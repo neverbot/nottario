@@ -58,6 +58,7 @@ func buildServer(d Deps) *sdk.Server {
 	registerWhoami(server, d)
 	registerProjects(server, d)
 	registerTasks(server, d)
+	registerDocs(server, d)
 	registerSkill(server, d)
 	return server
 }
