@@ -241,12 +241,15 @@ class NottarioGantt extends LitElement {
     if (!bands.length) return html`<div class="stage empty">No tasks yet.</div>`;
 
     // Geometry ----------------------------------------------------------
-    const bandHeight = 56;
-    const taskHeight = 24;
+    const taskHeight = 22;
+    const laneGap = 6;
+    const laneHeight = taskHeight + laneGap;
+    const bandPad = 8; // vertical padding inside a band
     const labelWidth = 120;
     const pastWidth = 360;
     const presentWidth = 80;
     const futureColumnWidth = 140;
+    const headerH = 28;
 
     // Past zone: real time span from oldest actual_start to now.
     const pastStartCandidates = (this.tasks || [])
@@ -268,6 +271,64 @@ class NottarioGantt extends LitElement {
     // Future zone topological columns per band.
     const futureDepthsPerBand = bands.map(b => this.computeTopoDepths(b.tasks));
 
+    // ---- Lane assignment per band ----
+    // For each band, position every task on the X axis, then greedily
+    // place it into the lowest-index lane whose previous occupant has
+    // already ended (with a small horizontal gap). The number of lanes
+    // determines the band's vertical height.
+    const overlapGap = 6;
+    const positions = []; // { task, bi, lane, from, to }
+    const lanesPerBand = bands.map(() => 1);
+    bands.forEach((b, bi) => {
+      const depths = futureDepthsPerBand[bi];
+      const ranged = [];
+      for (const t of b.tasks) {
+        const x = this.taskX({ t, xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth, depths });
+        if (!x) continue;
+        ranged.push({ task: t, from: x.from, to: x.to });
+      }
+      ranged.sort((a, b) => a.from - b.from);
+      const laneEnds = []; // laneEnds[i] = X where lane i is occupied until
+      for (const p of ranged) {
+        let placed = -1;
+        for (let li = 0; li < laneEnds.length; li++) {
+          if (laneEnds[li] + overlapGap <= p.from) {
+            placed = li;
+            break;
+          }
+        }
+        if (placed < 0) {
+          placed = laneEnds.length;
+          laneEnds.push(p.to);
+        } else {
+          laneEnds[placed] = p.to;
+        }
+        positions.push({ task: p.task, bi, lane: placed, from: p.from, to: p.to });
+      }
+      lanesPerBand[bi] = Math.max(1, laneEnds.length);
+    });
+
+    // ---- Compute each band's Y top from the lane counts ----
+    const bandTops = [];
+    const bandHeights = [];
+    {
+      let cursor = headerH;
+      for (let bi = 0; bi < bands.length; bi++) {
+        bandTops.push(cursor);
+        const h = lanesPerBand[bi] * laneHeight + bandPad * 2 - laneGap;
+        bandHeights.push(h);
+        cursor += h;
+      }
+    }
+    const totalHeight = bandTops.length
+      ? bandTops[bandTops.length - 1] + bandHeights[bandHeights.length - 1] + 16
+      : headerH + 80;
+
+    // Y of a task's top edge given band index + lane.
+    const taskY = (bi, lane) => bandTops[bi] + bandPad + lane * laneHeight;
+    // Y of a task's vertical centre (used by dependency arrows).
+    const taskCenterY = (bi, lane) => taskY(bi, lane) + taskHeight / 2;
+
     // Calculate total svg width.
     const maxDepth = futureDepthsPerBand.reduce((m, dmap) => {
       for (const t of dmap.keys()) {
@@ -278,13 +339,14 @@ class NottarioGantt extends LitElement {
     }, 0);
     const futureWidth = (maxDepth + 1) * futureColumnWidth;
     const width = futureStartX + futureWidth + 16;
-    const height = bands.length * bandHeight + 60;
-    const headerH = 28;
+
+    // Build an index for dependency arrows.
+    const posByTaskID = new Map(positions.map(p => [p.task.ID, p]));
 
     return html`
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       <div class="stage">
-        <svg width=${width} height=${height}>
+        <svg width=${width} height=${totalHeight}>
           <defs>
             <marker id="dep-arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
                     markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -300,61 +362,63 @@ class NottarioGantt extends LitElement {
           <!-- Band rows -->
           ${bands.map((b, bi) => svg`
             <rect class=${`band-bg ${bi % 2 ? 'alt' : ''}`}
-                  x="0" y=${headerH + bi * bandHeight}
-                  width=${width} height=${bandHeight}></rect>
+                  x="0" y=${bandTops[bi]}
+                  width=${width} height=${bandHeights[bi]}></rect>
             <text class="band-label"
-                  x="8" y=${headerH + bi * bandHeight + bandHeight / 2 + 4}>
+                  x="8" y=${bandTops[bi] + bandHeights[bi] / 2 + 4}>
               ${b.role.Label}
             </text>
           `)}
 
           <!-- Zone dividers -->
-          <line class="zone-divider" x1=${labelWidth} y1="0" x2=${labelWidth} y2=${height}></line>
-          <line class="zone-divider" x1=${presentX} y1="0" x2=${presentX} y2=${height}></line>
-          <line class="zone-divider" x1=${futureStartX} y1="0" x2=${futureStartX} y2=${height}></line>
+          <line class="zone-divider" x1=${labelWidth} y1="0" x2=${labelWidth} y2=${totalHeight}></line>
+          <line class="zone-divider" x1=${presentX} y1="0" x2=${presentX} y2=${totalHeight}></line>
+          <line class="zone-divider" x1=${futureStartX} y1="0" x2=${futureStartX} y2=${totalHeight}></line>
 
-          <!-- "now" marker (vertical line over the present zone) -->
+          <!-- "now" marker -->
           <line class="now-line"
                 x1=${presentX + presentWidth / 2} y1=${headerH - 8}
-                x2=${presentX + presentWidth / 2} y2=${height}></line>
+                x2=${presentX + presentWidth / 2} y2=${totalHeight}></line>
           <text class="now-label"
                 x=${presentX + presentWidth / 2}
                 y=${headerH - 12}
                 text-anchor="middle">now</text>
 
-          <!-- Tasks -->
-          ${bands.map((b, bi) => {
-            const bandY = headerH + bi * bandHeight + (bandHeight - taskHeight) / 2;
-            const depths = futureDepthsPerBand[bi];
-            const color = b.role.Color || '#59636e';
-            return b.tasks.map((t, ti) => {
-              const x = this.taskX({ t, bandY, xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth, depths });
-              if (!x) return null;
-              // Stagger overlapping tasks slightly within their band so
-              // labels do not collide vertically.
-              const yOffset = (ti % 2 === 0) ? 0 : 0;
-              return svg`
-                <rect class=${`task-rect ${t.State}`}
-                      x=${x.from} y=${bandY + yOffset}
-                      width=${Math.max(8, x.to - x.from)} height=${taskHeight}
-                      fill=${t.State === 'done' ? '#d1d9e0' : (t.State === 'doing' ? color : 'transparent')}
-                      stroke=${color}
-                      @click=${(e) => { e.stopPropagation(); this._emitSelect(t); }}>
-                  <title>${t.Title}</title>
-                </rect>
-                <text class=${`task-label ${t.State === 'doing' ? 'on-dark' : ''}`}
-                      x=${x.from + 6} y=${bandY + yOffset + 16}
-                      style="pointer-events:none">
-                  ${this._truncate(t.Title, Math.max(8, Math.floor((x.to - x.from) / 7)))}
-                </text>
-              `;
-            });
+          <!-- Tasks placed in their lane -->
+          ${positions.map(p => {
+            const t = p.task;
+            const color = bands[p.bi].role.Color || '#59636e';
+            const y = taskY(p.bi, p.lane);
+            const w = Math.max(8, p.to - p.from);
+            return svg`
+              <rect class=${`task-rect ${t.State}`}
+                    x=${p.from} y=${y}
+                    width=${w} height=${taskHeight}
+                    rx="4" ry="4"
+                    fill=${t.State === 'done' ? '#d1d9e0' : (t.State === 'doing' ? color : 'transparent')}
+                    stroke=${color}
+                    @click=${(e) => { e.stopPropagation(); this._emitSelect(t); }}>
+                <title>${t.Title}</title>
+              </rect>
+              <text class=${`task-label ${t.State === 'doing' ? 'on-dark' : ''}`}
+                    x=${p.from + 6} y=${y + taskHeight / 2 + 4}
+                    style="pointer-events:none">
+                ${this._truncate(t.Title, Math.max(8, Math.floor(w / 7)))}
+              </text>
+            `;
           })}
 
-          <!-- Dependency arrows (only show edges where at least one endpoint is visible at this view) -->
-          ${this._renderArrows(bands, futureDepthsPerBand, {
-            xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth,
-            headerH, bandHeight, taskHeight,
+          <!-- Dependency arrows: now anchored to each task's actual lane Y. -->
+          ${this.deps.map(d => {
+            const from = posByTaskID.get(d.DependsOnID);
+            const to = posByTaskID.get(d.TaskID);
+            if (!from || !to) return null;
+            const x1 = from.to;
+            const y1 = taskCenterY(from.bi, from.lane);
+            const x2 = to.from;
+            const y2 = taskCenterY(to.bi, to.lane);
+            const cx = (x1 + x2) / 2;
+            return svg`<path class="arrow" d=${`M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`}></path>`;
           })}
         </svg>
       </div>
@@ -389,37 +453,6 @@ class NottarioGantt extends LitElement {
     const d = depths.get(t.ID) || 0;
     const from = futureStartX + d * futureColumnWidth + 12;
     return { from, to: from + futureColumnWidth - 24 };
-  }
-
-  _renderArrows(bands, futureDepthsPerBand, geom) {
-    const { xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth,
-            headerH, bandHeight, taskHeight } = geom;
-    const allTasks = bands.flatMap(b => b.tasks);
-    const taskByID = new Map(allTasks.map(t => [t.ID, t]));
-    const bandIndexByTask = new Map();
-    bands.forEach((b, bi) => b.tasks.forEach(t => bandIndexByTask.set(t.ID, bi)));
-    const arrows = [];
-    for (const d of this.deps) {
-      const from = taskByID.get(d.DependsOnID);
-      const to = taskByID.get(d.TaskID);
-      if (!from || !to) continue;
-      const fromBand = bandIndexByTask.get(from.ID);
-      const toBand = bandIndexByTask.get(to.ID);
-      const depthsFrom = futureDepthsPerBand[fromBand];
-      const depthsTo = futureDepthsPerBand[toBand];
-      const a = this.taskX({ t: from, xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth, depths: depthsFrom });
-      const b = this.taskX({ t: to, xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth, depths: depthsTo });
-      if (!a || !b) continue;
-      const x1 = a.to;
-      const y1 = headerH + fromBand * bandHeight + bandHeight / 2;
-      const x2 = b.from;
-      const y2 = headerH + toBand * bandHeight + bandHeight / 2;
-      const cx = (x1 + x2) / 2;
-      arrows.push(svg`
-        <path class="arrow" d=${`M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`}></path>
-      `);
-    }
-    return arrows;
   }
 
   _emitSelect(t) {
