@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neverbot/nottario/internal/identity"
+	mcpserver "github.com/neverbot/nottario/internal/mcp"
 )
 
 // Deps wires the http server with its collaborators.
@@ -56,6 +57,16 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/tokens", ListTokensHandler(tok))
 	mux.Handle("POST /api/tokens", IssueTokenHandler(tok))
 	mux.Handle("DELETE /api/tokens/{id}", RevokeTokenHandler(tok))
+
+	// Skill bundle served unauthenticated so agents can preview the
+	// catalogue before authenticating.
+	mux.Handle("GET /skill", SkillHandler())
+	mux.Handle("GET /skill/", SkillHandler())
+
+	// MCP endpoint — Streamable HTTP transport with Bearer-token auth.
+	mcpHandler := mcpserver.Handler(mcpserver.Deps{Pool: d.Pool, Resolver: d.Resolver})
+	mux.Handle("/mcp", mcpHandler)
+	mux.Handle("/mcp/", mcpHandler)
 
 	tasks := TaskDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/projects/{id}/tasks", ListTasksHandler(tasks))
