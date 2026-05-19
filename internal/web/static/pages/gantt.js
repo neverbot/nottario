@@ -522,14 +522,18 @@ class NottarioGantt extends LitElement {
             `;
           })}
 
-          <!-- Dependency arrows: now anchored to each task's actual lane Y. -->
+          <!-- Dependency arrows: anchored to each task's actual lane Y.
+               The path stops one markerWidth before the target rect's
+               left edge so the arrowhead tip lands exactly on the
+               border, not inside the box. -->
           ${this.deps.map(d => {
             const from = posByTaskID.get(d.DependsOnID);
             const to = posByTaskID.get(d.TaskID);
             if (!from || !to) return null;
+            const markerW = 8;
             const x1 = from.to;
             const y1 = taskCenterY(from.bi, from.lane);
-            const x2 = to.from;
+            const x2 = to.from - markerW;
             const y2 = taskCenterY(to.bi, to.lane);
             const cx = (x1 + x2) / 2;
             return svg`<path class="arrow" d=${`M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`}></path>`;
