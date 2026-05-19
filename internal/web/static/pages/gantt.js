@@ -24,6 +24,7 @@ class NottarioGantt extends LitElement {
     tasks: { state: true },
     roles: { state: true },
     deps: { state: true },
+    members: { state: true },
     error: { state: true },
     now: { state: true },
   };
@@ -134,6 +135,7 @@ class NottarioGantt extends LitElement {
     this.tasks = null;
     this.roles = [];
     this.deps = [];
+    this.members = [];
     this.error = '';
     this.now = new Date();
   }
@@ -172,14 +174,16 @@ class NottarioGantt extends LitElement {
   async load() {
     if (!this.projectId) return;
     try {
-      const [tr, rr, dr] = await Promise.all([
+      const [tr, rr, dr, mr] = await Promise.all([
         fetch(`/api/projects/${this.projectId}/tasks?include_children=true`),
         fetch(`/api/projects/${this.projectId}/roles`),
         fetch(`/api/projects/${this.projectId}/tasks/dependencies`),
+        fetch(`/api/projects/${this.projectId}/members`),
       ]);
       this.tasks = (await tr.json()).tasks || [];
       this.roles = (await rr.json()).roles || [];
       this.deps = (await dr.json()).dependencies || [];
+      this.members = (await mr.json()).members || [];
     } catch (e) {
       this.error = e.message;
     }
@@ -241,7 +245,10 @@ class NottarioGantt extends LitElement {
     if (!bands.length) return html`<div class="stage empty">No tasks yet.</div>`;
 
     // Geometry ----------------------------------------------------------
-    const taskHeight = 22;
+    const taskHeight = 32;
+    const minBarWidth = 140;
+    const avatarSize = 22;
+    const avatarPad = 5;
     const laneGap = 6;
     const laneHeight = taskHeight + laneGap;
     const bandPad = 8; // vertical padding inside a band
@@ -285,7 +292,12 @@ class NottarioGantt extends LitElement {
       for (const t of b.tasks) {
         const x = this.taskX({ t, xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth, depths });
         if (!x) continue;
-        ranged.push({ task: t, from: x.from, to: x.to });
+        // Enforce a minimum bar width so the title fits inside even
+        // for tasks that finished in seconds. We grow to the right;
+        // the lane assignment below uses this widened range so
+        // concurrent tasks still get separate lanes.
+        const to = Math.max(x.to, x.from + minBarWidth);
+        ranged.push({ task: t, from: x.from, to });
       }
       ranged.sort((a, b) => a.from - b.from);
       const laneEnds = []; // laneEnds[i] = X where lane i is occupied until
@@ -343,6 +355,20 @@ class NottarioGantt extends LitElement {
     // Build an index for dependency arrows.
     const posByTaskID = new Map(positions.map(p => [p.task.ID, p]));
 
+    // Index members by user id so we can render the assignee avatar
+    // inside the task box. A user appears multiple times in the
+    // memberships list (once per role), so dedupe by UserID.
+    const usersById = new Map();
+    for (const m of this.members || []) {
+      if (!usersById.has(m.UserID)) {
+        usersById.set(m.UserID, {
+          AvatarURL: m.AvatarURL,
+          DisplayName: m.DisplayName,
+          GithubLogin: m.GithubLogin,
+        });
+      }
+    }
+
     return html`
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       <div class="stage">
@@ -352,6 +378,9 @@ class NottarioGantt extends LitElement {
                     markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#afb8c1"></path>
             </marker>
+            <clipPath id="gantt-avatar-clip">
+              <circle cx=${avatarSize / 2} cy=${avatarSize / 2} r=${avatarSize / 2}></circle>
+            </clipPath>
           </defs>
 
           <!-- Zone labels -->
@@ -390,20 +419,34 @@ class NottarioGantt extends LitElement {
             const color = bands[p.bi].role.Color || '#59636e';
             const y = taskY(p.bi, p.lane);
             const w = Math.max(8, p.to - p.from);
+            const user = t.AssigneeUserID ? usersById.get(t.AssigneeUserID) : null;
+            const avatarX = p.from + avatarPad;
+            const avatarY = y + (taskHeight - avatarSize) / 2;
+            const labelX = user ? avatarX + avatarSize + 6 : p.from + 8;
+            const labelMaxChars = Math.max(6, Math.floor((p.to - labelX - 6) / 7));
             return svg`
               <rect class=${`task-rect ${t.State}`}
                     x=${p.from} y=${y}
                     width=${w} height=${taskHeight}
-                    rx="4" ry="4"
+                    rx="6" ry="6"
                     fill=${t.State === 'done' ? '#d1d9e0' : (t.State === 'doing' ? color : 'transparent')}
                     stroke=${color}
                     @click=${(e) => { e.stopPropagation(); this._emitSelect(t); }}>
-                <title>${t.Title}</title>
+                <title>${t.Title}${user ? ` — assigned to ${user.DisplayName}` : ''}</title>
               </rect>
+              ${user && user.AvatarURL ? svg`
+                <g transform=${`translate(${avatarX}, ${avatarY})`} style="pointer-events:none">
+                  <image href=${user.AvatarURL}
+                         width=${avatarSize} height=${avatarSize}
+                         clip-path="url(#gantt-avatar-clip)"></image>
+                  <circle cx=${avatarSize / 2} cy=${avatarSize / 2} r=${avatarSize / 2}
+                          fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="1"></circle>
+                </g>
+              ` : null}
               <text class=${`task-label ${t.State === 'doing' ? 'on-dark' : ''}`}
-                    x=${p.from + 6} y=${y + taskHeight / 2 + 4}
+                    x=${labelX} y=${y + taskHeight / 2 + 4}
                     style="pointer-events:none">
-                ${this._truncate(t.Title, Math.max(8, Math.floor(w / 7)))}
+                ${this._truncate(t.Title, labelMaxChars)}
               </text>
             `;
           })}
