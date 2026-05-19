@@ -37,6 +37,7 @@ func IndexHandler() http.Handler {
 			}
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(html)
 	})

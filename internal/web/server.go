@@ -26,7 +26,17 @@ func NewServer(d Deps) http.Handler {
 	if err != nil {
 		panic("nottario: cannot derive static sub-fs: " + err.Error())
 	}
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
+	// Wrap the static file server so every response forces the browser
+	// to revalidate before reusing a cached copy. Without this header
+	// browsers happily serve stale JS/CSS even after a binary rebuild,
+	// which surfaced repeatedly during dogfooding as "I rebuilt but the
+	// page hasn't changed". The assets ship inside the binary anyway,
+	// so the bandwidth cost of revalidation is trivial.
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticSub)))
+	mux.Handle("GET /static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		staticHandler.ServeHTTP(w, r)
+	}))
 
 	mux.Handle("GET /healthz", HealthzHandler())
 	mux.Handle("GET /version", VersionHandler())
