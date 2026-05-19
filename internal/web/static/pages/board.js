@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { subscribe } from '/static/realtime.js';
 
 class NottarioBoardPage extends LitElement {
   static properties = {
@@ -147,10 +148,31 @@ class NottarioBoardPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.load();
+    this._subscribe();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._unsub?.();
   }
 
   updated(c) {
-    if (c.has('projectId')) this.load();
+    if (c.has('projectId')) {
+      this.load();
+      this._subscribe();
+    }
+  }
+
+  _subscribe() {
+    this._unsub?.();
+    if (!this.projectId) return;
+    this._unsub = subscribe(this.projectId, (ev) => {
+      if (!ev.type) return;
+      if (ev.type.startsWith('task.')) {
+        this.load();
+        if (this.selected) this.loadDetail(this.selected.task.ID);
+      }
+    });
   }
 
   async load() {

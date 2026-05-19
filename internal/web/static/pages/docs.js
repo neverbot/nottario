@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { subscribe } from '/static/realtime.js';
 
 class NottarioDocsPage extends LitElement {
   static properties = {
@@ -139,10 +140,32 @@ class NottarioDocsPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.load();
+    this._subscribe();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._unsub?.();
   }
 
   updated(c) {
-    if (c.has('projectId')) this.load();
+    if (c.has('projectId')) {
+      this.load();
+      this._subscribe();
+    }
+  }
+
+  _subscribe() {
+    this._unsub?.();
+    if (!this.projectId) return;
+    this._unsub = subscribe(this.projectId, (ev) => {
+      if (!ev.type?.startsWith('doc.')) return;
+      this.load();
+      // Refresh the open document if it was the one that changed.
+      if (this.selected && ev.path === this.selected.Path) {
+        this.open(this.selected.Path);
+      }
+    });
   }
 
   async load() {

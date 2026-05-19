@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { subscribe } from '/static/realtime.js';
 import './arch-graph.js';
 
 class NottarioArchPage extends LitElement {
@@ -152,10 +153,34 @@ class NottarioArchPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.load();
+    this._subscribe();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._unsub?.();
   }
 
   updated(c) {
-    if (c.has('projectId')) this.load();
+    if (c.has('projectId')) {
+      this.load();
+      this._subscribe();
+    }
+  }
+
+  _subscribe() {
+    this._unsub?.();
+    if (!this.projectId) return;
+    this._unsub = subscribe(this.projectId, (ev) => {
+      if (!ev.type?.startsWith('arch.')) return;
+      this.load();
+      if (this.selectedSlug) {
+        // refresh the open node detail
+        fetch(`/api/projects/${this.projectId}/arch/nodes/${encodeURIComponent(this.selectedSlug)}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) this.selectedDetail = d; });
+      }
+    });
   }
 
   async load() {
