@@ -70,6 +70,51 @@ func ListMembers(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) (
 	return out, rows.Err()
 }
 
+// UserMembership flattens a single (project, role) entry as seen
+// from a user's perspective — used by whoami so an agent can decide
+// which roles to filter `tasks.next` by, in which projects.
+type UserMembership struct {
+	ProjectID    uuid.UUID
+	ProjectSlug  string
+	ProjectName  string
+	RoleID       uuid.UUID
+	RoleKey      string
+	RoleLabel    string
+	RoleColor    string
+	RolePosition int
+}
+
+// ListUserMemberships returns every (project, role) tuple the user
+// belongs to, across all projects. Ordered by project slug then role
+// position so the response is deterministic.
+func ListUserMemberships(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]UserMembership, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT p.id, p.slug, p.name,
+		       r.id, r.key, r.label, COALESCE(r.color, ''), r.position
+		FROM memberships m
+		JOIN projects p ON p.id = m.project_id
+		JOIN roles    r ON r.id = m.role_id
+		WHERE m.user_id = $1
+		ORDER BY p.slug, r.position, r.label
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []UserMembership{}
+	for rows.Next() {
+		var m UserMembership
+		if err := rows.Scan(
+			&m.ProjectID, &m.ProjectSlug, &m.ProjectName,
+			&m.RoleID, &m.RoleKey, &m.RoleLabel, &m.RoleColor, &m.RolePosition,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // UserRoleIDs returns the role uuids the user holds in the project.
 func UserRoleIDs(ctx context.Context, pool *pgxpool.Pool, userID, projectID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := pool.Query(ctx, `

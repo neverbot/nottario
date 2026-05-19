@@ -30,6 +30,7 @@ token is revoked, the very next call fails with
 | `is_admin`     | `true` if the user is the instance admin (first GitHub user to ever log in).   |
 | `source`       | always `"token"` for MCP callers (other surfaces may use `"session"`).         |
 | `token_id`     | uuid of the specific API token presented.                                      |
+| `memberships`  | array of `{project_id, project_slug, project_name, role_id, role_key, role_label, role_color, role_position}` — every (project, role) tuple the user holds. Iterate this to know which roles to filter `tasks.next` by, in which projects, without an extra round-trip. |
 
 ## Roles
 

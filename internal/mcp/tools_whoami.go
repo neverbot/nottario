@@ -13,7 +13,7 @@ type WhoamiInput struct{}
 func registerWhoami(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.whoami",
-		Description: "Returns information about the authenticated agent: the underlying user, admin status, and how authentication was resolved. Always call this first to confirm credentials.",
+		Description: "Returns information about the authenticated agent: the underlying user, admin status, how authentication was resolved, and every (project, role) tuple the user belongs to. Always call this first to confirm credentials and discover which roles you can filter tasks by, in which projects.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ WhoamiInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -23,6 +23,10 @@ func registerWhoami(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError("user not found: " + err.Error())
 		}
+		memberships, err := identity.ListUserMemberships(ctx, d.Pool, user.ID)
+		if err != nil {
+			return toolError("list memberships: " + err.Error())
+		}
 		return jsonResult(map[string]any{
 			"user_id":      user.ID,
 			"github_login": user.GithubLogin,
@@ -30,6 +34,7 @@ func registerWhoami(server *sdk.Server, d Deps) {
 			"is_admin":     user.IsAdmin,
 			"source":       string(c.Source),
 			"token_id":     c.TokenID,
+			"memberships":  memberships,
 		})
 	})
 }
