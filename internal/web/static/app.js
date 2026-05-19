@@ -105,7 +105,12 @@ class NottarioShell extends LitElement {
 
   navigate(path) {
     window.history.pushState({}, '', path);
-    this.route = path;
+    // Route matching uses the pathname only; the hash is consumed by
+    // the destination page for deep-linking (search results, etc.).
+    this.route = path.split('#')[0];
+    // pushState does not fire `hashchange` even when the hash differs;
+    // dispatch one manually so pages already on the same path react.
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
   }
 
   async logout() {

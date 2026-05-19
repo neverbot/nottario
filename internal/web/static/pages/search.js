@@ -137,9 +137,15 @@ class NottarioSearchBox extends LitElement {
   goto(hit) {
     let path = null;
     switch (hit.kind) {
-      case 'task':      path = `/projects/${this.projectId}/board`; break;
-      case 'document':  path = `/projects/${this.projectId}/docs`; break;
-      case 'arch_node': path = `/projects/${this.projectId}/arch`; break;
+      case 'task':
+        path = `/projects/${this.projectId}/board#task=${hit.task_id}`;
+        break;
+      case 'document':
+        path = `/projects/${this.projectId}/docs#path=${encodeURIComponent(hit.doc_path)}`;
+        break;
+      case 'arch_node':
+        path = `/projects/${this.projectId}/arch#node=${encodeURIComponent(hit.node_slug)}`;
+        break;
     }
     if (path) window.nottarioNavigate(path);
     this.query = '';

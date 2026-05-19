@@ -179,20 +179,44 @@ class NottarioArchGraph extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.load();
+    this.load().then(() => this._applyHash());
     this._subscribe();
+    this._hashHandler = () => this._applyHash();
+    window.addEventListener('hashchange', this._hashHandler);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsub?.();
+    window.removeEventListener('hashchange', this._hashHandler);
   }
 
   updated(c) {
     if (c.has('projectId')) {
-      this.load();
+      this.load().then(() => this._applyHash());
       this._subscribe();
     }
+  }
+
+  _applyHash() {
+    const h = new URLSearchParams(window.location.hash.slice(1));
+    const slug = h.get('node');
+    if (!slug || !this.allNodes) return;
+    const node = this.allNodes[slug];
+    if (!node) return;
+    // Drill the view into the node's parent so the target is visible
+    // at the current level. Root nodes need null (the Roots view).
+    let parentSlug = null;
+    if (node.ParentID) {
+      const parent = Object.values(this.allNodes).find(n => n.ID === node.ParentID);
+      parentSlug = parent?.Slug || null;
+    }
+    if (this.currentParentSlug !== parentSlug) {
+      this.currentParentSlug = parentSlug;
+      this.recomputeLayout();
+    }
+    this.selectedSlug = slug;
+    this.loadDetail(slug);
   }
 
   _subscribe() {

@@ -139,20 +139,29 @@ class NottarioDocsPage extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.load();
+    this.load().then(() => this._applyHash());
     this._subscribe();
+    this._hashHandler = () => this._applyHash();
+    window.addEventListener('hashchange', this._hashHandler);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsub?.();
+    window.removeEventListener('hashchange', this._hashHandler);
   }
 
   updated(c) {
     if (c.has('projectId')) {
-      this.load();
+      this.load().then(() => this._applyHash());
       this._subscribe();
     }
+  }
+
+  _applyHash() {
+    const h = new URLSearchParams(window.location.hash.slice(1));
+    const path = h.get('path');
+    if (path) this.open(path);
   }
 
   _subscribe() {
