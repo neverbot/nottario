@@ -31,7 +31,13 @@ class NottarioShell extends LitElement {
       border-bottom: 1px solid #1b1f23;
     }
     header.topbar strong { font-size: 16px; }
-    header.topbar .spacer { flex: 1; }
+    /* The spacer pushes the user cluster to the right when there is
+       no growing element in between (e.g. on pages without a project
+       scope so the search box does not render). When the search box
+       is present, it absorbs the slack via its own flex-grow. */
+    header.topbar .spacer { flex: 0 0 0; }
+    header.topbar .user { margin-left: auto; }
+    header.topbar nottario-search-box ~ .user { margin-left: 0; }
     header.topbar a, header.topbar button.link {
       color: #fff;
       opacity: 0.85;

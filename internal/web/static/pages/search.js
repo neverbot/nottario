@@ -17,7 +17,11 @@ class NottarioSearchBox extends LitElement {
     :host {
       display: block;
       position: relative;
-      flex: 0 0 320px;
+      /* Search grows to absorb the slack between the left nav and the
+         right user cluster, but shrinks if the topbar runs out of
+         room. Keeps a minimum readable size and a comfortable cap. */
+      flex: 1 1 220px;
+      min-width: 180px;
       max-width: 320px;
     }
     input {
