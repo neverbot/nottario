@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
 import dagre from '/static/vendor/dagre/dagre.js';
 
 // <nottario-arch-graph> renders the architecture diagram as boxes
@@ -223,12 +223,44 @@ class NottarioArchGraph extends LitElement {
     return out.sort((a, b) => a.Position - b.Position || a.Slug.localeCompare(b.Slug));
   }
 
-  // The set of edges shown at the current level (both endpoints in the level).
+  // The set of edges drawn at the current level. Endpoints living
+  // deeper in the tree are *promoted* to their nearest visible
+  // ancestor, so the root view still shows meaningful arrows when
+  // the underlying edges live between descendants.
   visibleEdges(visibleNodes) {
     const visibleByID = new Map(visibleNodes.map(n => [n.ID, n]));
-    return this.allEdges.filter(e =>
-      visibleByID.has(e.FromNodeID) && visibleByID.has(e.ToNodeID)
-    );
+    const byID = new Map();
+    for (const n of Object.values(this.allNodes || {})) byID.set(n.ID, n);
+
+    const promote = (id) => {
+      // walk up parent_id until we find a visible ancestor; null if none
+      let cur = byID.get(id);
+      while (cur) {
+        if (visibleByID.has(cur.ID)) return cur.ID;
+        if (!cur.ParentID) return null;
+        cur = byID.get(cur.ParentID);
+      }
+      return null;
+    };
+
+    const out = [];
+    for (const e of this.allEdges) {
+      const fromID = promote(e.FromNodeID);
+      const toID = promote(e.ToNodeID);
+      if (!fromID || !toID || fromID === toID) continue;
+      // Substitute the visible endpoints so layout & rendering use them.
+      out.push({
+        ...e,
+        FromNodeID: fromID,
+        ToNodeID: toID,
+        FromSlug: byID.get(fromID).Slug,
+        FromName: byID.get(fromID).Name,
+        ToSlug: byID.get(toID).Slug,
+        ToName: byID.get(toID).Name,
+        _promoted: fromID !== e.FromNodeID || toID !== e.ToNodeID,
+      });
+    }
+    return out;
   }
 
   // hasChildren reports whether a node has any direct children.
@@ -449,11 +481,11 @@ class NottarioArchGraph extends LitElement {
     const cyclic = this.cycleEdgeIds.has(le.edge.ID);
     // mid-point for label
     const mid = p[Math.floor(p.length / 2)];
-    return html`
+    return svg`
       <g>
         <path class=${`edge-path ${cyclic ? 'cyclic' : ''}`}
               d=${d} marker-end="url(#arrowhead)"></path>
-        ${le.edge.Label || le.edge.Kind ? html`
+        ${le.edge.Label || le.edge.Kind ? svg`
           <text class="edge-label" x=${mid.x} y=${mid.y - 6} text-anchor="middle">
             ${le.edge.Label || le.edge.Kind}
           </text>
@@ -471,13 +503,12 @@ class NottarioArchGraph extends LitElement {
     const selected = this.selectedSlug === n.Slug;
     const cyclic = false; // node-level cycle indicator could be added later
     const expandable = this.hasChildren(n);
-    return html`
+    return svg`
       <g @click=${(e) => { e.stopPropagation(); this.onNodeClick(n.Slug); }}>
         <rect class=${`node-rect ${selected ? 'selected' : ''} ${cyclic ? 'cyclic' : ''}`}
               x=${x} y=${y} width=${ln.w} height=${ln.h} rx="8" ry="8"></rect>
         <rect class="node-kind-bg" x=${x} y=${y} width=${ln.w} height="16"
-              fill=${color} opacity="0.9"
-              style="clip-path: inset(0 0 0 0 round 8px 8px 0 0)"></rect>
+              fill=${color} opacity="0.9"></rect>
         <text class="node-kind" x=${x + 8} y=${y + 12}>${n.Kind}${expandable ? '  ▾' : ''}</text>
         <text class="node-name" x=${ln.x} y=${y + 36} text-anchor="middle">
           ${n.Name}
