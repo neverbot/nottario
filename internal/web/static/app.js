@@ -6,6 +6,7 @@ import './pages/tokens.js';
 import './pages/board.js';
 import './pages/docs.js';
 import './pages/arch.js';
+import './pages/search.js';
 
 class NottarioShell extends LitElement {
   static properties = {
@@ -113,6 +114,13 @@ class NottarioShell extends LitElement {
     this.navigate('/');
   }
 
+  // Extract the current project_id from the URL, if the user is on
+  // a project-scoped page. Returns null for /, /tokens, etc.
+  activeProjectId() {
+    const m = this.route.match(/^\/projects\/([^/]+)/);
+    return m ? m[1] : null;
+  }
+
   renderTopbar() {
     if (!this.me) return null;
     return html`
@@ -121,6 +129,7 @@ class NottarioShell extends LitElement {
         <a href="/" @click=${this.linkNav('/')}>Projects</a>
         <a href="/tokens" @click=${this.linkNav('/tokens')}>Tokens</a>
         <div class="spacer"></div>
+        <nottario-search-box project-id=${this.activeProjectId() || ''}></nottario-search-box>
         <div class="user">
           ${this.me.avatar_url ? html`<img src=${this.me.avatar_url} alt="">` : ''}
           <span>${this.me.display_name}</span>
