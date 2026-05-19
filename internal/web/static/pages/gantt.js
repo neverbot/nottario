@@ -88,6 +88,18 @@ class NottarioGantt extends LitElement {
     .task-rect.todo {
       stroke-dasharray: 4 3;
     }
+    /* Bug-type tasks get a tight dotted red stroke regardless of state. */
+    .task-rect.bug {
+      stroke: #cf222e !important;
+      stroke-dasharray: 2 3 !important;
+    }
+    /* Inconsistent: the task is not yet done but one of its dependents
+       is already done. Surface as a solid red 2.5px border. */
+    .task-rect.inconsistent {
+      stroke: #cf222e !important;
+      stroke-dasharray: 0 !important;
+      stroke-width: 2.5 !important;
+    }
     .task-label {
       fill: #1f2328;
       font-size: 11px;
@@ -391,6 +403,29 @@ class NottarioGantt extends LitElement {
     // Build an index for dependency arrows.
     const posByTaskID = new Map(positions.map(p => [p.task.ID, p]));
 
+    // Find tasks whose state is not 'done' but at least one task that
+    // depends on them is already 'done'. That's a logical
+    // inconsistency: the dependent completed before its precondition.
+    // We surface it on the bar with a solid red border.
+    const stateByID = new Map((this.tasks || []).map(t => [t.ID, t.State]));
+    const dependentsByID = new Map();
+    for (const d of this.deps) {
+      // d.TaskID depends on d.DependsOnID — so d.TaskID is a dependent
+      // (later task) of d.DependsOnID.
+      if (!dependentsByID.has(d.DependsOnID)) dependentsByID.set(d.DependsOnID, []);
+      dependentsByID.get(d.DependsOnID).push(d.TaskID);
+    }
+    const inconsistentIDs = new Set();
+    for (const t of this.tasks || []) {
+      if (t.State === 'done') continue;
+      for (const dependentID of dependentsByID.get(t.ID) || []) {
+        if (stateByID.get(dependentID) === 'done') {
+          inconsistentIDs.add(t.ID);
+          break;
+        }
+      }
+    }
+
     // Index members by user id so we can render the assignee avatar
     // inside the task box. A user appears multiple times in the
     // memberships list (once per role), so dedupe by UserID.
@@ -461,7 +496,7 @@ class NottarioGantt extends LitElement {
             const labelX = user ? avatarX + avatarSize + 6 : p.from + 8;
             const labelMaxChars = Math.max(6, Math.floor((p.to - labelX - 6) / 7));
             return svg`
-              <rect class=${`task-rect ${t.State}`}
+              <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}`}
                     x=${p.from} y=${y}
                     width=${w} height=${taskHeight}
                     rx="6" ry="6"
@@ -504,7 +539,9 @@ class NottarioGantt extends LitElement {
       <div class="legend">
         <span><span class="swatch" style="background:#d1d9e0;border:1px solid #afb8c1"></span> done</span>
         <span><span class="swatch" style="background:#1f6feb"></span> doing</span>
-        <span><span class="swatch" style="border:1px dashed #59636e"></span> todo (future, topological)</span>
+        <span><span class="swatch" style="border:1px dashed #59636e"></span> todo</span>
+        <span><span class="swatch" style="border:1px dotted #cf222e"></span> bug</span>
+        <span><span class="swatch" style="border:2px solid #cf222e"></span> inconsistent (dependent already done)</span>
         <span><span class="swatch" style="background:#cf222e;width:2px"></span> now</span>
       </div>
     `;
