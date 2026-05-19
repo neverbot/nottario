@@ -69,6 +69,124 @@ To keep state (the `db-data` volume) between runs:
 docker compose down
 ```
 
+## Connect an AI agent
+
+Nottario exposes its full surface area to AI agents through an MCP
+server bundled inside the same binary. Any MCP-capable client (Claude
+Code, Claude Desktop, Cursor, etc.) connects over HTTP with a Bearer
+token.
+
+### 1. Issue an API token
+
+In the web UI:
+
+1. Sign in with GitHub.
+2. Open **Tokens** in the top-right menu → **New token**.
+3. Give it a name (e.g. `claude-code-laptop`) and an optional default
+   role.
+4. Copy the secret — it is shown **once** and starts with `ntr_…`. It
+   is hashed in the database; if you lose it, revoke and issue a new
+   one.
+
+The token authenticates as the user that created it. Admin powers
+require that the underlying user is an instance admin.
+
+### 2. Add the server to your client
+
+**Claude Code:**
+
+```bash
+claude mcp add nottario http://localhost:8080/mcp \
+  --transport http \
+  --header "Authorization: Bearer ntr_…" \
+  --scope user
+```
+
+`--scope user` stores the config (and therefore the token) in
+`~/.claude.json`, not in the repo. Use `--scope local` to keep it per
+project but still outside git, or `--scope project` only when the
+server has no secrets to share (Nottario does, so prefer `user` or
+`local`).
+
+Verify:
+
+```bash
+claude mcp get nottario
+```
+
+**Claude Desktop:** edit `claude_desktop_config.json` (Settings →
+Developer → Edit Config) and add:
+
+```json
+{
+  "mcpServers": {
+    "nottario": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer ntr_…"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
+
+**Cursor:** in `~/.cursor/mcp.json` (or the project-level `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "nottario": {
+      "url": "http://localhost:8080/mcp",
+      "headers": { "Authorization": "Bearer ntr_…" }
+    }
+  }
+}
+```
+
+For a remote deployment, swap `http://localhost:8080` for your public
+URL. The transport must stay `http` (Streamable HTTP); plain SSE is
+not supported.
+
+### 3. Verify the connection
+
+From the agent, the first call should be `nottario.whoami`. If it
+returns your `github_login` and your `memberships` (roles per
+project), the connection is healthy. A `401 Unauthorized` with a
+`WWW-Authenticate: Bearer realm="nottario"` header means the token is
+missing, malformed or revoked.
+
+### 4. Pull the skill bundle
+
+Nottario ships a skill bundle that teaches agents how to use the
+tools (filing tasks, picking up work, writing docs, editing the
+architecture graph). Download and unzip it into your client's skills
+directory:
+
+```bash
+curl -fsSL http://localhost:8080/skill.zip -o nottario-skill.zip
+unzip nottario-skill.zip -d ~/.claude/skills/nottario
+```
+
+The bundle is regenerated on every release; pull it again after an
+upgrade to get new conventions and the latest tool descriptions.
+
+### Troubleshooting
+
+- **`401 Unauthorized`** — token missing, malformed (must start with
+  `ntr_`) or revoked. Issue a new one.
+- **`404` on `/mcp`** — wrong path or the binary is older than the
+  MCP milestone. Check `GET /version`.
+- **`Mcp-Session-Id missing` or session errors** — your client is not
+  preserving the session header between requests. Update the client
+  or check its transport config; Nottario follows the standard
+  Streamable HTTP transport.
+- **The agent sees no projects** — the user behind the token has no
+  memberships. An admin must add them via the web UI (Project
+  settings → Members) or grant `is_admin`.
+
 ## Day-to-day commands
 
 ```bash
