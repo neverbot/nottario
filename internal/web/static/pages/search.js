@@ -26,6 +26,7 @@ class NottarioSearchBox extends LitElement {
       max-width: 320px;
     }
     input {
+      box-sizing: border-box;
       width: 100%;
       padding: 5px 10px;
       border: 1px solid #afb8c1;
