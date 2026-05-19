@@ -1,16 +1,18 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import './arch-graph.js';
 
 class NottarioArchPage extends LitElement {
   static properties = {
     me: { type: Object },
     projectId: { type: String },
+    view: { state: true },           // 'tree' or 'graph'
     project: { state: true },
     kinds: { state: true },
     rootNodes: { state: true },
     selectedSlug: { state: true },
     selectedDetail: { state: true },
-    expanded: { state: true },   // map slug -> bool
-    childrenCache: { state: true }, // map slug -> array
+    expanded: { state: true },
+    childrenCache: { state: true },
     error: { state: true },
   };
 
@@ -136,6 +138,7 @@ class NottarioArchPage extends LitElement {
 
   constructor() {
     super();
+    this.view = 'graph';
     this.project = null;
     this.kinds = [];
     this.rootNodes = null;
@@ -332,12 +335,18 @@ class NottarioArchPage extends LitElement {
         <button @click=${() => this.back()}>← Back</button>
         <h2>${this.project.Name}</h2>
         <span class="muted">architecture</span>
+        <div style="flex:1"></div>
+        <div role="tablist" style="display:flex;gap:4px">
+          <button class=${this.view === 'graph' ? 'primary' : ''}
+                  @click=${() => { this.view = 'graph'; }}>Graph</button>
+          <button class=${this.view === 'tree' ? 'primary' : ''}
+                  @click=${() => { this.view = 'tree'; }}>Tree</button>
+        </div>
       </div>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
-      <div class="layout">
-        ${this.renderSidebar()}
-        ${this.renderReader()}
-      </div>
+      ${this.view === 'graph'
+        ? html`<nottario-arch-graph .projectId=${this.projectId}></nottario-arch-graph>`
+        : html`<div class="layout">${this.renderSidebar()}${this.renderReader()}</div>`}
     `;
   }
 }
