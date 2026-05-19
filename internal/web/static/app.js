@@ -171,20 +171,24 @@ class NottarioShell extends LitElement {
       return html`<nottario-project-settings
         .me=${this.me} .projectId=${settingsMatch[1]}></nottario-project-settings>`;
     }
-    const boardMatch = path.match(/^\/projects\/([^/]+)\/board$/);
+    // Board: /board (default kanban) | /board/kanban | /board/gantt
+    const boardMatch = path.match(/^\/projects\/([^/]+)\/board(?:\/(kanban|gantt))?$/);
     if (boardMatch) {
+      const view = boardMatch[2] || 'kanban';
       return html`<nottario-board-page
-        .me=${this.me} .projectId=${boardMatch[1]}></nottario-board-page>`;
+        .me=${this.me} .projectId=${boardMatch[1]} .view=${view}></nottario-board-page>`;
     }
     const docsMatch = path.match(/^\/projects\/([^/]+)\/docs$/);
     if (docsMatch) {
       return html`<nottario-docs-page
         .me=${this.me} .projectId=${docsMatch[1]}></nottario-docs-page>`;
     }
-    const archMatch = path.match(/^\/projects\/([^/]+)\/arch$/);
+    // Architecture: /arch (default diagram) | /arch/diagram | /arch/tree
+    const archMatch = path.match(/^\/projects\/([^/]+)\/arch(?:\/(diagram|tree))?$/);
     if (archMatch) {
+      const view = archMatch[2] || 'diagram';
       return html`<nottario-arch-page
-        .me=${this.me} .projectId=${archMatch[1]}></nottario-arch-page>`;
+        .me=${this.me} .projectId=${archMatch[1]} .view=${view}></nottario-arch-page>`;
     }
     return html`
       <div class="card" style="padding: 24px; text-align: center;">

@@ -6,7 +6,8 @@ class NottarioBoardPage extends LitElement {
   static properties = {
     me: { type: Object },
     projectId: { type: String },
-    view: { state: true },               // 'kanban' or 'gantt'
+    // 'kanban' (default) or 'gantt'. Driven by the URL via the shell.
+    view: { type: String },
     project: { state: true },
     tasks: { state: true },
     roles: { state: true },
@@ -329,9 +330,9 @@ class NottarioBoardPage extends LitElement {
         <div class="spacer"></div>
         <div role="tablist" style="display:flex;gap:4px">
           <button class=${this.view === 'kanban' ? 'primary' : ''}
-                  @click=${() => { this.view = 'kanban'; }}>Kanban</button>
+                  @click=${() => window.nottarioNavigate(`/projects/${this.projectId}/board`)}>Kanban</button>
           <button class=${this.view === 'gantt' ? 'primary' : ''}
-                  @click=${() => { this.view = 'gantt'; }}>Gantt</button>
+                  @click=${() => window.nottarioNavigate(`/projects/${this.projectId}/board/gantt`)}>Gantt</button>
         </div>
         <button class="primary" @click=${() => this.showCreate = true}>New task</button>
       </div>
