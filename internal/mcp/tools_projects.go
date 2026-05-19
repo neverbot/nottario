@@ -48,6 +48,28 @@ func registerProjects(server *sdk.Server, d Deps) {
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.projects.list_priorities",
+		Description: "Lists the project's priority buckets (named priorities). Each entry has a 'key' (e.g. 'low', 'high'), a numeric 'value' that tasks store, and a 'position' for sort order. Always call this before creating a task so you choose a key from the project's vocabulary rather than guessing a numeric value.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in GetProjectInput) (*sdk.CallToolResult, any, error) {
+		if in.ProjectID == "" {
+			return toolError("project_id is required")
+		}
+		pid, perr := uuid.Parse(in.ProjectID)
+		if perr != nil {
+			p, err := identity.GetProject(ctx, d.Pool, in.ProjectID)
+			if err != nil {
+				return toolError("project not found: " + err.Error())
+			}
+			pid = p.ID
+		}
+		pr, err := identity.ListPriorities(ctx, d.Pool, pid)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(map[string]any{"priorities": pr})
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.projects.list_roles",
 		Description: "Lists the role catalogue of a project (e.g. backend, frontend, qa, design). Tool callers use these role IDs to filter tasks by role or to set the target_role of newly-created tasks.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in GetProjectInput) (*sdk.CallToolResult, any, error) {

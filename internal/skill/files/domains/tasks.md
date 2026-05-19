@@ -75,6 +75,19 @@ Filters narrow the candidate set:
   roles in the project.
 - `role_id` set → tasks whose `target_role_id` equals it or is null.
 
+### Priorities
+
+Each project defines its own priority buckets (named labels mapped to
+a numeric value). Defaults seeded on project creation: `low=30`,
+`medium=60`, `high=90`, `critical=100`. Admins can rename, retune or
+add buckets per project.
+
+**Always pick a key from the project's vocabulary** — call
+`nottario.projects.list_priorities` first and pass the chosen key as
+`priority_key` to `tasks.create` / `tasks.update`. Avoid passing raw
+numbers in `priority` unless you have a deliberate reason to bypass
+the buckets (e.g. inserting between two existing buckets).
+
 ### `nottario.tasks.create`
 
 Defaults: `state=todo`, `type=task`, `priority=50`. To create a
@@ -94,14 +107,36 @@ feature with subtasks:
 The parent transitions to `done` automatically when all its children
 are `done`.
 
+#### One task per role
+
+When a unit of work spans multiple roles (e.g. backend migration +
+frontend reorder UI + qa smoke), **do not file a single multi-role
+task**. Create one task per affected role and link them with
+`add_dependency` in the order they must be executed. Each role-scoped
+task is then individually pickable by the right agent and tracked
+independently.
+
+Typical pattern: group the role-scoped tasks under a `type=feature`
+parent so they share a title and roll up to `done` together.
+
+```text
+1. create(type='feature', title='Roles: add order, drag UI, Gantt lanes')  → F
+2. create(parent_task_id=F.id, target_role_id=backend, title='migration + API')   → B
+3. create(parent_task_id=F.id, target_role_id=frontend, title='drag UI + Gantt')  → Fe
+   then add_dependency(Fe, B)
+4. create(parent_task_id=F.id, target_role_id=qa, title='smoke reorder + lanes')  → Q
+   then add_dependency(Q, Fe)
+```
+
 ### `nottario.tasks.update`
 
 Mutates the fields you pass. Notable nuances:
 
 - Pass `assignee_user_id: ""` (empty string) to **unassign** the
   user. Same for `target_role_id`.
-- Changing `priority` is the canonical way to reorder; do not rely
-  on creation time alone.
+- Changing `priority` is the canonical way to reorder; pass
+  `priority_key` (resolved against project buckets) rather than a raw
+  number.
 - Use this for description edits and renames; do not delete-and-recreate.
 
 ### `nottario.tasks.set_state`

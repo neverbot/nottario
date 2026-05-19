@@ -194,6 +194,11 @@ type createTaskRequest struct {
 	Title          string     `json:"title"`
 	Description    string     `json:"description"`
 	Priority       *int       `json:"priority"`
+	// PriorityKey is an alternative to Priority: when set, the server
+	// resolves it against the project's priority catalogue and uses
+	// the bucket's numeric value. Priority (numeric) takes precedence
+	// when both are present.
+	PriorityKey    string     `json:"priority_key"`
 	AssigneeUserID *uuid.UUID `json:"assignee_user_id"`
 	TargetRoleID   *uuid.UUID `json:"target_role_id"`
 }
@@ -220,13 +225,23 @@ func CreateTaskHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		// Resolve priority_key when no explicit numeric priority is given.
+		priority := req.Priority
+		if priority == nil && req.PriorityKey != "" {
+			v, err := identity.ResolvePriorityKey(r.Context(), d.Pool, pid, req.PriorityKey)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			priority = &v
+		}
 		t, err := tasks.Create(r.Context(), d.Pool, tasks.CreateParams{
 			ProjectID:      pid,
 			ParentTaskID:   req.ParentTaskID,
 			Type:           req.Type,
 			Title:          req.Title,
 			DescriptionMD:  req.Description,
-			Priority:       req.Priority,
+			Priority:       priority,
 			AssigneeUserID: req.AssigneeUserID,
 			TargetRoleID:   req.TargetRoleID,
 		}, d.authorship(c))

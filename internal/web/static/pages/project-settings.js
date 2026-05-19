@@ -7,6 +7,7 @@ class NottarioProjectSettings extends LitElement {
     project: { state: true },
     roles: { state: true },
     members: { state: true },
+    priorities: { state: true },
     activeTab: { state: true },
     error: { state: true },
   };
@@ -68,6 +69,7 @@ class NottarioProjectSettings extends LitElement {
     this.project = null;
     this.roles = [];
     this.members = [];
+    this.priorities = [];
     this.activeTab = 'general';
     this.error = '';
   }
@@ -84,15 +86,17 @@ class NottarioProjectSettings extends LitElement {
   async load() {
     if (!this.projectId) return;
     try {
-      const [pr, rr, mr] = await Promise.all([
+      const [pr, rr, mr, qr] = await Promise.all([
         fetch(`/api/projects/${this.projectId}`),
         fetch(`/api/projects/${this.projectId}/roles`),
         fetch(`/api/projects/${this.projectId}/members`),
+        fetch(`/api/projects/${this.projectId}/priorities`),
       ]);
       if (!pr.ok) throw new Error('project not found');
       this.project = await pr.json();
       this.roles = (await rr.json()).roles || [];
       this.members = (await mr.json()).members || [];
+      this.priorities = (await qr.json()).priorities || [];
     } catch (e) {
       this.error = e.message;
     }
@@ -129,6 +133,37 @@ class NottarioProjectSettings extends LitElement {
     } catch (err) { this.error = err.message; }
   }
 
+  async upsertPriority(key, value, position) {
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/priorities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value: Number(value), position: Number(position) }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'failed');
+      await this.load();
+    } catch (err) { this.error = err.message; }
+  }
+
+  async addPriority(e) {
+    e.preventDefault();
+    const f = e.target;
+    const pos = this.priorities.length;
+    await this.upsertPriority(f.key.value.trim(), f.value.value, pos);
+    f.reset();
+  }
+
+  async deletePriority(key) {
+    if (!confirm(`Delete priority bucket "${key}"?`)) return;
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/priorities/${encodeURIComponent(key)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'delete failed');
+      await this.load();
+    } catch (err) { this.error = err.message; }
+  }
+
   back() { window.nottarioNavigate('/'); }
 
   render() {
@@ -142,7 +177,7 @@ class NottarioProjectSettings extends LitElement {
         <span class="muted">${this.project.Slug}</span>
       </div>
       <div class="tabs">
-        ${['general', 'roles', 'members'].map(t => html`
+        ${['general', 'roles', 'priorities', 'members'].map(t => html`
           <button class="tab ${this.activeTab === t ? 'active' : ''}"
                   @click=${() => this.activeTab = t}>
             ${t.charAt(0).toUpperCase() + t.slice(1)}
@@ -153,6 +188,7 @@ class NottarioProjectSettings extends LitElement {
       <div class="panel">
         ${this.activeTab === 'general' ? this.renderGeneral() : null}
         ${this.activeTab === 'roles' ? this.renderRoles() : null}
+        ${this.activeTab === 'priorities' ? this.renderPriorities() : null}
         ${this.activeTab === 'members' ? this.renderMembers() : null}
       </div>
     `;
@@ -199,6 +235,47 @@ class NottarioProjectSettings extends LitElement {
           <input name="label" placeholder="Label" required>
           <input name="color" placeholder="#hex" style="max-width:90px">
           <button type="submit" class="primary">Add role</button>
+        </form>
+      ` : null}
+    `;
+  }
+
+  renderPriorities() {
+    const sorted = [...this.priorities].sort((a, b) => (a.Position - b.Position) || (b.Value - a.Value));
+    return html`
+      <p class="muted" style="margin:0 0 12px">
+        Named priority buckets. Tasks store the numeric value; agents pick by key
+        (e.g. <code>high</code>) via the MCP. Higher value = pulled first.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Value</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${sorted.map(p => html`
+            <tr>
+              <td class="mono">${p.Key}</td>
+              <td>
+                ${this.me?.is_admin
+                  ? html`<input type="number" min="0" max="100" .value=${String(p.Value)}
+                          @change=${(e) => this.upsertPriority(p.Key, e.target.value, p.Position)}
+                          style="width:80px">`
+                  : p.Value}
+              </td>
+              <td class="row-actions">
+                ${this.me?.is_admin
+                  ? html`<button class="danger" @click=${() => this.deletePriority(p.Key)}>Delete</button>`
+                  : null}
+              </td>
+            </tr>
+          `)}
+        </tbody>
+      </table>
+      ${this.me?.is_admin ? html`
+        <form class="add-row" @submit=${(e) => this.addPriority(e)}>
+          <input name="key" placeholder="key (e.g. urgent)" required>
+          <input name="value" type="number" min="0" max="100" placeholder="value (0-100)" required style="max-width:140px">
+          <button type="submit" class="primary">Add bucket</button>
         </form>
       ` : null}
     `;

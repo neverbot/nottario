@@ -40,21 +40,23 @@ type tasksCreateInput struct {
 	Title          string `json:"title" jsonschema:"short human-readable title"`
 	Description    string `json:"description,omitempty" jsonschema:"longer markdown description"`
 	Type           string `json:"type,omitempty" jsonschema:"'task' (default), 'bug', 'chore', 'spike' or 'feature'"`
-	Priority       *int   `json:"priority,omitempty" jsonschema:"0-100 (defaults to 50). Higher = pulled first."`
+	Priority       *int   `json:"priority,omitempty" jsonschema:"raw 0-100 value. Prefer priority_key over this — call projects.list_priorities to discover the project's buckets."`
+	PriorityKey    string `json:"priority_key,omitempty" jsonschema:"named bucket from projects.list_priorities (e.g. 'low','medium','high','critical'). Resolved server-side to the bucket's numeric value. Takes precedence over priority only when priority is omitted."`
 	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"optional uuid of the user this task is assigned to"`
 	TargetRoleID   string `json:"target_role_id,omitempty" jsonschema:"optional uuid of the role this task is targeted at"`
 	ParentTaskID   string `json:"parent_task_id,omitempty" jsonschema:"optional uuid of a parent feature task this task is a child of"`
 }
 
 type tasksUpdateInput struct {
-	ProjectID       string  `json:"project_id" jsonschema:"uuid of the project"`
-	TaskID          string  `json:"task_id" jsonschema:"uuid of the task"`
-	Title           *string `json:"title,omitempty"`
-	Description     *string `json:"description,omitempty"`
-	Type            *string `json:"type,omitempty"`
-	Priority        *int    `json:"priority,omitempty"`
-	AssigneeUserID  *string `json:"assignee_user_id,omitempty" jsonschema:"uuid to set, or empty string to unset"`
-	TargetRoleID    *string `json:"target_role_id,omitempty" jsonschema:"uuid to set, or empty string to unset"`
+	ProjectID      string  `json:"project_id" jsonschema:"uuid of the project"`
+	TaskID         string  `json:"task_id" jsonschema:"uuid of the task"`
+	Title          *string `json:"title,omitempty"`
+	Description    *string `json:"description,omitempty"`
+	Type           *string `json:"type,omitempty"`
+	Priority       *int    `json:"priority,omitempty" jsonschema:"raw 0-100 value. Prefer priority_key."`
+	PriorityKey    string  `json:"priority_key,omitempty" jsonschema:"named bucket from projects.list_priorities; resolved server-side."`
+	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"uuid to set, or empty string to unset"`
+	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"uuid to set, or empty string to unset"`
 }
 
 type tasksStateInput struct {
@@ -191,12 +193,20 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
+		priority := in.Priority
+		if priority == nil && in.PriorityKey != "" {
+			v, err := identity.ResolvePriorityKey(ctx, d.Pool, pid, in.PriorityKey)
+			if err != nil {
+				return toolError("unknown priority_key '" + in.PriorityKey + "' (call nottario.projects.list_priorities to see available keys)")
+			}
+			priority = &v
+		}
 		params := tasks.CreateParams{
 			ProjectID:     pid,
 			Title:         in.Title,
 			DescriptionMD: in.Description,
 			Type:          tasks.Type(in.Type),
-			Priority:      in.Priority,
+			Priority:      priority,
 		}
 		if id := optUUID(in.AssigneeUserID); id != nil {
 			params.AssigneeUserID = id
@@ -233,6 +243,13 @@ func registerTasks(server *sdk.Server, d Deps) {
 			up.Type = &tt
 		}
 		up.Priority = in.Priority
+		if up.Priority == nil && in.PriorityKey != "" {
+			v, err := identity.ResolvePriorityKey(ctx, d.Pool, pid, in.PriorityKey)
+			if err != nil {
+				return toolError("unknown priority_key '" + in.PriorityKey + "'")
+			}
+			up.Priority = &v
+		}
 		if in.AssigneeUserID != nil {
 			if *in.AssigneeUserID == "" {
 				up.UnsetAssignee = true

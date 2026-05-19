@@ -12,6 +12,7 @@ class NottarioBoardPage extends LitElement {
     tasks: { state: true },
     roles: { state: true },
     members: { state: true },
+    priorities: { state: true },
     showCreate: { state: true },
     selected: { state: true },
     error: { state: true },
@@ -193,23 +194,32 @@ class NottarioBoardPage extends LitElement {
   async load() {
     if (!this.projectId) return;
     try {
-      const [pr, tr, rr, mr] = await Promise.all([
+      const [pr, tr, rr, mr, qr] = await Promise.all([
         fetch(`/api/projects/${this.projectId}`),
         fetch(`/api/projects/${this.projectId}/tasks?include_children=true`),
         fetch(`/api/projects/${this.projectId}/roles`),
         fetch(`/api/projects/${this.projectId}/members`),
+        fetch(`/api/projects/${this.projectId}/priorities`),
       ]);
       if (!pr.ok) throw new Error('project not found');
       this.project = await pr.json();
       this.tasks = (await tr.json()).tasks || [];
       this.roles = (await rr.json()).roles || [];
       this.members = (await mr.json()).members || [];
+      this.priorities = (await qr.json()).priorities || [];
     } catch (e) {
       this.error = e.message;
     }
   }
 
   roleByID(id) { return this.roles.find(r => r.ID === id); }
+
+  _priorityLabel(value) {
+    if (!this.priorities || !this.priorities.length) return `p${value}`;
+    const exact = this.priorities.find(p => p.Value === value);
+    if (exact) return exact.Key;
+    return `p${value}`;
+  }
 
   back() { window.nottarioNavigate('/'); }
 
@@ -269,7 +279,7 @@ class NottarioBoardPage extends LitElement {
       title: f.title.value.trim(),
       description: f.description.value.trim(),
       type: f.type.value,
-      priority: parseInt(f.priority.value, 10),
+      priority_key: f.priority_key.value,
     };
     if (f.target_role_id.value) body.target_role_id = f.target_role_id.value;
     try {
@@ -313,7 +323,7 @@ class NottarioBoardPage extends LitElement {
         <div class="title">${t.Title}</div>
         <div class="meta">
           <span class="badge ${t.Type}">${t.Type}</span>
-          <span class="prio">p${t.Priority}</span>
+          <span class="prio">${this._priorityLabel(t.Priority)}</span>
           ${role ? html`<span class="badge" style=${`background:${role.Color || '#eee'}1a; border-color:${role.Color || '#ddd'}`}>${role.Label}</span>` : ''}
         </div>
       </div>
@@ -383,7 +393,10 @@ class NottarioBoardPage extends LitElement {
               </div>
               <div style="flex:1">
                 <label>Priority</label>
-                <input name="priority" type="number" value="50" min="0" max="100">
+                <select name="priority_key">
+                  ${[...this.priorities].sort((a, b) => b.Value - a.Value).map(p =>
+                    html`<option value=${p.Key} ?selected=${p.Key === 'medium'}>${p.Key} (${p.Value})</option>`)}
+                </select>
               </div>
               <div style="flex:1">
                 <label>Target role</label>

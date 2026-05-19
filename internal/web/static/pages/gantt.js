@@ -25,6 +25,7 @@ class NottarioGantt extends LitElement {
     roles: { state: true },
     deps: { state: true },
     members: { state: true },
+    priorities: { state: true },
     error: { state: true },
     now: { state: true },
   };
@@ -187,13 +188,22 @@ class NottarioGantt extends LitElement {
   }
 
   _centerOnNow() {
-    const stage = this.shadowRoot?.querySelector('.stage');
-    const nowLine = this.shadowRoot?.querySelector('.now-line');
-    if (!stage || !nowLine) return;
-    const nowX = parseFloat(nowLine.getAttribute('x1') || '0');
-    const target = Math.max(0, nowX - stage.clientWidth / 2);
-    stage.scrollLeft = target;
-    this._initialCenterDone = true;
+    // Defer two frames: first to let Lit flush its SVG render, second
+    // to let the browser actually lay out the (now wider) sub-columns
+    // and compute scrollWidth / clientWidth. Reading those numbers in
+    // the same tick as render() returns stale zeroes — the sub-column
+    // priority columns added enough X to push the now-line off-screen
+    // before the layout pass had finished.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const stage = this.shadowRoot?.querySelector('.stage');
+      const nowLine = this.shadowRoot?.querySelector('.now-line');
+      if (!stage || !nowLine) return;
+      const nowX = parseFloat(nowLine.getAttribute('x1') || '0');
+      if (!stage.clientWidth) return; // not visible yet — try again on next update
+      const target = Math.max(0, nowX - stage.clientWidth / 2);
+      stage.scrollLeft = target;
+      this._initialCenterDone = true;
+    }));
   }
 
   _subscribe() {
@@ -206,19 +216,29 @@ class NottarioGantt extends LitElement {
     });
   }
 
+  _priorityLabel(value) {
+    if (this.priorities && this.priorities.length) {
+      const exact = this.priorities.find(p => p.Value === value);
+      if (exact) return exact.Key;
+    }
+    return `p${value}`;
+  }
+
   async load() {
     if (!this.projectId) return;
     try {
-      const [tr, rr, dr, mr] = await Promise.all([
+      const [tr, rr, dr, mr, qr] = await Promise.all([
         fetch(`/api/projects/${this.projectId}/tasks?include_children=true`),
         fetch(`/api/projects/${this.projectId}/roles`),
         fetch(`/api/projects/${this.projectId}/tasks/dependencies`),
         fetch(`/api/projects/${this.projectId}/members`),
+        fetch(`/api/projects/${this.projectId}/priorities`),
       ]);
       this.tasks = (await tr.json()).tasks || [];
       this.roles = (await rr.json()).roles || [];
       this.deps = (await dr.json()).dependencies || [];
       this.members = (await mr.json()).members || [];
+      this.priorities = (await qr.json()).priorities || [];
     } catch (e) {
       this.error = e.message;
     }
@@ -501,7 +521,7 @@ class NottarioGantt extends LitElement {
 
           <!-- Priority labels at the top of each future sub-column -->
           ${futurePriorityBuckets.map(b => svg`
-            <text class="priority-label" x=${b.x + 4} y=${headerH - 4}>p${b.priority}</text>
+            <text class="priority-label" x=${b.x + 4} y=${headerH - 4}>${this._priorityLabel(b.priority)}</text>
           `)}
 
           <!-- Band rows -->

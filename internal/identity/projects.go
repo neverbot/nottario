@@ -60,6 +60,10 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 		}
 	}
 
+	if err := seedDefaultPriorities(ctx, tx, p.ID); err != nil {
+		return nil, err
+	}
+
 	for _, repo := range repos {
 		repo = strings.TrimSpace(repo)
 		if repo == "" {
