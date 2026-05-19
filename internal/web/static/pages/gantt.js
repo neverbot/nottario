@@ -158,7 +158,24 @@ class NottarioGantt extends LitElement {
     if (c.has('projectId')) {
       this.load();
       this._subscribe();
+      this._initialCenterDone = false; // re-centre when project changes
     }
+    // Once the SVG is in the DOM and has its first computed layout,
+    // scroll the stage so the "now" line sits in the middle. We only
+    // do this once per project so we don't fight the user's scroll.
+    if (!this._initialCenterDone && this.tasks && this.tasks.length) {
+      this._centerOnNow();
+    }
+  }
+
+  _centerOnNow() {
+    const stage = this.shadowRoot?.querySelector('.stage');
+    const nowLine = this.shadowRoot?.querySelector('.now-line');
+    if (!stage || !nowLine) return;
+    const nowX = parseFloat(nowLine.getAttribute('x1') || '0');
+    const target = Math.max(0, nowX - stage.clientWidth / 2);
+    stage.scrollLeft = target;
+    this._initialCenterDone = true;
   }
 
   _subscribe() {
@@ -205,7 +222,11 @@ class NottarioGantt extends LitElement {
     return result.filter(b => b.tasks.length > 0);
   }
 
-  // Compute topological depth for `todo` tasks within their band.
+  // Compute topological depth across ALL todo tasks in the project,
+  // not per band. A task depending on a task in another band still
+  // ends up further to the right by columns, so dependency arrows
+  // never collapse to perfectly vertical lines.
+  //
   // Depth = 0 when the task has no `todo`/`doing` predecessors;
   // otherwise = max(predecessor.depth) + 1.
   computeTopoDepths(tasks) {
@@ -255,7 +276,6 @@ class NottarioGantt extends LitElement {
     const labelWidth = 120;
     const pastSlotW = minBarWidth + 6;     // 146 — one done task per ordinal slot
     const futureColumnWidth = minBarWidth + 16;
-    const laneStaggerX = 10;      // horizontal nudge per lane in present/future, keeps deps from being perfectly vertical
     const headerH = 28;
 
     // ---- Past zone: ordinal slots ----
@@ -283,8 +303,11 @@ class NottarioGantt extends LitElement {
     const presentX = labelWidth + pastWidth;
     const futureStartX = presentX + presentWidth;
 
-    // Future zone topological columns per band.
-    const futureDepthsPerBand = bands.map(b => this.computeTopoDepths(b.tasks));
+    // Future zone topological columns: depth is computed GLOBALLY,
+    // not per band, so a task that depends on a task in a different
+    // band still ends up further to the right.
+    const globalDepths = this.computeTopoDepths(this.tasks || []);
+    const futureDepthsPerBand = bands.map(() => globalDepths);
 
     // ---- Lane assignment per band ----
     // For each band, position every task on the X axis, then greedily
@@ -324,16 +347,10 @@ class NottarioGantt extends LitElement {
         } else {
           laneEnds[placed] = p.to;
         }
-        // Add a small per-lane horizontal stagger for tasks in the
-        // present/future zones so dependency arrows between bands at
-        // the same depth/now line have visible slope instead of
-        // falling perfectly vertical.
-        let stagger = 0;
-        if (p.task.State !== 'done') stagger = placed * laneStaggerX;
         positions.push({
           task: p.task, bi, lane: placed,
-          from: p.from + stagger,
-          to: p.to + stagger,
+          from: p.from,
+          to: p.to,
         });
       }
       lanesPerBand[bi] = Math.max(1, laneEnds.length);
