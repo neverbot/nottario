@@ -57,5 +57,18 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("POST /api/tokens", IssueTokenHandler(tok))
 	mux.Handle("DELETE /api/tokens/{id}", RevokeTokenHandler(tok))
 
+	tasks := TaskDeps{Pool: d.Pool, Resolver: d.Resolver}
+	mux.Handle("GET /api/projects/{id}/tasks", ListTasksHandler(tasks))
+	mux.Handle("POST /api/projects/{id}/tasks", CreateTaskHandler(tasks))
+	mux.Handle("GET /api/projects/{id}/tasks/next", NextTaskHandler(tasks))
+	mux.Handle("GET /api/projects/{id}/tasks/{task_id}", GetTaskHandler(tasks))
+	mux.Handle("PATCH /api/projects/{id}/tasks/{task_id}", UpdateTaskHandler(tasks))
+	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}", DeleteTaskHandler(tasks))
+	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/state", SetTaskStateHandler(tasks))
+	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/dependencies", AddDependencyHandler(tasks))
+	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}/dependencies/{dep_id}", RemoveDependencyHandler(tasks))
+	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/commits", LinkCommitHandler(tasks))
+	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/comments", AddCommentHandler(tasks))
+
 	return mux
 }
