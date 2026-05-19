@@ -112,6 +112,8 @@ example:
 - `domains/tasks.md` — the full task API surface and edge cases.
 - `domains/docs.md` — the shared-markdown domain: skills, context,
   notes; frontmatter; optimistic concurrency.
+- `domains/architecture.md` — the textual architecture diagram:
+  nodes, edges, kinds, when to touch it and when to leave it alone.
 
 The skill is bundled with the binary; what you read here is what
 shipped, but each Nottario instance may override files via documents
