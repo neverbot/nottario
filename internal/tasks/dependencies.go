@@ -42,6 +42,37 @@ func RemoveDependency(ctx context.Context, pool *pgxpool.Pool, taskID, dependsOn
 	return err
 }
 
+// ProjectDependency is one edge from the project-wide list.
+type ProjectDependency struct {
+	TaskID      uuid.UUID
+	DependsOnID uuid.UUID
+}
+
+// ListAllDependencies returns every dependency edge of a project,
+// used by the Gantt to compute topological positions for `todo`
+// tasks in a single round-trip.
+func ListAllDependencies(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]ProjectDependency, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT d.task_id, d.depends_on_id
+		FROM task_dependencies d
+		JOIN tasks t ON t.id = d.task_id
+		WHERE t.project_id = $1
+	`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ProjectDependency{}
+	for rows.Next() {
+		var p ProjectDependency
+		if err := rows.Scan(&p.TaskID, &p.DependsOnID); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // ListDependenciesOf returns the IDs the task depends on.
 func ListDependenciesOf(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := pool.Query(ctx, `

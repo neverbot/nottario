@@ -66,6 +66,32 @@ func (d TaskDeps) ensureProjectAccess(ctx context.Context, c identity.Caller, pr
 	return nil
 }
 
+// ListDependenciesHandler returns every dependency edge for the project.
+func ListDependenciesHandler(d TaskDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		pid, err := projectIDFromPath(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		deps, err := tasks.ListAllDependencies(r.Context(), d.Pool, pid)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"dependencies": deps})
+	})
+}
+
 // ListTasksHandler returns the project's tasks.
 func ListTasksHandler(d TaskDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
