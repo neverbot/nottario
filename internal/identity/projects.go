@@ -50,11 +50,11 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 		return nil, fmt.Errorf("insert project: %w", err)
 	}
 
-	for _, r := range DefaultRoleCatalogue {
+	for i, r := range DefaultRoleCatalogue {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO roles (project_id, key, label, color)
-			VALUES ($1, $2, $3, $4)
-		`, p.ID, r.Key, r.Label, r.Color)
+			INSERT INTO roles (project_id, key, label, color, position)
+			VALUES ($1, $2, $3, $4, $5)
+		`, p.ID, r.Key, r.Label, r.Color, i)
 		if err != nil {
 			return nil, fmt.Errorf("seed role %s: %w", r.Key, err)
 		}

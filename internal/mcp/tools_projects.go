@@ -91,4 +91,44 @@ func registerProjects(server *sdk.Server, d Deps) {
 		}
 		return jsonResult(map[string]any{"roles": roles})
 	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.projects.reorder_roles",
+		Description: "Admin-only. Rewrites the top-to-bottom order of a project's roles. Pass the full ordered list of role ids; the position field is updated atomically. The Gantt view and the Roles settings page render in this order.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in ReorderRolesInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !c.IsAdmin {
+			return toolError("admin only")
+		}
+		pid, perr := uuid.Parse(in.ProjectID)
+		if perr != nil {
+			p, err := identity.GetProject(ctx, d.Pool, in.ProjectID)
+			if err != nil {
+				return toolError("project not found: " + err.Error())
+			}
+			pid = p.ID
+		}
+		ids := make([]uuid.UUID, 0, len(in.RoleIDs))
+		for _, s := range in.RoleIDs {
+			id, err := uuid.Parse(s)
+			if err != nil {
+				return toolError("invalid role id: " + s)
+			}
+			ids = append(ids, id)
+		}
+		if err := identity.MoveRole(ctx, d.Pool, pid, ids); err != nil {
+			return toolError(err.Error())
+		}
+		roles, _ := identity.ListRoles(ctx, d.Pool, pid)
+		return jsonResult(map[string]any{"roles": roles})
+	})
+}
+
+// ReorderRolesInput is the input for nottario.projects.reorder_roles.
+type ReorderRolesInput struct {
+	ProjectID string   `json:"project_id" jsonschema:"uuid or slug of the project"`
+	RoleIDs   []string `json:"role_ids" jsonschema:"role uuids in the desired top-to-bottom order"`
 }

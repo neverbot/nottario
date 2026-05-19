@@ -101,6 +101,49 @@ func UpdateRoleHandler(d ProjectDeps) http.Handler {
 	})
 }
 
+// ReorderRolesHandler accepts the full desired top-to-bottom ordering
+// of a project's role ids and rewrites their `position` accordingly.
+// Admin-only.
+func ReorderRolesHandler(d ProjectDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		if !c.IsAdmin {
+			writeError(w, http.StatusForbidden, "admin only")
+			return
+		}
+		pid, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		var body struct {
+			RoleIDs []string `json:"role_ids"`
+		}
+		if err := decodeJSON(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		ids := make([]uuid.UUID, 0, len(body.RoleIDs))
+		for _, s := range body.RoleIDs {
+			id, err := uuid.Parse(s)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid role id: "+s)
+				return
+			}
+			ids = append(ids, id)
+		}
+		if err := identity.MoveRole(r.Context(), d.Pool, pid, ids); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
 // DeleteRoleHandler removes a role. Admin-only.
 func DeleteRoleHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

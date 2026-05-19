@@ -65,6 +65,7 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("POST /api/projects/{id}/roles", CreateRoleHandler(proj))
 	mux.Handle("PATCH /api/projects/{id}/roles/{role_id}", UpdateRoleHandler(proj))
 	mux.Handle("DELETE /api/projects/{id}/roles/{role_id}", DeleteRoleHandler(proj))
+	mux.Handle("POST /api/projects/{id}/roles/reorder", ReorderRolesHandler(proj))
 
 	mux.Handle("GET /api/projects/{id}/priorities", ListPrioritiesHandler(proj))
 	mux.Handle("POST /api/projects/{id}/priorities", UpsertPriorityHandler(proj))

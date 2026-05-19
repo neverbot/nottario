@@ -56,6 +56,7 @@ type Role struct {
 	Key       string
 	Label     string
 	Color     string
+	Position  int
 	CreatedAt time.Time
 }
 
