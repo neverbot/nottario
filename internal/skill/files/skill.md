@@ -116,6 +116,22 @@ example:
   nodes, edges, kinds, when to touch it and when to leave it alone.
 
 The skill is bundled with the binary; what you read here is what
-shipped, but each Nottario instance may override files via documents
-under `global/skills/...` (when the document domain ships in a later
-milestone).
+shipped. Each Nottario instance can **override or extend** any file
+without rebuilding the binary: an admin (or an agent with admin
+permissions) creates a document with `scope=global`, `kind=skill`
+and `path=global/skills/<file>`. The next call to
+`nottario.skill.read` resolves to the override; otherwise the
+embedded copy is served. `nottario.skill.list` includes both,
+tagging each entry with `origin: "embedded" | "global"`.
+
+Use this to:
+
+- **Override** a shipped file (e.g. tighten the rules in
+  `domains/tasks.md` for your team).
+- **Add** files that the bundle doesn't include
+  (`by-language/go.md`, `by-role/security.md`,
+  `recipes/deploying-to-our-k8s.md`).
+
+A full snapshot of the current bundle (overrides applied) is
+available as a zip at `GET /skill.zip` — useful to mirror the skill
+into `~/.claude/skills/nottario/` on a machine, or for backups.

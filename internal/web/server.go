@@ -66,9 +66,11 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("DELETE /api/tokens/{id}", RevokeTokenHandler(tok))
 
 	// Skill bundle served unauthenticated so agents can preview the
-	// catalogue before authenticating.
-	mux.Handle("GET /skill", SkillHandler())
-	mux.Handle("GET /skill/", SkillHandler())
+	// catalogue before authenticating. Per-organisation overrides
+	// resolved against the documents table inside the handler.
+	mux.Handle("GET /skill", SkillHandler(d.Pool))
+	mux.Handle("GET /skill/", SkillHandler(d.Pool))
+	mux.Handle("GET /skill.zip", SkillZipHandler(d.Pool))
 
 	// Real-time event stream for the web UI (and any future SSE client).
 	if d.Hub != nil {
