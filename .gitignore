@@ -1,0 +1,38 @@
+# Exploratory analysis (not versioned)
+docs/initial/
+
+# Visual companion from the brainstorming process
+.superpowers/
+
+# Build artefacts and binaries
+/nottario
+/bin/
+/dist/
+/tmp/
+*.exe
+*.test
+*.out
+
+# Go
+vendor/
+coverage.out
+coverage.html
+
+# Frontend
+node_modules/
+
+# Local environments
+.env
+.env.*
+!.env.example
+
+# Editors and tooling
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and local data
+*.log
+/data/
