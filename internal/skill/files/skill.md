@@ -1,0 +1,117 @@
+---
+name: nottario
+description: Use when working on a software project tracked in Nottario. Establishes the agent's identity, locates the active project, finds the next task to work on, and records progress (state changes, linked commits, comments).
+---
+
+# Nottario skill
+
+This skill teaches you to use the Nottario MCP server. Nottario coordinates
+developers and their agents around three domains: tasks, shared markdown
+context, and an architecture diagram. This skill currently covers the
+**tasks** domain; documents and architecture arrive in later milestones.
+
+## Identifying yourself
+
+Always start by calling `nottario.whoami` to confirm:
+
+- which **user** you are acting on behalf of (`user_id`, `github_login`);
+- whether you are an **admin**;
+- the **token_id** that authenticates you.
+
+If `whoami` fails, the configured API token is missing or revoked — stop
+and ask the human to provide a fresh one from the Nottario web UI under
+**Tokens → New token**.
+
+## Locating the active project
+
+Nottario does **not** keep a "currently active project" on the server side.
+**Every tool call that needs a project requires `project_id` as an
+explicit argument.** Resolve it once at the start of your session:
+
+1. Call `nottario.projects.list` to see what is available.
+2. Pick the project whose `slug` or `name` matches what the human asked
+   you to work on (or ask the human if unsure).
+3. Cache the `id` in your working memory for the rest of the session and
+   pass it on every subsequent call.
+
+If you need the role catalogue (to assign a task to "any backend"), call
+`nottario.projects.list_roles` once and cache the result.
+
+## Working a task end-to-end
+
+The expected flow when the human says "carry on" or "do the next thing":
+
+1. **Find what to do.** Call `nottario.tasks.next` with the project_id
+   (and optionally `assignee_user_id` set to your own `user_id` from
+   `whoami`). It returns the highest-priority `todo` task whose
+   dependencies are satisfied.
+2. **Mark you've started.** Call `nottario.tasks.set_state` with
+   `state="doing"`. This records `actual_start` automatically.
+3. **Do the work in the human's repo locally.** Nottario does not store
+   code; you work in the existing checkout as you always would.
+4. **Commit and link.** When you commit, call
+   `nottario.tasks.link_commit` with `repo="owner/repo"` and the SHA so
+   that future readers can trace the work.
+5. **Note non-obvious things.** Use `nottario.tasks.add_comment` for
+   anything a future reader (human or agent) would benefit from: tricky
+   trade-offs, follow-up ideas, why you chose A over B.
+6. **Close.** `nottario.tasks.set_state` with `state="done"`. This
+   records `actual_end`.
+7. **Loop.** If the human wants you to keep going, call
+   `nottario.tasks.next` again.
+
+## Filing work as you discover it
+
+While working, you will spot things the human cares about but did not
+ask for: bugs, follow-ups, missing features. **File them as tasks**
+rather than dropping them in your reply:
+
+```
+nottario.tasks.create {
+  project_id: "...",
+  title: "Fix null deref in auth callback on duplicate state",
+  type: "bug",
+  priority: 70,           // pick something sensible
+  target_role_id: "..."   // optional: route to a role rather than a person
+}
+```
+
+Pick `type`:
+
+- `task` for ordinary work,
+- `bug` for defects you found,
+- `chore` for cleanup,
+- `spike` for time-boxed investigations,
+- `feature` for a *parent* task whose children are the actual work.
+
+For multi-role features (design → backend → frontend → qa), create a
+`feature` parent and child tasks linked to it via `parent_task_id`, then
+declare the order with `nottario.tasks.add_dependency`.
+
+## Rules of thumb
+
+- **Always identify and re-confirm the project.** Do not assume the
+  project from earlier in the conversation; pass `project_id`
+  explicitly every time.
+- **Do not invent ids.** Always look them up via `list` / `get`.
+- **Do not change tasks that belong to other people without being asked.**
+  If you have to, leave a comment explaining why.
+- **Prefer small, frequent updates over silent batching.** Set state to
+  `doing` as soon as you start; mark `done` as soon as you finish.
+- **If you are unsure whether to file a comment or not, file it.** A
+  short comment is cheap; missing context is expensive later.
+- **Never call `nottario.tasks.set_state` with `done` if the task is
+  not actually finished.** Use a comment to explain mid-way state.
+
+## When in doubt
+
+Call `nottario.skill.read` with the path of a deeper guide — for
+example:
+
+- `references/identity.md` — token and identity details.
+- `domains/tasks.md` — the full task API surface and edge cases.
+
+The skill is bundled with the binary; what you read here is what
+shipped, but each Nottario instance may override files via documents
+under `global/skills/...` (when the document domain ships in a later
+milestone).
