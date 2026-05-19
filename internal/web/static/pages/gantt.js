@@ -247,7 +247,7 @@ class NottarioGantt extends LitElement {
   // Group tasks by role; falls back to a "general" pseudo-role for
   // tasks without target_role_id.
   bands() {
-    const order = [...this.roles];
+    const order = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
     const general = { ID: '__general__', Key: 'general', Label: 'general', Color: '#59636e' };
     const result = order.map(r => ({ role: r, tasks: [] }));
     result.push({ role: general, tasks: [] });

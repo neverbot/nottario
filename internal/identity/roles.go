@@ -112,17 +112,33 @@ func MoveRole(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, orde
 		}
 		pos++
 	}
-	// Anything not mentioned keeps trailing slots in creation order.
-	if _, err := tx.Exec(ctx, `
-		WITH trailing AS (
-		  SELECT id, row_number() OVER (ORDER BY created_at, id) - 1 AS r
-		  FROM roles
-		  WHERE project_id = $1 AND id <> ALL($2)
-		)
-		UPDATE roles r SET position = $3 + t.r
-		FROM trailing t WHERE r.id = t.id
-	`, projectID, orderedRoleIDs, pos); err != nil {
+	// Anything not mentioned keeps trailing slots in creation order so a
+	// partial reorder doesn't drop roles off the bottom.
+	rows2, err := tx.Query(ctx, `
+		SELECT id FROM roles
+		WHERE project_id = $1
+		ORDER BY created_at, id
+	`, projectID)
+	if err != nil {
 		return err
+	}
+	var trailing []uuid.UUID
+	for rows2.Next() {
+		var id uuid.UUID
+		if err := rows2.Scan(&id); err != nil {
+			rows2.Close()
+			return err
+		}
+		if !seen[id] {
+			trailing = append(trailing, id)
+		}
+	}
+	rows2.Close()
+	for _, id := range trailing {
+		if _, err := tx.Exec(ctx, `UPDATE roles SET position = $1 WHERE id = $2`, pos, id); err != nil {
+			return err
+		}
+		pos++
 	}
 
 	return tx.Commit(ctx)

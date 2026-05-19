@@ -62,6 +62,16 @@ class NottarioProjectSettings extends LitElement {
     .add-row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
     .add-row input { flex: 1; }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
+    tr[draggable] { cursor: grab; }
+    tr.dragging { opacity: 0.45; }
+    tr.drag-over td:first-child { box-shadow: inset 2px 0 0 0 #1f6feb; }
+    .drag-handle {
+      color: #8c959f;
+      cursor: grab;
+      user-select: none;
+      padding: 0 6px;
+      font-family: ui-monospace, monospace;
+    }
   `;
 
   constructor() {
@@ -211,25 +221,38 @@ class NottarioProjectSettings extends LitElement {
   }
 
   renderRoles() {
+    const sorted = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
+    const canDrag = this.me?.is_admin;
     return html`
+      ${canDrag ? html`<p class="muted" style="margin:0 0 8px">Drag rows to reorder. Order is shared with the Gantt view.</p>` : null}
       <table>
         <thead>
-          <tr><th>Key</th><th>Label</th><th>Color</th><th></th></tr>
+          <tr>
+            ${canDrag ? html`<th style="width:24px"></th>` : null}
+            <th>Key</th><th>Label</th><th>Color</th><th></th>
+          </tr>
         </thead>
         <tbody>
-          ${this.roles.map(r => html`
-            <tr>
+          ${sorted.map(r => html`
+            <tr draggable=${canDrag ? 'true' : 'false'}
+                data-id=${r.ID}
+                @dragstart=${(e) => this._dragStart(e, r.ID)}
+                @dragend=${(e) => this._dragEnd(e)}
+                @dragover=${(e) => this._dragOver(e)}
+                @dragleave=${(e) => this._dragLeave(e)}
+                @drop=${(e) => this._drop(e, r.ID)}>
+              ${canDrag ? html`<td class="drag-handle" title="Drag to reorder">⋮⋮</td>` : null}
               <td class="mono">${r.Key}</td>
               <td>${r.Label}</td>
               <td>${r.Color ? html`<span class="color-dot" style=${`background:${r.Color}`}></span>${r.Color}` : ''}</td>
               <td class="row-actions">
-                ${this.me?.is_admin ? html`<button class="danger" @click=${() => this.deleteRole(r.ID)}>Delete</button>` : null}
+                ${canDrag ? html`<button class="danger" @click=${() => this.deleteRole(r.ID)}>Delete</button>` : null}
               </td>
             </tr>
           `)}
         </tbody>
       </table>
-      ${this.me?.is_admin ? html`
+      ${canDrag ? html`
         <form class="add-row" @submit=${(e) => this.addRole(e)}>
           <input name="key" placeholder="key (snake-case)" required>
           <input name="label" placeholder="Label" required>
@@ -238,6 +261,52 @@ class NottarioProjectSettings extends LitElement {
         </form>
       ` : null}
     `;
+  }
+
+  _dragStart(e, id) {
+    this._dragId = id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+    e.currentTarget.classList.add('dragging');
+  }
+  _dragEnd(e) {
+    e.currentTarget.classList.remove('dragging');
+    this.shadowRoot.querySelectorAll('tr.drag-over').forEach(el => el.classList.remove('drag-over'));
+  }
+  _dragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const row = e.currentTarget;
+    this.shadowRoot.querySelectorAll('tr.drag-over').forEach(el => el !== row && el.classList.remove('drag-over'));
+    row.classList.add('drag-over');
+  }
+  _dragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+  }
+  async _drop(e, targetId) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    const sourceId = this._dragId;
+    if (!sourceId || sourceId === targetId) return;
+    const sorted = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
+    const without = sorted.filter(r => r.ID !== sourceId);
+    const targetIdx = without.findIndex(r => r.ID === targetId);
+    const sourceRole = sorted.find(r => r.ID === sourceId);
+    without.splice(targetIdx, 0, sourceRole);
+    const ids = without.map(r => r.ID);
+    // Optimistic local update.
+    this.roles = without.map((r, i) => ({ ...r, Position: i }));
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/roles/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role_ids: ids }),
+      });
+      if (!res.ok) throw new Error('reorder failed');
+    } catch (err) {
+      this.error = err.message;
+      await this.load();
+    }
   }
 
   renderPriorities() {
