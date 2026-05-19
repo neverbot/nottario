@@ -186,6 +186,7 @@ class NottarioProjectsPage extends LitElement {
                 <div class="actions">
                   <button class="primary" @click=${() => this.goto(`/projects/${p.ID}/board`)}>Open board</button>
                   <button @click=${() => this.goto(`/projects/${p.ID}/docs`)}>Docs</button>
+                  <button @click=${() => this.goto(`/projects/${p.ID}/arch`)}>Architecture</button>
                   <button @click=${() => this.goto(`/projects/${p.ID}/settings`)}>Settings</button>
                 </div>
               </div>

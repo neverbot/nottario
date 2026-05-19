@@ -5,6 +5,7 @@ import './pages/project-settings.js';
 import './pages/tokens.js';
 import './pages/board.js';
 import './pages/docs.js';
+import './pages/arch.js';
 
 class NottarioShell extends LitElement {
   static properties = {
@@ -165,6 +166,11 @@ class NottarioShell extends LitElement {
     if (docsMatch) {
       return html`<nottario-docs-page
         .me=${this.me} .projectId=${docsMatch[1]}></nottario-docs-page>`;
+    }
+    const archMatch = path.match(/^\/projects\/([^/]+)\/arch$/);
+    if (archMatch) {
+      return html`<nottario-arch-page
+        .me=${this.me} .projectId=${archMatch[1]}></nottario-arch-page>`;
     }
     return html`
       <div class="card" style="padding: 24px; text-align: center;">
