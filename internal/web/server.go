@@ -107,6 +107,9 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/docs/search", SearchDocsHandler(docsDeps))
 	mux.Handle("GET /api/docs/history", HistoryDocHandler(docsDeps))
 
+	searchDeps := SearchDeps{Pool: d.Pool, Resolver: d.Resolver}
+	mux.Handle("GET /api/search", SearchHandler(searchDeps))
+
 	tasks := TaskDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/projects/{id}/tasks", ListTasksHandler(tasks))
 	mux.Handle("POST /api/projects/{id}/tasks", CreateTaskHandler(tasks))
