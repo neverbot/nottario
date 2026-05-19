@@ -77,6 +77,14 @@ func NewServer(d Deps) http.Handler {
 		mux.Handle(method+" /mcp/", mcpHandler)
 	}
 
+	docsDeps := DocsDeps{Pool: d.Pool, Resolver: d.Resolver}
+	mux.Handle("GET /api/docs", ListDocsHandler(docsDeps))
+	mux.Handle("GET /api/docs/read", ReadDocHandler(docsDeps))
+	mux.Handle("POST /api/docs/write", WriteDocHandler(docsDeps))
+	mux.Handle("POST /api/docs/delete", DeleteDocHandler(docsDeps))
+	mux.Handle("GET /api/docs/search", SearchDocsHandler(docsDeps))
+	mux.Handle("GET /api/docs/history", HistoryDocHandler(docsDeps))
+
 	tasks := TaskDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/projects/{id}/tasks", ListTasksHandler(tasks))
 	mux.Handle("POST /api/projects/{id}/tasks", CreateTaskHandler(tasks))

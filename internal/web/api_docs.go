@@ -1,0 +1,295 @@
+package web
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/neverbot/nottario/internal/docs"
+	"github.com/neverbot/nottario/internal/identity"
+)
+
+// DocsDeps wires the docs HTTP endpoints.
+type DocsDeps struct {
+	Pool     *pgxpool.Pool
+	Resolver *identity.Resolver
+}
+
+func (d DocsDeps) caller(r *http.Request) (identity.Caller, bool) {
+	if c, ok := d.Resolver.ResolveSession(r); ok {
+		return c, true
+	}
+	return d.Resolver.ResolveToken(r)
+}
+
+func (d DocsDeps) authorship(c identity.Caller) docs.Authorship {
+	a := docs.Authorship{}
+	uid := c.UserID
+	a.UserID = &uid
+	if c.Source == identity.SourceToken {
+		tid := c.TokenID
+		a.TokenID = &tid
+	}
+	return a
+}
+
+// resolveScope reads the (scope, project_id) pair from the request,
+// applies the access rules, and returns the canonical form. Admins
+// see everything; non-admin callers see only projects they are
+// members of, plus all global documents.
+func (d DocsDeps) resolveScope(ctx context.Context, c identity.Caller, scopeStr, projectIDStr string) (docs.Scope, *uuid.UUID, error) {
+	scope := docs.Scope(scopeStr)
+	if scope == "" {
+		scope = docs.ScopeProject
+	}
+	if !docs.ValidScope(scope) {
+		return "", nil, errors.New("invalid scope")
+	}
+	if scope == docs.ScopeGlobal {
+		return scope, nil, nil
+	}
+	if projectIDStr == "" {
+		return "", nil, errors.New("project_id is required when scope=project")
+	}
+	pid, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		return "", nil, errors.New("project_id must be a uuid")
+	}
+	if !c.IsAdmin {
+		roles, err := identity.UserRoleIDs(ctx, d.Pool, c.UserID, pid)
+		if err != nil {
+			return "", nil, err
+		}
+		if len(roles) == 0 {
+			return "", nil, errors.New("not a project member")
+		}
+	}
+	return scope, &pid, nil
+}
+
+// requireWriteGlobal limits write access to global docs to admins.
+func requireWriteGlobal(c identity.Caller, scope docs.Scope) error {
+	if scope == docs.ScopeGlobal && !c.IsAdmin {
+		return errors.New("only admins can modify global documents")
+	}
+	return nil
+}
+
+// ListDocsHandler returns lightweight summaries.
+func ListDocsHandler(d DocsDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		q := r.URL.Query()
+		scope, pid, err := d.resolveScope(r.Context(), c, q.Get("scope"), q.Get("project_id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		f := docs.ListFilter{
+			Scope:      scope,
+			ProjectID:  pid,
+			PathPrefix: q.Get("path_prefix"),
+			Kind:       docs.Kind(q.Get("kind")),
+		}
+		list, err := docs.List(r.Context(), d.Pool, f)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"documents": list})
+	})
+}
+
+// ReadDocHandler fetches a single document.
+func ReadDocHandler(d DocsDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		q := r.URL.Query()
+		path := q.Get("path")
+		if strings.TrimSpace(path) == "" {
+			writeError(w, http.StatusBadRequest, "path is required")
+			return
+		}
+		scope, pid, err := d.resolveScope(r.Context(), c, q.Get("scope"), q.Get("project_id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		doc, err := docs.Read(r.Context(), d.Pool, scope, pid, path)
+		if errors.Is(err, docs.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "document not found")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, doc)
+	})
+}
+
+type writeDocRequest struct {
+	Scope           string  `json:"scope"`
+	ProjectID       string  `json:"project_id"`
+	Path            string  `json:"path"`
+	Kind            string  `json:"kind"`
+	ContentMD       string  `json:"content_md"`
+	Message         string  `json:"message"`
+	ExpectedVersion *int    `json:"expected_version"`
+}
+
+// WriteDocHandler creates or updates a document.
+func WriteDocHandler(d DocsDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		var req writeDocRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		scope, pid, err := d.resolveScope(r.Context(), c, req.Scope, req.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := requireWriteGlobal(c, scope); err != nil {
+			writeError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		doc, err := docs.Write(r.Context(), d.Pool, docs.WriteParams{
+			Scope:           scope,
+			ProjectID:       pid,
+			Path:            req.Path,
+			Kind:            docs.Kind(req.Kind),
+			ContentMD:       req.ContentMD,
+			Message:         req.Message,
+			ExpectedVersion: req.ExpectedVersion,
+		}, d.authorship(c))
+		if errors.Is(err, docs.ErrVersionConflict) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, doc)
+	})
+}
+
+type deleteDocRequest struct {
+	Scope     string `json:"scope"`
+	ProjectID string `json:"project_id"`
+	Path      string `json:"path"`
+	Message   string `json:"message"`
+}
+
+// DeleteDocHandler soft-deletes a document.
+func DeleteDocHandler(d DocsDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		var req deleteDocRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		scope, pid, err := d.resolveScope(r.Context(), c, req.Scope, req.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := requireWriteGlobal(c, scope); err != nil {
+			writeError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if err := docs.Delete(r.Context(), d.Pool, scope, pid, req.Path, req.Message, d.authorship(c)); err != nil {
+			if errors.Is(err, docs.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "document not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+// SearchDocsHandler runs a full-text search.
+func SearchDocsHandler(d DocsDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		q := r.URL.Query()
+		query := q.Get("q")
+		scope, pid, err := d.resolveScope(r.Context(), c, q.Get("scope"), q.Get("project_id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		hits, err := docs.Search(r.Context(), d.Pool, query, docs.SearchFilter{
+			Scope:     scope,
+			ProjectID: pid,
+			Kind:      docs.Kind(q.Get("kind")),
+		})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"hits": hits})
+	})
+}
+
+// HistoryDocHandler lists historical versions of a document.
+func HistoryDocHandler(d DocsDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		q := r.URL.Query()
+		path := q.Get("path")
+		scope, pid, err := d.resolveScope(r.Context(), c, q.Get("scope"), q.Get("project_id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		doc, err := docs.Read(r.Context(), d.Pool, scope, pid, path)
+		if errors.Is(err, docs.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "document not found")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		versions, err := docs.History(r.Context(), d.Pool, doc.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"versions": versions})
+	})
+}
