@@ -184,6 +184,7 @@ class NottarioProjectsPage extends LitElement {
                   ? html`<div class="repos">${p.Repos.map(r => html`<span>${r}</span>`)}</div>`
                   : null}
                 <div class="actions">
+                  <button class="primary" @click=${() => this.goto(`/projects/${p.ID}/board`)}>Open board</button>
                   <button @click=${() => this.goto(`/projects/${p.ID}/settings`)}>Settings</button>
                 </div>
               </div>

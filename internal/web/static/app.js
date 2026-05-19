@@ -3,6 +3,7 @@ import './pages/login.js';
 import './pages/projects.js';
 import './pages/project-settings.js';
 import './pages/tokens.js';
+import './pages/board.js';
 
 class NottarioShell extends LitElement {
   static properties = {
@@ -153,6 +154,11 @@ class NottarioShell extends LitElement {
     if (settingsMatch) {
       return html`<nottario-project-settings
         .me=${this.me} .projectId=${settingsMatch[1]}></nottario-project-settings>`;
+    }
+    const boardMatch = path.match(/^\/projects\/([^/]+)\/board$/);
+    if (boardMatch) {
+      return html`<nottario-board-page
+        .me=${this.me} .projectId=${boardMatch[1]}></nottario-board-page>`;
     }
     return html`
       <div class="card" style="padding: 24px; text-align: center;">
