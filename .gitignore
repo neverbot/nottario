@@ -14,7 +14,7 @@ docs/initial/
 *.out
 
 # Go
-vendor/
+/vendor/
 coverage.out
 coverage.html
 
