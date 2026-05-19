@@ -144,17 +144,31 @@ needed).
 
 ### "Carry on" — the loop
 
+**Required order of operations.** Always assign the task to yourself
+(your `whoami.user_id`) BEFORE moving it to `doing`. Without that,
+the task sits in `doing` with no owner; humans cannot tell which
+agent is working on what, and two agents may pick up the same task.
+
 ```
 loop:
-  task = nottario.tasks.next { project_id, assignee_user_id: my_user_id }
+  me   = nottario.whoami { }
+  task = nottario.tasks.next { project_id, assignee_user_id: me.user_id }
   if task is null: tell the human "no eligible tasks" and stop
-  nottario.tasks.set_state { ..., state: "doing" }
-  ...do the work...
-  nottario.tasks.link_commit { ..., repo, sha }
-  nottario.tasks.add_comment { ..., body: "Done; tested with X" }     // optional
-  nottario.tasks.set_state { ..., state: "done" }
+
+  // 1) Take ownership before flipping state.
+  nottario.tasks.update    { task_id: task.id, assignee_user_id: me.user_id }
+  nottario.tasks.set_state { task_id: task.id, state: "doing" }
+
+  ...do the work in the local repo...
+
+  nottario.tasks.link_commit { task_id: task.id, repo, sha }
+  nottario.tasks.add_comment { task_id: task.id, body: "..." }   // optional
+  nottario.tasks.set_state   { task_id: task.id, state: "done" }
 goto loop
 ```
+
+If a task you want to pick up is already assigned to another user,
+leave a comment before stealing it, or ask the human first.
 
 ### "I found a bug while doing my task"
 

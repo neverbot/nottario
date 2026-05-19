@@ -57,6 +57,12 @@ class NottarioGantt extends LitElement {
       text-transform: uppercase;
       font-family: ui-monospace, SFMono-Regular, monospace;
     }
+    .priority-label {
+      fill: #57606a;
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 600;
+    }
     .zone-divider {
       stroke: #afb8c1;
       stroke-width: 1;
@@ -321,6 +327,45 @@ class NottarioGantt extends LitElement {
     const globalDepths = this.computeTopoDepths(this.tasks || []);
     const futureDepthsPerBand = bands.map(() => globalDepths);
 
+    // ---- Future sub-columns by priority within each depth ----
+    // For each topological depth, collect the distinct priorities of
+    // the todo tasks at that depth, sorted DESC. Each priority gets a
+    // sub-column inside the depth's slot in the future zone; higher
+    // priority means leftmost sub-column. The "next" eligible task is
+    // therefore in the leftmost sub-column at depth 0.
+    const futureSubColumnX = new Map(); // taskID -> x offset
+    const futurePriorityBuckets = [];   // [{ depth, priority, x }] for labels
+    {
+      // tasksByDepth: depth -> [{ priority, count }]
+      const tasksByDepth = new Map();
+      for (const t of this.tasks || []) {
+        if (t.State !== 'todo') continue;
+        const d = globalDepths.get(t.ID) || 0;
+        if (!tasksByDepth.has(d)) tasksByDepth.set(d, []);
+        tasksByDepth.get(d).push(t);
+      }
+      // For each depth, build a sorted list of distinct priorities and
+      // record the X for each priority bucket.
+      const depthsSorted = Array.from(tasksByDepth.keys()).sort((a, b) => a - b);
+      let cursor = futureStartX;
+      for (const d of depthsSorted) {
+        const ts = tasksByDepth.get(d);
+        const distinctPriorities = Array.from(new Set(ts.map(t => t.Priority)))
+          .sort((a, b) => b - a); // DESC
+        for (let i = 0; i < distinctPriorities.length; i++) {
+          const p = distinctPriorities[i];
+          const x = cursor + i * futureColumnWidth + 12;
+          futurePriorityBuckets.push({ depth: d, priority: p, x });
+          for (const t of ts) {
+            if (t.Priority === p) futureSubColumnX.set(t.ID, x);
+          }
+        }
+        cursor += Math.max(1, distinctPriorities.length) * futureColumnWidth;
+      }
+      // Stash the rightmost X so we can size the SVG accordingly.
+      this._futureEndX = cursor;
+    }
+
     // ---- Lane assignment per band ----
     // For each band, position every task on the X axis, then greedily
     // place it into the lowest-index lane whose previous occupant has
@@ -335,10 +380,11 @@ class NottarioGantt extends LitElement {
       const ranged = [];
       for (const t of b.tasks) {
         const pastSlot = (t.State === 'done') ? (slots.get(t.ID) ?? null) : null;
+        const futureX = (t.State === 'todo') ? futureSubColumnX.get(t.ID) : undefined;
         const x = this.taskX({
           t, labelWidth, pastSlotW, pastSlot,
           presentX, presentWidth, futureStartX, futureColumnWidth,
-          depths, minBarWidth,
+          futureX, depths, minBarWidth,
         });
         if (!x) continue;
         ranged.push({ task: t, from: x.from, to: x.to });
@@ -389,16 +435,10 @@ class NottarioGantt extends LitElement {
     // Y of a task's vertical centre (used by dependency arrows).
     const taskCenterY = (bi, lane) => taskY(bi, lane) + taskHeight / 2;
 
-    // Calculate total svg width.
-    const maxDepth = futureDepthsPerBand.reduce((m, dmap) => {
-      for (const t of dmap.keys()) {
-        const tk = bands.flatMap(b => b.tasks).find(x => x.ID === t);
-        if (tk && tk.State === 'todo') m = Math.max(m, dmap.get(t));
-      }
-      return m;
-    }, 0);
-    const futureWidth = (maxDepth + 1) * futureColumnWidth;
-    const width = futureStartX + futureWidth + 16;
+    // Calculate total svg width — the future zone now sizes itself
+    // from the sub-column buckets (depth × priority), so we use the
+    // running cursor stashed in _futureEndX.
+    const width = Math.max(futureStartX + futureColumnWidth, this._futureEndX || futureStartX) + 16;
 
     // Build an index for dependency arrows.
     const posByTaskID = new Map(positions.map(p => [p.task.ID, p]));
@@ -457,7 +497,12 @@ class NottarioGantt extends LitElement {
           <!-- Zone labels -->
           <text class="zone-label" x=${labelWidth + 4} y="14">PAST · chronological</text>
           <text class="zone-label" x=${presentX + 4} y="14">NOW</text>
-          <text class="zone-label" x=${futureStartX + 4} y="14">FUTURE · topological</text>
+          <text class="zone-label" x=${futureStartX + 4} y="14">FUTURE · topological + priority</text>
+
+          <!-- Priority labels at the top of each future sub-column -->
+          ${futurePriorityBuckets.map(b => svg`
+            <text class="priority-label" x=${b.x + 4} y=${headerH - 4}>p${b.priority}</text>
+          `)}
 
           <!-- Band rows -->
           ${bands.map((b, bi) => svg`
@@ -557,7 +602,7 @@ class NottarioGantt extends LitElement {
   // Doing tasks are anchored to a fixed slot in the present zone.
   // Todo tasks are placed by their topological depth in the future
   // zone. Returns null when the task cannot be placed.
-  taskX({ t, labelWidth, pastSlotW, pastSlot, presentX, presentWidth, futureStartX, futureColumnWidth, depths, minBarWidth }) {
+  taskX({ t, labelWidth, pastSlotW, pastSlot, presentX, presentWidth, futureStartX, futureColumnWidth, futureX, depths, minBarWidth }) {
     if (t.State === 'done') {
       if (pastSlot == null) return null; // no actual_end ⇒ not on past axis
       const from = labelWidth + pastSlot * pastSlotW + 6;
@@ -567,9 +612,13 @@ class NottarioGantt extends LitElement {
       const from = presentX + 12;
       return { from, to: from + minBarWidth };
     }
-    // todo
-    const d = depths.get(t.ID) || 0;
-    const from = futureStartX + d * futureColumnWidth + 12;
+    // todo — futureX (sub-column X) computed by the priority grouping
+    // pass. Fall back to depth-only if we somehow didn't precompute.
+    let from = futureX;
+    if (from == null) {
+      const d = depths.get(t.ID) || 0;
+      from = futureStartX + d * futureColumnWidth + 12;
+    }
     return { from, to: from + minBarWidth };
   }
 
