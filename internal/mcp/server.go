@@ -60,6 +60,7 @@ func buildServer(d Deps) *sdk.Server {
 	registerTasks(server, d)
 	registerDocs(server, d)
 	registerArch(server, d)
+	registerSearch(server, d)
 	registerSkill(server, d)
 	return server
 }
