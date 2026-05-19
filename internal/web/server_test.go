@@ -8,8 +8,11 @@ import (
 	"testing"
 )
 
-func TestNewServer_RoutesIndexHealthzVersionStatic(t *testing.T) {
-	srv := NewServer()
+// TestNewServer_PublicRoutes verifies the routes that don't require
+// a database. Full identity-dependent routes are covered by the
+// end-to-end smoke (compose stack + manual run).
+func TestNewServer_PublicRoutes(t *testing.T) {
+	srv := NewServer(Deps{})
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
 
