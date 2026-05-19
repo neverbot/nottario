@@ -1,12 +1,24 @@
 :root {
   --fg: #1f2328;
   --fg-muted: #59636e;
+  --fg-on-accent: #ffffff;
   --bg: #ffffff;
   --bg-subtle: #f6f8fa;
+  --bg-overlay: rgba(0, 0, 0, 0.04);
   --border: #d1d9e0;
+  --border-strong: #afb8c1;
   --accent: #0969da;
+  --accent-hover: #0860c8;
+  --success: #1f883d;
+  --warning: #9a6700;
+  --danger: #cf222e;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
           Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --shadow-sm: 0 1px 0 rgba(31, 35, 40, 0.04);
+  --shadow-md: 0 3px 6px rgba(140, 149, 159, 0.15);
 }
 
 * { box-sizing: border-box; }
@@ -23,3 +35,67 @@ html, body {
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--fg);
+  padding: 5px 16px;
+  border-radius: var(--radius);
+  transition: background-color 120ms, border-color 120ms;
+}
+button:hover { background: #eef2f6; border-color: var(--border-strong); }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+button.primary {
+  background: var(--success);
+  border-color: rgba(31, 35, 40, 0.15);
+  color: var(--fg-on-accent);
+}
+button.primary:hover { background: #1a7f37; }
+
+button.danger {
+  color: var(--danger);
+}
+
+input[type="text"], input[type="email"], textarea, select {
+  font-family: inherit;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  width: 100%;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+}
+
+.muted { color: var(--fg-muted); }
+.mono { font-family: var(--mono); }
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 2em;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-subtle);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+}
+
+.badge.admin { background: #fff8c5; color: #7d4e00; border-color: #d4a72c; }
