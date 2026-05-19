@@ -1,0 +1,35 @@
+# Secrets and local-only files
+.env
+.env.*
+!.env.example
+
+# Build artefacts
+bin/
+dist/
+tmp/
+*.exe
+*.test
+*.out
+
+# Project metadata that the binary doesn't need
+.git/
+.github/
+.claude/
+.superpowers/
+docs/
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
+
+# Coverage and logs
+coverage.out
+coverage.html
+*.log
+
+# Go vendor (we use modules, not vendored deps)
+/vendor/
+
+# Frontend deps (we don't ship any node_modules)
+node_modules/

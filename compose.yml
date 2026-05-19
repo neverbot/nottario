@@ -2,19 +2,30 @@ services:
   nottario:
     build:
       context: .
+      args:
+        VERSION: dev
     image: nottario:dev
     ports:
       - "8080:8080"
+    # Secrets and per-deployment settings are loaded from .env (gitignored).
+    # The .env file must contain at least GITHUB_OAUTH_CLIENT_ID,
+    # GITHUB_OAUTH_CLIENT_SECRET and SESSION_KEY. See .env.example.
+    env_file:
+      - .env
+    # Overrides applied on top of .env: inside the compose network the
+    # database hostname is 'db', not 'localhost'.
     environment:
       HTTP_ADDR: ":8080"
-      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8080}"
       DATABASE_URL: "postgres://nottario:nottario@db:5432/nottario?sslmode=disable"
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
 
   db:
     image: postgres:16-alpine
+    # The host port mapping is convenient for `psql` from your machine
+    # while developing. Remove it for production-style deployments.
     ports:
       - "5432:5432"
     environment:
@@ -28,6 +39,7 @@ services:
       interval: 2s
       timeout: 2s
       retries: 30
+    restart: unless-stopped
 
 volumes:
   db-data:
