@@ -251,27 +251,35 @@ class NottarioGantt extends LitElement {
     const avatarPad = 5;
     const laneGap = 6;
     const laneHeight = taskHeight + laneGap;
-    const bandPad = 8; // vertical padding inside a band
+    const bandPad = 8;            // vertical padding inside a band
     const labelWidth = 120;
-    const pastWidth = 360;
-    const presentWidth = 80;
-    const futureColumnWidth = 140;
+    const pastSlotW = minBarWidth + 6;     // 146 — one done task per ordinal slot
+    const futureColumnWidth = minBarWidth + 16;
+    const laneStaggerX = 10;      // horizontal nudge per lane in present/future, keeps deps from being perfectly vertical
     const headerH = 28;
 
-    // Past zone: real time span from oldest actual_start to now.
-    const pastStartCandidates = (this.tasks || [])
-      .filter(t => t.ActualStart)
-      .map(t => new Date(t.ActualStart).getTime());
-    const pastMin = pastStartCandidates.length
-      ? Math.min(...pastStartCandidates)
-      : this.now.getTime() - 7 * 24 * 3600 * 1000;
-    const pastMax = this.now.getTime();
-    const pastSpan = Math.max(60_000, pastMax - pastMin);
+    // ---- Past zone: ordinal slots ----
+    // Each band orders its done tasks chronologically by actual_end and
+    // assigns each one a fixed-width slot. The past axis becomes
+    // "chronological order" instead of "real time", which keeps tasks
+    // legible regardless of how close together they happened. The
+    // tooltip on each bar still shows the actual timestamp.
+    const pastSlotPerBand = bands.map(b => {
+      const done = b.tasks
+        .filter(t => t.State === 'done' && t.ActualEnd)
+        .sort((a, b) => new Date(a.ActualEnd).getTime() - new Date(b.ActualEnd).getTime());
+      const m = new Map();
+      done.forEach((t, i) => m.set(t.ID, i));
+      return m;
+    });
+    const maxPastSlots = pastSlotPerBand.reduce((m, x) => Math.max(m, x.size), 0);
+    const pastWidth = Math.max(360, maxPastSlots * pastSlotW + 12);
 
-    const xFromTime = (ms) => {
-      const t = Math.max(pastMin, Math.min(pastMax, ms));
-      return labelWidth + ((t - pastMin) / pastSpan) * pastWidth;
-    };
+    // The present zone gets enough room for one min-width bar plus
+    // padding. Multiple concurrent `doing` tasks stack into lanes
+    // (handled by the lane assignment below).
+    const presentWidth = minBarWidth + 24;
+
     const presentX = labelWidth + pastWidth;
     const futureStartX = presentX + presentWidth;
 
@@ -288,16 +296,17 @@ class NottarioGantt extends LitElement {
     const lanesPerBand = bands.map(() => 1);
     bands.forEach((b, bi) => {
       const depths = futureDepthsPerBand[bi];
+      const slots = pastSlotPerBand[bi];
       const ranged = [];
       for (const t of b.tasks) {
-        const x = this.taskX({ t, xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth, depths });
+        const pastSlot = (t.State === 'done') ? (slots.get(t.ID) ?? null) : null;
+        const x = this.taskX({
+          t, labelWidth, pastSlotW, pastSlot,
+          presentX, presentWidth, futureStartX, futureColumnWidth,
+          depths, minBarWidth,
+        });
         if (!x) continue;
-        // Enforce a minimum bar width so the title fits inside even
-        // for tasks that finished in seconds. We grow to the right;
-        // the lane assignment below uses this widened range so
-        // concurrent tasks still get separate lanes.
-        const to = Math.max(x.to, x.from + minBarWidth);
-        ranged.push({ task: t, from: x.from, to });
+        ranged.push({ task: t, from: x.from, to: x.to });
       }
       ranged.sort((a, b) => a.from - b.from);
       const laneEnds = []; // laneEnds[i] = X where lane i is occupied until
@@ -315,7 +324,17 @@ class NottarioGantt extends LitElement {
         } else {
           laneEnds[placed] = p.to;
         }
-        positions.push({ task: p.task, bi, lane: placed, from: p.from, to: p.to });
+        // Add a small per-lane horizontal stagger for tasks in the
+        // present/future zones so dependency arrows between bands at
+        // the same depth/now line have visible slope instead of
+        // falling perfectly vertical.
+        let stagger = 0;
+        if (p.task.State !== 'done') stagger = placed * laneStaggerX;
+        positions.push({
+          task: p.task, bi, lane: placed,
+          from: p.from + stagger,
+          to: p.to + stagger,
+        });
       }
       lanesPerBand[bi] = Math.max(1, laneEnds.length);
     });
@@ -384,7 +403,7 @@ class NottarioGantt extends LitElement {
           </defs>
 
           <!-- Zone labels -->
-          <text class="zone-label" x=${labelWidth + 4} y="14">PAST · real time</text>
+          <text class="zone-label" x=${labelWidth + 4} y="14">PAST · chronological</text>
           <text class="zone-label" x=${presentX + 4} y="14">NOW</text>
           <text class="zone-label" x=${futureStartX + 4} y="14">FUTURE · topological</text>
 
@@ -475,27 +494,25 @@ class NottarioGantt extends LitElement {
   }
 
   // Compute the (from, to) X coordinates of a task on the timeline.
-  // Returns null when the task cannot be placed (e.g. doing without
-  // actual_start, which shouldn't happen).
-  taskX({ t, xFromTime, presentX, presentWidth, futureStartX, futureColumnWidth, depths }) {
+  //
+  // Past tasks use their ordinal slot index (passed in as pastSlot).
+  // Doing tasks are anchored to a fixed slot in the present zone.
+  // Todo tasks are placed by their topological depth in the future
+  // zone. Returns null when the task cannot be placed.
+  taskX({ t, labelWidth, pastSlotW, pastSlot, presentX, presentWidth, futureStartX, futureColumnWidth, depths, minBarWidth }) {
     if (t.State === 'done') {
-      if (!t.ActualStart || !t.ActualEnd) return null;
-      const from = xFromTime(new Date(t.ActualStart).getTime());
-      const to = Math.max(from + 4, xFromTime(new Date(t.ActualEnd).getTime()));
-      return { from, to };
+      if (pastSlot == null) return null; // no actual_end ⇒ not on past axis
+      const from = labelWidth + pastSlot * pastSlotW + 6;
+      return { from, to: from + minBarWidth };
     }
     if (t.State === 'doing') {
-      if (!t.ActualStart) {
-        return { from: presentX + 4, to: presentX + presentWidth - 4 };
-      }
-      const from = xFromTime(new Date(t.ActualStart).getTime());
-      const to = presentX + presentWidth / 2;
-      return { from, to: Math.max(from + 4, to) };
+      const from = presentX + 12;
+      return { from, to: from + minBarWidth };
     }
     // todo
     const d = depths.get(t.ID) || 0;
     const from = futureStartX + d * futureColumnWidth + 12;
-    return { from, to: from + futureColumnWidth - 24 };
+    return { from, to: from + minBarWidth };
   }
 
   _emitSelect(t) {
