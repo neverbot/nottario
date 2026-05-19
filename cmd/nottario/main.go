@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/neverbot/nottario/internal/config"
 	"github.com/neverbot/nottario/internal/db"
+	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/version"
 	"github.com/neverbot/nottario/internal/web"
 )
@@ -45,15 +47,29 @@ func main() {
 	}
 	logger.Info("migrations applied")
 
+	cookieSecure := strings.HasPrefix(cfg.PublicURL, "https://")
+	resolver := identity.NewResolver(pool, cfg.SessionKey, cookieSecure)
+	oauthCfg := identity.OAuthConfig{
+		ClientID:     cfg.GithubClientID,
+		ClientSecret: cfg.GithubClientSecret,
+		PublicURL:    cfg.PublicURL,
+		SessionKey:   cfg.SessionKey,
+		CookieSecure: cookieSecure,
+	}
+
 	srv := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           web.NewServer(),
+		Addr: cfg.HTTPAddr,
+		Handler: web.NewServer(web.Deps{
+			Pool:        pool,
+			Resolver:    resolver,
+			OAuthConfig: oauthCfg,
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("http server listening", "addr", cfg.HTTPAddr)
+		logger.Info("http server listening", "addr", cfg.HTTPAddr, "public_url", cfg.PublicURL)
 		errCh <- srv.ListenAndServe()
 	}()
 
