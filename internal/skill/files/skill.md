@@ -110,6 +110,8 @@ example:
 
 - `references/identity.md` — token and identity details.
 - `domains/tasks.md` — the full task API surface and edge cases.
+- `domains/docs.md` — the shared-markdown domain: skills, context,
+  notes; frontmatter; optimistic concurrency.
 
 The skill is bundled with the binary; what you read here is what
 shipped, but each Nottario instance may override files via documents
