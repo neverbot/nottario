@@ -23,9 +23,16 @@ func TestNewServer_PublicRoutes(t *testing.T) {
 		wantCTPrefx string
 	}{
 		{"/", 200, "<nottario-shell></nottario-shell>", "text/html"},
+		// Catch-all serves the SPA shell for client-side routes so a
+		// browser refresh on a deep link does not 404.
+		{"/projects/12345/board", 200, "<nottario-shell></nottario-shell>", "text/html"},
+		{"/tokens", 200, "<nottario-shell></nottario-shell>", "text/html"},
 		{"/healthz", 200, `"status":"ok"`, "application/json"},
 		{"/version", 200, `"version"`, "application/json"},
 		{"/static/styles.css", 200, "--fg:", "text/css"},
+		// Unknown API and auth paths must 404 in JSON, not the SPA shell.
+		{"/api/this-does-not-exist", 404, `"error"`, "application/json"},
+		{"/auth/nope", 404, `"error"`, "application/json"},
 	}
 	for _, c := range cases {
 		resp, err := http.Get(ts.URL + c.path)

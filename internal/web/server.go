@@ -28,7 +28,12 @@ func NewServer(d Deps) http.Handler {
 
 	mux.Handle("GET /healthz", HealthzHandler())
 	mux.Handle("GET /version", VersionHandler())
-	mux.Handle("GET /{$}", IndexHandler())
+	// SPA catch-all: any GET that does not match a more specific route
+	// is served the embedded index.html so the client-side router can
+	// resolve the path (handles direct page loads and refreshes for
+	// /projects/<id>/board, /tokens, etc.). Unknown /api/* and /auth/*
+	// paths short-circuit to 404 inside the handler.
+	mux.Handle("GET /", IndexHandler())
 
 	auth := AuthDeps{Pool: d.Pool, Resolver: d.Resolver, OAuthConfig: d.OAuthConfig}
 	mux.Handle("GET /auth/github/start", GithubStartHandler(auth))
@@ -64,9 +69,13 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /skill/", SkillHandler())
 
 	// MCP endpoint — Streamable HTTP transport with Bearer-token auth.
+	// Methods are enumerated explicitly so this route does not conflict
+	// with the SPA catch-all on GET /.
 	mcpHandler := mcpserver.Handler(mcpserver.Deps{Pool: d.Pool, Resolver: d.Resolver})
-	mux.Handle("/mcp", mcpHandler)
-	mux.Handle("/mcp/", mcpHandler)
+	for _, method := range []string{"GET", "POST", "DELETE", "OPTIONS"} {
+		mux.Handle(method+" /mcp", mcpHandler)
+		mux.Handle(method+" /mcp/", mcpHandler)
+	}
 
 	tasks := TaskDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/projects/{id}/tasks", ListTasksHandler(tasks))
