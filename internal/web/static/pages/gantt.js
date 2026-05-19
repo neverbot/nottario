@@ -1,4 +1,5 @@
 import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
+import { subscribe } from '/static/realtime.js';
 
 // <nottario-gantt> renders the project's tasks as a horizontal
 // timeline with three zones on the X axis:
@@ -140,16 +141,32 @@ class NottarioGantt extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.load();
+    this._subscribe();
+    // Keep the "now" line live; once per minute is enough for the UI.
     this._tick = setInterval(() => { this.now = new Date(); }, 60 * 1000);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     clearInterval(this._tick);
+    this._unsub?.();
   }
 
   updated(c) {
-    if (c.has('projectId')) this.load();
+    if (c.has('projectId')) {
+      this.load();
+      this._subscribe();
+    }
+  }
+
+  _subscribe() {
+    this._unsub?.();
+    if (!this.projectId) return;
+    this._unsub = subscribe(this.projectId, (ev) => {
+      // Tasks and dependencies are what the gantt draws; reload on
+      // any related event.
+      if (ev.type?.startsWith('task.')) this.load();
+    });
   }
 
   async load() {
