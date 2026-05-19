@@ -77,6 +77,21 @@ func NewServer(d Deps) http.Handler {
 		mux.Handle(method+" /mcp/", mcpHandler)
 	}
 
+	archDeps := ArchDeps{Pool: d.Pool, Resolver: d.Resolver}
+	mux.Handle("GET /api/projects/{id}/arch/kinds", ListKindsHandler(archDeps))
+	mux.Handle("POST /api/projects/{id}/arch/kinds", UpsertKindHandler(archDeps))
+	mux.Handle("DELETE /api/projects/{id}/arch/kinds/{key}", DeleteKindHandler(archDeps))
+	mux.Handle("GET /api/projects/{id}/arch/nodes", ListNodesHandler(archDeps))
+	mux.Handle("POST /api/projects/{id}/arch/nodes", UpsertNodeHandler(archDeps))
+	mux.Handle("GET /api/projects/{id}/arch/nodes/{slug}", GetNodeHandler(archDeps))
+	mux.Handle("DELETE /api/projects/{id}/arch/nodes/{slug}", RemoveNodeHandler(archDeps))
+	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/move", MoveNodeHandler(archDeps))
+	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/links", LinkNodeHandler(archDeps))
+	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/unlinks", UnlinkNodeHandler(archDeps))
+	mux.Handle("GET /api/projects/{id}/arch/edges", ListEdgesHandler(archDeps))
+	mux.Handle("POST /api/projects/{id}/arch/edges", UpsertEdgeHandler(archDeps))
+	mux.Handle("DELETE /api/projects/{id}/arch/edges/{edge_id}", RemoveEdgeHandler(archDeps))
+
 	docsDeps := DocsDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/docs", ListDocsHandler(docsDeps))
 	mux.Handle("GET /api/docs/read", ReadDocHandler(docsDeps))
