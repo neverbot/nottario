@@ -17,6 +17,7 @@ import (
 	"github.com/neverbot/nottario/internal/config"
 	"github.com/neverbot/nottario/internal/db"
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/realtime"
 	"github.com/neverbot/nottario/internal/version"
 	"github.com/neverbot/nottario/internal/web"
 )
@@ -57,12 +58,20 @@ func main() {
 		CookieSecure: cookieSecure,
 	}
 
+	hub := realtime.New(logger)
+	go func() {
+		if err := hub.Run(ctx, pool); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("realtime listener stopped", "err", err)
+		}
+	}()
+
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: web.NewServer(web.Deps{
 			Pool:        pool,
 			Resolver:    resolver,
 			OAuthConfig: oauthCfg,
+			Hub:         hub,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

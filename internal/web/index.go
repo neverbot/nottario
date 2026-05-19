@@ -17,6 +17,7 @@ var reservedPrefixes = []string{
 	"/static/",
 	"/healthz",
 	"/version",
+	"/events",
 }
 
 // IndexHandler serves the embedded index.html for any path the

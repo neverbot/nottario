@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neverbot/nottario/internal/identity"
 	mcpserver "github.com/neverbot/nottario/internal/mcp"
+	"github.com/neverbot/nottario/internal/realtime"
 )
 
 // Deps wires the http server with its collaborators.
@@ -14,6 +15,7 @@ type Deps struct {
 	Pool        *pgxpool.Pool
 	Resolver    *identity.Resolver
 	OAuthConfig identity.OAuthConfig
+	Hub         *realtime.Hub
 }
 
 // NewServer returns an http.Handler wiring all M1 routes.
@@ -67,6 +69,11 @@ func NewServer(d Deps) http.Handler {
 	// catalogue before authenticating.
 	mux.Handle("GET /skill", SkillHandler())
 	mux.Handle("GET /skill/", SkillHandler())
+
+	// Real-time event stream for the web UI (and any future SSE client).
+	if d.Hub != nil {
+		mux.Handle("GET /events", realtime.SSEHandler(d.Hub, d.Pool, d.Resolver))
+	}
 
 	// MCP endpoint — Streamable HTTP transport with Bearer-token auth.
 	// Methods are enumerated explicitly so this route does not conflict
