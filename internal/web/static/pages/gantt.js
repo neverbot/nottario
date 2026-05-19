@@ -410,8 +410,8 @@ class NottarioGantt extends LitElement {
       <div class="stage">
         <svg width=${width} height=${totalHeight}>
           <defs>
-            <marker id="dep-arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
-                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <marker id="dep-arrowhead" viewBox="0 0 10 10" refX="0" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#afb8c1"></path>
             </marker>
             <clipPath id="gantt-avatar-clip">
