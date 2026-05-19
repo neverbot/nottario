@@ -1,10 +1,12 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
+import './gantt.js';
 
 class NottarioBoardPage extends LitElement {
   static properties = {
     me: { type: Object },
     projectId: { type: String },
+    view: { state: true },               // 'kanban' or 'gantt'
     project: { state: true },
     tasks: { state: true },
     roles: { state: true },
@@ -136,6 +138,7 @@ class NottarioBoardPage extends LitElement {
 
   constructor() {
     super();
+    this.view = 'kanban';
     this.project = null;
     this.tasks = [];
     this.roles = [];
@@ -322,19 +325,31 @@ class NottarioBoardPage extends LitElement {
       <div class="header">
         <button @click=${() => this.back()}>← Back</button>
         <h2>${this.project.Name}</h2>
-        <span class="muted">board</span>
+        <span class="muted">${this.view === 'gantt' ? 'gantt' : 'board'}</span>
         <div class="spacer"></div>
+        <div role="tablist" style="display:flex;gap:4px">
+          <button class=${this.view === 'kanban' ? 'primary' : ''}
+                  @click=${() => { this.view = 'kanban'; }}>Kanban</button>
+          <button class=${this.view === 'gantt' ? 'primary' : ''}
+                  @click=${() => { this.view = 'gantt'; }}>Gantt</button>
+        </div>
         <button class="primary" @click=${() => this.showCreate = true}>New task</button>
       </div>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
-      <div class="columns">
-        ${['todo', 'doing', 'done'].map(s => html`
-          <div class="col">
-            <h3>${s} <span class="count">${this.byState(s).length}</span></h3>
-            ${this.byState(s).map(t => this.renderCard(t))}
+      ${this.view === 'gantt'
+        ? html`<nottario-gantt
+                  .projectId=${this.projectId}
+                  @task-selected=${(e) => this.open(e.detail.task)}></nottario-gantt>`
+        : html`
+          <div class="columns">
+            ${['todo', 'doing', 'done'].map(s => html`
+              <div class="col">
+                <h3>${s} <span class="count">${this.byState(s).length}</span></h3>
+                ${this.byState(s).map(t => this.renderCard(t))}
+              </div>
+            `)}
           </div>
-        `)}
-      </div>
+        `}
       ${this.showCreate ? this.renderCreate() : null}
       ${this.selected ? this.renderDetail() : null}
     `;
