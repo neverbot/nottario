@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
 import '/static/components/page-header.js';
 
 class NottarioProfilePage extends LitElement {
@@ -8,7 +9,7 @@ class NottarioProfilePage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, css`
+  static styles = [buttonStyles, surfaceStyles, tableStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -77,33 +78,6 @@ class NottarioProfilePage extends LitElement {
       vertical-align: 2px;
     }
 
-    table.memberships {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      background: #fff;
-      border: 1px solid #d1d9e0;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
-    }
-    table.memberships th,
-    table.memberships td {
-      text-align: left;
-      padding: 9px 14px;
-      border-bottom: 1px solid #eaeef2;
-      font-size: 13px;
-      vertical-align: middle;
-    }
-    table.memberships tbody tr:last-child td { border-bottom: none; }
-    table.memberships th {
-      background: #f6f8fa;
-      font-weight: 600;
-      color: #59636e;
-      text-transform: uppercase;
-      font-size: 11px;
-      letter-spacing: 0.04em;
-    }
     table.memberships .roles {
       display: flex;
       flex-wrap: wrap;
@@ -244,7 +218,7 @@ class NottarioProfilePage extends LitElement {
         ${memberships.length === 0
           ? html`<div class="empty">You don't belong to any project yet.</div>`
           : html`
-            <table class="memberships">
+            <table class="data-table memberships">
               <thead>
                 <tr><th>Project</th><th>Roles</th></tr>
               </thead>

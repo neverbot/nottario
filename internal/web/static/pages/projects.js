@@ -2,6 +2,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { defaultPathFor, viewByKey } from '/static/views.js';
 import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import { surfaceStyles, dialogStyles } from '/static/components/surfaces.js';
 import '/static/components/page-header.js';
 
 class NottarioProjectsPage extends LitElement {
@@ -13,7 +14,7 @@ class NottarioProjectsPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, css`
+  static styles = [buttonStyles, surfaceStyles, dialogStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
     .grid {
@@ -192,32 +193,6 @@ class NottarioProjectsPage extends LitElement {
       color: #59636e;
     }
     .card .footer .spacer { flex: 1; }
-    .empty {
-      padding: 40px 24px;
-      text-align: center;
-      color: #59636e;
-      background: #fff;
-      border: 1px dashed #d1d9e0;
-      border-radius: 8px;
-    }
-    .empty strong { display: block; color: #1f2328; font-size: 15px; margin-bottom: 4px; }
-    .dialog {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-    }
-    .dialog .panel {
-      background: #fff;
-      border-radius: 8px;
-      padding: 24px;
-      width: 480px;
-      max-width: 90vw;
-    }
-    .dialog h3 { margin: 0 0 16px 0; }
     .field { margin-bottom: 12px; }
     .field label {
       display: block;

@@ -2,6 +2,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import { dialogStyles } from '/static/components/surfaces.js';
 import '/static/components/page-header.js';
 import '/static/components/segmented-control.js';
 import './gantt.js';
@@ -23,7 +24,7 @@ class NottarioBoardPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, css`
+  static styles = [buttonStyles, dialogStyles, css`
     :host { display: block; }
     .spacer { flex: 1; }
     .columns {
@@ -174,24 +175,9 @@ class NottarioBoardPage extends LitElement {
     .badge.chore { background: #fff8c5; border-color: #d4a72c; color: #7d4e00; }
     .badge.spike { background: #ddf4d1; border-color: #95d57e; color: #1a7f37; }
     .prio { font-family: ui-monospace, SFMono-Regular, monospace; }
-    .dialog {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-    }
-    .panel {
-      background: #fff;
-      border-radius: 8px;
-      padding: 24px;
-      width: 560px;
-      max-width: 92vw;
-      max-height: 88vh;
-      overflow: auto;
-    }
+    /* Detail panel wider than the shared default; everything else
+       inherits from dialogStyles in components/surfaces.js. */
+    .dialog .panel { width: 560px; }
     .field { margin-bottom: 12px; }
     .field label { display: block; margin-bottom: 4px; font-weight: 500; font-size: 13px; }
     .actions-row { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }

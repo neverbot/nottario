@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
 import '/static/components/page-header.js';
 
 class NottarioUsersPage extends LitElement {
@@ -10,7 +11,7 @@ class NottarioUsersPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, css`
+  static styles = [buttonStyles, surfaceStyles, tableStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
     .spacer { flex: 1; }
@@ -20,32 +21,6 @@ class NottarioUsersPage extends LitElement {
       border: 1px solid #d0d7de;
       border-radius: 6px;
       font: inherit;
-    }
-    table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      background: #fff;
-      border: 1px solid #d1d9e0;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
-    }
-    th, td {
-      text-align: left;
-      padding: 10px 14px;
-      border-bottom: 1px solid #eaeef2;
-      font-size: 13px;
-      vertical-align: middle;
-    }
-    tbody tr:last-child td { border-bottom: none; }
-    th {
-      background: #f6f8fa;
-      font-weight: 600;
-      color: #59636e;
-      text-transform: uppercase;
-      font-size: 11px;
-      letter-spacing: 0.04em;
     }
     .user-cell {
       display: flex;
@@ -79,14 +54,6 @@ class NottarioUsersPage extends LitElement {
       border: 1px solid #eac54f;
     }
     .muted { color: #59636e; }
-    .empty {
-      padding: 32px;
-      text-align: center;
-      color: #59636e;
-      background: #fff;
-      border: 1px dashed #d1d9e0;
-      border-radius: 8px;
-    }
     .error { color: #cf222e; font-size: 13px; margin-bottom: 8px; }
   `];
 
@@ -144,7 +111,7 @@ class NottarioUsersPage extends LitElement {
       ${rows.length === 0
         ? html`<div class="empty">No users match the filter.</div>`
         : html`
-          <table>
+          <table class="data-table">
             <thead>
               <tr>
                 <th>User</th>

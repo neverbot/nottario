@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
 import '/static/components/page-header.js';
 
 class NottarioTokensPage extends LitElement {
@@ -12,7 +13,7 @@ class NottarioTokensPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, css`
+  static styles = [buttonStyles, tableStyles, dialogStyles, css`
     :host { display: block; }
     .header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
     .header h2 { margin: 0; }
@@ -24,27 +25,10 @@ class NottarioTokensPage extends LitElement {
       padding: 0;
       overflow: hidden;
     }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 16px; text-align: left; border-bottom: 1px solid #eaeef2; }
-    th { font-size: 12px; text-transform: uppercase; color: #59636e; background: #f6f8fa; }
-    tr:last-child td { border-bottom: none; }
     .row-actions { text-align: right; }
-    .dialog {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-    }
-    .dialog .inner {
-      background: #fff;
-      border-radius: 8px;
-      padding: 24px;
-      width: 540px;
-      max-width: 90vw;
-    }
+    /* Wider than the shared default; everything else inherits from
+       dialogStyles in components/surfaces.js. */
+    .dialog .panel { width: 540px; }
     .field { margin-bottom: 12px; }
     .field label { display: block; margin-bottom: 4px; font-weight: 500; font-size: 13px; }
     .actions-row {
@@ -153,7 +137,7 @@ class NottarioTokensPage extends LitElement {
       </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       <div class="panel">
-        <table>
+        <table class="data-table">
           <thead><tr>
             <th>Name</th><th>Prefix</th><th>Created</th><th>Last used</th><th>Status</th><th></th>
           </tr></thead>
@@ -183,7 +167,7 @@ class NottarioTokensPage extends LitElement {
     if (this.issued) {
       return html`
         <div class="dialog">
-          <div class="inner">
+          <div class="panel">
             <h3>Token issued</h3>
             <div class="secret-banner">
               <strong>Copy this token now.</strong> It will not be shown again.
@@ -199,7 +183,7 @@ class NottarioTokensPage extends LitElement {
     }
     return html`
       <div class="dialog">
-        <div class="inner">
+        <div class="panel">
           <h3>New API token</h3>
           ${this.error ? html`<div class="error">${this.error}</div>` : null}
           <form @submit=${(e) => this.issue(e)}>
