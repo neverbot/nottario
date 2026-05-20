@@ -4,7 +4,6 @@ import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { dialogStyles } from '/static/components/surfaces.js';
 import '/static/components/page-header.js';
-import '/static/components/segmented-control.js';
 import './gantt.js';
 
 class NottarioBoardPage extends LitElement {
@@ -506,20 +505,11 @@ class NottarioBoardPage extends LitElement {
     const hideDoing = this.view === 'kanban' && doingCount === 0 && !this.expandDoing;
     return html`
       <nottario-page-header
-        .title=${this.view === 'gantt' ? 'Gantt' : 'Kanban'}>
+        .title=${this.view === 'gantt' ? 'Gantt' : 'Board'}>
         ${hideDoing
           ? html`<button slot="actions" class="btn ghost" title="Show the doing column"
                          @click=${() => this.expandDoing = true}>· 0 doing</button>`
           : null}
-        <nottario-segmented-control slot="switcher"
-          .options=${[
-            { value: 'kanban', label: 'Kanban' },
-            { value: 'gantt',  label: 'Gantt'  },
-          ]}
-          .value=${this.view === 'gantt' ? 'gantt' : 'kanban'}
-          @change=${(e) => window.nottarioNavigate(
-            `/projects/${this.projectId}/board/${e.detail.value}`)}>
-        </nottario-segmented-control>
         ${this.view === 'gantt'
           ? html`<button slot="actions" class="btn ghost"
                          title="Scroll the Gantt back to the now line"

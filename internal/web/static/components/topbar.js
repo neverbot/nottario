@@ -361,12 +361,17 @@ class NottarioTopbar extends LitElement {
 
   // Per-project sub-navigation. Active when the route is inside a
   // project (`/projects/{id}/...`). Mirrors GitHub's repo sub-nav.
+  //
+  // Board and Gantt are siblings, not parent+sub-view. They share
+  // the URL prefix `/board/` for historical reasons; the nav matches
+  // their full path so each entry lights up independently.
   _projectNavItems(projectId) {
     const base = `/projects/${projectId}`;
     const r = this.route || '';
     const match = (prefix) => r === prefix || r.startsWith(prefix + '/');
     const items = [
-      { label: 'Board',        href: `${base}/board/kanban`, active: match(`${base}/board`) },
+      { label: 'Board',        href: `${base}/board/kanban`, active: match(`${base}/board/kanban`) },
+      { label: 'Gantt',        href: `${base}/board/gantt`,  active: match(`${base}/board/gantt`)  },
       { label: 'Docs',         href: `${base}/docs`,         active: match(`${base}/docs`) },
       { label: 'Architecture', href: `${base}/arch/diagram`, active: match(`${base}/arch`) },
     ];
