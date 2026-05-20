@@ -100,10 +100,13 @@ That target chains, in order:
 
 1. `gofmt -l .` must list no files (fix with `gofmt -w .`).
 2. `go vet ./...` must pass clean.
-3. `make lint` — `golangci-lint` with `gosec` G201/G202 enabled
-   blocks any SQL query built via `fmt.Sprintf` of non-literal pieces
-   or string concatenation passed to `Query`/`Exec`. That's the SQL
-   injection guard.
+3. `make lint` — `golangci-lint` (hygiene: gosec, govet, staticcheck,
+   ineffassign, unused, errcheck, gofmt) **plus** a custom
+   `internal/tools/sqlcheck` analyzer that flags inline `fmt.Sprintf`
+   or string concatenation of runtime values passed to pgx
+   `Query`/`Exec`/`QueryRow`. This is a regression guard for the
+   obvious injection patterns; the structural guarantee will come
+   from the sqlc migration (Tier 2 of the SQL safety feature).
 4. `go test ./...` must pass — every package, including the
    concurrency and integration tests as they land.
 

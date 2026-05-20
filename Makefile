@@ -45,6 +45,7 @@ tools:
 
 lint: tools
 	$(GOBIN)/golangci-lint run ./...
+	$(GO) run ./internal/tools/sqlcheck ./...
 
 # Pre-commit gate documented in .claude/claude.md. Run before every
 # `git commit`. Order matches the doc: gofmt clean, vet clean, lint
