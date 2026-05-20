@@ -1,5 +1,8 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
+import { buttonStyles } from '/static/components/buttons.js';
+import '/static/components/page-header.js';
+import '/static/components/segmented-control.js';
 import './arch-graph.js';
 
 class NottarioArchPage extends LitElement {
@@ -18,9 +21,8 @@ class NottarioArchPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = css`
+  static styles = [buttonStyles, css`
     :host { display: block; }
-    .header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 16px; }
     .header h2 { margin: 0; }
     .header .muted { color: #59636e; }
     .layout {
@@ -136,7 +138,7 @@ class NottarioArchPage extends LitElement {
       margin-bottom: 8px;
     }
     code { font-size: 12px; }
-  `;
+  `];
 
   constructor() {
     super();
@@ -366,18 +368,19 @@ class NottarioArchPage extends LitElement {
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
     return html`
-      <div class="header">
-        <button @click=${() => this.back()}>← Back</button>
-        <h2>${this.project.Name}</h2>
-        <span class="muted">architecture</span>
-        <div style="flex:1"></div>
-        <div role="tablist" style="display:flex;gap:4px">
-          <button class=${this.view === 'diagram' ? 'primary' : ''}
-                  @click=${() => window.nottarioNavigate(`/projects/${this.projectId}/arch/diagram`)}>Diagram</button>
-          <button class=${this.view === 'tree' ? 'primary' : ''}
-                  @click=${() => window.nottarioNavigate(`/projects/${this.projectId}/arch/tree`)}>Tree</button>
-        </div>
-      </div>
+      <nottario-page-header
+        .crumbs=${[{ label: 'Projects', href: '/' }, { label: this.project.Name, href: `/projects/${this.project.ID}` }, { label: 'Architecture' }]}
+        title="Architecture">
+        <nottario-segmented-control slot="switcher"
+          .options=${[
+            { value: 'diagram', label: 'Diagram' },
+            { value: 'tree',    label: 'Tree'    },
+          ]}
+          .value=${this.view === 'tree' ? 'tree' : 'diagram'}
+          @change=${(e) => window.nottarioNavigate(
+            `/projects/${this.projectId}/arch/${e.detail.value}`)}>
+        </nottario-segmented-control>
+      </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${this.view === 'diagram'
         ? html`<nottario-arch-graph .projectId=${this.projectId}></nottario-arch-graph>`

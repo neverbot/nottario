@@ -1,4 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { buttonStyles } from '/static/components/buttons.js';
+import '/static/components/page-header.js';
 
 class NottarioUsersPage extends LitElement {
   static properties = {
@@ -8,11 +10,9 @@ class NottarioUsersPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = css`
+  static styles = [buttonStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
-    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-    h2 { margin: 0; }
     .spacer { flex: 1; }
     input.filter {
       width: 240px;
@@ -88,7 +88,7 @@ class NottarioUsersPage extends LitElement {
       border-radius: 8px;
     }
     .error { color: #cf222e; font-size: 13px; margin-bottom: 8px; }
-  `;
+  `];
 
   constructor() {
     super();
@@ -133,14 +133,13 @@ class NottarioUsersPage extends LitElement {
     }
     const rows = this._filtered();
     return html`
-      <div class="header">
-        <h2>Users</h2>
-        <span class="muted">${this.users.length} ${this.users.length === 1 ? 'user' : 'users'}</span>
-        <div class="spacer"></div>
-        <input class="filter" type="search" placeholder="Filter by name or login…"
+      <nottario-page-header
+        title="Users"
+        .subtitle=${`${this.users.length} ${this.users.length === 1 ? 'user' : 'users'}`}>
+        <input slot="actions" class="filter" type="search" placeholder="Filter by name or login…"
                .value=${this.filter}
                @input=${(e) => this.filter = e.target.value}>
-      </div>
+      </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${rows.length === 0
         ? html`<div class="empty">No users match the filter.</div>`

@@ -1,5 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { EscController } from '/static/components/esc.js';
+import { buttonStyles } from '/static/components/buttons.js';
+import '/static/components/page-header.js';
 
 class NottarioTokensPage extends LitElement {
   static properties = {
@@ -10,7 +12,7 @@ class NottarioTokensPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = css`
+  static styles = [buttonStyles, css`
     :host { display: block; }
     .header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
     .header h2 { margin: 0; }
@@ -70,7 +72,7 @@ class NottarioTokensPage extends LitElement {
     }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
     .muted { color: #59636e; }
-  `;
+  `];
 
   constructor() {
     super();
@@ -143,11 +145,12 @@ class NottarioTokensPage extends LitElement {
   render() {
     if (this.tokens === null) return html`<div class="panel" style="padding:16px">Loading…</div>`;
     return html`
-      <div class="header">
-        <h2>API tokens</h2>
-        <div class="spacer"></div>
-        <button class="primary" @click=${() => this.open()}>New token</button>
-      </div>
+      <nottario-page-header
+        .crumbs=${[{ label: 'Profile', href: '/me' }, { label: 'API tokens' }]}
+        title="API tokens">
+        <button slot="actions" class="btn primary"
+                @click=${() => this.open()}>New token</button>
+      </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       <div class="panel">
         <table>
@@ -165,7 +168,7 @@ class NottarioTokensPage extends LitElement {
                   <td>${this.fmt(t.LastUsedAt)}</td>
                   <td>${t.RevokedAt ? html`<span class="muted">revoked</span>` : html`<span style="color:#1f883d">active</span>`}</td>
                   <td class="row-actions">
-                    ${t.RevokedAt ? null : html`<button class="danger" @click=${() => this.revoke(t.ID)}>Revoke</button>`}
+                    ${t.RevokedAt ? null : html`<button class="btn danger" @click=${() => this.revoke(t.ID)}>Revoke</button>`}
                   </td>
                 </tr>
               `)}
@@ -187,8 +190,8 @@ class NottarioTokensPage extends LitElement {
             </div>
             <div class="secret">${this.issued.plaintext}</div>
             <div class="actions-row">
-              <button @click=${() => navigator.clipboard.writeText(this.issued.plaintext)}>Copy</button>
-              <button class="primary" @click=${() => this.close()}>Done</button>
+              <button class="btn secondary" @click=${() => navigator.clipboard.writeText(this.issued.plaintext)}>Copy</button>
+              <button class="btn primary" @click=${() => this.close()}>Done</button>
             </div>
           </div>
         </div>
@@ -205,8 +208,8 @@ class NottarioTokensPage extends LitElement {
               <input name="name" required autofocus placeholder="laptop, ci-runner, …">
             </div>
             <div class="actions-row">
-              <button type="button" @click=${() => this.close()}>Cancel</button>
-              <button type="submit" class="primary">Issue</button>
+              <button type="button" class="btn secondary" @click=${() => this.close()}>Cancel</button>
+              <button type="submit" class="btn primary">Issue</button>
             </div>
           </form>
         </div>

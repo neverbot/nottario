@@ -1,5 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
+import { buttonStyles } from '/static/components/buttons.js';
+import '/static/components/page-header.js';
 
 class NottarioDocsPage extends LitElement {
   static properties = {
@@ -18,7 +20,7 @@ class NottarioDocsPage extends LitElement {
     hits: { state: true },
   };
 
-  static styles = css`
+  static styles = [buttonStyles, css`
     :host { display: block; }
     .layout {
       display: grid;
@@ -120,7 +122,7 @@ class NottarioDocsPage extends LitElement {
     .badge.note    { background: #fff8c5; color: #7d4e00; border-color: #d4a72c; }
     .group { margin-bottom: 8px; }
     .group-title { font-size: 11px; color: #57606a; padding-left: 4px; }
-  `;
+  `];
 
   constructor() {
     super();
@@ -345,11 +347,10 @@ class NottarioDocsPage extends LitElement {
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
     return html`
-      <div style="display:flex; align-items:baseline; gap:16px; margin-bottom:16px;">
-        <button @click=${() => this.back()}>← Back</button>
-        <h2 style="margin:0">${this.project.Name}</h2>
-        <span class="muted">docs</span>
-      </div>
+      <nottario-page-header
+        .crumbs=${[{ label: 'Projects', href: '/' }, { label: this.project.Name, href: `/projects/${this.project.ID}` }, { label: 'Docs' }]}
+        title="Docs">
+      </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${this.info ? html`<div class="info">${this.info}</div>` : null}
       <div class="layout">
@@ -365,7 +366,7 @@ class NottarioDocsPage extends LitElement {
     return html`
       <div class="sidebar">
         <div class="actions">
-          <button class="primary" style="flex:1" @click=${() => this.startCreate()}>+ New doc</button>
+          <button class="btn primary" style="flex:1" @click=${() => this.startCreate()}>+ New doc</button>
         </div>
         <input class="search" placeholder="Search…" .value=${this.search}
           @input=${(e) => { this.search = e.target.value; }}
@@ -405,7 +406,7 @@ class NottarioDocsPage extends LitElement {
           </li>
         `)}
       </ul>
-      <button style="margin-top:8px" @click=${() => { this.hits = null; this.search = ''; }}>Clear search</button>
+      <button class="btn ghost" style="margin-top:8px" @click=${() => { this.hits = null; this.search = ''; }}>Clear search</button>
     `;
   }
 
@@ -422,8 +423,8 @@ class NottarioDocsPage extends LitElement {
         <header>
           <h2>New document</h2>
           <div class="spacer"></div>
-          <button @click=${() => this.cancelCreate()}>Cancel</button>
-          <button class="primary" @click=${() => this.saveNew()}>Create</button>
+          <button class="btn secondary" @click=${() => this.cancelCreate()}>Cancel</button>
+          <button class="btn primary" @click=${() => this.saveNew()}>Create</button>
         </header>
         <div class="field">
           <label>Path (e.g. <code>projects/${this.projectId}/context/glossary.md</code>)</label>
@@ -447,8 +448,8 @@ class NottarioDocsPage extends LitElement {
           <span class=${`badge ${s.Kind}`}>${s.Kind}</span>
           <div class="spacer"></div>
           <span class="meta">v${s.CurrentVersion}</span>
-          <button @click=${() => this.startEdit()}>Edit</button>
-          <button class="danger" @click=${() => this.del()}>Delete</button>
+          <button class="btn secondary" @click=${() => this.startEdit()}>Edit</button>
+          <button class="btn danger" @click=${() => this.del()}>Delete</button>
         </header>
         ${s.Description ? html`<p class="muted">${s.Description}</p>` : null}
         <div style="font-size:11px;color:#59636e;margin-bottom:8px">${s.Path}</div>
@@ -463,8 +464,8 @@ class NottarioDocsPage extends LitElement {
         <header>
           <h2>${this.selected.Path}</h2>
           <div class="spacer"></div>
-          <button @click=${() => { this.editing = false; }}>Cancel</button>
-          <button class="primary" @click=${() => this.saveEdit()}>Save</button>
+          <button class="btn secondary" @click=${() => { this.editing = false; }}>Cancel</button>
+          <button class="btn primary" @click=${() => this.saveEdit()}>Save</button>
         </header>
         <textarea .value=${this.draft} @input=${(e) => { this.draft = e.target.value; }}></textarea>
       </div>

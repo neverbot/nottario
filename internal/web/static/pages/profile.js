@@ -1,4 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { buttonStyles } from '/static/components/buttons.js';
+import '/static/components/page-header.js';
 
 class NottarioProfilePage extends LitElement {
   static properties = {
@@ -6,7 +8,7 @@ class NottarioProfilePage extends LitElement {
     error: { state: true },
   };
 
-  static styles = css`
+  static styles = [buttonStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -150,18 +152,7 @@ class NottarioProfilePage extends LitElement {
       text-decoration: none;
     }
     .row a.tokens-link:hover { text-decoration: underline; }
-    .row button.signout {
-      padding: 6px 14px;
-      border: 1px solid #cf222e;
-      color: #cf222e;
-      background: #fff;
-      border-radius: 6px;
-      cursor: pointer;
-      font: inherit;
-      font-weight: 500;
-      font-size: 13px;
-    }
-    .row button.signout:hover { background: #ffebe9; }
+    /* sign-out reuses the shared .btn.danger from components/buttons.js */
 
     .empty {
       padding: 18px 16px;
@@ -172,7 +163,7 @@ class NottarioProfilePage extends LitElement {
       border-radius: 8px;
     }
     .error { color: #cf222e; margin-bottom: 12px; font-size: 13px; }
-  `;
+  `];
 
   constructor() {
     super();
@@ -226,6 +217,10 @@ class NottarioProfilePage extends LitElement {
       : null;
     return html`
       <div class="wrap">
+        <nottario-page-header
+          title="Your account"
+          .subtitle=${me.github_login ? `@${me.github_login}` : ''}>
+        </nottario-page-header>
         ${this.error ? html`<div class="error">${this.error}</div>` : null}
 
         <h2>Profile</h2>
@@ -302,7 +297,7 @@ class NottarioProfilePage extends LitElement {
           <div class="row">
             <div class="label">Session</div>
             <div class="value">
-              <button class="signout" @click=${() => this._logout()}>Sign out</button>
+              <button class="btn danger" @click=${() => this._logout()}>Sign out</button>
             </div>
           </div>
         </div>

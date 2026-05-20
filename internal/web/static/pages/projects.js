@@ -1,6 +1,8 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { defaultPathFor, viewByKey } from '/static/views.js';
 import { EscController } from '/static/components/esc.js';
+import { buttonStyles } from '/static/components/buttons.js';
+import '/static/components/page-header.js';
 
 class NottarioProjectsPage extends LitElement {
   static properties = {
@@ -11,17 +13,9 @@ class NottarioProjectsPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = css`
+  static styles = [buttonStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-    h2 { margin: 0; }
-    .spacer { flex: 1; }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
@@ -242,7 +236,7 @@ class NottarioProjectsPage extends LitElement {
       font-size: 13px;
       margin-bottom: 8px;
     }
-  `;
+  `];
 
   constructor() {
     super();
@@ -435,13 +429,12 @@ class NottarioProjectsPage extends LitElement {
       return html`<div class="empty">Loading projects…</div>`;
     }
     return html`
-      <div class="header">
-        <h2>Projects</h2>
-        <div class="spacer"></div>
+      <nottario-page-header title="Projects">
         ${this.me?.is_admin
-          ? html`<button class="primary" @click=${() => this.openCreate()}>New project</button>`
+          ? html`<button slot="actions" class="btn primary"
+                         @click=${() => this.openCreate()}>New project</button>`
           : null}
-      </div>
+      </nottario-page-header>
       ${this.projects.length === 0
         ? html`<div class="empty">
             <strong>No projects yet.</strong>
@@ -486,8 +479,8 @@ class NottarioProjectsPage extends LitElement {
               <textarea name="repos" rows="3"></textarea>
             </div>
             <div class="actions-row">
-              <button type="button" @click=${() => this.closeCreate()}>Cancel</button>
-              <button type="submit" class="primary" ?disabled=${this.creating}>
+              <button type="button" class="btn secondary" @click=${() => this.closeCreate()}>Cancel</button>
+              <button type="submit" class="btn primary" ?disabled=${this.creating}>
                 ${this.creating ? 'Creating…' : 'Create'}
               </button>
             </div>

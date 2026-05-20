@@ -1,6 +1,9 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
+import { buttonStyles } from '/static/components/buttons.js';
+import '/static/components/page-header.js';
+import '/static/components/segmented-control.js';
 import './gantt.js';
 
 class NottarioBoardPage extends LitElement {
@@ -20,10 +23,8 @@ class NottarioBoardPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = css`
+  static styles = [buttonStyles, css`
     :host { display: block; }
-    .header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 16px; }
-    .header h2 { margin: 0; }
     .spacer { flex: 1; }
     .columns {
       display: grid;
@@ -227,7 +228,7 @@ class NottarioBoardPage extends LitElement {
       color: #59636e;
       margin-bottom: 4px;
     }
-  `;
+  `];
 
   constructor() {
     super();
@@ -386,8 +387,8 @@ class NottarioBoardPage extends LitElement {
               style=${`background:${role.Color || '#eee'}1a; border-color:${role.Color || '#ddd'}`}>${role.Label}</span>` : ''}
           </div>
           <div class="row">
-            <button class="start" @click=${() => this.setState(next.ID, 'doing')}>Start</button>
-            <button class="peek" @click=${() => this.open(next)}>Open</button>
+            <button class="btn primary" @click=${() => this.setState(next.ID, 'doing')}>Start</button>
+            <button class="btn ghost" @click=${() => this.open(next)}>Open</button>
             <div class="spacer"></div>
           </div>
         </div>
@@ -517,30 +518,32 @@ class NottarioBoardPage extends LitElement {
     if (!this.project) return html`<p>Loading…</p>`;
     const doingCount = this.byState('doing').length;
     const hideDoing = this.view === 'kanban' && doingCount === 0 && !this.expandDoing;
+    const crumbs = [{ label: 'Projects', href: '/' }, { label: this.project.Name }];
     return html`
-      <div class="header">
-        <button @click=${() => this.back()}>← Back</button>
-        <h2>${this.project.Name}</h2>
-        <span class="muted">${this.view === 'gantt' ? 'gantt' : 'board'}</span>
+      <nottario-page-header
+        .crumbs=${crumbs}
+        .title=${this.view === 'gantt' ? 'Gantt' : 'Kanban'}>
         ${hideDoing
-          ? html`<button class="doing-pill" title="Show the doing column"
-                         @click=${() => this.expandDoing = true}>
-                   <span class="dot"></span> 0 doing
-                 </button>`
+          ? html`<button slot="actions" class="btn ghost" title="Show the doing column"
+                         @click=${() => this.expandDoing = true}>· 0 doing</button>`
           : null}
-        <div class="spacer"></div>
-        <div role="tablist" style="display:flex;gap:4px">
-          <button class=${this.view === 'kanban' ? 'primary' : ''}
-                  @click=${() => window.nottarioNavigate(`/projects/${this.projectId}/board`)}>Kanban</button>
-          <button class=${this.view === 'gantt' ? 'primary' : ''}
-                  @click=${() => window.nottarioNavigate(`/projects/${this.projectId}/board/gantt`)}>Gantt</button>
-        </div>
-        ${this.view === 'gantt' ? html`
-          <button title="Scroll the Gantt back to the now line"
-                  @click=${() => this.renderRoot.querySelector('nottario-gantt')?.scrollToNow()}>↻ Now</button>
-        ` : null}
-        <button class="primary" @click=${() => this.showCreate = true}>New task</button>
-      </div>
+        <nottario-segmented-control slot="switcher"
+          .options=${[
+            { value: 'kanban', label: 'Kanban' },
+            { value: 'gantt',  label: 'Gantt'  },
+          ]}
+          .value=${this.view === 'gantt' ? 'gantt' : 'kanban'}
+          @change=${(e) => window.nottarioNavigate(
+            `/projects/${this.projectId}/board/${e.detail.value}`)}>
+        </nottario-segmented-control>
+        ${this.view === 'gantt'
+          ? html`<button slot="actions" class="btn ghost"
+                         title="Scroll the Gantt back to the now line"
+                         @click=${() => this.renderRoot.querySelector('nottario-gantt')?.scrollToNow()}>↻ Now</button>`
+          : null}
+        <button slot="actions" class="btn primary"
+                @click=${() => this.showCreate = true}>New task</button>
+      </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${this.view === 'gantt'
         ? html`<nottario-gantt
@@ -611,8 +614,8 @@ class NottarioBoardPage extends LitElement {
               </div>
             </div>
             <div class="actions-row">
-              <button type="button" @click=${() => this.showCreate = false}>Cancel</button>
-              <button type="submit" class="primary">Create</button>
+              <button type="button" class="btn secondary" @click=${() => this.showCreate = false}>Cancel</button>
+              <button type="submit" class="btn primary">Create</button>
             </div>
           </form>
         </div>
@@ -632,7 +635,8 @@ class NottarioBoardPage extends LitElement {
             <div>State</div>
             <div class="state-buttons">
               ${['todo', 'doing', 'done'].map(s => html`
-                <button class=${task.State === s ? 'active' : ''} @click=${() => this.setState(task.ID, s)}>${s}</button>
+                <button class=${'btn ' + (task.State === s ? 'primary' : 'secondary')}
+                        @click=${() => this.setState(task.ID, s)}>${s}</button>
               `)}
             </div>
             <div>Priority</div>
@@ -663,15 +667,15 @@ class NottarioBoardPage extends LitElement {
             <form @submit=${(e) => { e.preventDefault(); const t = e.target.body; this.addComment(task.ID, t.value); t.value = ''; }}>
               <textarea name="body" rows="2" placeholder="Add a comment…" style="margin-top:8px"></textarea>
               <div class="actions-row">
-                <button type="submit">Add comment</button>
+                <button type="submit" class="btn secondary">Add comment</button>
               </div>
             </form>
           </div>
 
           <div class="actions-row">
-            <button class="danger" @click=${() => this.deleteTask(task.ID)}>Delete</button>
+            <button class="btn danger" @click=${() => this.deleteTask(task.ID)}>Delete</button>
             <div class="spacer" style="flex:1"></div>
-            <button @click=${() => this.closeDetail()}>Close</button>
+            <button class="btn secondary" @click=${() => this.closeDetail()}>Close</button>
           </div>
         </div>
       </div>

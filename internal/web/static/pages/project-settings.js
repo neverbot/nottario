@@ -1,5 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
+import { buttonStyles } from '/static/components/buttons.js';
+import '/static/components/page-header.js';
 
 class NottarioProjectSettings extends LitElement {
   static properties = {
@@ -13,7 +15,7 @@ class NottarioProjectSettings extends LitElement {
     error: { state: true },
   };
 
-  static styles = css`
+  static styles = [buttonStyles, css`
     :host { display: block; }
     .header {
       display: flex;
@@ -73,7 +75,7 @@ class NottarioProjectSettings extends LitElement {
       padding: 0 6px;
       font-family: ui-monospace, monospace;
     }
-  `;
+  `];
 
   constructor() {
     super();
@@ -181,12 +183,17 @@ class NottarioProjectSettings extends LitElement {
     if (!this.project) {
       return html`<div class="panel">Loading…${this.error ? html`<div class="error">${this.error}</div>` : ''}</div>`;
     }
+    const crumbs = [
+      { label: 'Projects', href: '/' },
+      { label: this.project.Name, href: `/projects/${this.project.ID}` },
+      { label: 'Settings' },
+    ];
     return html`
-      <div class="header">
-        <button @click=${() => this.back()}>← Back</button>
-        <h2>${this.project.Name}</h2>
-        <span class="muted">${this.project.Slug}</span>
-      </div>
+      <nottario-page-header
+        .crumbs=${crumbs}
+        title="Settings"
+        .subtitle=${this.project.Slug}>
+      </nottario-page-header>
       <div class="tabs">
         ${['general', 'roles', 'priorities', 'mcp', 'members'].map(t => html`
           <button class="tab ${this.activeTab === t ? 'active' : ''}"
@@ -277,7 +284,7 @@ class NottarioProjectSettings extends LitElement {
               <td>${r.Label}</td>
               <td>${r.Color ? html`<span class="color-dot" style=${`background:${r.Color}`}></span>${r.Color}` : ''}</td>
               <td class="row-actions">
-                ${canDrag ? html`<button class="danger" @click=${() => this.deleteRole(r.ID)}>Delete</button>` : null}
+                ${canDrag ? html`<button class="btn danger" @click=${() => this.deleteRole(r.ID)}>Delete</button>` : null}
               </td>
             </tr>
           `)}
@@ -288,7 +295,7 @@ class NottarioProjectSettings extends LitElement {
           <input name="key" placeholder="key (snake-case)" required>
           <input name="label" placeholder="Label" required>
           <input name="color" placeholder="#hex" style="max-width:90px">
-          <button type="submit" class="primary">Add role</button>
+          <button type="submit" class="btn primary">Add role</button>
         </form>
       ` : null}
     `;
@@ -364,7 +371,7 @@ class NottarioProjectSettings extends LitElement {
               </td>
               <td class="row-actions">
                 ${this.me?.is_admin
-                  ? html`<button class="danger" @click=${() => this.deletePriority(p.Key)}>Delete</button>`
+                  ? html`<button class="btn danger" @click=${() => this.deletePriority(p.Key)}>Delete</button>`
                   : null}
               </td>
             </tr>
@@ -375,7 +382,7 @@ class NottarioProjectSettings extends LitElement {
         <form class="add-row" @submit=${(e) => this.addPriority(e)}>
           <input name="key" placeholder="key (e.g. urgent)" required>
           <input name="value" type="number" min="0" max="100" placeholder="value (0-100)" required style="max-width:140px">
-          <button type="submit" class="primary">Add bucket</button>
+          <button type="submit" class="btn primary">Add bucket</button>
         </form>
       ` : null}
     `;
