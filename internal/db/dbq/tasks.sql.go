@@ -76,3 +76,84 @@ func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
 	)
 	return i, err
 }
+
+const insertTask = `-- name: InsertTask :one
+INSERT INTO tasks (
+  project_id, parent_task_id, type, title, description_md,
+  state, priority, assignee_user_id, target_role_id,
+  created_by_user_id, created_by_token_id
+)
+VALUES ($1, $2, $3, $4, $5, 'todo', $6, $7, $8, $9, $10)
+RETURNING id, project_id, parent_task_id, type, title, description_md,
+          state, priority, assignee_user_id, target_role_id,
+          actual_start, actual_end,
+          created_by_user_id, created_by_token_id,
+          created_at, updated_at
+`
+
+type InsertTaskParams struct {
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+}
+
+type InsertTaskRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	State            string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      pgtype.Timestamptz
+	ActualEnd        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error) {
+	row := q.db.QueryRow(ctx, insertTask,
+		arg.ProjectID,
+		arg.ParentTaskID,
+		arg.Type,
+		arg.Title,
+		arg.DescriptionMd,
+		arg.Priority,
+		arg.AssigneeUserID,
+		arg.TargetRoleID,
+		arg.CreatedByUserID,
+		arg.CreatedByTokenID,
+	)
+	var i InsertTaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ParentTaskID,
+		&i.Type,
+		&i.Title,
+		&i.DescriptionMd,
+		&i.State,
+		&i.Priority,
+		&i.AssigneeUserID,
+		&i.TargetRoleID,
+		&i.ActualStart,
+		&i.ActualEnd,
+		&i.CreatedByUserID,
+		&i.CreatedByTokenID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

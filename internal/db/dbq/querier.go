@@ -13,6 +13,7 @@ import (
 type Querier interface {
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
+	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

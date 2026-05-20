@@ -39,7 +39,8 @@ type CreateParams struct {
 	TargetRoleID   *uuid.UUID
 }
 
-// Create inserts a new task. State defaults to 'todo'.
+// Create inserts a new task. State defaults to 'todo'. Implemented
+// via sqlc-generated dbq.InsertTask.
 func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorship) (*Task, error) {
 	if p.Title == "" {
 		return nil, errors.New("title is required")
@@ -58,34 +59,39 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	if p.Priority != nil {
 		priority = *p.Priority
 	}
-
-	var out Task
-	err := pool.QueryRow(ctx, `
-		INSERT INTO tasks (
-			project_id, parent_task_id, type, title, description_md,
-			state, priority, assignee_user_id, target_role_id,
-			created_by_user_id, created_by_token_id
-		)
-		VALUES ($1, $2, $3, $4, $5, 'todo', $6, $7, $8, $9, $10)
-		RETURNING id, project_id, parent_task_id, type, title, description_md,
-		          state, priority, assignee_user_id, target_role_id,
-		          actual_start, actual_end,
-		          created_by_user_id, created_by_token_id,
-		          created_at, updated_at
-	`, p.ProjectID, p.ParentTaskID, t, p.Title, p.DescriptionMD,
-		priority, p.AssigneeUserID, p.TargetRoleID,
-		by.UserID, by.TokenID,
-	).Scan(
-		&out.ID, &out.ProjectID, &out.ParentTaskID, &out.Type, &out.Title, &out.DescriptionMD,
-		&out.State, &out.Priority, &out.AssigneeUserID, &out.TargetRoleID,
-		&out.ActualStart, &out.ActualEnd,
-		&out.CreatedByUserID, &out.CreatedByTokenID,
-		&out.CreatedAt, &out.UpdatedAt,
-	)
+	row, err := dbq.New(pool).InsertTask(ctx, dbq.InsertTaskParams{
+		ProjectID:        p.ProjectID,
+		ParentTaskID:     p.ParentTaskID,
+		Type:             string(t),
+		Title:            p.Title,
+		DescriptionMd:    p.DescriptionMD,
+		Priority:         int32(priority),
+		AssigneeUserID:   p.AssigneeUserID,
+		TargetRoleID:     p.TargetRoleID,
+		CreatedByUserID:  by.UserID,
+		CreatedByTokenID: by.TokenID,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return &Task{
+		ID:               row.ID,
+		ProjectID:        row.ProjectID,
+		ParentTaskID:     row.ParentTaskID,
+		Type:             Type(row.Type),
+		Title:            row.Title,
+		DescriptionMD:    row.DescriptionMd,
+		State:            State(row.State),
+		Priority:         int(row.Priority),
+		AssigneeUserID:   row.AssigneeUserID,
+		TargetRoleID:     row.TargetRoleID,
+		ActualStart:      timestampPtr(row.ActualStart),
+		ActualEnd:        timestampPtr(row.ActualEnd),
+		CreatedByUserID:  row.CreatedByUserID,
+		CreatedByTokenID: row.CreatedByTokenID,
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+	}, nil
 }
 
 // Get loads a task by id. Implemented via sqlc-generated dbq.GetTask
@@ -588,13 +594,14 @@ func rollUpParentDoneTx(ctx context.Context, tx pgx.Tx, parentID *uuid.UUID) err
 	return nil
 }
 
-// Delete removes the task. Children and links cascade.
+// Delete removes the task. Children and links cascade. Implemented
+// via sqlc-generated dbq.DeleteTask.
 func Delete(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
-	cmd, err := pool.Exec(ctx, `DELETE FROM tasks WHERE id = $1`, id)
+	rows, err := dbq.New(pool).DeleteTask(ctx, id)
 	if err != nil {
 		return err
 	}
-	if cmd.RowsAffected() == 0 {
+	if rows == 0 {
 		return ErrNotFound
 	}
 	return nil
