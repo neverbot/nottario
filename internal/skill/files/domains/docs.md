@@ -101,14 +101,25 @@ The body you send should include any frontmatter you want preserved:
 content_md = "---\ntitle: …\nkind: skill\n---\n\nBody…"
 ```
 
-**Optimistic concurrency**: pass `expected_version`.
+**Optimistic concurrency**: always pass `expected_version`.
 
 - For a **new document**, pass `0`. If the path already exists you get
   `version_conflict`.
 - For an **update**, pass the `current_version` you most recently
   read. If someone else updated between your read and write you get
-  `version_conflict`; the correct response is to read again, integrate
-  the conflicting changes, and retry.
+  `version_conflict`; the response payload now includes the live
+  `current_version` and a human message. Re-read, integrate, retry.
+
+The conflict shape is:
+
+```json
+{ "error": "version_conflict", "current_version": 7,
+  "message": "re-read the document and retry with the latest current_version" }
+```
+
+Omitting `expected_version` is **deprecated**: the server still
+accepts the write but logs a warning, and you're racing whoever else
+might be editing the same path. Don't.
 
 Always include a short `message` explaining *why* — like a commit
 message. It's stored on the version row and helps future readers.
@@ -117,7 +128,9 @@ message. It's stored on the version row and helps future readers.
 
 Soft delete: the row stays in `document_versions` so history is
 preserved. Re-writing the same path resurrects the document with the
-next version number.
+next version number. Same `expected_version` semantics as `write`:
+pass the `current_version` from your most recent read; omitting it is
+deprecated and logs a warning.
 
 ### `nottario.docs.history`, `nottario.docs.read_version`
 

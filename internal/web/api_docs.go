@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -171,6 +172,9 @@ func WriteDocHandler(d DocsDeps) http.Handler {
 			writeError(w, http.StatusForbidden, err.Error())
 			return
 		}
+		if req.ExpectedVersion == nil {
+			log.Printf("api docs.write: deprecated call without expected_version (user=%s path=%q scope=%s)", c.UserID, req.Path, scope)
+		}
 		doc, err := docs.Write(r.Context(), d.Pool, docs.WriteParams{
 			Scope:           scope,
 			ProjectID:       pid,
@@ -180,8 +184,13 @@ func WriteDocHandler(d DocsDeps) http.Handler {
 			Message:         req.Message,
 			ExpectedVersion: req.ExpectedVersion,
 		}, d.authorship(c))
-		if errors.Is(err, docs.ErrVersionConflict) {
-			writeError(w, http.StatusConflict, err.Error())
+		var vc *docs.VersionConflictError
+		if errors.As(err, &vc) {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":           "version_conflict",
+				"current_version": vc.CurrentVersion,
+				"message":         "re-read the document and retry with the latest current_version",
+			})
 			return
 		}
 		if err != nil {
@@ -193,10 +202,11 @@ func WriteDocHandler(d DocsDeps) http.Handler {
 }
 
 type deleteDocRequest struct {
-	Scope     string `json:"scope"`
-	ProjectID string `json:"project_id"`
-	Path      string `json:"path"`
-	Message   string `json:"message"`
+	Scope           string `json:"scope"`
+	ProjectID       string `json:"project_id"`
+	Path            string `json:"path"`
+	Message         string `json:"message"`
+	ExpectedVersion *int   `json:"expected_version"`
 }
 
 // DeleteDocHandler soft-deletes a document.
@@ -221,11 +231,27 @@ func DeleteDocHandler(d DocsDeps) http.Handler {
 			writeError(w, http.StatusForbidden, err.Error())
 			return
 		}
-		if err := docs.Delete(r.Context(), d.Pool, scope, pid, req.Path, req.Message, d.authorship(c)); err != nil {
-			if errors.Is(err, docs.ErrNotFound) {
-				writeError(w, http.StatusNotFound, "document not found")
-				return
-			}
+		if req.ExpectedVersion == nil {
+			log.Printf("api docs.delete: deprecated call without expected_version (user=%s path=%q scope=%s)", c.UserID, req.Path, scope)
+		}
+		err = docs.DeleteWithParams(r.Context(), d.Pool, docs.DeleteParams{
+			Scope: scope, ProjectID: pid, Path: req.Path, Message: req.Message,
+			ExpectedVersion: req.ExpectedVersion,
+		}, d.authorship(c))
+		var vc *docs.VersionConflictError
+		if errors.As(err, &vc) {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":           "version_conflict",
+				"current_version": vc.CurrentVersion,
+				"message":         "re-read the document and retry with the latest current_version",
+			})
+			return
+		}
+		if errors.Is(err, docs.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "document not found")
+			return
+		}
+		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}

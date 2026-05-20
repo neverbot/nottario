@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -45,8 +46,9 @@ type docsWriteInput struct {
 
 type docsDeleteInput struct {
 	docsScopeInput
-	Path    string `json:"path" jsonschema:"logical path"`
-	Message string `json:"message,omitempty" jsonschema:"short explanation, stored on the version row"`
+	Path            string `json:"path" jsonschema:"logical path"`
+	Message         string `json:"message,omitempty" jsonschema:"short explanation, stored on the version row"`
+	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"optional optimistic-concurrency check: must equal current_version"`
 }
 
 type docsHistoryInput struct {
@@ -117,7 +119,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.write",
-		Description: "Creates or updates a document. Pass the full markdown including optional YAML frontmatter. For updates, pass expected_version equal to the current_version you most recently read; pass 0 for a new document.",
+		Description: "Creates or updates a document. Pass the full markdown including optional YAML frontmatter. Always pass expected_version: equal to the current_version returned by the most recent docs.read, or 0 when creating a new document. Omitting expected_version is DEPRECATED and logs a server-side warning — it skips the optimistic-concurrency check and risks silently overwriting concurrent edits.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsWriteInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -130,6 +132,9 @@ func registerDocs(server *sdk.Server, d Deps) {
 		if scope == docs.ScopeGlobal && !c.IsAdmin {
 			return toolError("only admins can modify global documents")
 		}
+		if in.ExpectedVersion == nil {
+			log.Printf("mcp docs.write: deprecated call without expected_version (user=%s path=%q scope=%s)", c.UserID, in.Path, scope)
+		}
 		doc, err := docs.Write(ctx, d.Pool, docs.WriteParams{
 			Scope: scope, ProjectID: pid,
 			Path: in.Path, Kind: docs.Kind(in.Kind),
@@ -137,8 +142,13 @@ func registerDocs(server *sdk.Server, d Deps) {
 			Message:         in.Message,
 			ExpectedVersion: in.ExpectedVersion,
 		}, docs.Authorship{UserID: ptrUUID(c.UserID), TokenID: ptrUUID(c.TokenID)})
-		if errors.Is(err, docs.ErrVersionConflict) {
-			return toolError("version_conflict: re-read the document and retry with the latest current_version")
+		var vc *docs.VersionConflictError
+		if errors.As(err, &vc) {
+			return jsonResult(map[string]any{
+				"error":           "version_conflict",
+				"current_version": vc.CurrentVersion,
+				"message":         "re-read the document and retry with the latest current_version",
+			})
 		}
 		if err != nil {
 			return toolError(err.Error())
@@ -148,7 +158,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.delete",
-		Description: "Soft-deletes a document. The history is preserved; rewriting the same path resurrects it.",
+		Description: "Soft-deletes a document. The history is preserved; rewriting the same path resurrects it. Pass expected_version equal to the current_version returned by the most recent docs.read. Omitting expected_version is DEPRECATED and logs a server-side warning.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsDeleteInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -161,9 +171,25 @@ func registerDocs(server *sdk.Server, d Deps) {
 		if scope == docs.ScopeGlobal && !c.IsAdmin {
 			return toolError("only admins can modify global documents")
 		}
-		if err := docs.Delete(ctx, d.Pool, scope, pid, in.Path, in.Message, docs.Authorship{
-			UserID: ptrUUID(c.UserID), TokenID: ptrUUID(c.TokenID),
-		}); err != nil {
+		if in.ExpectedVersion == nil {
+			log.Printf("mcp docs.delete: deprecated call without expected_version (user=%s path=%q scope=%s)", c.UserID, in.Path, scope)
+		}
+		err = docs.DeleteWithParams(ctx, d.Pool, docs.DeleteParams{
+			Scope: scope, ProjectID: pid, Path: in.Path, Message: in.Message,
+			ExpectedVersion: in.ExpectedVersion,
+		}, docs.Authorship{UserID: ptrUUID(c.UserID), TokenID: ptrUUID(c.TokenID)})
+		var vc *docs.VersionConflictError
+		if errors.As(err, &vc) {
+			return jsonResult(map[string]any{
+				"error":           "version_conflict",
+				"current_version": vc.CurrentVersion,
+				"message":         "re-read the document and retry with the latest current_version",
+			})
+		}
+		if errors.Is(err, docs.ErrNotFound) {
+			return toolError("document not found")
+		}
+		if err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")

@@ -25,6 +25,23 @@ var (
 	ErrPathRequired    = errors.New("path is required")
 )
 
+// VersionConflictError is returned by Write/Delete when the caller's
+// expected_version does not match the row's current_version. It
+// satisfies errors.Is(err, ErrVersionConflict) so existing callers
+// continue to match, while exposing the actual current_version so
+// API layers can return a structured 409 payload.
+type VersionConflictError struct {
+	CurrentVersion int
+}
+
+func (e *VersionConflictError) Error() string {
+	return fmt.Sprintf("expected_version does not match current_version (current=%d)", e.CurrentVersion)
+}
+
+func (e *VersionConflictError) Is(target error) bool {
+	return target == ErrVersionConflict
+}
+
 // Authorship records who performed an operation.
 type Authorship struct {
 	UserID  *uuid.UUID
@@ -98,7 +115,7 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if p.ExpectedVersion != nil && *p.ExpectedVersion != 0 {
-			return nil, ErrVersionConflict
+			return nil, &VersionConflictError{CurrentVersion: 0}
 		}
 		row, err := q.InsertDocument(ctx, dbq.InsertDocumentParams{
 			Scope:            string(p.Scope),
@@ -139,7 +156,7 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 	}
 
 	if p.ExpectedVersion != nil && *p.ExpectedVersion != int(existing.CurrentVersion) {
-		return nil, ErrVersionConflict
+		return nil, &VersionConflictError{CurrentVersion: int(existing.CurrentVersion)}
 	}
 	newVersion := int(existing.CurrentVersion) + 1
 
@@ -378,9 +395,30 @@ func ReadVersion(ctx context.Context, pool *pgxpool.Pool, documentID uuid.UUID, 
 	}, nil
 }
 
-// Delete soft-deletes the document.
+// DeleteParams carries the input to soft-delete a document. When
+// ExpectedVersion is non-nil it must match the row's current_version
+// before the delete proceeds, mirroring Write's optimistic
+// concurrency check.
+type DeleteParams struct {
+	Scope           Scope
+	ProjectID       *uuid.UUID
+	Path            string
+	Message         string
+	ExpectedVersion *int
+}
+
+// Delete soft-deletes the document. Backwards-compatible wrapper
+// kept for the few call sites that don't yet pass DeleteParams.
 func Delete(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uuid.UUID, path, message string, by Authorship) error {
-	if err := validateScope(scope, projectID); err != nil {
+	return DeleteWithParams(ctx, pool, DeleteParams{
+		Scope: scope, ProjectID: projectID, Path: path, Message: message,
+	}, by)
+}
+
+// DeleteWithParams is the structured variant of Delete that supports
+// optimistic concurrency via ExpectedVersion.
+func DeleteWithParams(ctx context.Context, pool *pgxpool.Pool, p DeleteParams, by Authorship) error {
+	if err := validateScope(p.Scope, p.ProjectID); err != nil {
 		return err
 	}
 	tx, err := pool.Begin(ctx)
@@ -391,9 +429,9 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uui
 	q := dbq.New(tx)
 
 	row, err := q.GetDocumentForDelete(ctx, dbq.GetDocumentForDeleteParams{
-		Scope:     string(scope),
-		ProjectID: projectID,
-		Path:      path,
+		Scope:     string(p.Scope),
+		ProjectID: p.ProjectID,
+		Path:      p.Path,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
@@ -402,6 +440,11 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uui
 		return err
 	}
 
+	if p.ExpectedVersion != nil && *p.ExpectedVersion != int(row.CurrentVersion) {
+		return &VersionConflictError{CurrentVersion: int(row.CurrentVersion)}
+	}
+
+	message := p.Message
 	newVersion := int(row.CurrentVersion) + 1
 	if err := q.SoftDeleteDocument(ctx, dbq.SoftDeleteDocumentParams{
 		ID:               row.ID,
