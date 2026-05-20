@@ -14,14 +14,24 @@ import (
 // introduce a cycle in the dependency graph.
 var ErrCycle = errors.New("dependency would create a cycle")
 
+// depLockNamespace is the int4 we hand to pg_advisory_xact_lock to
+// tag dependency-graph mutations. The second int4 is the hash of the
+// project id so concurrent AddDependency calls in DIFFERENT projects
+// don't contend. Within a project, all AddDependency calls serialize,
+// which is what prevents the 3+-node cycle race (e.g. A→B, B→C, C→A
+// added concurrently from three different agents).
+const depLockNamespace int32 = 0x44455053 // "DEPS" ascii
+
 // AddDependency declares that task depends on dependsOn. Both must
 // belong to the same project. Cycles are rejected with ErrCycle.
 //
-// Concurrency-wise we take a row-level lock on the task row so a
-// SetState(done) racing against this insert is forced to serialize:
-// either SetState lands first and we see the task already done, or
-// AddDependency lands first and SetState's precondition check sees
-// the new edge.
+// Concurrency model:
+//   - Take an xact-scoped advisory lock keyed on the project so all
+//     dep mutations within a project serialize. Cheap because deps
+//     are added rarely relative to other writes; bullet-proof against
+//     N-node cycle races.
+//   - Take a row-level lock on both endpoints so a SetState(done)
+//     racing against this insert is forced to serialize too.
 func AddDependency(ctx context.Context, pool *pgxpool.Pool, taskID, dependsOnID uuid.UUID) error {
 	if taskID == dependsOnID {
 		return errors.New("task cannot depend on itself")
@@ -32,8 +42,24 @@ func AddDependency(ctx context.Context, pool *pgxpool.Pool, taskID, dependsOnID 
 	}
 	defer tx.Rollback(ctx)
 
-	// Lock both endpoints to serialize with their SetState and with
-	// other concurrent dep mutations on the same pair.
+	// Resolve the project from the task row so we can scope the lock.
+	var projectID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT project_id FROM tasks WHERE id = $1`, taskID).Scan(&projectID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("task not found")
+		}
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock($1::int, hashtext($2::text))`,
+		depLockNamespace, projectID,
+	); err != nil {
+		return err
+	}
+
+	// Lock both endpoints (ordered by id for deterministic acquisition)
+	// so a SetState on either side and any other dep mutation touching
+	// these rows serialize with us.
 	if _, err := tx.Exec(ctx,
 		`SELECT id FROM tasks WHERE id IN ($1, $2) ORDER BY id FOR UPDATE`,
 		taskID, dependsOnID,
