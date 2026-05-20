@@ -344,6 +344,10 @@ class NottarioBoardPage extends LitElement {
           <button class=${this.view === 'gantt' ? 'primary' : ''}
                   @click=${() => window.nottarioNavigate(`/projects/${this.projectId}/board/gantt`)}>Gantt</button>
         </div>
+        ${this.view === 'gantt' ? html`
+          <button title="Scroll the Gantt back to the now line"
+                  @click=${() => this.renderRoot.querySelector('nottario-gantt')?.scrollToNow()}>↻ Now</button>
+        ` : null}
         <button class="primary" @click=${() => this.showCreate = true}>New task</button>
       </div>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}

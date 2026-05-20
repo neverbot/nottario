@@ -225,6 +225,33 @@ class NottarioGantt extends LitElement {
     }
   }
 
+  // Public: called from the board page's "↻ Now" button. Same target
+  // as the initial centring pass but with rAF easing (ease-out-quart,
+  // ~220ms), since the user pressed something so the motion is
+  // expected. Honours prefers-reduced-motion by snapping instead.
+  scrollToNow() {
+    const stage = this.shadowRoot?.querySelector('.stage');
+    const nowLine = this.shadowRoot?.querySelector('.now-line');
+    if (!stage || !nowLine) return;
+    const nowX = parseFloat(nowLine.getAttribute('x1') || '0');
+    if (!stage.clientWidth) return;
+    const target = Math.max(0, nowX - stage.clientWidth / 2);
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { stage.scrollLeft = target; return; }
+    const start = stage.scrollLeft;
+    const delta = target - start;
+    if (Math.abs(delta) < 1) return;
+    const duration = 220;
+    const t0 = performance.now();
+    const ease = (t) => 1 - Math.pow(1 - t, 4); // ease-out-quart
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / duration);
+      stage.scrollLeft = start + delta * ease(t);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   _centerOnNow() {
     // Defer two frames: first to let Lit flush its SVG render, second
     // to let the browser actually lay out the (now wider) sub-columns
