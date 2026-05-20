@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import { tableStyles } from '/static/components/surfaces.js';
 import '/static/components/page-header.js';
 
 class NottarioProjectSettings extends LitElement {
@@ -15,7 +16,7 @@ class NottarioProjectSettings extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, css`
+  static styles = [buttonStyles, tableStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -72,9 +73,6 @@ class NottarioProjectSettings extends LitElement {
       margin: -4px 0 12px;
     }
 
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eaeef2; }
-    th { font-size: 12px; text-transform: uppercase; color: #59636e; }
     .color-dot {
       display: inline-block;
       width: 10px;
@@ -110,8 +108,70 @@ class NottarioProjectSettings extends LitElement {
       background: #ffebe9;
       outline: none;
     }
-    .add-row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
-    .add-row input { flex: 1; }
+    /* Add-row forms below tables. End-to-end fields aligned with the
+       table widths above, labels visible. The 'inline' modifier
+       collapses labels to a single line and is used by the role/
+       priority add forms; the default stacked form is used for
+       multi-line creates. */
+    .add-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .add-row .field { margin-bottom: 0; flex: 1; min-width: 120px; }
+    .add-row .field.narrow { flex: 0 0 110px; }
+    .add-row .add-action { display: flex; align-items: center; height: 32px; }
+
+    /* Inline-edit number input inside table cells. Matches the
+       .field input chrome so the priorities table doesn't look like
+       a different design language. */
+    .inline-num {
+      width: 84px;
+      padding: 4px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #fff;
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+      box-sizing: border-box;
+    }
+    .inline-num:focus { outline: 2px solid #0969da; border-color: #0969da; }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
+
+    /* Member cells */
+    .user-cell { display: flex; align-items: center; gap: 10px; }
+    .user-cell .user-text { line-height: 1.3; }
+    .user-cell .login { color: #59636e; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
+    .member-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #d0d7de;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      text-transform: uppercase;
+    }
+    .badge.admin {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: #fff8c5;
+      color: #9a6700;
+      border: 1px solid #eac54f;
+      margin-left: 6px;
+      vertical-align: 2px;
+    }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
     .field { margin-bottom: 12px; }
     .field label {
@@ -373,7 +433,7 @@ class NottarioProjectSettings extends LitElement {
               <div style="display:flex;align-items:center;gap:8px">
                 <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
                        @change=${(e) => this.saveMCPPageSize(e.target.value)}
-                       style="width:100px"> <span class="muted" style="font-size:13px">tasks per page</span>
+                       class="inline-num" style="width:100px"> <span class="muted" style="font-size:13px">tasks per page</span>
               </div>
               <p class="muted" style="margin:6px 0 0;font-size:12px">
                 Agents that call <code>nottario.tasks.list</code> without an explicit
@@ -422,8 +482,8 @@ class NottarioProjectSettings extends LitElement {
     const sorted = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
     const canDrag = this.me?.is_admin;
     return html`
-      ${canDrag ? html`<p class="muted" style="margin:0 0 8px">Drag rows to reorder. Order is shared with the Gantt view.</p>` : null}
-      <table>
+      ${canDrag ? html`<p class="helper" style="margin:0 0 10px">Drag rows to reorder. Order is shared with the Gantt view.</p>` : null}
+      <table class="data-table">
         <thead>
           <tr>
             ${canDrag ? html`<th style="width:24px"></th>` : null}
@@ -442,7 +502,9 @@ class NottarioProjectSettings extends LitElement {
               ${canDrag ? html`<td class="drag-handle" title="Drag to reorder">⋮⋮</td>` : null}
               <td class="mono">${r.Key}</td>
               <td>${r.Label}</td>
-              <td>${r.Color ? html`<span class="color-dot" style=${`background:${r.Color}`}></span>${r.Color}` : ''}</td>
+              <td>${r.Color
+                    ? html`<span class="color-dot" style=${`background:${r.Color}`}></span><span class="mono" style="font-size:11px">${r.Color}</span>`
+                    : html`<span class="muted">—</span>`}</td>
               <td class="row-actions">
                 ${canDrag ? html`<button class="delete" title="Delete role" aria-label="Delete role"
                                           @click=${() => this.deleteRole(r.ID)}>✕</button>` : null}
@@ -453,10 +515,21 @@ class NottarioProjectSettings extends LitElement {
       </table>
       ${canDrag ? html`
         <form class="add-row" @submit=${(e) => this.addRole(e)}>
-          <input name="key" placeholder="key (snake-case)" required>
-          <input name="label" placeholder="Label" required>
-          <input name="color" placeholder="#hex" style="max-width:90px">
-          <button type="submit" class="btn primary">Add role</button>
+          <div class="field">
+            <label>Key</label>
+            <input name="key" placeholder="backend" required>
+          </div>
+          <div class="field">
+            <label>Label</label>
+            <input name="label" placeholder="Backend" required>
+          </div>
+          <div class="field narrow">
+            <label>Color</label>
+            <input name="color" placeholder="#1f6feb">
+          </div>
+          <div class="add-action">
+            <button type="submit" class="btn primary">Add role</button>
+          </div>
         </form>
       ` : null}
     `;
@@ -511,13 +584,13 @@ class NottarioProjectSettings extends LitElement {
   renderPriorities() {
     const sorted = [...this.priorities].sort((a, b) => (a.Position - b.Position) || (b.Value - a.Value));
     return html`
-      <p class="muted" style="margin:0 0 12px">
+      <p class="helper" style="margin:0 0 12px">
         Named priority buckets. Tasks store the numeric value; agents pick by key
         (e.g. <code>high</code>) via the MCP. Higher value = pulled first.
       </p>
-      <table>
+      <table class="data-table">
         <thead>
-          <tr><th>Key</th><th>Value</th><th></th></tr>
+          <tr><th>Key</th><th style="width:140px">Value</th><th style="width:60px"></th></tr>
         </thead>
         <tbody>
           ${sorted.map(p => html`
@@ -527,7 +600,7 @@ class NottarioProjectSettings extends LitElement {
                 ${this.me?.is_admin
                   ? html`<input type="number" min="0" max="100" .value=${String(p.Value)}
                           @change=${(e) => this.upsertPriority(p.Key, e.target.value, p.Position)}
-                          style="width:80px">`
+                          class="inline-num">`
                   : p.Value}
               </td>
               <td class="row-actions">
@@ -542,9 +615,17 @@ class NottarioProjectSettings extends LitElement {
       </table>
       ${this.me?.is_admin ? html`
         <form class="add-row" @submit=${(e) => this.addPriority(e)}>
-          <input name="key" placeholder="key (e.g. urgent)" required>
-          <input name="value" type="number" min="0" max="100" placeholder="value (0-100)" required style="max-width:140px">
-          <button type="submit" class="btn primary">Add bucket</button>
+          <div class="field">
+            <label>Key</label>
+            <input name="key" placeholder="urgent" required>
+          </div>
+          <div class="field narrow">
+            <label>Value</label>
+            <input name="value" type="number" min="0" max="100" placeholder="0-100" required>
+          </div>
+          <div class="add-action">
+            <button type="submit" class="btn primary">Add bucket</button>
+          </div>
         </form>
       ` : null}
     `;
@@ -566,9 +647,9 @@ class NottarioProjectSettings extends LitElement {
 
   renderMembers() {
     return html`
-      <table>
+      <table class="data-table">
         <thead>
-          <tr><th>User</th><th>Role</th></tr>
+          <tr><th>User</th><th style="width:180px">Role</th></tr>
         </thead>
         <tbody>
           ${this.members.length === 0
@@ -576,9 +657,17 @@ class NottarioProjectSettings extends LitElement {
             : this.members.map(m => html`
               <tr>
                 <td>
-                  ${m.AvatarURL ? html`<img src=${m.AvatarURL} alt="" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:6px">` : ''}
-                  ${m.DisplayName} <span class="muted">@${m.GithubLogin}</span>
-                  ${m.IsAdmin ? html`<span class="badge admin" style="margin-left:6px">admin</span>` : ''}
+                  <div class="user-cell">
+                    ${m.AvatarURL
+                      ? html`<img class="member-avatar" src=${m.AvatarURL} alt="">`
+                      : html`<span class="member-avatar fallback">${this._initials(m.DisplayName || m.GithubLogin)}</span>`}
+                    <div class="user-text">
+                      <div>${m.DisplayName || m.GithubLogin}
+                        ${m.IsAdmin ? html`<span class="badge admin">admin</span>` : ''}
+                      </div>
+                      <div class="login">@${m.GithubLogin}</div>
+                    </div>
+                  </div>
                 </td>
                 <td>
                   ${m.RoleColor ? html`<span class="color-dot" style=${`background:${m.RoleColor}`}></span>` : ''}
@@ -588,8 +677,14 @@ class NottarioProjectSettings extends LitElement {
             `)}
         </tbody>
       </table>
-      <p class="muted" style="margin-top:12px">Adding members from the UI is coming in a later milestone. For now, the first user who logs in is admin; other users self-register via GitHub OAuth on first login and an admin can grant them roles via the API.</p>
+      <p class="helper" style="margin-top:12px">Adding members from the UI is coming in a later milestone. For now, the first user who logs in is admin; other users self-register via GitHub OAuth on first login and an admin can grant them roles via the API.</p>
     `;
+  }
+
+  _initials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/).slice(0, 2);
+    return parts.map(p => p.charAt(0)).join('');
   }
 }
 
