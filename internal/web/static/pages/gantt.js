@@ -473,48 +473,113 @@ class NottarioGantt extends LitElement {
       for (const c of cellCounts.values()) maxCellLanes = Math.max(maxCellLanes, c);
       return Math.max(1, Math.max(maxCellLanes, doingCount));
     });
-    // Per band, walk past tasks reverse-chronologically (most recent
-    // first) so the newest task lands in column 0 (rightmost, flush
-    // against NOW). col 0 = right, col K-1 = left. Free tasks tuck into
-    // the previous column's available lanes (capped by the band's
-    // future-zone lane count) so the band's height stays consistent
-    // across zones.
-    const taskColInBand = new Map(); // taskID -> col index
-    let maxCol = -1;
+    // Anchored slots come from a global successor-depth pass: every
+    // band-chronological successor and every done→done dep edge pushes
+    // its source one slot further left. This is what guarantees that a
+    // dep edge between two done tasks in different bands always points
+    // forward, because the dependent ends up at a strictly greater
+    // slot than its precondition.
+    const bandSuccessor = new Map();
+    for (const b of bands) {
+      const sorted = b.tasks
+        .filter(t => t.State === 'done' && t.ActualEnd)
+        .sort((x, y) => new Date(x.ActualEnd).getTime() - new Date(y.ActualEnd).getTime());
+      for (let i = 0; i < sorted.length - 1; i++) {
+        bandSuccessor.set(sorted[i].ID, sorted[i + 1].ID);
+      }
+    }
+    const depSuccessors = new Map();
+    for (const d of this.deps) {
+      if (doneByID.has(d.TaskID) && doneByID.has(d.DependsOnID)) {
+        if (!depSuccessors.has(d.DependsOnID)) depSuccessors.set(d.DependsOnID, []);
+        depSuccessors.get(d.DependsOnID).push(d.TaskID);
+      }
+    }
+    const succession = new Map();
+    const visiting = new Set();
+    const computeSucc = (id) => {
+      if (succession.has(id)) return succession.get(id);
+      if (visiting.has(id)) return 0;
+      visiting.add(id);
+      let s = 0;
+      const next = bandSuccessor.get(id);
+      if (next) s = Math.max(s, 1 + computeSucc(next));
+      for (const dep of depSuccessors.get(id) || []) {
+        s = Math.max(s, 1 + computeSucc(dep));
+      }
+      visiting.delete(id);
+      succession.set(id, s);
+      return s;
+    };
+    for (const id of doneByID.keys()) computeSucc(id);
+    const maxPastSlots = doneByID.size
+      ? Math.max(0, ...succession.values()) + 1
+      : 0;
+    // Initial slot = K-1-succession (right-pack newest tasks flush
+    // against NOW). Anchored tasks stay here; free tasks may move.
+    const globalPastSlot = new Map();
+    for (const [id, s] of succession) {
+      globalPastSlot.set(id, maxPastSlots - 1 - s);
+    }
+    // Vertical packing for FREE past tasks only. Anchored tasks keep
+    // their natural slot so every arrow we already validated stays
+    // forward. A free task moves to a nearby occupied slot inside its
+    // own band when that slot has lane room (cap = band's future lane
+    // count). The chosen target is the closest occupied slot to the
+    // task's original position, so free tasks gravitate toward dense
+    // anchored clusters instead of sitting alone in their own column.
     for (let bi = 0; bi < bands.length; bi++) {
       const b = bands[bi];
       const maxLanesPast = futureLanesPerBand[bi];
-      const sorted = b.tasks
+      if (maxLanesPast < 2) continue; // no vertical room
+      const bandDoneIDs = b.tasks
         .filter(t => t.State === 'done' && t.ActualEnd)
-        .sort((x, y) => new Date(y.ActualEnd).getTime() - new Date(x.ActualEnd).getTime());
-      let col = 0;
-      let prevCol = -1;
-      const laneAt = new Map(); // col -> next free lane
-      for (const t of sorted) {
-        const anchored = depTouched.has(t.ID);
-        if (anchored) {
-          taskColInBand.set(t.ID, col);
-          laneAt.set(col, (laneAt.get(col) || 0) + 1);
-          prevCol = col;
-          col++;
-        } else if (prevCol >= 0 && (laneAt.get(prevCol) || 0) < maxLanesPast) {
-          taskColInBand.set(t.ID, prevCol);
-          laneAt.set(prevCol, (laneAt.get(prevCol) || 0) + 1);
-        } else {
-          taskColInBand.set(t.ID, col);
-          laneAt.set(col, 1);
-          prevCol = col;
-          col++;
-        }
+        .map(t => t.ID);
+      const slotOccupants = new Map(); // slot -> count
+      for (const id of bandDoneIDs) {
+        const s = globalPastSlot.get(id);
+        slotOccupants.set(s, (slotOccupants.get(s) || 0) + 1);
       }
-      maxCol = Math.max(maxCol, col - 1);
+      // Walk free tasks in chronological order (oldest first) so
+      // relocations cascade left-to-right; tasks finished later have
+      // a shot at landing under tasks already placed.
+      const freeSorted = b.tasks
+        .filter(t => t.State === 'done' && t.ActualEnd && !depTouched.has(t.ID))
+        .sort((x, y) => new Date(x.ActualEnd).getTime() - new Date(y.ActualEnd).getTime());
+      for (const t of freeSorted) {
+        const myOldSlot = globalPastSlot.get(t.ID);
+        let bestSlot = null;
+        let bestDist = Infinity;
+        for (const [s, count] of slotOccupants) {
+          if (s === myOldSlot) continue;
+          if (count >= maxLanesPast) continue;
+          const d = Math.abs(s - myOldSlot);
+          if (d < bestDist) { bestDist = d; bestSlot = s; }
+        }
+        if (bestSlot == null) continue;
+        // Move the task.
+        const oldCount = slotOccupants.get(myOldSlot) || 0;
+        if (oldCount <= 1) slotOccupants.delete(myOldSlot);
+        else slotOccupants.set(myOldSlot, oldCount - 1);
+        slotOccupants.set(bestSlot, (slotOccupants.get(bestSlot) || 0) + 1);
+        globalPastSlot.set(t.ID, bestSlot);
+      }
     }
-    const maxPastSlots = maxCol + 1;
-    const globalPastSlot = new Map();
-    for (const [id, c] of taskColInBand) {
-      // col 0 (newest) → slot maxPastSlots-1 (rightmost). col K-1 → slot 0.
-      globalPastSlot.set(id, maxPastSlots - 1 - c);
+    // Compact: drop slot indices that ended up empty after relocation
+    // so the past zone width matches what's actually drawn. Preserves
+    // the slot ORDER so cross-band dep arrows stay forward (succession
+    // already encoded the right ordering, we're just renumbering).
+    {
+      const usedSlots = [...new Set(globalPastSlot.values())].sort((a, b) => a - b);
+      const remap = new Map();
+      usedSlots.forEach((s, i) => remap.set(s, i));
+      for (const [id, s] of globalPastSlot) globalPastSlot.set(id, remap.get(s));
     }
+    const compactedPastSlots = (() => {
+      let m = -1;
+      for (const s of globalPastSlot.values()) if (s > m) m = s;
+      return m + 1;
+    })();
     const pastSlotPerBand = bands.map(b => {
       const m = new Map();
       for (const t of b.tasks) {
@@ -522,7 +587,7 @@ class NottarioGantt extends LitElement {
       }
       return m;
     });
-    const pastWidth = Math.max(360, maxPastSlots * pastSlotW + 12);
+    const pastWidth = Math.max(360, compactedPastSlots * pastSlotW + 12);
 
     // The present zone gets enough room for one min-width bar plus
     // padding. Multiple concurrent `doing` tasks stack into lanes
