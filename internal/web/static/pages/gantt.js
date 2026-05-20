@@ -540,7 +540,7 @@ class NottarioGantt extends LitElement {
     // descendants in 2+ role bands it's "cross-role" — we'll hoist it
     // into a dedicated Features lane (decided below). Single-role
     // features stay inside their natural role band.
-    const featureAggregates = new Map(); // featureID -> {from, to, bi, crossRole}
+    const featureAggregates = new Map(); // featureID -> {from, to, bi, crossRole, roleColors}
     let anyCrossRole = false;
     for (const fid of this.foldedFeatures) {
       const feat = taskByID.get(fid);
@@ -571,7 +571,12 @@ class NottarioGantt extends LitElement {
         for (const [k, v] of bandVotes) if (v > max) { max = v; best = k; }
         naturalBi = best >= 0 ? best : 0;
       }
-      featureAggregates.set(fid, { from: lo, to: hi, bi: naturalBi, crossRole });
+      // Capture the role colours of the involved bands, ordered by the
+      // band's display position so the dots read top→bottom by role.
+      const roleColors = [...bandsSeen]
+        .sort((a, b) => a - b)
+        .map(bi => bands[bi].role.Color || '#8c959f');
+      featureAggregates.set(fid, { from: lo, to: hi, bi: naturalBi, crossRole, roleColors });
     }
 
     // ---- Optional Features lane (only when there's something to put in it) ----
@@ -593,7 +598,7 @@ class NottarioGantt extends LitElement {
         if (this.foldedFeatures.has(t.ID) && featureAggregates.has(t.ID)) {
           const agg = featureAggregates.get(t.ID);
           const targetBi = agg.crossRole ? 0 : agg.bi + bandOffset;
-          visiblePerBand[targetBi].push({ task: t, from: agg.from, to: agg.to, kind: 'feature-agg', crossRole: agg.crossRole });
+          visiblePerBand[targetBi].push({ task: t, from: agg.from, to: agg.to, kind: 'feature-agg', crossRole: agg.crossRole, roleColors: agg.roleColors });
         } else if (!childrenByParent.has(t.ID)) {
           const p = rawPositions.get(t.ID);
           if (p) visiblePerBand[p.bi + bandOffset].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
@@ -618,7 +623,7 @@ class NottarioGantt extends LitElement {
         }
         if (placed < 0) { placed = laneEnds.length; laneEnds.push(e.to); }
         else { laneEnds[placed] = e.to; }
-        positions.push({ task: e.task, bi, lane: placed, from: e.from, to: e.to, kind: e.kind });
+        positions.push({ task: e.task, bi, lane: placed, from: e.from, to: e.to, kind: e.kind, roleColors: e.roleColors });
       }
       lanesPerBand[bi] = Math.max(1, laneEnds.length);
     });
@@ -726,7 +731,7 @@ class NottarioGantt extends LitElement {
                     width=${width} height=${bandHeights[bi]}></rect>
               <text class=${labelCls}
                     x="8" y=${bandTops[bi] + bandHeights[bi] / 2 + 4}>
-                ${isFeatures ? 'FEATURES' : b.role.Label}
+                ${isFeatures ? 'Features' : b.role.Label}
               </text>
             `;
           })}
@@ -758,6 +763,14 @@ class NottarioGantt extends LitElement {
             const labelMaxChars = Math.max(6, Math.floor((p.to - labelX - 6) / 7));
             if (p.kind === 'feature-agg') {
               const childCount = (childrenByParent.get(t.ID) || []).length;
+              const dots = p.roleColors || [];
+              const dotR = 4;
+              const dotGap = 4;
+              const dotPadRight = 10;
+              // Reserve room for the dots so the label doesn't run under them.
+              const dotsBlockW = dots.length * (dotR * 2) + Math.max(0, dots.length - 1) * dotGap;
+              const dotsStartX = p.to - dotPadRight - dotsBlockW + dotR;
+              const labelRoom = Math.max(6, Math.floor((dotsStartX - dotR - labelX - 6) / 7));
               return svg`
                 <rect class="task-rect feature-agg"
                       x=${p.from} y=${y}
@@ -772,8 +785,16 @@ class NottarioGantt extends LitElement {
                 </rect>
                 <text class="task-label" x=${labelX} y=${y + taskHeight / 2 + 4}
                       style="pointer-events:none">
-                  ▸ ${this._truncate(t.Title, labelMaxChars - 2)}
+                  ▸ ${this._truncate(t.Title, labelRoom)}
                 </text>
+                ${dots.map((c, i) => svg`
+                  <circle cx=${dotsStartX + i * (dotR * 2 + dotGap)}
+                          cy=${y + taskHeight / 2}
+                          r=${dotR}
+                          fill=${c}
+                          stroke="rgba(0,0,0,0.18)" stroke-width="0.5"
+                          style="pointer-events:none"></circle>
+                `)}
               `;
             }
             const isFeatureUnfolded = t.Type === 'feature' && !this.foldedFeatures.has(t.ID);
