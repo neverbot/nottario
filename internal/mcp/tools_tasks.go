@@ -22,6 +22,8 @@ type tasksListInput struct {
 	TargetRoleID    string `json:"target_role_id,omitempty" jsonschema:"optional uuid of a role to filter target_role"`
 	ParentTaskID    string `json:"parent_task_id,omitempty" jsonschema:"if set, list children of this feature task"`
 	IncludeChildren bool   `json:"include_children,omitempty" jsonschema:"if true, include tasks that have a parent_task_id (default false: top-level only)"`
+	Limit           int    `json:"limit,omitempty" jsonschema:"page size (1..500). When omitted, uses the project's configured mcp_page_size (default 50)."`
+	Cursor          string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous call's next_cursor. Empty/omitted returns the first page."`
 }
 
 type taskRefInput struct {
@@ -88,7 +90,7 @@ type tasksCommentInput struct {
 func registerTasks(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.list",
-		Description: "Lists tasks in a project, optionally filtered by state, type, assignee, target role or parent feature task. Returns top-level tasks by default; pass include_children=true to flatten feature subtrees.",
+		Description: "Lists tasks in a project, optionally filtered by state, type, assignee, target role or parent feature task. Returns top-level tasks by default; pass include_children=true to flatten feature subtrees.\n\nPagination is keyset-based: each call returns at most `limit` tasks (defaults to the project's `mcp_page_size`, 50 unless an admin changed it), plus `next_cursor` and `has_more`. To walk the full backlog: call repeatedly passing the previous `next_cursor` until `has_more` is false. Filters can change between pages without corrupting the walk.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksListInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
@@ -113,11 +115,28 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if id := optUUID(in.ParentTaskID); id != nil {
 			f.ParentTaskID = id
 		}
-		list, err := tasks.List(ctx, d.Pool, f)
+		limit := in.Limit
+		if limit <= 0 {
+			proj, err := identity.GetProject(ctx, d.Pool, pid.String())
+			if err != nil {
+				return toolError("load project: " + err.Error())
+			}
+			limit = proj.MCPPageSize
+		}
+		cursor, err := tasks.DecodeCursor(in.Cursor)
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(map[string]any{"tasks": list})
+		page, err := tasks.ListPaginated(ctx, d.Pool, f, limit, cursor)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		next, _ := tasks.EncodeCursor(page.NextCursor)
+		return jsonResult(map[string]any{
+			"tasks":       page.Tasks,
+			"next_cursor": next,
+			"has_more":    page.HasMore,
+		})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{

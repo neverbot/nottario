@@ -2,8 +2,11 @@ package tasks
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -116,6 +119,52 @@ type ListFilter struct {
 	IncludeChildren bool // when false (default), only top-level tasks (parent IS NULL) are returned
 }
 
+// Cursor identifies the last item of a page in the (priority DESC,
+// created_at ASC, id ASC) ordering. Encoded opaquely so callers
+// shouldn't depend on its shape.
+type Cursor struct {
+	Priority  int       `json:"p"`
+	CreatedAt time.Time `json:"c"`
+	ID        uuid.UUID `json:"i"`
+}
+
+// Page wraps a paginated slice of tasks plus the cursor for the next
+// page (nil when this was the last page).
+type Page struct {
+	Tasks      []Task
+	NextCursor *Cursor
+	HasMore    bool
+}
+
+// EncodeCursor base64-encodes an opaque cursor so clients can pass it
+// back verbatim.
+func EncodeCursor(c *Cursor) (string, error) {
+	if c == nil {
+		return "", nil
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// DecodeCursor reverses EncodeCursor.
+func DecodeCursor(s string) (*Cursor, error) {
+	if s == "" {
+		return nil, nil
+	}
+	b, err := base64.URLEncoding.DecodeString(s)
+	if err != nil {
+		return nil, errors.New("invalid cursor: " + err.Error())
+	}
+	var c Cursor
+	if err := json.Unmarshal(b, &c); err != nil {
+		return nil, errors.New("invalid cursor: " + err.Error())
+	}
+	return &c, nil
+}
+
 // List returns tasks for a project filtered by f, ordered by
 // priority DESC, created_at ASC.
 func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Task, error) {
@@ -182,6 +231,108 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Task, error)
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// ListPaginated runs the same filters as List but with a keyset
+// cursor and a hard limit. `limit` is clamped to the [1, 500] range
+// (callers should already have resolved nil/zero to the project's
+// configured page size). Returns the page plus the next cursor or
+// `(_, false, nil)` when there are no more rows.
+func ListPaginated(ctx context.Context, pool *pgxpool.Pool, f ListFilter, limit int, after *Cursor) (Page, error) {
+	if f.ProjectID == uuid.Nil {
+		return Page{}, errors.New("project_id is required")
+	}
+	if limit < 1 {
+		limit = 1
+	} else if limit > 500 {
+		limit = 500
+	}
+
+	query := `
+		SELECT id, project_id, parent_task_id, type, title, description_md,
+		       state, priority, assignee_user_id, target_role_id,
+		       actual_start, actual_end,
+		       created_by_user_id, created_by_token_id,
+		       created_at, updated_at
+		FROM tasks WHERE project_id = $1
+	`
+	args := []any{f.ProjectID}
+	idx := 2
+	if f.State != "" {
+		query += fmt.Sprintf(" AND state = $%d", idx)
+		args = append(args, f.State)
+		idx++
+	}
+	if f.Type != "" {
+		query += fmt.Sprintf(" AND type = $%d", idx)
+		args = append(args, f.Type)
+		idx++
+	}
+	if f.AssigneeUserID != nil {
+		query += fmt.Sprintf(" AND assignee_user_id = $%d", idx)
+		args = append(args, *f.AssigneeUserID)
+		idx++
+	}
+	if f.TargetRoleID != nil {
+		query += fmt.Sprintf(" AND target_role_id = $%d", idx)
+		args = append(args, *f.TargetRoleID)
+		idx++
+	}
+	if f.ParentTaskID != nil {
+		query += fmt.Sprintf(" AND parent_task_id = $%d", idx)
+		args = append(args, *f.ParentTaskID)
+		idx++
+	} else if !f.IncludeChildren {
+		query += " AND parent_task_id IS NULL"
+	}
+	if after != nil {
+		query += fmt.Sprintf(`
+			AND (
+			  priority <  $%d
+			  OR (priority = $%d AND created_at > $%d)
+			  OR (priority = $%d AND created_at = $%d AND id > $%d)
+			)`,
+			idx, idx, idx+1, idx, idx+1, idx+2)
+		args = append(args, after.Priority, after.CreatedAt, after.ID)
+		idx += 3
+	}
+	query += fmt.Sprintf(" ORDER BY priority DESC, created_at ASC, id ASC LIMIT $%d", idx)
+	args = append(args, limit+1)
+
+	rows, err := pool.Query(ctx, query, args...)
+	if err != nil {
+		return Page{}, err
+	}
+	defer rows.Close()
+	out := []Task{}
+	for rows.Next() {
+		var t Task
+		if err := rows.Scan(
+			&t.ID, &t.ProjectID, &t.ParentTaskID, &t.Type, &t.Title, &t.DescriptionMD,
+			&t.State, &t.Priority, &t.AssigneeUserID, &t.TargetRoleID,
+			&t.ActualStart, &t.ActualEnd,
+			&t.CreatedByUserID, &t.CreatedByTokenID,
+			&t.CreatedAt, &t.UpdatedAt,
+		); err != nil {
+			return Page{}, err
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return Page{}, err
+	}
+
+	page := Page{}
+	if len(out) > limit {
+		page.HasMore = true
+		out = out[:limit]
+	}
+	page.Tasks = out
+	if page.HasMore && len(out) > 0 {
+		last := out[len(out)-1]
+		page.NextCursor = &Cursor{Priority: last.Priority, CreatedAt: last.CreatedAt, ID: last.ID}
+	}
+	return page, nil
 }
 
 // UpdateParams enumerates the mutable fields of a task. A nil

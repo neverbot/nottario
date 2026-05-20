@@ -40,10 +40,12 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 		VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6)
 		RETURNING id, slug, name, description,
 		          COALESCE(primary_language, ''), COALESCE(project_type, ''),
+		          mcp_page_size,
 		          created_by_user_id, created_at, updated_at
 	`, slug, name, description, primaryLanguage, projectType, createdByUserID).Scan(
 		&p.ID, &p.Slug, &p.Name, &p.Description,
 		&p.PrimaryLanguage, &p.ProjectType,
+		&p.MCPPageSize,
 		&p.CreatedByUserID, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -96,6 +98,7 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 		rows, err = pool.Query(ctx, `
 			SELECT id, slug, name, description,
 			       COALESCE(primary_language, ''), COALESCE(project_type, ''),
+			       mcp_page_size,
 			       created_by_user_id, created_at, updated_at
 			FROM projects ORDER BY name
 		`)
@@ -103,6 +106,7 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 		rows, err = pool.Query(ctx, `
 			SELECT DISTINCT p.id, p.slug, p.name, p.description,
 			       COALESCE(p.primary_language, ''), COALESCE(p.project_type, ''),
+			       p.mcp_page_size,
 			       p.created_by_user_id, p.created_at, p.updated_at
 			FROM projects p
 			JOIN memberships m ON m.project_id = p.id
@@ -121,6 +125,7 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 		if err := rows.Scan(
 			&p.ID, &p.Slug, &p.Name, &p.Description,
 			&p.PrimaryLanguage, &p.ProjectType,
+			&p.MCPPageSize,
 			&p.CreatedByUserID, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -147,6 +152,7 @@ func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Proj
 	row := pool.QueryRow(ctx, `
 		SELECT id, slug, name, description,
 		       COALESCE(primary_language, ''), COALESCE(project_type, ''),
+		       mcp_page_size,
 		       created_by_user_id, created_at, updated_at
 		FROM projects
 		WHERE id::text = $1 OR slug = $1
@@ -154,6 +160,7 @@ func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Proj
 	if err := row.Scan(
 		&p.ID, &p.Slug, &p.Name, &p.Description,
 		&p.PrimaryLanguage, &p.ProjectType,
+		&p.MCPPageSize,
 		&p.CreatedByUserID, &p.CreatedAt, &p.UpdatedAt,
 	); err != nil {
 		return nil, err
@@ -206,6 +213,21 @@ func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, 
 	}
 
 	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return GetProject(ctx, pool, id.String())
+}
+
+// UpdateProjectMCPPageSize sets the per-project default page size used
+// by `tasks.list` over MCP when the caller doesn't pass an explicit
+// `limit`. The DB CHECK constraint enforces the 1..500 range.
+func UpdateProjectMCPPageSize(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, pageSize int) (*Project, error) {
+	if pageSize < 1 || pageSize > 500 {
+		return nil, errors.New("mcp_page_size must be between 1 and 500")
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE projects SET mcp_page_size = $2, updated_at = now() WHERE id = $1
+	`, id, pageSize); err != nil {
 		return nil, err
 	}
 	return GetProject(ctx, pool, id.String())
