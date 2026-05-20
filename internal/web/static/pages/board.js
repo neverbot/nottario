@@ -518,10 +518,8 @@ class NottarioBoardPage extends LitElement {
     if (!this.project) return html`<p>Loading…</p>`;
     const doingCount = this.byState('doing').length;
     const hideDoing = this.view === 'kanban' && doingCount === 0 && !this.expandDoing;
-    const crumbs = [{ label: 'Projects', href: '/' }, { label: this.project.Name }];
     return html`
       <nottario-page-header
-        .crumbs=${crumbs}
         .title=${this.view === 'gantt' ? 'Gantt' : 'Kanban'}>
         ${hideDoing
           ? html`<button slot="actions" class="btn ghost" title="Show the doing column"

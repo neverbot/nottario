@@ -368,9 +368,7 @@ class NottarioArchPage extends LitElement {
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
     return html`
-      <nottario-page-header
-        .crumbs=${[{ label: 'Projects', href: '/' }, { label: this.project.Name, href: `/projects/${this.project.ID}` }, { label: 'Architecture' }]}
-        title="Architecture">
+      <nottario-page-header title="Architecture">
         <nottario-segmented-control slot="switcher"
           .options=${[
             { value: 'diagram', label: 'Diagram' },

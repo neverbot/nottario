@@ -183,14 +183,8 @@ class NottarioProjectSettings extends LitElement {
     if (!this.project) {
       return html`<div class="panel">Loading…${this.error ? html`<div class="error">${this.error}</div>` : ''}</div>`;
     }
-    const crumbs = [
-      { label: 'Projects', href: '/' },
-      { label: this.project.Name, href: `/projects/${this.project.ID}` },
-      { label: 'Settings' },
-    ];
     return html`
       <nottario-page-header
-        .crumbs=${crumbs}
         title="Settings"
         .subtitle=${this.project.Slug}>
       </nottario-page-header>

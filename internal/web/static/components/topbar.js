@@ -11,6 +11,7 @@ class NottarioTopbar extends LitElement {
     me: { type: Object },
     route: { type: String },
     open: { state: true }, // user dropdown open flag
+    _projectName: { state: true }, // cached name of the active project
   };
 
   static styles = css`
@@ -76,6 +77,51 @@ class NottarioTopbar extends LitElement {
     }
     nav.primary a.active {
       color: #fff;
+    }
+    .project-row {
+      background: #1f2328;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .project-row .inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: flex;
+      align-items: stretch;
+      gap: 4px;
+    }
+    .project-row .pname {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px 0 0;
+      margin-right: 6px;
+      color: #fff;
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.01em;
+      border-right: 1px solid rgba(255,255,255,0.1);
+    }
+    nav.project {
+      display: flex;
+      align-items: stretch;
+      gap: 4px;
+    }
+    nav.project a {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      height: 36px;
+      padding: 0 12px;
+      color: rgba(255,255,255,0.72);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+    }
+    nav.project a:hover { color: #fff; }
+    nav.project a.active {
+      color: #fff;
+      border-bottom-color: #ff8c42;
     }
     nav.primary a.active::after {
       content: "";
@@ -213,6 +259,8 @@ class NottarioTopbar extends LitElement {
     this.me = null;
     this.route = '/';
     this.open = false;
+    this._projectName = '';
+    this._projectNameFor = '';
     this._onDocClick = (e) => {
       if (!this.open) return;
       if (e.composedPath().includes(this)) return;
@@ -242,6 +290,23 @@ class NottarioTopbar extends LitElement {
   activeProjectId() {
     const m = (this.route || '').match(/^\/projects\/([^/]+)/);
     return m ? m[1] : null;
+  }
+
+  updated(changed) {
+    if (changed.has('route')) {
+      const pid = this.activeProjectId();
+      if (pid && pid !== this._projectNameFor) {
+        this._projectNameFor = pid;
+        this._projectName = '';
+        fetch(`/api/projects/${pid}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(p => { if (p && this._projectNameFor === pid) this._projectName = p.Name; })
+          .catch(() => { /* ignore */ });
+      } else if (!pid) {
+        this._projectNameFor = '';
+        this._projectName = '';
+      }
+    }
   }
 
   _go(path) {
@@ -294,6 +359,23 @@ class NottarioTopbar extends LitElement {
     return this.route === path || this.route.startsWith(path + '/');
   }
 
+  // Per-project sub-navigation. Active when the route is inside a
+  // project (`/projects/{id}/...`). Mirrors GitHub's repo sub-nav.
+  _projectNavItems(projectId) {
+    const base = `/projects/${projectId}`;
+    const r = this.route || '';
+    const match = (prefix) => r === prefix || r.startsWith(prefix + '/');
+    const items = [
+      { label: 'Board',        href: `${base}/board/kanban`, active: match(`${base}/board`) },
+      { label: 'Docs',         href: `${base}/docs`,         active: match(`${base}/docs`) },
+      { label: 'Architecture', href: `${base}/arch/diagram`, active: match(`${base}/arch`) },
+    ];
+    if (this.me?.is_admin) {
+      items.push({ label: 'Settings', href: `${base}/settings`, active: match(`${base}/settings`) });
+    }
+    return items;
+  }
+
   _initials(name) {
     if (!name) return '?';
     const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -303,6 +385,7 @@ class NottarioTopbar extends LitElement {
   render() {
     if (!this.me) return null;
     const proj = this.activeProjectId();
+    const projectItems = proj ? this._projectNavItems(proj) : null;
     return html`
       <div class="bar">
         <a class="brand" href="/" @click=${this._go('/')}>
@@ -348,6 +431,20 @@ class NottarioTopbar extends LitElement {
           </div>
         </div>
       </div>
+      ${projectItems ? html`
+        <div class="project-row">
+          <div class="inner">
+            ${this._projectName
+              ? html`<span class="pname">${this._projectName}</span>`
+              : null}
+            <nav class="project" aria-label="Project navigation">
+              ${projectItems.map(it => html`
+                <a href=${it.href} class=${it.active ? 'active' : ''}
+                   @click=${this._go(it.href)}>${it.label}</a>
+              `)}
+            </nav>
+          </div>
+        </div>` : null}
     `;
   }
 }

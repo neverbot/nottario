@@ -347,10 +347,7 @@ class NottarioDocsPage extends LitElement {
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
     return html`
-      <nottario-page-header
-        .crumbs=${[{ label: 'Projects', href: '/' }, { label: this.project.Name, href: `/projects/${this.project.ID}` }, { label: 'Docs' }]}
-        title="Docs">
-      </nottario-page-header>
+      <nottario-page-header title="Docs"></nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${this.info ? html`<div class="info">${this.info}</div>` : null}
       <div class="layout">
