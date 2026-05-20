@@ -63,13 +63,18 @@ func MeHandler(deps AuthDeps) http.Handler {
 			writeError(w, http.StatusInternalServerError, "user lookup failed")
 			return
 		}
+		// Memberships are best-effort: the profile page needs them but a
+		// transient db error shouldn't blank out the rest of the response.
+		memberships, _ := identity.ListUserMemberships(r.Context(), deps.Pool, user.ID)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id":           user.ID,
 			"github_login": user.GithubLogin,
 			"display_name": user.DisplayName,
 			"avatar_url":   user.AvatarURL,
 			"is_admin":     user.IsAdmin,
+			"created_at":   user.CreatedAt,
 			"source":       string(c.Source),
+			"memberships":  memberships,
 		})
 	})
 }
