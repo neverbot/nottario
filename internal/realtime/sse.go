@@ -98,4 +98,3 @@ func writeEvent(w http.ResponseWriter, f http.Flusher, ev Event) error {
 	f.Flush()
 	return nil
 }
-

@@ -90,17 +90,26 @@ interface (for humans; architecture is read-only for them).
 
 ## Pre-commit gate
 
-Before **every** `git commit` on this repo:
+Before **every** `git commit` on this repo, run:
 
-1. **Format**: `gofmt -l .` must list no files (or run `gofmt -w .`
-   to fix them). Equivalent: `go fmt ./...` until both stay quiet.
-2. **Vet / lint**: `go vet ./...` must pass clean. If the project ever
-   adopts `golangci-lint`, that becomes the canonical check.
-3. **Tests**: `go test ./...` must pass — every package, including
-   the concurrency / integration tests once they exist.
+```
+make check
+```
+
+That target chains, in order:
+
+1. `gofmt -l .` must list no files (fix with `gofmt -w .`).
+2. `go vet ./...` must pass clean.
+3. `make lint` — `golangci-lint` with `gosec` G201/G202 enabled
+   blocks any SQL query built via `fmt.Sprintf` of non-literal pieces
+   or string concatenation passed to `Query`/`Exec`. That's the SQL
+   injection guard.
+4. `go test ./...` must pass — every package, including the
+   concurrency and integration tests as they land.
 
 If any of these fail, fix the underlying issue. Never bypass with
-`--no-verify` or by skipping packages.
+`--no-verify` or by skipping packages. The linters are pinned in the
+Makefile; `make tools` installs them.
 
 Frontend assets (`internal/web/static/**`) are vanilla JS without a
 build step, so no JS-side linting is required today; if a Lit/JS

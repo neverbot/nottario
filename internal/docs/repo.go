@@ -93,7 +93,7 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Look up the existing row, if any.
 	var existing struct {
@@ -265,7 +265,6 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Summary, err
 	if f.Kind != "" {
 		q += fmt.Sprintf(" AND kind = $%d", idx)
 		args = append(args, string(f.Kind))
-		idx++
 	}
 	q += " ORDER BY path"
 
@@ -323,7 +322,6 @@ func Search(ctx context.Context, pool *pgxpool.Pool, query string, f SearchFilte
 	if f.Kind != "" {
 		q += fmt.Sprintf(" AND kind = $%d", idx)
 		args = append(args, string(f.Kind))
-		idx++
 	}
 	q += " ORDER BY rank DESC, path"
 
@@ -413,7 +411,7 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uui
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var doc Document
 	err = tx.QueryRow(ctx, `

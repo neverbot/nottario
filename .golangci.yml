@@ -1,0 +1,55 @@
+# Tier 1 SQL safety + general Go hygiene.
+#
+# The goal of this configuration is to make hand-written SQL safe by
+# default: gosec G201/G202/G203 fail the build on Sprintf/concat into
+# Query/Exec, which is the only way an injection can sneak in given
+# we use pgx with $N placeholders.
+#
+# Run via: make lint  (or  golangci-lint run)
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - gosec        # security checks, including G201 (SQL string formatting)
+    - govet        # standard library vet
+    - staticcheck  # broad static analysis
+    - ineffassign  # ineffectual assignments
+    - unused       # unused identifiers
+    - errcheck     # unchecked errors
+    - gofmt        # formatting (matches the pre-commit gate)
+
+linters-settings:
+  gosec:
+    includes:
+      - G201   # SQL query construction using format string
+      - G202   # SQL query construction via string concatenation
+      - G203   # use of unescaped data in HTML templates (defence in depth)
+      - G401   # weak cryptography (not SQL but cheap to enable)
+      - G402   # bad TLS settings
+      - G404   # weak random for security purposes
+      - G501   # blocklisted import md5
+      - G502   # blocklisted import des
+      - G505   # blocklisted import sha1
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+
+issues:
+  exclude-rules:
+    # The skill bundle embeds files using filepath joins on package-
+    # local input; gosec G304 file inclusion via variable is a false
+    # positive on bundled assets.
+    - path: internal/skill/bundle.go
+      linters:
+        - gosec
+    # Generated code (none today, but reserve the rule).
+    - path: ".*\\.gen\\.go"
+      linters:
+        - gosec
+        - errcheck
+        - staticcheck
+        - unused

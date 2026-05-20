@@ -140,13 +140,13 @@ func ReadDocHandler(d DocsDeps) http.Handler {
 }
 
 type writeDocRequest struct {
-	Scope           string  `json:"scope"`
-	ProjectID       string  `json:"project_id"`
-	Path            string  `json:"path"`
-	Kind            string  `json:"kind"`
-	ContentMD       string  `json:"content_md"`
-	Message         string  `json:"message"`
-	ExpectedVersion *int    `json:"expected_version"`
+	Scope           string `json:"scope"`
+	ProjectID       string `json:"project_id"`
+	Path            string `json:"path"`
+	Kind            string `json:"kind"`
+	ContentMD       string `json:"content_md"`
+	Message         string `json:"message"`
+	ExpectedVersion *int   `json:"expected_version"`
 }
 
 // WriteDocHandler creates or updates a document.

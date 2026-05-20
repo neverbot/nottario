@@ -32,22 +32,22 @@ const (
 
 // Task is the central entity of the work domain.
 type Task struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	ParentTaskID      *uuid.UUID
-	Type              Type
-	Title             string
-	DescriptionMD     string
-	State             State
-	Priority          int
-	AssigneeUserID    *uuid.UUID
-	TargetRoleID      *uuid.UUID
-	ActualStart       *time.Time
-	ActualEnd         *time.Time
-	CreatedByUserID   *uuid.UUID
-	CreatedByTokenID  *uuid.UUID
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             Type
+	Title            string
+	DescriptionMD    string
+	State            State
+	Priority         int
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      *time.Time
+	ActualEnd        *time.Time
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // Dependency is the directed relation "task depends on another task".

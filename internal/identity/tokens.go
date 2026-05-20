@@ -125,4 +125,3 @@ func RevokeToken(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, requesti
 	}
 	return nil
 }
-

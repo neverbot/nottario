@@ -3,12 +3,12 @@
 //
 // Resolution order for any requested path (e.g. "domains/tasks.md"):
 //
-//   1. A `documents` row with scope='global', kind='skill' and
-//      path='global/skills/<requested>'. When present, its content
-//      (frontmatter reconstructed from JSONB + body) is returned and
-//      marked Origin="global".
-//   2. Otherwise the file embedded in the binary, marked
-//      Origin="embedded".
+//  1. A `documents` row with scope='global', kind='skill' and
+//     path='global/skills/<requested>'. When present, its content
+//     (frontmatter reconstructed from JSONB + body) is returned and
+//     marked Origin="global".
+//  2. Otherwise the file embedded in the binary, marked
+//     Origin="embedded".
 //
 // Listings union the two sources, preferring `global` when both
 // exist and surfacing global-only files (organisation-added skills).

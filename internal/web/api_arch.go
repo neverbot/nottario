@@ -140,15 +140,15 @@ func DeleteKindHandler(d ArchDeps) http.Handler {
 }
 
 type nodeUpsertRequest struct {
-	Slug          string         `json:"slug"`
-	ParentSlug    string         `json:"parent_slug"`
-	Kind          string         `json:"kind"`
-	Name          string         `json:"name"`
-	Description   string         `json:"description"`
-	Metadata      map[string]any `json:"metadata"`
-	LinkedRepo    string         `json:"linked_repo"`
-	LinkedPath    string         `json:"linked_path"`
-	Position      *int           `json:"position"`
+	Slug        string         `json:"slug"`
+	ParentSlug  string         `json:"parent_slug"`
+	Kind        string         `json:"kind"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Metadata    map[string]any `json:"metadata"`
+	LinkedRepo  string         `json:"linked_repo"`
+	LinkedPath  string         `json:"linked_path"`
+	Position    *int           `json:"position"`
 }
 
 // UpsertNodeHandler creates or updates a node by slug.

@@ -92,7 +92,7 @@ func (r *RollUpReconciler) closeFeature(ctx context.Context, id uuid.UUID) error
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	idCopy := id
 	if err := rollUpParentDoneTx(ctx, tx, &idCopy); err != nil {
 		return err

@@ -4,11 +4,11 @@ import "testing"
 
 func TestValidType(t *testing.T) {
 	cases := map[Type]bool{
-		TypeTask:    true,
-		TypeBug:     true,
-		TypeChore:   true,
-		TypeSpike:   true,
-		TypeFeature: true,
+		TypeTask:     true,
+		TypeBug:      true,
+		TypeChore:    true,
+		TypeSpike:    true,
+		TypeFeature:  true,
 		Type("nope"): false,
 		Type(""):     false,
 	}

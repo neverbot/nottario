@@ -35,10 +35,9 @@ const stateCookieName = "nottario_oauth_state"
 
 const githubAuthURL = "https://github.com/login/oauth/authorize"
 const githubTokenURL = "https://github.com/login/oauth/access_token"
-const githubUserURL = "https://api.github.com/user"
-const githubEmailsURL = "https://api.github.com/user/emails"
 
-// githubAPIBase is overridable in tests.
+// githubAPIBase is overridable in tests. The user/emails endpoints are
+// formed from this base inside fetchGithubUser.
 var githubAPIBase = "https://api.github.com"
 
 // oauthEndpoint returns the GitHub OAuth2 endpoint; tests can

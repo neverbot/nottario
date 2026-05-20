@@ -28,7 +28,7 @@ func EnsureDefaultKinds(ctx context.Context, pool *pgxpool.Pool, projectID uuid.
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	for _, k := range DefaultKinds {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO arch_node_kinds (project_id, key, label, icon, color, description, is_default)

@@ -125,7 +125,7 @@ func Claim(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, callerUserID u
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var t Task
 	err = tx.QueryRow(ctx, `

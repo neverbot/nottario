@@ -12,8 +12,8 @@ import (
 // NextFilter narrows what counts as the "next" task.
 type NextFilter struct {
 	ProjectID      uuid.UUID
-	AssigneeUserID *uuid.UUID // when set, only tasks assigned to this user or to roles they hold
-	RoleID         *uuid.UUID // when set, only tasks targeting this role or with no role
+	AssigneeUserID *uuid.UUID  // when set, only tasks assigned to this user or to roles they hold
+	RoleID         *uuid.UUID  // when set, only tasks targeting this role or with no role
 	UserRoleIDs    []uuid.UUID // when set together with AssigneeUserID, expands eligibility
 }
 

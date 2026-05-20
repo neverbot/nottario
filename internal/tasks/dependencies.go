@@ -40,7 +40,7 @@ func AddDependency(ctx context.Context, pool *pgxpool.Pool, taskID, dependsOnID 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Resolve the project from the task row so we can scope the lock.
 	var projectID uuid.UUID

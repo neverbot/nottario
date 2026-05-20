@@ -208,7 +208,6 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Task, error)
 	if f.ParentTaskID != nil {
 		query += fmt.Sprintf(" AND parent_task_id = $%d", idx)
 		args = append(args, *f.ParentTaskID)
-		idx++
 	} else if !f.IncludeChildren {
 		query += " AND parent_task_id IS NULL"
 	}
@@ -444,7 +443,7 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Lock the task row for the rest of this transaction. AddDependency
 	// (and any other writer that may want to mutate this task's deps)

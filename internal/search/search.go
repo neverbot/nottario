@@ -27,20 +27,20 @@ const (
 // Hit is one search result. Fields are intentionally flat so JSON
 // consumers can branch on Kind.
 type Hit struct {
-	Kind       Kind    `json:"kind"`
-	ProjectID  string  `json:"project_id"`
-	Rank       float32 `json:"rank"`
+	Kind      Kind    `json:"kind"`
+	ProjectID string  `json:"project_id"`
+	Rank      float32 `json:"rank"`
 	// Common display fields:
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
 	// Kind-specific identifiers (one is set, others are empty):
-	TaskID      string `json:"task_id,omitempty"`
-	DocPath     string `json:"doc_path,omitempty"`
-	DocScope    string `json:"doc_scope,omitempty"`
-	NodeSlug    string `json:"node_slug,omitempty"`
-	NodeKind    string `json:"node_kind,omitempty"`
-	TaskState   string `json:"task_state,omitempty"`
-	TaskType    string `json:"task_type,omitempty"`
+	TaskID    string `json:"task_id,omitempty"`
+	DocPath   string `json:"doc_path,omitempty"`
+	DocScope  string `json:"doc_scope,omitempty"`
+	NodeSlug  string `json:"node_slug,omitempty"`
+	NodeKind  string `json:"node_kind,omitempty"`
+	TaskState string `json:"task_state,omitempty"`
+	TaskType  string `json:"task_type,omitempty"`
 }
 
 // Filter narrows a Search call.

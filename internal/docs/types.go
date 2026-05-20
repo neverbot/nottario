@@ -35,23 +35,23 @@ const (
 // frontmatter front block — agents and humans see only the body. The
 // raw frontmatter sits in Frontmatter.
 type Document struct {
-	ID                uuid.UUID
-	Scope             Scope
-	ProjectID         *uuid.UUID
-	Path              string
-	Kind              Kind
-	Title             string
-	Description       string
-	ContentMD         string
-	Frontmatter       map[string]any
-	CurrentVersion    int
-	DeletedAt         *time.Time
-	CreatedByUserID   *uuid.UUID
-	CreatedByTokenID  *uuid.UUID
-	UpdatedByUserID   *uuid.UUID
-	UpdatedByTokenID  *uuid.UUID
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID               uuid.UUID
+	Scope            Scope
+	ProjectID        *uuid.UUID
+	Path             string
+	Kind             Kind
+	Title            string
+	Description      string
+	ContentMD        string
+	Frontmatter      map[string]any
+	CurrentVersion   int
+	DeletedAt        *time.Time
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	UpdatedByUserID  *uuid.UUID
+	UpdatedByTokenID *uuid.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // Version is one entry in `document_versions`.

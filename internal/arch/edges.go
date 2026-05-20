@@ -38,7 +38,7 @@ func UpsertEdge(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	fromID, err := resolveSlug(ctx, tx, projectID, p.FromSlug)
 	if err != nil {
 		return nil, err

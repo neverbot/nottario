@@ -19,7 +19,7 @@ func UpsertFromGithub(ctx context.Context, pool *pgxpool.Pool, githubID int64, l
 	if err != nil {
 		return nil, false, fmt.Errorf("begin: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var u User
 	var created bool

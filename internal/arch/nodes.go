@@ -61,7 +61,7 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	ok, err := kindExists(ctx, tx, projectID, p.Kind)
 	if err != nil {
@@ -262,7 +262,7 @@ func MoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, slug
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var nodeID uuid.UUID
 	if err := tx.QueryRow(ctx, `SELECT id FROM arch_nodes WHERE project_id = $1 AND slug = $2`, projectID, slug).Scan(&nodeID); err != nil {

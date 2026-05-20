@@ -79,7 +79,7 @@ func MoveRole(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, orde
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Validate every id belongs to the project.
 	rows, err := tx.Query(ctx, `SELECT id FROM roles WHERE project_id = $1`, projectID)

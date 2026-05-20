@@ -32,7 +32,7 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var p Project
 	err = tx.QueryRow(ctx, `
@@ -179,7 +179,7 @@ func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, 
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx, `
 		UPDATE projects
