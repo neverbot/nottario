@@ -18,6 +18,7 @@ import (
 	"github.com/neverbot/nottario/internal/db"
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/realtime"
+	"github.com/neverbot/nottario/internal/tasks"
 	"github.com/neverbot/nottario/internal/version"
 	"github.com/neverbot/nottario/internal/web"
 )
@@ -62,6 +63,17 @@ func main() {
 	go func() {
 		if err := hub.Run(ctx, pool); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("realtime listener stopped", "err", err)
+		}
+	}()
+
+	// Belt-and-suspenders reconciler: closes feature parents whose
+	// children are all done but whose own state never got updated.
+	// Live path already does this inside SetState's transaction; this
+	// catches anything that drifted while the process was down.
+	reconciler := &tasks.RollUpReconciler{Pool: pool, Interval: 60 * time.Second, Logger: logger}
+	go func() {
+		if err := reconciler.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("rollup reconciler stopped", "err", err)
 		}
 	}()
 
