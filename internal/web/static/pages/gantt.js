@@ -436,45 +436,84 @@ class NottarioGantt extends LitElement {
     for (const t of this.tasks || []) {
       if (t.State === 'done' && t.ActualEnd) doneByID.set(t.ID, t);
     }
-    const bandSuccessor = new Map(); // taskID -> next-in-band taskID
-    for (const b of bands) {
+    // A past task is "anchored" when it touches at least one dependency
+    // edge that will be drawn as an arrow on the chart. Anchored tasks
+    // keep their own column. "Free" past tasks (no arrows in or out)
+    // tuck vertically into the previous column's empty lanes, which
+    // shrinks the band's horizontal footprint without altering any
+    // arrow geometry.
+    const depTouched = new Set();
+    for (const d of this.deps) {
+      if (doneByID.has(d.TaskID))      depTouched.add(d.TaskID);
+      if (doneByID.has(d.DependsOnID)) depTouched.add(d.DependsOnID);
+    }
+    // Future topological depths drive both the future X axis and the
+    // lane count each band needs for non-done tasks (which the past
+    // packing then reuses).
+    const globalDepths = this.computeTopoDepths(this.tasks || []);
+    // Compute the lane count each band needs from its non-done tasks.
+    // Future zone: tasks sharing a (depth, priority) cell pile vertically
+    // into lanes. Present zone: every `doing` task collides at the same X.
+    // Past packing then reuses THIS lane count — it doesn't define a new
+    // one. Bands with no future/present pressure cap at 1 lane (which
+    // means past tasks keep their natural one-per-column layout).
+    const futureLanesPerBand = bands.map(b => {
+      const cellCounts = new Map();
+      let doingCount = 0;
+      for (const t of b.tasks) {
+        if (t.State === 'doing') {
+          doingCount++;
+        } else if (t.State === 'todo') {
+          const d = globalDepths.get(t.ID) || 0;
+          const key = `${d}:${t.Priority}`;
+          cellCounts.set(key, (cellCounts.get(key) || 0) + 1);
+        }
+      }
+      let maxCellLanes = 0;
+      for (const c of cellCounts.values()) maxCellLanes = Math.max(maxCellLanes, c);
+      return Math.max(1, Math.max(maxCellLanes, doingCount));
+    });
+    // Per band, walk past tasks reverse-chronologically (most recent
+    // first) so the newest task lands in column 0 (rightmost, flush
+    // against NOW). col 0 = right, col K-1 = left. Free tasks tuck into
+    // the previous column's available lanes (capped by the band's
+    // future-zone lane count) so the band's height stays consistent
+    // across zones.
+    const taskColInBand = new Map(); // taskID -> col index
+    let maxCol = -1;
+    for (let bi = 0; bi < bands.length; bi++) {
+      const b = bands[bi];
+      const maxLanesPast = futureLanesPerBand[bi];
       const sorted = b.tasks
         .filter(t => t.State === 'done' && t.ActualEnd)
-        .sort((x, y) => new Date(x.ActualEnd).getTime() - new Date(y.ActualEnd).getTime());
-      for (let i = 0; i < sorted.length - 1; i++) {
-        bandSuccessor.set(sorted[i].ID, sorted[i + 1].ID);
+        .sort((x, y) => new Date(y.ActualEnd).getTime() - new Date(x.ActualEnd).getTime());
+      let col = 0;
+      let prevCol = -1;
+      const laneAt = new Map(); // col -> next free lane
+      for (const t of sorted) {
+        const anchored = depTouched.has(t.ID);
+        if (anchored) {
+          taskColInBand.set(t.ID, col);
+          laneAt.set(col, (laneAt.get(col) || 0) + 1);
+          prevCol = col;
+          col++;
+        } else if (prevCol >= 0 && (laneAt.get(prevCol) || 0) < maxLanesPast) {
+          taskColInBand.set(t.ID, prevCol);
+          laneAt.set(prevCol, (laneAt.get(prevCol) || 0) + 1);
+        } else {
+          taskColInBand.set(t.ID, col);
+          laneAt.set(col, 1);
+          prevCol = col;
+          col++;
+        }
       }
+      maxCol = Math.max(maxCol, col - 1);
     }
-    const depSuccessors = new Map(); // taskID -> [dependent taskIDs] (done only)
-    for (const d of this.deps) {
-      if (doneByID.has(d.TaskID) && doneByID.has(d.DependsOnID)) {
-        if (!depSuccessors.has(d.DependsOnID)) depSuccessors.set(d.DependsOnID, []);
-        depSuccessors.get(d.DependsOnID).push(d.TaskID);
-      }
-    }
-    const succession = new Map();
-    const visiting = new Set();
-    const computeSucc = (id) => {
-      if (succession.has(id)) return succession.get(id);
-      if (visiting.has(id)) return 0; // cycle guard (shouldn't happen with cycle-free deps)
-      visiting.add(id);
-      let s = 0;
-      const next = bandSuccessor.get(id);
-      if (next) s = Math.max(s, 1 + computeSucc(next));
-      for (const dep of depSuccessors.get(id) || []) {
-        s = Math.max(s, 1 + computeSucc(dep));
-      }
-      visiting.delete(id);
-      succession.set(id, s);
-      return s;
-    };
-    for (const id of doneByID.keys()) computeSucc(id);
-    const maxPastSlots = doneByID.size
-      ? Math.max(0, ...succession.values()) + 1
-      : 0;
+    const maxPastSlots = maxCol + 1;
     const globalPastSlot = new Map();
-    for (const [id, s] of succession) {
-      globalPastSlot.set(id, maxPastSlots - 1 - s);
+    for (const [id, c] of taskColInBand) {
+      // col 0 (newest) → slot maxPastSlots-1 (rightmost). col K-1 → slot 0.
+      globalPastSlot.set(id, maxPastSlots - 1 - c);
     }
     const pastSlotPerBand = bands.map(b => {
       const m = new Map();
@@ -495,8 +534,8 @@ class NottarioGantt extends LitElement {
 
     // Future zone topological columns: depth is computed GLOBALLY,
     // not per band, so a task that depends on a task in a different
-    // band still ends up further to the right.
-    const globalDepths = this.computeTopoDepths(this.tasks || []);
+    // band still ends up further to the right. (globalDepths is
+    // computed earlier so the past-zone packing can also see it.)
     const futureDepthsPerBand = bands.map(() => globalDepths);
 
     // ---- Future sub-columns by priority within each depth ----
