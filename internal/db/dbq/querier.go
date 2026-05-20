@@ -8,12 +8,23 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
+	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
+	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
+	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
+	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
+	LockTaskRow(ctx context.Context, id uuid.UUID) error
+	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
+	ProjectIDForTask(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
+	WouldCreateCycle(ctx context.Context, arg WouldCreateCycleParams) (pgtype.Bool, error)
 }
 
 var _ Querier = (*Queries)(nil)
