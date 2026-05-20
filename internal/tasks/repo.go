@@ -440,44 +440,61 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 	if !ValidState(s) {
 		return nil, fmt.Errorf("invalid state: %q", s)
 	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	// Lock the task row for the rest of this transaction. AddDependency
+	// (and any other writer that may want to mutate this task's deps)
+	// takes the same lock, so they serialize: the precondition check
+	// below sees a stable view, and a concurrent add_dependency either
+	// waits or finds the task already in 'done'.
+	var taskType string
+	var parentTaskID *uuid.UUID
+	if err := tx.QueryRow(ctx,
+		`SELECT type, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&taskType, &parentTaskID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
 	// When closing a non-feature task, require every direct precondition
 	// to be `done`. Features are rolled up automatically by the engine
 	// (see rollUpParentDone) so this check would race with itself; we
 	// skip it for them.
-	if s == StateDone {
-		var taskType string
-		if err := pool.QueryRow(ctx,
-			`SELECT type FROM tasks WHERE id = $1`, id).Scan(&taskType); err != nil {
+	if s == StateDone && taskType != "feature" {
+		rows, err := tx.Query(ctx, `
+			SELECT t.id, t.title, t.state
+			FROM task_dependencies td
+			JOIN tasks t ON t.id = td.depends_on_id
+			WHERE td.task_id = $1 AND t.state <> 'done'
+			ORDER BY t.actual_end NULLS LAST, t.created_at
+		`, id)
+		if err != nil {
 			return nil, err
 		}
-		if taskType != "feature" {
-			rows, err := pool.Query(ctx, `
-				SELECT t.id, t.title, t.state
-				FROM task_dependencies td
-				JOIN tasks t ON t.id = td.depends_on_id
-				WHERE td.task_id = $1 AND t.state <> 'done'
-				ORDER BY t.actual_end NULLS LAST, t.created_at
-			`, id)
-			if err != nil {
+		var unresolved []PreconditionRef
+		for rows.Next() {
+			var p PreconditionRef
+			if err := rows.Scan(&p.ID, &p.Title, &p.State); err != nil {
+				rows.Close()
 				return nil, err
 			}
-			defer rows.Close()
-			var unresolved []PreconditionRef
-			for rows.Next() {
-				var p PreconditionRef
-				if err := rows.Scan(&p.ID, &p.Title, &p.State); err != nil {
-					return nil, err
-				}
-				unresolved = append(unresolved, p)
-			}
-			if err := rows.Err(); err != nil {
-				return nil, err
-			}
-			if len(unresolved) > 0 {
-				return nil, &UnresolvedPreconditionsError{TaskID: id, Preconditions: unresolved}
-			}
+			unresolved = append(unresolved, p)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		if len(unresolved) > 0 {
+			return nil, &UnresolvedPreconditionsError{TaskID: id, Preconditions: unresolved}
 		}
 	}
+
 	var actualStartSQL, actualEndSQL string
 	switch s {
 	case StateTodo:
@@ -491,44 +508,37 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 		actualEndSQL = "actual_end = now()"
 	}
 	query := fmt.Sprintf(
-		"UPDATE tasks SET state = $2, %s, %s WHERE id = $1",
+		"UPDATE tasks SET state = $2, %s, %s, updated_at = now() WHERE id = $1",
 		actualStartSQL, actualEndSQL,
 	)
-	if _, err := pool.Exec(ctx, query, id, s); err != nil {
+	if _, err := tx.Exec(ctx, query, id, s); err != nil {
 		return nil, err
 	}
-	t, err := Get(ctx, pool, id)
-	if err != nil {
-		return nil, err
-	}
-	// Bubble "done" upward: every ancestor feature whose children are
-	// all done becomes done too. The skill bundle promises this; we now
-	// honour it. We only roll forward (never un-done a parent when a
-	// child reopens) because that would surprise a human who manually
-	// closed a feature.
+
+	// Bubble "done" upward inside the same transaction so two siblings
+	// closing concurrently can't both miss the parent.
 	if s == StateDone {
-		if err := rollUpParentDone(ctx, pool, t.ParentTaskID); err != nil {
-			return nil, err
-		}
-		// Re-fetch the task in case its own parent chain mutated other
-		// rows that observers care about. (Cheap.)
-		t, err = Get(ctx, pool, id)
-		if err != nil {
+		if err := rollUpParentDoneTx(ctx, tx, parentTaskID); err != nil {
 			return nil, err
 		}
 	}
-	return t, nil
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return Get(ctx, pool, id)
 }
 
-// rollUpParentDone walks the parent chain and marks any parent feature
-// whose children are now all `done` as done too. No-op when parent is
-// nil, already done, or has at least one non-done child.
-func rollUpParentDone(ctx context.Context, pool *pgxpool.Pool, parentID *uuid.UUID) error {
+// rollUpParentDoneTx walks the parent chain inside the given
+// transaction, locking each parent row with FOR UPDATE so concurrent
+// child closures serialize on the parent. No-op when parent is nil,
+// already done, or has at least one non-done child.
+func rollUpParentDoneTx(ctx context.Context, tx pgx.Tx, parentID *uuid.UUID) error {
 	for parentID != nil {
 		var pState string
 		var pNext *uuid.UUID
-		if err := pool.QueryRow(ctx, `
-			SELECT state, parent_task_id FROM tasks WHERE id = $1
+		if err := tx.QueryRow(ctx, `
+			SELECT state, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE
 		`, *parentID).Scan(&pState, &pNext); err != nil {
 			return err
 		}
@@ -536,7 +546,7 @@ func rollUpParentDone(ctx context.Context, pool *pgxpool.Pool, parentID *uuid.UU
 			return nil
 		}
 		var pending int
-		if err := pool.QueryRow(ctx, `
+		if err := tx.QueryRow(ctx, `
 			SELECT COUNT(*) FROM tasks
 			WHERE parent_task_id = $1 AND state <> 'done'
 		`, *parentID).Scan(&pending); err != nil {
@@ -545,10 +555,11 @@ func rollUpParentDone(ctx context.Context, pool *pgxpool.Pool, parentID *uuid.UU
 		if pending > 0 {
 			return nil
 		}
-		if _, err := pool.Exec(ctx, `
+		if _, err := tx.Exec(ctx, `
 			UPDATE tasks SET state = 'done',
 			       actual_start = COALESCE(actual_start, now()),
-			       actual_end = now()
+			       actual_end = now(),
+			       updated_at = now()
 			 WHERE id = $1
 		`, *parentID); err != nil {
 			return err

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,23 +16,46 @@ var ErrCycle = errors.New("dependency would create a cycle")
 
 // AddDependency declares that task depends on dependsOn. Both must
 // belong to the same project. Cycles are rejected with ErrCycle.
+//
+// Concurrency-wise we take a row-level lock on the task row so a
+// SetState(done) racing against this insert is forced to serialize:
+// either SetState lands first and we see the task already done, or
+// AddDependency lands first and SetState's precondition check sees
+// the new edge.
 func AddDependency(ctx context.Context, pool *pgxpool.Pool, taskID, dependsOnID uuid.UUID) error {
 	if taskID == dependsOnID {
 		return errors.New("task cannot depend on itself")
 	}
-	cycle, err := wouldCreateCycle(ctx, pool, taskID, dependsOnID)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Lock both endpoints to serialize with their SetState and with
+	// other concurrent dep mutations on the same pair.
+	if _, err := tx.Exec(ctx,
+		`SELECT id FROM tasks WHERE id IN ($1, $2) ORDER BY id FOR UPDATE`,
+		taskID, dependsOnID,
+	); err != nil {
+		return err
+	}
+
+	cycle, err := wouldCreateCycleTx(ctx, tx, taskID, dependsOnID)
 	if err != nil {
 		return err
 	}
 	if cycle {
 		return ErrCycle
 	}
-	_, err = pool.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO task_dependencies (task_id, depends_on_id)
 		VALUES ($1, $2)
 		ON CONFLICT DO NOTHING
-	`, taskID, dependsOnID)
-	return err
+	`, taskID, dependsOnID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // RemoveDependency drops the edge if it exists.
@@ -113,12 +137,15 @@ func ListDependentsOf(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID)
 	return out, rows.Err()
 }
 
-// wouldCreateCycle walks the dependency graph from dependsOn and
+// wouldCreateCycleTx walks the dependency graph from dependsOn and
 // checks whether taskID is reachable. If it is, the new edge would
-// close a cycle.
-func wouldCreateCycle(ctx context.Context, pool *pgxpool.Pool, taskID, dependsOnID uuid.UUID) (bool, error) {
+// close a cycle. Runs inside the caller's transaction so it sees a
+// consistent snapshot.
+func wouldCreateCycleTx(ctx context.Context, tx interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, taskID, dependsOnID uuid.UUID) (bool, error) {
 	var hit bool
-	err := pool.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		WITH RECURSIVE reachable(id) AS (
 			SELECT depends_on_id FROM task_dependencies WHERE task_id = $1
 			UNION
