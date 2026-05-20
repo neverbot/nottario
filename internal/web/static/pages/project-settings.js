@@ -187,10 +187,10 @@ class NottarioProjectSettings extends LitElement {
         <span class="muted">${this.project.Slug}</span>
       </div>
       <div class="tabs">
-        ${['general', 'roles', 'priorities', 'members'].map(t => html`
+        ${['general', 'roles', 'priorities', 'mcp', 'members'].map(t => html`
           <button class="tab ${this.activeTab === t ? 'active' : ''}"
                   @click=${() => this.activeTab = t}>
-            ${t.charAt(0).toUpperCase() + t.slice(1)}
+            ${t === 'mcp' ? 'MCP' : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         `)}
       </div>
@@ -199,6 +199,7 @@ class NottarioProjectSettings extends LitElement {
         ${this.activeTab === 'general' ? this.renderGeneral() : null}
         ${this.activeTab === 'roles' ? this.renderRoles() : null}
         ${this.activeTab === 'priorities' ? this.renderPriorities() : null}
+        ${this.activeTab === 'mcp' ? this.renderMCP() : null}
         ${this.activeTab === 'members' ? this.renderMembers() : null}
       </div>
     `;
@@ -348,6 +349,47 @@ class NottarioProjectSettings extends LitElement {
         </form>
       ` : null}
     `;
+  }
+
+  renderMCP() {
+    const p = this.project;
+    const admin = this.me?.is_admin;
+    return html`
+      <p class="muted" style="margin:0 0 12px">
+        Settings that affect how this project is exposed over the MCP server.
+      </p>
+      <dl>
+        <dt><strong>Default page size for <code>tasks.list</code></strong></dt>
+        <dd>
+          ${admin
+            ? html`
+              <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
+                     @change=${(e) => this.saveMCPPageSize(e.target.value)}
+                     style="width:100px"> tasks per page
+              <p class="muted" style="margin:6px 0 0;font-size:12px">
+                Agents that call <code>nottario.tasks.list</code> without an explicit
+                <code>limit</code> get this many tasks per page. They iterate the
+                returned <code>next_cursor</code> until <code>has_more</code> is false.
+                Hard range: 1–500.
+              </p>`
+            : html`${p.MCPPageSize || 50} tasks per page <span class="muted">(admin only)</span>`}
+        </dd>
+      </dl>
+    `;
+  }
+
+  async saveMCPPageSize(value) {
+    const n = parseInt(value, 10);
+    if (!n || n < 1 || n > 500) { this.error = 'page size must be between 1 and 500'; return; }
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/mcp`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mcp_page_size: n }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'failed');
+      await this.load();
+    } catch (err) { this.error = err.message; }
   }
 
   renderMembers() {
