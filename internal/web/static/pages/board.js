@@ -28,6 +28,29 @@ class NottarioBoardPage extends LitElement {
       grid-template-columns: repeat(3, 1fr);
       gap: 16px;
     }
+    .columns.two { grid-template-columns: repeat(2, 1fr); }
+    .doing-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      color: #59636e;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      font: inherit;
+    }
+    .doing-pill:hover { border-color: #afb8c1; color: #1f2328; }
+    .doing-pill .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #afb8c1;
+    }
     .col {
       background: #f6f8fa;
       border-radius: 8px;

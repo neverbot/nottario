@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { defaultPathFor } from './views.js';
 import './components/topbar.js';
 import './pages/login.js';
 import './pages/projects.js';
@@ -70,6 +71,24 @@ class NottarioShell extends LitElement {
     }
   }
 
+  // Resolves the canonical /projects/{id} URL: fetches the project,
+  // navigates to its default_view. Guarded against repeat triggers
+  // during the brief render-in-flight window.
+  async _redirectToDefaultView(pid) {
+    if (this._resolvingPid === pid) return;
+    this._resolvingPid = pid;
+    try {
+      const r = await fetch(`/api/projects/${pid}`);
+      if (!r.ok) { this.navigate('/'); return; }
+      const p = await r.json();
+      this.navigate(defaultPathFor(p));
+    } catch (_) {
+      this.navigate('/');
+    } finally {
+      this._resolvingPid = null;
+    }
+  }
+
   navigate(path) {
     window.history.pushState({}, '', path);
     // Route matching uses the pathname only; the hash is consumed by
@@ -123,6 +142,15 @@ class NottarioShell extends LitElement {
     }
     if (path === '/me' || path === '/profile') {
       return html`<nottario-profile-page .me=${this.me}></nottario-profile-page>`;
+    }
+    // /projects/{id} (no suffix) is the canonical project URL: resolve
+    // it to the project's default_view server-side, then redirect. We
+    // hit this when external links / agents reference the bare path,
+    // or when the user types it manually.
+    const bareProjectMatch = path.match(/^\/projects\/([^/]+)\/?$/);
+    if (bareProjectMatch) {
+      this._redirectToDefaultView(bareProjectMatch[1]);
+      return html`<div class="loading">Opening project…</div>`;
     }
     const settingsMatch = path.match(/^\/projects\/([^/]+)\/settings$/);
     if (settingsMatch) {
