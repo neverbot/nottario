@@ -28,6 +28,7 @@ class NottarioGantt extends LitElement {
     priorities: { state: true },
     error: { state: true },
     now: { state: true },
+    foldedFeatures: { state: true },
   };
 
   static styles = css`
@@ -157,6 +158,33 @@ class NottarioGantt extends LitElement {
     this.members = [];
     this.error = '';
     this.now = new Date();
+    this.foldedFeatures = new Set();      // feature IDs currently collapsed
+    this._knownFeatureIDs = new Set();    // features we've ever seen
+  }
+
+  // Update the folded set when fresh tasks arrive: new feature IDs
+  // start collapsed; previously-known IDs keep whatever the user set.
+  _syncFoldedFeatures(tasks) {
+    const next = new Set(this.foldedFeatures);
+    const seen = new Set();
+    for (const t of tasks) {
+      if (t.Type !== 'feature') continue;
+      seen.add(t.ID);
+      if (!this._knownFeatureIDs.has(t.ID)) {
+        next.add(t.ID);
+        this._knownFeatureIDs.add(t.ID);
+      }
+    }
+    // Forget features that no longer exist.
+    for (const id of [...next]) if (!seen.has(id)) next.delete(id);
+    for (const id of [...this._knownFeatureIDs]) if (!seen.has(id)) this._knownFeatureIDs.delete(id);
+    this.foldedFeatures = next;
+  }
+
+  _toggleFold(featureID) {
+    const next = new Set(this.foldedFeatures);
+    if (next.has(featureID)) next.delete(featureID); else next.add(featureID);
+    this.foldedFeatures = next;
   }
 
   connectedCallback() {
@@ -235,6 +263,7 @@ class NottarioGantt extends LitElement {
         fetch(`/api/projects/${this.projectId}/priorities`),
       ]);
       this.tasks = (await tr.json()).tasks || [];
+      this._syncFoldedFeatures(this.tasks);
       this.roles = (await rr.json()).roles || [];
       this.deps = (await dr.json()).dependencies || [];
       this.members = (await mr.json()).members || [];
@@ -316,21 +345,71 @@ class NottarioGantt extends LitElement {
     const futureColumnWidth = minBarWidth + 16;
     const headerH = 28;
 
-    // ---- Past zone: ordinal slots ----
-    // Each band orders its done tasks chronologically by actual_end and
-    // assigns each one a fixed-width slot. The past axis becomes
-    // "chronological order" instead of "real time", which keeps tasks
-    // legible regardless of how close together they happened. The
-    // tooltip on each bar still shows the actual timestamp.
-    const pastSlotPerBand = bands.map(b => {
-      const done = b.tasks
+    // ---- Past zone: right-packed by successor depth ----
+    // Naive chronological slots leave empty space to the right of any
+    // band whose latest done task is not the overall most-recent task
+    // in the project. Instead we right-pack: each done task gets a
+    // slot equal to K-1-succ(t), where succ(t) counts the longest
+    // chain of "successors" descending from t. A successor is:
+    //   (a) the next done task in the SAME band by actual_end, or
+    //   (b) any done task that DEPENDS on t.
+    // This guarantees:
+    //   • Within each band, chronological order is preserved.
+    //   • For any done→done dep edge, the dependent's slot is strictly
+    //     greater than the precondition's — no backward arrows.
+    //   • Bands with no later tasks and no done dependents sit at the
+    //     rightmost slot, flush against NOW.
+    const doneByID = new Map();
+    for (const t of this.tasks || []) {
+      if (t.State === 'done' && t.ActualEnd) doneByID.set(t.ID, t);
+    }
+    const bandSuccessor = new Map(); // taskID -> next-in-band taskID
+    for (const b of bands) {
+      const sorted = b.tasks
         .filter(t => t.State === 'done' && t.ActualEnd)
-        .sort((a, b) => new Date(a.ActualEnd).getTime() - new Date(b.ActualEnd).getTime());
+        .sort((x, y) => new Date(x.ActualEnd).getTime() - new Date(y.ActualEnd).getTime());
+      for (let i = 0; i < sorted.length - 1; i++) {
+        bandSuccessor.set(sorted[i].ID, sorted[i + 1].ID);
+      }
+    }
+    const depSuccessors = new Map(); // taskID -> [dependent taskIDs] (done only)
+    for (const d of this.deps) {
+      if (doneByID.has(d.TaskID) && doneByID.has(d.DependsOnID)) {
+        if (!depSuccessors.has(d.DependsOnID)) depSuccessors.set(d.DependsOnID, []);
+        depSuccessors.get(d.DependsOnID).push(d.TaskID);
+      }
+    }
+    const succession = new Map();
+    const visiting = new Set();
+    const computeSucc = (id) => {
+      if (succession.has(id)) return succession.get(id);
+      if (visiting.has(id)) return 0; // cycle guard (shouldn't happen with cycle-free deps)
+      visiting.add(id);
+      let s = 0;
+      const next = bandSuccessor.get(id);
+      if (next) s = Math.max(s, 1 + computeSucc(next));
+      for (const dep of depSuccessors.get(id) || []) {
+        s = Math.max(s, 1 + computeSucc(dep));
+      }
+      visiting.delete(id);
+      succession.set(id, s);
+      return s;
+    };
+    for (const id of doneByID.keys()) computeSucc(id);
+    const maxPastSlots = doneByID.size
+      ? Math.max(0, ...succession.values()) + 1
+      : 0;
+    const globalPastSlot = new Map();
+    for (const [id, s] of succession) {
+      globalPastSlot.set(id, maxPastSlots - 1 - s);
+    }
+    const pastSlotPerBand = bands.map(b => {
       const m = new Map();
-      done.forEach((t, i) => m.set(t.ID, i));
+      for (const t of b.tasks) {
+        if (globalPastSlot.has(t.ID)) m.set(t.ID, globalPastSlot.get(t.ID));
+      }
       return m;
     });
-    const maxPastSlots = pastSlotPerBand.reduce((m, x) => Math.max(m, x.size), 0);
     const pastWidth = Math.max(360, maxPastSlots * pastSlotW + 12);
 
     // The present zone gets enough room for one min-width bar plus
@@ -392,12 +471,46 @@ class NottarioGantt extends LitElement {
     // already ended (with a small horizontal gap). The number of lanes
     // determines the band's vertical height.
     const overlapGap = 6;
-    const positions = []; // { task, bi, lane, from, to }
-    const lanesPerBand = bands.map(() => 1);
+
+    // ---- Feature folding ----
+    // Build parent→children index, then derive:
+    //   • descendants of every feature (recursive)
+    //   • the set of tasks hidden because a feature ancestor is folded
+    //   • a per-feature aggregate position when folded (envelope of its
+    //     non-feature descendants).
+    const taskByID = new Map((this.tasks || []).map(t => [t.ID, t]));
+    const childrenByParent = new Map();
+    for (const t of this.tasks || []) {
+      if (!t.ParentTaskID) continue;
+      if (!childrenByParent.has(t.ParentTaskID)) childrenByParent.set(t.ParentTaskID, []);
+      childrenByParent.get(t.ParentTaskID).push(t.ID);
+    }
+    const collectDescendants = (id, out) => {
+      for (const c of childrenByParent.get(id) || []) {
+        if (out.has(c)) continue;
+        out.add(c);
+        collectDescendants(c, out);
+      }
+      return out;
+    };
+    const hiddenByFold = new Set();
+    for (const fid of this.foldedFeatures) {
+      const f = taskByID.get(fid);
+      if (!f || f.Type !== 'feature') continue;
+      collectDescendants(fid, hiddenByFold);
+    }
+
+    // ---- Raw positions for every task (independent of fold state) ----
+    // Computed in the task's "natural" band so we can build aggregates
+    // even when descendants live in a band other than the feature's.
+    const bandIndexByTaskID = new Map();
+    bands.forEach((b, bi) => {
+      for (const t of b.tasks) bandIndexByTaskID.set(t.ID, bi);
+    });
+    const rawPositions = new Map(); // taskID -> {from, to, bi}
     bands.forEach((b, bi) => {
       const depths = futureDepthsPerBand[bi];
       const slots = pastSlotPerBand[bi];
-      const ranged = [];
       for (const t of b.tasks) {
         const pastSlot = (t.State === 'done') ? (slots.get(t.ID) ?? null) : null;
         const futureX = (t.State === 'todo') ? futureSubColumnX.get(t.ID) : undefined;
@@ -407,29 +520,73 @@ class NottarioGantt extends LitElement {
           futureX, depths, minBarWidth,
         });
         if (!x) continue;
-        ranged.push({ task: t, from: x.from, to: x.to });
+        rawPositions.set(t.ID, { from: x.from, to: x.to, bi });
       }
-      ranged.sort((a, b) => a.from - b.from);
-      const laneEnds = []; // laneEnds[i] = X where lane i is occupied until
-      for (const p of ranged) {
+    });
+
+    // ---- Aggregate positions for folded features ----
+    const featureAggregates = new Map(); // featureID -> {from, to, bi}
+    for (const fid of this.foldedFeatures) {
+      const feat = taskByID.get(fid);
+      if (!feat || feat.Type !== 'feature') continue;
+      const desc = collectDescendants(fid, new Set());
+      if (!desc.size) continue;
+      let lo = Infinity, hi = -Infinity;
+      const bandVotes = new Map();
+      for (const did of desc) {
+        const d = taskByID.get(did);
+        if (!d || d.Type === 'feature') continue; // ignore sub-features
+        const p = rawPositions.get(did);
+        if (!p) continue;
+        lo = Math.min(lo, p.from);
+        hi = Math.max(hi, p.to);
+        bandVotes.set(p.bi, (bandVotes.get(p.bi) || 0) + 1);
+      }
+      if (lo === Infinity) continue;
+      // Feature's own band if it has a target_role; else the band that
+      // contains the most descendants; else the general fallback.
+      let bi = bandIndexByTaskID.get(fid);
+      if (bi == null) {
+        let best = -1, max = -1;
+        for (const [k, v] of bandVotes) if (v > max) { max = v; best = k; }
+        bi = best >= 0 ? best : 0;
+      }
+      featureAggregates.set(fid, { from: lo, to: hi, bi });
+    }
+
+    // ---- Visible entries per band ----
+    const visiblePerBand = bands.map(() => []);
+    for (const t of this.tasks || []) {
+      if (hiddenByFold.has(t.ID)) continue;
+      if (t.Type === 'feature') {
+        if (this.foldedFeatures.has(t.ID) && featureAggregates.has(t.ID)) {
+          const agg = featureAggregates.get(t.ID);
+          visiblePerBand[agg.bi].push({ task: t, from: agg.from, to: agg.to, kind: 'feature-agg' });
+        } else if (!childrenByParent.has(t.ID)) {
+          const p = rawPositions.get(t.ID);
+          if (p) visiblePerBand[p.bi].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
+        }
+        // unfolded feature with children: feature itself hidden, kids show through
+        continue;
+      }
+      const p = rawPositions.get(t.ID);
+      if (p) visiblePerBand[p.bi].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
+    }
+
+    // ---- Lane assignment per band (greedy) ----
+    const positions = []; // { task, bi, lane, from, to, kind }
+    const lanesPerBand = bands.map(() => 1);
+    visiblePerBand.forEach((entries, bi) => {
+      entries.sort((a, b) => a.from - b.from);
+      const laneEnds = [];
+      for (const e of entries) {
         let placed = -1;
         for (let li = 0; li < laneEnds.length; li++) {
-          if (laneEnds[li] + overlapGap <= p.from) {
-            placed = li;
-            break;
-          }
+          if (laneEnds[li] + overlapGap <= e.from) { placed = li; break; }
         }
-        if (placed < 0) {
-          placed = laneEnds.length;
-          laneEnds.push(p.to);
-        } else {
-          laneEnds[placed] = p.to;
-        }
-        positions.push({
-          task: p.task, bi, lane: placed,
-          from: p.from,
-          to: p.to,
-        });
+        if (placed < 0) { placed = laneEnds.length; laneEnds.push(e.to); }
+        else { laneEnds[placed] = e.to; }
+        positions.push({ task: e.task, bi, lane: placed, from: e.from, to: e.to, kind: e.kind });
       }
       lanesPerBand[bi] = Math.max(1, laneEnds.length);
     });
@@ -560,6 +717,28 @@ class NottarioGantt extends LitElement {
             const avatarY = y + (taskHeight - avatarSize) / 2;
             const labelX = user ? avatarX + avatarSize + 6 : p.from + 8;
             const labelMaxChars = Math.max(6, Math.floor((p.to - labelX - 6) / 7));
+            if (p.kind === 'feature-agg') {
+              const childCount = (childrenByParent.get(t.ID) || []).length;
+              return svg`
+                <rect class="task-rect feature-agg"
+                      x=${p.from} y=${y}
+                      width=${w} height=${taskHeight}
+                      rx="6" ry="6"
+                      fill="#eef0f3"
+                      stroke=${color}
+                      stroke-dasharray="6 3"
+                      style="cursor:pointer"
+                      @click=${(e) => { e.stopPropagation(); this._toggleFold(t.ID); }}>
+                  <title>${t.Title} — feature with ${childCount} task${childCount === 1 ? '' : 's'} (click to expand)</title>
+                </rect>
+                <text class="task-label" x=${labelX} y=${y + taskHeight / 2 + 4}
+                      style="pointer-events:none">
+                  ▸ ${this._truncate(t.Title, labelMaxChars - 2)}
+                </text>
+              `;
+            }
+            const isFeatureUnfolded = t.Type === 'feature' && !this.foldedFeatures.has(t.ID);
+            // Childless features and (defensive) any feature reaching here render as normal.
             return svg`
               <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}`}
                     x=${p.from} y=${y}
@@ -596,12 +775,47 @@ class NottarioGantt extends LitElement {
             const to = posByTaskID.get(d.TaskID);
             if (!from || !to) return null;
             const markerW = 8;
-            const x1 = from.to;
+            // Forward / backward decision uses the BOX edges, not the
+            // marker-adjusted endpoints. Otherwise a target sitting in
+            // the slot immediately to the right of the source (its left
+            // edge ≈ source.right + 6, then -8 for the marker) would
+            // appear as if it were behind the source by 2 px and
+            // trigger an unnecessary loop.
+            const sourceRight = from.to;
+            const targetLeft = to.from;
+            const x1 = sourceRight;
             const y1 = taskCenterY(from.bi, from.lane);
-            const x2 = to.from - markerW;
             const y2 = taskCenterY(to.bi, to.lane);
-            const cx = (x1 + x2) / 2;
-            return svg`<path class="arrow" d=${`M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`}></path>`;
+
+            // Forward edge (target's left edge is at or to the right of
+            // source's right edge): one S-curve. We compute the path
+            // endpoint so the marker tip lands on the target's left
+            // border, but clamp it forward of the source so the cubic's
+            // end tangent is always +x. Otherwise adjacent boxes (gap
+            // smaller than markerW) would produce a tiny backward
+            // tangent and `auto-start-reverse` would flip the marker.
+            if (targetLeft >= sourceRight) {
+              const x2 = Math.max(targetLeft - markerW, x1 + 2);
+              const cx = (x1 + x2) / 2;
+              return svg`<path class="arrow" d=${`M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`}></path>`;
+            }
+            const x2 = targetLeft - markerW;
+
+            // Backward edge (target is at or left of source — typically an
+            // inconsistency where a done task depends on a still-todo one).
+            // Both endpoints must keep horizontal tangents pointing right
+            // so the marker ends up rotated toward the target's left edge.
+            // We detour below the lower endpoint with two cubic segments
+            // meeting at a midpoint waypoint.
+            const bow = 60;                              // horizontal stick-out
+            const arch = Math.max(40, taskHeight + 24);  // vertical detour
+            const yMid = Math.max(y1, y2) + arch;
+            const xMid = (x1 + x2) / 2;
+            return svg`<path class="arrow" d=${
+              `M ${x1} ${y1} ` +
+              `C ${x1 + bow} ${y1} ${x1 + bow} ${yMid} ${xMid} ${yMid} ` +
+              `S ${x2 - bow} ${y2} ${x2} ${y2}`
+            }></path>`;
           })}
         </svg>
       </div>
