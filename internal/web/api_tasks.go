@@ -180,20 +180,20 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 		commits, _ := tasks.ListCommits(r.Context(), d.Pool, tid)
 		comments, _ := tasks.ListComments(r.Context(), d.Pool, tid)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"task":          t,
-			"depends_on":    deps,
-			"commits":       commits,
-			"comments":      comments,
+			"task":       t,
+			"depends_on": deps,
+			"commits":    commits,
+			"comments":   comments,
 		})
 	})
 }
 
 type createTaskRequest struct {
-	ParentTaskID   *uuid.UUID `json:"parent_task_id"`
-	Type           tasks.Type `json:"type"`
-	Title          string     `json:"title"`
-	Description    string     `json:"description"`
-	Priority       *int       `json:"priority"`
+	ParentTaskID *uuid.UUID `json:"parent_task_id"`
+	Type         tasks.Type `json:"type"`
+	Title        string     `json:"title"`
+	Description  string     `json:"description"`
+	Priority     *int       `json:"priority"`
 	// PriorityKey is an alternative to Priority: when set, the server
 	// resolves it against the project's priority catalogue and uses
 	// the bucket's numeric value. Priority (numeric) takes precedence
@@ -263,14 +263,14 @@ func CreateTaskHandler(d TaskDeps) http.Handler {
 }
 
 type updateTaskRequest struct {
-	Title          *string     `json:"title"`
-	Description    *string     `json:"description"`
-	Type           *tasks.Type `json:"type"`
-	Priority       *int        `json:"priority"`
-	AssigneeUserID *uuid.UUID  `json:"assignee_user_id"`
-	UnsetAssignee  bool        `json:"unset_assignee"`
-	TargetRoleID   *uuid.UUID  `json:"target_role_id"`
-	UnsetTargetRole bool       `json:"unset_target_role"`
+	Title           *string     `json:"title"`
+	Description     *string     `json:"description"`
+	Type            *tasks.Type `json:"type"`
+	Priority        *int        `json:"priority"`
+	AssigneeUserID  *uuid.UUID  `json:"assignee_user_id"`
+	UnsetAssignee   bool        `json:"unset_assignee"`
+	TargetRoleID    *uuid.UUID  `json:"target_role_id"`
+	UnsetTargetRole bool        `json:"unset_target_role"`
 }
 
 // UpdateTaskHandler edits the mutable fields of a task.

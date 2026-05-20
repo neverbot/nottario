@@ -113,12 +113,12 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Task, error) {
 
 // ListFilter restricts a List call.
 type ListFilter struct {
-	ProjectID      uuid.UUID
-	State          State
-	Type           Type
-	AssigneeUserID *uuid.UUID
-	TargetRoleID   *uuid.UUID
-	ParentTaskID   *uuid.UUID
+	ProjectID       uuid.UUID
+	State           State
+	Type            Type
+	AssigneeUserID  *uuid.UUID
+	TargetRoleID    *uuid.UUID
+	ParentTaskID    *uuid.UUID
 	IncludeChildren bool // when false (default), only top-level tasks (parent IS NULL) are returned
 }
 
@@ -342,13 +342,13 @@ func ListPaginated(ctx context.Context, pool *pgxpool.Pool, f ListFilter, limit 
 // pointer means "leave unchanged"; an empty/zero value means
 // "set to that value".
 type UpdateParams struct {
-	Title          *string
-	DescriptionMD  *string
-	Type           *Type
-	Priority       *int
-	AssigneeUserID *uuid.UUID
-	UnsetAssignee  bool
-	TargetRoleID   *uuid.UUID
+	Title           *string
+	DescriptionMD   *string
+	Type            *Type
+	Priority        *int
+	AssigneeUserID  *uuid.UUID
+	UnsetAssignee   bool
+	TargetRoleID    *uuid.UUID
 	UnsetTargetRole bool
 }
 
@@ -415,8 +415,8 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParam
 // slice carries enough detail for the caller to surface a useful
 // message ("you still owe: A, B, C").
 type UnresolvedPreconditionsError struct {
-	TaskID         uuid.UUID         `json:"task_id"`
-	Preconditions  []PreconditionRef `json:"preconditions"`
+	TaskID        uuid.UUID         `json:"task_id"`
+	Preconditions []PreconditionRef `json:"preconditions"`
 }
 
 // PreconditionRef is the minimal shape a caller needs to find an

@@ -166,8 +166,78 @@ func registerTasks(server *sdk.Server, d Deps) {
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.tasks.claim_next",
+		Description: "Atomically picks the highest-priority eligible task and CLAIMS it for the calling user (sets assignee = caller, state = doing, actual_start = now) — all in a single Postgres UPDATE backed by SELECT ... FOR UPDATE SKIP LOCKED so two agents picking at the same time get DIFFERENT tasks. This is the SAFE pickup primitive; the older next+update+set_state pattern has a race window. Returns {task: null} when nothing is eligible. Filters: same as tasks.next (assignee_user_id, role_id).",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksNextInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		pid, err := uuid.Parse(in.ProjectID)
+		if err != nil {
+			return toolError("project_id must be a uuid")
+		}
+		if err := requireProjectAccess(ctx, d, pid); err != nil {
+			return toolError(err.Error())
+		}
+		f := tasks.NextFilter{ProjectID: pid}
+		if id := optUUID(in.AssigneeUserID); id != nil {
+			f.AssigneeUserID = id
+			roles, _ := identity.UserRoleIDs(ctx, d.Pool, *id, pid)
+			f.UserRoleIDs = roles
+		}
+		if id := optUUID(in.RoleID); id != nil {
+			f.RoleID = id
+			f.AssigneeUserID = nil
+			f.UserRoleIDs = nil
+		}
+		t, err := tasks.ClaimNext(ctx, d.Pool, f, c.UserID)
+		if errors.Is(err, tasks.ErrNotFound) {
+			return jsonResult(map[string]any{"task": nil})
+		}
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(map[string]any{"task": t})
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.tasks.claim",
+		Description: "Atomically claims a SPECIFIC task by id for the calling user (assignee = caller, state = doing). Use this when you found a candidate via tasks.list and want to take it without racing other agents. Returns the task on success, or a {error, current_state, current_assignee_user_id, preconditions[]?, pending_children_count?, reason} payload when the task is not claimable. Idempotent if the caller already owns the task in 'doing' state.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := requireProjectAccess(ctx, d, pid); err != nil {
+			return toolError(err.Error())
+		}
+		t, err := tasks.Claim(ctx, d.Pool, tid, c.UserID)
+		if err != nil {
+			var cerr *tasks.ClaimConflictError
+			if errors.As(err, &cerr) {
+				return jsonResult(map[string]any{
+					"error":                    cerr.Error(),
+					"reason":                   cerr.Reason,
+					"task_id":                  cerr.TaskID,
+					"current_state":            string(cerr.CurrentState),
+					"current_assignee_user_id": cerr.CurrentAssigneeUserID,
+					"preconditions":            cerr.Preconditions,
+					"pending_children_count":   cerr.PendingChildrenCount,
+				})
+			}
+			return toolError(err.Error())
+		}
+		return jsonResult(t)
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.next",
-		Description: "Returns the next eligible task to pick up: priority DESC, no unresolved dependencies, state='todo', type<>'feature'. Optional filters restrict to a specific user or role. Returns {task: null} when nothing is eligible.",
+		Description: "PREVIEW ONLY (no side effects). Returns the next eligible task as ranked by priority + dependency satisfaction, without claiming it. Useful for inspecting what tasks.claim_next would pick, or to surface to a human before committing. To actually take the task, call nottario.tasks.claim_next (atomic) — calling next + then update + then set_state in three separate steps is racy under multi-agent load. Returns {task: null} when nothing is eligible.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksNextInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
