@@ -27,10 +27,33 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
 )
+
+// ignoredLines collects every line that carries a `//sqlcheck:ignore`
+// comment (anywhere on the line — line or trailing comment). Call
+// sites on those lines are skipped. The escape hatch is for SQL that
+// is intentionally built outside of sqlc (e.g. DDL that doesn't
+// accept $N placeholders, like CREATE/DROP DATABASE in test helpers)
+// where the input is whitelisted at the source.
+func ignoredLines(fset *token.FileSet, f *ast.File) map[string]bool {
+	out := map[string]bool{}
+	for _, cg := range f.Comments {
+		for _, c := range cg.List {
+			if !strings.Contains(c.Text, "sqlcheck:ignore") {
+				continue
+			}
+			pos := fset.Position(c.Slash)
+			out[pos.Filename+":"+strconv.Itoa(pos.Line)] = true
+		}
+	}
+	return out
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }
 
 // pgx-side method names that accept SQL as their second arg (after ctx).
 var sqlSinkMethods = map[string]bool{
@@ -61,6 +84,7 @@ func main() {
 	violations := 0
 	for _, pkg := range pkgs {
 		for _, f := range pkg.Syntax {
+			ignored := ignoredLines(pkg.Fset, f)
 			ast.Inspect(f, func(n ast.Node) bool {
 				call, ok := n.(*ast.CallExpr)
 				if !ok {
@@ -79,6 +103,9 @@ func main() {
 				sqlArg := call.Args[1]
 				if reason := danger(pkg.TypesInfo, sqlArg); reason != "" {
 					pos := pkg.Fset.Position(sqlArg.Pos())
+					if ignored[pos.Filename+":"+itoa(pos.Line)] {
+						return true
+					}
 					fmt.Printf("%s:%d:%d: %s in inline argument to %s — use $N placeholders or move the query to sqlc\n",
 						pos.Filename, pos.Line, pos.Column, reason, sel.Sel.Name)
 					violations++

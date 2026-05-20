@@ -40,6 +40,15 @@ build:
 test:
 	$(GO) test ./...
 
+# Integration tests need a Postgres reachable as a privileged role (it
+# CREATE/DROPs a fresh database per test package). Defaults to the
+# `db` service started by `docker compose up -d db` and assumes the
+# port mapping in compose.yml is left at 5432:5432. Override with
+# TEST_DATABASE_URL when running elsewhere.
+TEST_DATABASE_URL ?= postgres://nottario:nottario@localhost:5432/postgres?sslmode=disable
+test-integration:
+	TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(GO) test ./...
+
 tools:
 	@command -v $(GOBIN)/golangci-lint >/dev/null 2>&1 \
 		|| $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
