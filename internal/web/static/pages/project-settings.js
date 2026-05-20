@@ -52,25 +52,78 @@ class NottarioProjectSettings extends LitElement {
       border-radius: 4px;
     }
 
-    /* Sub-sections within a tab (e.g. General → Default view + Advanced)
-       are separated by a hairline and a small uppercase eyebrow. */
-    .subsection {
+    /* Project preferences block: lives below the explicit form,
+       owns the live-save controls (default view, page size). One
+       hairline + one eyebrow + an "auto-saves" badge so the
+       interaction difference is signalled once instead of repeated
+       per control. */
+    .preferences {
       margin-top: 28px;
-      padding-top: 20px;
+      padding-top: 18px;
       border-top: 1px solid #eaeef2;
     }
-    .subsection > h3 {
-      margin: 0 0 10px;
+    .prefs-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .prefs-eyebrow {
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: #59636e;
       font-weight: 600;
     }
-    .subsection .helper {
+    .prefs-badge {
+      font-size: 11px;
+      color: #1f883d;
+      background: #dafbe1;
+      border: 1px solid #aceebb;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-weight: 500;
+    }
+    .prefs-row { margin-bottom: 14px; }
+    .prefs-row:last-child { margin-bottom: 0; }
+    .prefs-control {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .prefs-control select,
+    .prefs-control input[type="number"] {
+      width: auto;
+      min-width: 120px;
+      padding: 6px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font: inherit;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    .prefs-control input[type="number"] { width: 96px; font-variant-numeric: tabular-nums; }
+    .prefs-control select:focus,
+    .prefs-control input[type="number"]:focus {
+      outline: 2px solid #0969da;
+      outline-offset: 0;
+      border-color: #0969da;
+    }
+    .prefs-numwrap { display: inline-flex; align-items: center; gap: 8px; }
+    .prefs-help {
       color: #59636e;
       font-size: 12px;
-      margin: -4px 0 12px;
+      flex-basis: 100%;
+      margin: 0;
+    }
+    .prefs-help code {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      background: #f6f8fa;
+      padding: 0 4px;
+      border-radius: 3px;
+      font-size: 11px;
     }
 
     .color-dot {
@@ -392,54 +445,56 @@ class NottarioProjectSettings extends LitElement {
         </div>
       </form>
 
-      ${this._renderDefaultViewSubsection()}
-      ${this._renderAdvancedSubsection()}
+      ${this._renderPreferences()}
     `;
   }
 
-  _renderDefaultViewSubsection() {
+  // Project preferences: two live-save controls (default view, default
+  // MCP page size) sharing one bordered band below the explicit form.
+  // Live-save (no Save button) so the band gets a small "Saved
+  // automatically" badge at the top to signal the different interaction.
+  _renderPreferences() {
     const p = this.project;
     const admin = this.me?.is_admin;
     const currentView = viewByKey(p.DefaultView || 'board/kanban');
     return html`
-      <div class="subsection">
-        <h3>Default view</h3>
-        <p class="helper">Clicking a project card on the home page navigates here.</p>
-        <div class="field" style="max-width:320px;margin-bottom:0">
-          ${admin
-            ? html`
-              <select @change=${(e) => this.saveDefaultView(e.target.value)}>
-                ${PROJECT_VIEWS.map(v => html`
-                  <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
-                `)}
-              </select>`
-            : html`<div>${currentView.label} <span class="muted">(admin only)</span></div>`}
+      <div class="preferences">
+        <div class="prefs-head">
+          <span class="prefs-eyebrow">Project preferences</span>
+          <span class="prefs-badge" title="These controls save as you change them">Saved automatically</span>
         </div>
-      </div>
-    `;
-  }
 
-  _renderAdvancedSubsection() {
-    const p = this.project;
-    const admin = this.me?.is_admin;
-    return html`
-      <div class="subsection">
-        <h3>Advanced</h3>
-        <p class="helper">Settings that affect how this project is exposed over the MCP server.</p>
-        <div class="field" style="max-width:320px;margin-bottom:0">
+        <div class="field prefs-row">
+          <label>Default view</label>
+          <div class="prefs-control">
+            ${admin
+              ? html`
+                <select @change=${(e) => this.saveDefaultView(e.target.value)}>
+                  ${PROJECT_VIEWS.map(v => html`
+                    <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
+                  `)}
+                </select>`
+              : html`<span>${currentView.label}</span> <span class="muted">(admin only)</span>`}
+            <span class="prefs-help">Where a project card on the home page navigates.</span>
+          </div>
+        </div>
+
+        <div class="field prefs-row">
           <label>Default page size for <code>tasks.list</code></label>
-          ${admin
-            ? html`
-              <div style="display:flex;align-items:center;gap:8px">
-                <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
-                       @change=${(e) => this.saveMCPPageSize(e.target.value)}
-                       class="inline-num" style="width:100px"> <span class="muted" style="font-size:13px">tasks per page</span>
-              </div>
-              <p class="muted" style="margin:6px 0 0;font-size:12px">
-                Agents that call <code>nottario.tasks.list</code> without an explicit
-                <code>limit</code> get this many tasks per page. Hard range: 1–500.
-              </p>`
-            : html`${p.MCPPageSize || 50} tasks per page <span class="muted">(admin only)</span>`}
+          <div class="prefs-control">
+            ${admin
+              ? html`
+                <span class="prefs-numwrap">
+                  <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
+                         @change=${(e) => this.saveMCPPageSize(e.target.value)}>
+                  <span class="muted">tasks per page</span>
+                </span>`
+              : html`${p.MCPPageSize || 50} <span class="muted">tasks per page (admin only)</span>`}
+            <span class="prefs-help">
+              Agents that call <code>nottario.tasks.list</code> without an explicit
+              <code>limit</code> get this many tasks per page. Hard range: 1–500.
+            </span>
+          </div>
         </div>
       </div>
     `;
