@@ -474,18 +474,20 @@ class NottarioGantt extends LitElement {
       return Math.max(1, Math.max(maxCellLanes, doingCount));
     });
     // Anchored slots come from a global successor-depth pass: every
-    // band-chronological successor and every done→done dep edge pushes
-    // its source one slot further left. This is what guarantees that a
-    // dep edge between two done tasks in different bands always points
-    // forward, because the dependent ends up at a strictly greater
-    // slot than its precondition.
+    // band-chronological successor BETWEEN ANCHORED TASKS and every
+    // done→done dep edge pushes its source one slot further left. Free
+    // tasks are deliberately excluded from the band-chain — they don't
+    // have arrows, so they shouldn't force horizontal spread on their
+    // own behalf. Their succession ends up at 0 and they cluster at
+    // the rightmost slot, then gravitate around the anchored skeleton
+    // in the relocation phase below.
     const bandSuccessor = new Map();
     for (const b of bands) {
-      const sorted = b.tasks
-        .filter(t => t.State === 'done' && t.ActualEnd)
+      const anchoredChronoSorted = b.tasks
+        .filter(t => t.State === 'done' && t.ActualEnd && depTouched.has(t.ID))
         .sort((x, y) => new Date(x.ActualEnd).getTime() - new Date(y.ActualEnd).getTime());
-      for (let i = 0; i < sorted.length - 1; i++) {
-        bandSuccessor.set(sorted[i].ID, sorted[i + 1].ID);
+      for (let i = 0; i < anchoredChronoSorted.length - 1; i++) {
+        bandSuccessor.set(anchoredChronoSorted[i].ID, anchoredChronoSorted[i + 1].ID);
       }
     }
     const depSuccessors = new Map();
@@ -521,48 +523,46 @@ class NottarioGantt extends LitElement {
     for (const [id, s] of succession) {
       globalPastSlot.set(id, maxPastSlots - 1 - s);
     }
-    // Vertical packing for FREE past tasks only. Anchored tasks keep
-    // their natural slot so every arrow we already validated stays
-    // forward. A free task moves to a nearby occupied slot inside its
-    // own band when that slot has lane room (cap = band's future lane
-    // count). The chosen target is the closest occupied slot to the
-    // task's original position, so free tasks gravitate toward dense
-    // anchored clusters instead of sitting alone in their own column.
+    // Place FREE past tasks. Each free task gravitates toward NOW: we
+    // walk them newest-first and drop each into the RIGHTMOST slot
+    // (among any globally-used slot) where the task's band still has
+    // lane room. Free tasks have no arrows, so they can occupy any
+    // column without breaking arrow geometry. Cap per band = the
+    // band's future-zone lane count, so past height never exceeds
+    // what the future zone already established.
+    const usedGlobalSlots = new Set(globalPastSlot.values());
     for (let bi = 0; bi < bands.length; bi++) {
       const b = bands[bi];
       const maxLanesPast = futureLanesPerBand[bi];
-      if (maxLanesPast < 2) continue; // no vertical room
-      const bandDoneIDs = b.tasks
-        .filter(t => t.State === 'done' && t.ActualEnd)
-        .map(t => t.ID);
-      const slotOccupants = new Map(); // slot -> count
-      for (const id of bandDoneIDs) {
-        const s = globalPastSlot.get(id);
+      // Build the band's per-slot occupancy from ANCHORED tasks only
+      // (their slot is fixed by succession). Free tasks haven't been
+      // placed yet — we re-place them here.
+      const slotOccupants = new Map();
+      for (const t of b.tasks) {
+        if (t.State !== 'done' || !t.ActualEnd) continue;
+        if (!depTouched.has(t.ID)) continue;
+        const s = globalPastSlot.get(t.ID);
         slotOccupants.set(s, (slotOccupants.get(s) || 0) + 1);
       }
-      // Walk free tasks in chronological order (oldest first) so
-      // relocations cascade left-to-right; tasks finished later have
-      // a shot at landing under tasks already placed.
+      // Newest free first: closer-to-NOW priority gets the rightmost
+      // available slot.
       const freeSorted = b.tasks
         .filter(t => t.State === 'done' && t.ActualEnd && !depTouched.has(t.ID))
-        .sort((x, y) => new Date(x.ActualEnd).getTime() - new Date(y.ActualEnd).getTime());
+        .sort((x, y) => new Date(y.ActualEnd).getTime() - new Date(x.ActualEnd).getTime());
       for (const t of freeSorted) {
-        const myOldSlot = globalPastSlot.get(t.ID);
         let bestSlot = null;
-        let bestDist = Infinity;
-        for (const [s, count] of slotOccupants) {
-          if (s === myOldSlot) continue;
+        for (const s of usedGlobalSlots) {
+          const count = slotOccupants.get(s) || 0;
           if (count >= maxLanesPast) continue;
-          const d = Math.abs(s - myOldSlot);
-          if (d < bestDist) { bestDist = d; bestSlot = s; }
+          if (bestSlot == null || s > bestSlot) bestSlot = s;
         }
-        if (bestSlot == null) continue;
-        // Move the task.
-        const oldCount = slotOccupants.get(myOldSlot) || 0;
-        if (oldCount <= 1) slotOccupants.delete(myOldSlot);
-        else slotOccupants.set(myOldSlot, oldCount - 1);
-        slotOccupants.set(bestSlot, (slotOccupants.get(bestSlot) || 0) + 1);
+        if (bestSlot == null) {
+          // No room anywhere — fall back to the task's initial slot.
+          continue;
+        }
         globalPastSlot.set(t.ID, bestSlot);
+        slotOccupants.set(bestSlot, (slotOccupants.get(bestSlot) || 0) + 1);
+        usedGlobalSlots.add(bestSlot);
       }
     }
     // Compact: drop slot indices that ended up empty after relocation
