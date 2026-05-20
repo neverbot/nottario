@@ -14,6 +14,7 @@ import (
 type Querier interface {
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
+	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
 	DeleteProjectPriority(ctx context.Context, arg DeleteProjectPriorityParams) (int64, error)
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
@@ -22,16 +23,20 @@ type Querier interface {
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
+	InsertMembership(ctx context.Context, arg InsertMembershipParams) error
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
 	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) error
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
+	ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error)
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
+	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
 	ListProjectPriorities(ctx context.Context, projectID uuid.UUID) ([]ListProjectPrioritiesRow, error)
 	ListProjectRoleIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
 	ListProjectRoles(ctx context.Context, projectID uuid.UUID) ([]ListProjectRolesRow, error)
 	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
+	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
