@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { defaultPathFor, viewByKey } from '/static/views.js';
+import { EscController } from '/static/components/esc.js';
 
 class NottarioProjectsPage extends LitElement {
   static properties = {
@@ -115,6 +116,9 @@ class NottarioProjectsPage extends LitElement {
     this.showCreate = false;
     this.creating = false;
     this.error = '';
+    new EscController(this, (e) => {
+      if (this.showCreate) { this.closeCreate(); e.stopPropagation(); }
+    });
   }
 
   connectedCallback() {

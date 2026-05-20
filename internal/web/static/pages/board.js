@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
+import { EscController } from '/static/components/esc.js';
 import './gantt.js';
 
 class NottarioBoardPage extends LitElement {
@@ -239,6 +240,15 @@ class NottarioBoardPage extends LitElement {
     this.selected = null;
     this.expandDoing = false;
     this.error = '';
+    new EscController(this, (e) => this._onEsc(e));
+  }
+
+  _onEsc(e) {
+    // Topmost first: the task detail panel sits over the create form
+    // when both happen to be open. Stop propagation after closing so
+    // an outer listener (topbar dropdown, etc.) doesn't also react.
+    if (this.selected)   { this.closeDetail();       e.stopPropagation(); return; }
+    if (this.showCreate) { this.showCreate = false;  e.stopPropagation(); return; }
   }
 
   connectedCallback() {

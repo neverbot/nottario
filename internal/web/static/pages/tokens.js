@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { EscController } from '/static/components/esc.js';
 
 class NottarioTokensPage extends LitElement {
   static properties = {
@@ -77,6 +78,9 @@ class NottarioTokensPage extends LitElement {
     this.showIssue = false;
     this.issued = null;
     this.error = '';
+    new EscController(this, (e) => {
+      if (this.showIssue) { this.close(); e.stopPropagation(); }
+    });
   }
 
   connectedCallback() {
