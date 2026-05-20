@@ -28,3 +28,12 @@ FROM users WHERE id = $1;
 
 -- name: TouchUserLastSeen :exec
 UPDATE users SET last_seen_at = now() WHERE id = $1;
+
+-- name: ListUsers :many
+SELECT u.id, u.github_login, u.github_id, u.display_name,
+       COALESCE(u.avatar_url, '')::text AS avatar_url,
+       u.is_admin, u.created_at, u.last_seen_at,
+       (SELECT COUNT(DISTINCT m.project_id)::int
+          FROM memberships m WHERE m.user_id = u.id) AS project_count
+FROM users u
+ORDER BY u.display_name, u.github_login;

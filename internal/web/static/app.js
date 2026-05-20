@@ -4,6 +4,7 @@ import './pages/login.js';
 import './pages/projects.js';
 import './pages/project-settings.js';
 import './pages/tokens.js';
+import './pages/users.js';
 import './pages/board.js';
 import './pages/docs.js';
 import './pages/arch.js';
@@ -115,6 +116,9 @@ class NottarioShell extends LitElement {
     }
     if (path === '/tokens') {
       return html`<nottario-tokens-page .me=${this.me}></nottario-tokens-page>`;
+    }
+    if (path === '/users') {
+      return html`<nottario-users-page .me=${this.me}></nottario-users-page>`;
     }
     const settingsMatch = path.match(/^\/projects\/([^/]+)\/settings$/);
     if (settingsMatch) {

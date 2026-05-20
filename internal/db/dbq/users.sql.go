@@ -141,6 +141,58 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (InsertU
 	return i, err
 }
 
+const listUsers = `-- name: ListUsers :many
+SELECT u.id, u.github_login, u.github_id, u.display_name,
+       COALESCE(u.avatar_url, '')::text AS avatar_url,
+       u.is_admin, u.created_at, u.last_seen_at,
+       (SELECT COUNT(DISTINCT m.project_id)::int
+          FROM memberships m WHERE m.user_id = u.id) AS project_count
+FROM users u
+ORDER BY u.display_name, u.github_login
+`
+
+type ListUsersRow struct {
+	ID           uuid.UUID
+	GithubLogin  string
+	GithubID     int64
+	DisplayName  string
+	AvatarUrl    string
+	IsAdmin      bool
+	CreatedAt    pgtype.Timestamptz
+	LastSeenAt   pgtype.Timestamptz
+	ProjectCount int32
+}
+
+func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsersRow{}
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GithubLogin,
+			&i.GithubID,
+			&i.DisplayName,
+			&i.AvatarUrl,
+			&i.IsAdmin,
+			&i.CreatedAt,
+			&i.LastSeenAt,
+			&i.ProjectCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const touchUserLastSeen = `-- name: TouchUserLastSeen :exec
 UPDATE users SET last_seen_at = now() WHERE id = $1
 `

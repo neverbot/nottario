@@ -53,6 +53,7 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("POST /auth/logout", LogoutHandler(auth))
 	mux.Handle("GET /auth/logout", LogoutHandler(auth)) // convenience for the UI
 	mux.Handle("GET /api/me", MeHandler(auth))
+	mux.Handle("GET /api/users", ListUsersHandler(UsersDeps{Pool: d.Pool, Resolver: d.Resolver}))
 
 	proj := ProjectDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/projects", ListProjectsHandler(proj))

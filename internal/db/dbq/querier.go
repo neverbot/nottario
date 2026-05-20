@@ -99,6 +99,7 @@ type Querier interface {
 	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
 	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
 	ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error)
+	ListUsers(ctx context.Context) ([]ListUsersRow, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)

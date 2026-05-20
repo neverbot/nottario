@@ -85,6 +85,29 @@ func TouchUserSeen(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error 
 	return dbq.New(pool).TouchUserLastSeen(ctx, id)
 }
 
+// UserSummary is the lightweight shape returned by ListAllUsers: User
+// fields plus a project_count derived from memberships, useful for the
+// global Users directory.
+type UserSummary struct {
+	User
+	ProjectCount int
+}
+
+// ListAllUsers returns every user on the instance plus how many
+// projects they belong to. Visible to any authenticated caller.
+func ListAllUsers(ctx context.Context, pool *pgxpool.Pool) ([]UserSummary, error) {
+	rows, err := dbq.New(pool).ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UserSummary, 0, len(rows))
+	for _, r := range rows {
+		u := userFromRow(r.ID, r.GithubLogin, r.GithubID, r.DisplayName, r.AvatarUrl, r.IsAdmin, r.CreatedAt, r.LastSeenAt)
+		out = append(out, UserSummary{User: u, ProjectCount: int(r.ProjectCount)})
+	}
+	return out, nil
+}
+
 func userFromRow(id uuid.UUID, login string, gid int64, name string, avatar string, admin bool, created, lastSeen pgtype.Timestamptz) User {
 	var last *time.Time
 	if lastSeen.Valid {

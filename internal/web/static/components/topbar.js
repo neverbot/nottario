@@ -312,8 +312,8 @@ class NottarioTopbar extends LitElement {
         <nav class="primary">
           <a href="/" class=${this._isActive('/') ? 'active' : ''}
              @click=${this._go('/')}>Projects</a>
-          <a href="/tokens" class=${this._isActive('/tokens') ? 'active' : ''}
-             @click=${this._go('/tokens')}>Tokens</a>
+          <a href="/users" class=${this._isActive('/users') ? 'active' : ''}
+             @click=${this._go('/users')}>Users</a>
         </nav>
         <div class="spacer"></div>
         <div class="right">
