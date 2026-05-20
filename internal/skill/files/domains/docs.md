@@ -185,6 +185,73 @@ nottario.docs.write {
 // on version_conflict: re-read and retry.
 ```
 
+## Keeping a local file in sync with Nottario
+
+Some documents live in **two places at once**: as a `.md` file on disk
+(committed to the repo) and as a Nottario document. `claude.md` is the
+canonical example, but the same pattern applies to anything an agent
+edits in both surfaces — operating manuals, ADRs the team also wants
+in the repo, anything you can imagine being touched concurrently by a
+teammate's editor and by another agent over MCP.
+
+Without discipline, the two diverge. The flow below keeps them in
+lockstep using the optimistic-concurrency primitives:
+
+1. **Before editing** the local file, read the Nottario copy first
+   and stash its `CurrentVersion`:
+
+   ```text
+   doc = nottario.docs.read {
+     scope: "project",
+     project_id: "...",
+     path: "projects/<id>/context/claude.md",
+   }
+   // remember doc.CurrentVersion
+   ```
+
+2. **Compare** Nottario's body against the local file.
+   - If they match, edit the local file and commit your changes.
+   - If Nottario is ahead, merge its changes into your local file
+     *first* — somebody (an agent in another session, a teammate)
+     wrote to Nottario after the last sync. Resolve the merge, then
+     commit.
+
+3. **Push to Nottario** with the version you stashed in step 1:
+
+   ```text
+   nottario.docs.write {
+     scope: "project",
+     project_id: "...",
+     path: "projects/<id>/context/claude.md",
+     content_md: <full updated body>,
+     expected_version: doc.CurrentVersion,
+     message: "<why you changed it>",
+   }
+   ```
+
+4. **On `version_conflict`** the response carries the live
+   `current_version` and a message:
+
+   ```json
+   { "error": "version_conflict", "current_version": 9,
+     "message": "re-read the document and retry with the latest current_version" }
+   ```
+
+   Re-read, merge Nottario's newer body into yours, and retry the
+   write with the new `current_version`. Never just retry with the
+   stale version — you would clobber whatever change made Nottario
+   move forward.
+
+**Generic rule:** for *any* document an agent edits both as a file
+and via MCP, read-then-write under `expected_version` is the
+contract. The repo commit and the Nottario write are two sides of
+the same change; finish both before moving on, in this order:
+read → edit → commit → write.
+
+This `claude.md`-style sync flow is the same one called out in the
+project's own `claude.md` under **Document sync (local files ↔
+Nottario)** — keep them aligned if either changes.
+
 ## Things you cannot do (today)
 
 - Edit a comment or version body retroactively.
