@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // UpsertFromGithub inserts or updates a user from the GitHub
@@ -20,53 +24,44 @@ func UpsertFromGithub(ctx context.Context, pool *pgxpool.Pool, githubID int64, l
 		return nil, false, fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	var u User
-	var created bool
-	err = tx.QueryRow(ctx, `
-		SELECT id, github_login, github_id, display_name,
-		       COALESCE(avatar_url, ''), is_admin, created_at, last_seen_at
-		FROM users
-		WHERE github_id = $1
-	`, githubID).Scan(
-		&u.ID, &u.GithubLogin, &u.GithubID, &u.DisplayName,
-		&u.AvatarURL, &u.IsAdmin, &u.CreatedAt, &u.LastSeenAt,
+	existing, err := q.GetUserByGithubID(ctx, githubID)
+	var (
+		u       User
+		created bool
 	)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// Brand-new user.
-		var count int
-		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		count, err := q.CountUsers(ctx)
+		if err != nil {
 			return nil, false, fmt.Errorf("count users: %w", err)
 		}
 		isAdmin := count == 0
-		err = tx.QueryRow(ctx, `
-			INSERT INTO users (github_login, github_id, display_name, avatar_url, is_admin)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id, github_login, github_id, display_name,
-			          COALESCE(avatar_url, ''), is_admin, created_at, last_seen_at
-		`, login, githubID, displayName, avatarURL, isAdmin).Scan(
-			&u.ID, &u.GithubLogin, &u.GithubID, &u.DisplayName,
-			&u.AvatarURL, &u.IsAdmin, &u.CreatedAt, &u.LastSeenAt,
-		)
+		row, err := q.InsertUser(ctx, dbq.InsertUserParams{
+			GithubLogin: login,
+			GithubID:    githubID,
+			DisplayName: displayName,
+			AvatarUrl:   pgtype.Text{String: avatarURL, Valid: avatarURL != ""},
+			IsAdmin:     isAdmin,
+		})
 		if err != nil {
 			return nil, false, fmt.Errorf("insert user: %w", err)
 		}
+		u = userFromRow(row.ID, row.GithubLogin, row.GithubID, row.DisplayName, row.AvatarUrl, row.IsAdmin, row.CreatedAt, row.LastSeenAt)
 		created = true
 	case err != nil:
 		return nil, false, fmt.Errorf("select user: %w", err)
 	default:
-		// Update mutable display fields from GitHub.
-		_, err = tx.Exec(ctx, `
-			UPDATE users SET display_name = $2, avatar_url = $3, github_login = $4
-			WHERE id = $1
-		`, u.ID, displayName, avatarURL, login)
-		if err != nil {
+		if err := q.UpdateUserProfile(ctx, dbq.UpdateUserProfileParams{
+			ID:          existing.ID,
+			DisplayName: displayName,
+			AvatarUrl:   pgtype.Text{String: avatarURL, Valid: avatarURL != ""},
+			GithubLogin: login,
+		}); err != nil {
 			return nil, false, fmt.Errorf("update user: %w", err)
 		}
-		u.DisplayName = displayName
-		u.AvatarURL = avatarURL
-		u.GithubLogin = login
+		u = userFromRow(existing.ID, login, existing.GithubID, displayName, avatarURL, existing.IsAdmin, existing.CreatedAt, existing.LastSeenAt)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -77,23 +72,33 @@ func UpsertFromGithub(ctx context.Context, pool *pgxpool.Pool, githubID int64, l
 
 // GetUser fetches a user by id.
 func GetUser(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*User, error) {
-	var u User
-	err := pool.QueryRow(ctx, `
-		SELECT id, github_login, github_id, display_name,
-		       COALESCE(avatar_url, ''), is_admin, created_at, last_seen_at
-		FROM users WHERE id = $1
-	`, id).Scan(
-		&u.ID, &u.GithubLogin, &u.GithubID, &u.DisplayName,
-		&u.AvatarURL, &u.IsAdmin, &u.CreatedAt, &u.LastSeenAt,
-	)
+	row, err := dbq.New(pool).GetUserByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	u := userFromRow(row.ID, row.GithubLogin, row.GithubID, row.DisplayName, row.AvatarUrl, row.IsAdmin, row.CreatedAt, row.LastSeenAt)
 	return &u, nil
 }
 
 // TouchUserSeen records the user's most recent activity.
 func TouchUserSeen(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
-	_, err := pool.Exec(ctx, `UPDATE users SET last_seen_at = now() WHERE id = $1`, id)
-	return err
+	return dbq.New(pool).TouchUserLastSeen(ctx, id)
+}
+
+func userFromRow(id uuid.UUID, login string, gid int64, name string, avatar string, admin bool, created, lastSeen pgtype.Timestamptz) User {
+	var last *time.Time
+	if lastSeen.Valid {
+		v := lastSeen.Time
+		last = &v
+	}
+	return User{
+		ID:          id,
+		GithubLogin: login,
+		GithubID:    gid,
+		DisplayName: name,
+		AvatarURL:   avatar,
+		IsAdmin:     admin,
+		CreatedAt:   created.Time,
+		LastSeenAt:  last,
+	}
 }

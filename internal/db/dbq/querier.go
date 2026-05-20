@@ -14,6 +14,7 @@ import (
 type Querier interface {
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
+	CountUsers(ctx context.Context) (int32, error)
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
 	DeleteProjectPriority(ctx context.Context, arg DeleteProjectPriorityParams) (int64, error)
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
@@ -23,12 +24,15 @@ type Querier interface {
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
+	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
 	InsertMembership(ctx context.Context, arg InsertMembershipParams) error
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
 	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) error
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (TaskComment, error)
+	InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
 	ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error)
@@ -52,7 +56,9 @@ type Querier interface {
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
+	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (UpdateProjectRoleRow, error)
+	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
 	UpsertProjectPriority(ctx context.Context, arg UpsertProjectPriorityParams) (UpsertProjectPriorityRow, error)
 	UpsertTaskCommit(ctx context.Context, arg UpsertTaskCommitParams) error
 	UserBelongsToProjectOrIsAdmin(ctx context.Context, arg UserBelongsToProjectOrIsAdminParams) (bool, error)
