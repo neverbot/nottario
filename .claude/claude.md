@@ -47,11 +47,12 @@ artefacts written to disk must be in English regardless.
   as layout engine and renders to SVG. It is the only visualisation
   library allowed.
 - **Database:** Postgres always. SQLite is off the table.
-  Hand-written SQL is being migrated to **sqlc**; new queries go in
-  `internal/db/queries/*.sql` and are regenerated with `make sqlc`.
-  Outside sqlc, pgx with `$N` placeholders only; never `fmt.Sprintf`
-  or concatenation of runtime values into Query/Exec (CI blocks it
-  via the custom `internal/tools/sqlcheck` analyzer).
+  The backend is fully on **sqlc**; all queries live in
+  `internal/db/queries/*.sql` and the generated Go is committed at
+  `internal/db/dbq/`. Outside sqlc, pgx with `$N` placeholders only;
+  never `fmt.Sprintf` or concatenation of runtime values into
+  `Query`/`Exec`/`QueryRow` (CI blocks it via the custom
+  `internal/tools/sqlcheck` analyzer).
 - **Concurrency model (multi-agent safe):**
   - `nottario.tasks.claim_next` / `nottario.tasks.claim` are atomic
     (`SELECT … FOR UPDATE SKIP LOCKED` and per-row locks). Never use
@@ -136,6 +137,43 @@ artefacts written to disk must be in English regardless.
   `priority_key` over raw integers; the buckets live in
   `nottario.projects.list_priorities`.
 
+### SQL conventions (sqlc workflow)
+- **All new queries land in `internal/db/queries/<domain>.sql`.** One
+  file per logical domain (`tasks.sql`, `docs.sql`, `arch.sql`,
+  `search.sql`, …). Each query starts with a `-- name: <Name> :<kind>`
+  comment where `<kind>` is `one`, `many`, `exec`, `execrows`.
+- **Regenerate with `make sqlc`.** Commit the generated
+  `internal/db/dbq/*.sql.go` alongside the `.sql` changes — CI runs
+  `sqlc diff` (`make sqlc-check`) and a drift will fail the gate.
+- **Named args over positional** when a query has more than ~3
+  parameters or any optional input. Use `sqlc.arg('name')::<type>`
+  for required, `sqlc.narg('name')::<type>` for optional/nullable;
+  always cast so Postgres can infer the type. Mixing positional `$N`
+  with `sqlc.arg(...)` in the same query is fragile — pick one style
+  per query.
+- **Optional filters** are expressed as
+  `(sqlc.narg('foo')::text IS NULL OR col = sqlc.narg('foo')::text)`
+  rather than building SQL dynamically in Go.
+- **UUID overrides** (in `sqlc.yaml`) map `uuid` → `uuid.UUID` and
+  nullable `uuid` → `*uuid.UUID`. Don't reach for `pgtype.UUID`.
+- **Nullable text/timestamps** surface as `pgtype.Text` /
+  `pgtype.Timestamptz`. Convert at the boundary with the
+  `textPtr` / `timestampPtr` / `pgtypeText` helpers each package
+  keeps next to its repo code; do not leak pgtype into domain types.
+- **JSONB** comes back as `[]byte`; decode with `json.Unmarshal`
+  inside the package's row-mapping helper, never in the consumer.
+- **Transactions:** `dbq.New(tx)` binds queries to an open `pgx.Tx`;
+  use the same Queries handle throughout a transaction. Always
+  `defer func() { _ = tx.Rollback(ctx) }()` immediately after `Begin`.
+- **No raw pgx fallback.** If something feels hard to express in
+  sqlc, add a named query — don't drop back to inline SQL. The
+  `sqlcheck` analyzer will flag any new inline `Query`/`Exec` with
+  runtime-formatted SQL.
+- **Locks and CTEs:** advisory locks
+  (`pg_advisory_xact_lock`), `FOR UPDATE [SKIP LOCKED]` and
+  `WITH RECURSIVE` cycle checks all live in sqlc queries today —
+  see `dependencies.sql`, `tasks.sql`, `arch.sql` for the patterns.
+
 ### Document sync (local files ↔ Nottario)
 - The canonical store for shared docs is Nottario (`context` kind).
   Some docs (notably this `claude.md`) also live in the repo. Before
@@ -185,8 +223,8 @@ Pre-alpha but dogfooding actively. Foundation, identity, tasks,
 docs, architecture, gantt, kanban, MCP server, skill bundle, search
 all in place. Currently working on:
 
-- SQL safety (Tier 1 lint guard landed; Tier 2 sqlc migration in
-  progress).
+- SQL safety (Tier 1 lint guard landed; Tier 2 sqlc migration
+  complete across tasks, identity, docs, arch and search).
 - Documents optimistic concurrency + `claude.md` sync flow.
 - Concurrency primitives for multi-agent safety
   (`claim_next`/`claim` atomic; `SetState` transactional;
