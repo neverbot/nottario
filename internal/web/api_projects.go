@@ -100,6 +100,7 @@ type updateProjectRequest struct {
 	Description     string   `json:"description"`
 	PrimaryLanguage string   `json:"primary_language"`
 	ProjectType     string   `json:"project_type"`
+	DefaultView     string   `json:"default_view"`
 	Repos           []string `json:"repos"`
 }
 
@@ -125,9 +126,9 @@ func UpdateProjectHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		p, err := identity.UpdateProject(r.Context(), d.Pool, id, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, req.Repos)
+		p, err := identity.UpdateProject(r.Context(), d.Pool, id, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, req.DefaultView, req.Repos)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, p)

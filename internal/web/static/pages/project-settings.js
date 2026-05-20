@@ -52,61 +52,6 @@ class NottarioProjectSettings extends LitElement {
       border-radius: 4px;
     }
 
-    /* Project preferences block: lives below the explicit form,
-       owns the live-save controls (default view, page size). One
-       hairline + one eyebrow + an "auto-saves" badge so the
-       interaction difference is signalled once instead of repeated
-       per control. */
-    .preferences {
-      margin-top: 28px;
-      padding-top: 18px;
-      border-top: 1px solid #eaeef2;
-    }
-    .prefs-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-    .prefs-eyebrow {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #59636e;
-      font-weight: 600;
-    }
-    .prefs-badge {
-      font-size: 11px;
-      color: #1f883d;
-      background: #dafbe1;
-      border: 1px solid #aceebb;
-      padding: 1px 8px;
-      border-radius: 999px;
-      font-weight: 500;
-    }
-    .prefs-row { margin-bottom: 14px; }
-    .prefs-row:last-child { margin-bottom: 0; }
-    .prefs-control {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .prefs-control select,
-    .prefs-control input[type="number"] {
-      width: auto;
-      min-width: 120px;
-      padding: 6px 10px;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      font: inherit;
-      background: #fff;
-      box-sizing: border-box;
-    }
-    .prefs-control select { max-width: 260px; }
-    .prefs-control input[type="number"] { width: 96px; font-variant-numeric: tabular-nums; }
-
     /* Hide the browser-native number spinner everywhere on this page.
        It's a system-styled control that clashes with our chrome, and
        GitHub-likes hide it by convention. The keyboard (↑/↓) and
@@ -118,20 +63,12 @@ class NottarioProjectSettings extends LitElement {
       margin: 0;
     }
     input[type="number"] { -moz-appearance: textfield; }
-    .prefs-control select:focus,
-    .prefs-control input[type="number"]:focus {
-      outline: 2px solid #0969da;
-      outline-offset: 0;
-      border-color: #0969da;
-    }
-    .prefs-numwrap { display: inline-flex; align-items: center; gap: 8px; }
-    .prefs-help {
+    .helper {
       color: #59636e;
       font-size: 12px;
-      flex-basis: 100%;
       margin: 0;
     }
-    .prefs-help code {
+    .helper code {
       font-family: ui-monospace, SFMono-Regular, monospace;
       background: #f6f8fa;
       padding: 0 4px;
@@ -389,6 +326,7 @@ class NottarioProjectSettings extends LitElement {
       { id: 'roles',      label: 'Roles',      body: () => this.renderRoles() },
       { id: 'priorities', label: 'Priorities', body: () => this.renderPriorities() },
       { id: 'members',    label: 'Members',    body: () => this.renderMembers() },
+      { id: 'mcp',        label: 'MCP',        body: () => this.renderMCP() },
     ];
     const active = tabs.find(t => t.id === this.activeTab) || tabs[0];
     return html`
@@ -412,6 +350,7 @@ class NottarioProjectSettings extends LitElement {
   renderGeneral() {
     const p = this.project;
     const admin = this.me?.is_admin;
+    const currentView = viewByKey(p.DefaultView || 'board/kanban');
     if (!admin) {
       return html`
         <dl>
@@ -419,6 +358,7 @@ class NottarioProjectSettings extends LitElement {
           <dt><strong>Description</strong></dt><dd>${p.Description || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Primary language</strong></dt><dd>${p.PrimaryLanguage || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Project type</strong></dt><dd>${p.ProjectType || html`<span class="muted">none</span>`}</dd>
+          <dt><strong>Default view</strong></dt><dd>${currentView.label}</dd>
           <dt><strong>Repositories</strong></dt>
           <dd>${p.Repos && p.Repos.length
                 ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map(r => html`<li>${r}</li>`)}</ul>`
@@ -450,6 +390,14 @@ class NottarioProjectSettings extends LitElement {
           </div>
         </div>
         <div class="field">
+          <label>Default view <span class="muted" style="font-weight:400">where a project card on the home page navigates</span></label>
+          <select name="default_view" style="max-width:260px">
+            ${PROJECT_VIEWS.map(v => html`
+              <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
+            `)}
+          </select>
+        </div>
+        <div class="field">
           <label>Repositories <span class="muted" style="font-weight:400">one per line or comma-separated, format owner/repo</span></label>
           <textarea name="repos" rows="3" .value=${reposText}></textarea>
         </div>
@@ -457,59 +405,32 @@ class NottarioProjectSettings extends LitElement {
           <button type="submit" class="btn primary">Save changes</button>
         </div>
       </form>
-
-      ${this._renderPreferences()}
     `;
   }
 
-  // Project preferences: two live-save controls (default view, default
-  // MCP page size) sharing one bordered band below the explicit form.
-  // Live-save (no Save button) so the band gets a small "Saved
-  // automatically" badge at the top to signal the different interaction.
-  _renderPreferences() {
+  renderMCP() {
     const p = this.project;
     const admin = this.me?.is_admin;
-    const currentView = viewByKey(p.DefaultView || 'board/kanban');
     return html`
-      <div class="preferences">
-        <div class="prefs-head">
-          <span class="prefs-eyebrow">Project preferences</span>
-          <span class="prefs-badge" title="These controls save as you change them">Saved automatically</span>
-        </div>
-
-        <div class="field prefs-row">
-          <label>Default view</label>
-          <div class="prefs-control">
-            ${admin
-              ? html`
-                <select @change=${(e) => this.saveDefaultView(e.target.value)}>
-                  ${PROJECT_VIEWS.map(v => html`
-                    <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
-                  `)}
-                </select>`
-              : html`<span>${currentView.label}</span> <span class="muted">(admin only)</span>`}
-            <span class="prefs-help">Where a project card on the home page navigates.</span>
-          </div>
-        </div>
-
-        <div class="field prefs-row">
-          <label>Default page size for <code>tasks.list</code></label>
-          <div class="prefs-control">
-            ${admin
-              ? html`
-                <span class="prefs-numwrap">
-                  <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
-                         @change=${(e) => this.saveMCPPageSize(e.target.value)}>
-                  <span class="muted">tasks per page</span>
-                </span>`
-              : html`${p.MCPPageSize || 50} <span class="muted">tasks per page (admin only)</span>`}
-            <span class="prefs-help">
-              Agents that call <code>nottario.tasks.list</code> without an explicit
-              <code>limit</code> get this many tasks per page. Hard range: 1–500.
-            </span>
-          </div>
-        </div>
+      <p class="helper" style="margin:0 0 12px">
+        Settings that affect how this project is exposed over the MCP server.
+      </p>
+      <div class="field" style="max-width:320px">
+        <label>Default page size for <code>tasks.list</code></label>
+        ${admin
+          ? html`
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
+                     @change=${(e) => this.saveMCPPageSize(e.target.value)}
+                     style="width:96px;font-variant-numeric:tabular-nums">
+              <span class="muted">tasks per page</span>
+            </div>`
+          : html`${p.MCPPageSize || 50} tasks per page <span class="muted">(admin only)</span>`}
       </div>
+      <p class="helper" style="margin-top:8px">
+        Agents that call <code>nottario.tasks.list</code> without an explicit
+        <code>limit</code> get this many tasks per page. Hard range: 1–500.
+      </p>
     `;
   }
 
@@ -521,6 +442,7 @@ class NottarioProjectSettings extends LitElement {
       description: f.description.value.trim(),
       primary_language: f.primary_language.value.trim(),
       project_type: f.project_type.value.trim(),
+      default_view: f.default_view.value,
       repos: f.repos.value.split(/\s*,\s*|\n+/).map(s => s.trim()).filter(Boolean),
     };
     try {
@@ -528,18 +450,6 @@ class NottarioProjectSettings extends LitElement {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'failed');
-      await this.load();
-    } catch (err) { this.error = err.message; }
-  }
-
-  async saveDefaultView(value) {
-    try {
-      const res = await fetch(`/api/projects/${this.projectId}/default_view`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ default_view: value }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'failed');
       await this.load();
