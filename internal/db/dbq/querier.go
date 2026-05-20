@@ -13,6 +13,8 @@ import (
 
 type Querier interface {
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
+	ArchKindExists(ctx context.Context, arg ArchKindExistsParams) (bool, error)
+	ArchNodeCycleCheck(ctx context.Context, arg ArchNodeCycleCheckParams) (bool, error)
 	// Atomic claim: same eligibility filter as NextEligibleTask, picked
 	// via SELECT … FOR UPDATE SKIP LOCKED so two concurrent agents never
 	// claim the same row. Marks the row assignee = caller, state = doing,
@@ -20,8 +22,15 @@ type Querier interface {
 	ClaimNextEligibleTask(ctx context.Context, arg ClaimNextEligibleTaskParams) (ClaimNextEligibleTaskRow, error)
 	ClaimTask(ctx context.Context, arg ClaimTaskParams) error
 	ClearProjectRepos(ctx context.Context, projectID uuid.UUID) error
+	CountArchKinds(ctx context.Context, projectID uuid.UUID) (int32, error)
+	CountArchNodeChildren(ctx context.Context, parentID *uuid.UUID) (int32, error)
+	CountNodesByKind(ctx context.Context, arg CountNodesByKindParams) (int32, error)
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)
+	DeleteArchEdge(ctx context.Context, arg DeleteArchEdgeParams) (int64, error)
+	DeleteArchKind(ctx context.Context, arg DeleteArchKindParams) (int64, error)
+	DeleteArchNode(ctx context.Context, id uuid.UUID) error
+	DeleteArchNodeLink(ctx context.Context, arg DeleteArchNodeLinkParams) error
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
 	DeleteProjectByID(ctx context.Context, id uuid.UUID) error
 	DeleteProjectPriority(ctx context.Context, arg DeleteProjectPriorityParams) (int64, error)
@@ -30,6 +39,8 @@ type Querier interface {
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
 	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
+	GetArchNodeBySlug(ctx context.Context, arg GetArchNodeBySlugParams) (GetArchNodeBySlugRow, error)
+	GetArchNodeIDBySlug(ctx context.Context, arg GetArchNodeIDBySlugParams) (uuid.UUID, error)
 	GetDocumentByPath(ctx context.Context, arg GetDocumentByPathParams) (GetDocumentByPathRow, error)
 	GetDocumentForDelete(ctx context.Context, arg GetDocumentForDeleteParams) (GetDocumentForDeleteRow, error)
 	GetDocumentVersion(ctx context.Context, arg GetDocumentVersionParams) (DocumentVersion, error)
@@ -42,6 +53,9 @@ type Querier interface {
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error)
+	InsertArchNode(ctx context.Context, arg InsertArchNodeParams) (InsertArchNodeRow, error)
+	InsertArchNodeLink(ctx context.Context, arg InsertArchNodeLinkParams) error
+	InsertDefaultArchKind(ctx context.Context, arg InsertDefaultArchKindParams) error
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
 	InsertDocument(ctx context.Context, arg InsertDocumentParams) (InsertDocumentRow, error)
 	InsertDocumentVersion(ctx context.Context, arg InsertDocumentVersionParams) error
@@ -54,6 +68,10 @@ type Querier interface {
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (TaskComment, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error)
+	ListArchEdges(ctx context.Context, arg ListArchEdgesParams) ([]ListArchEdgesRow, error)
+	ListArchKinds(ctx context.Context, projectID uuid.UUID) ([]ArchNodeKind, error)
+	ListArchNodeLinks(ctx context.Context, nodeID uuid.UUID) ([]ArchNodeLink, error)
+	ListArchNodes(ctx context.Context, arg ListArchNodesParams) ([]ListArchNodesRow, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
 	ListDocumentVersions(ctx context.Context, documentID uuid.UUID) ([]ListDocumentVersionsRow, error)
@@ -85,6 +103,7 @@ type Querier interface {
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LookupAPIToken(ctx context.Context, tokenHash []byte) (LookupAPITokenRow, error)
+	MoveArchNode(ctx context.Context, arg MoveArchNodeParams) (MoveArchNodeRow, error)
 	// Preview: returns the next pickable task without claiming it. Same
 	// eligibility rules as ClaimNextEligibleTask but no row lock and no
 	// mutation. Use ClaimNextEligibleTask for atomic pickup.
@@ -105,6 +124,8 @@ type Querier interface {
 	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
+	UnifiedSearch(ctx context.Context, arg UnifiedSearchParams) ([]UnifiedSearchRow, error)
+	UpdateArchNode(ctx context.Context, arg UpdateArchNodeParams) (UpdateArchNodeRow, error)
 	UpdateDocument(ctx context.Context, arg UpdateDocumentParams) (UpdateDocumentRow, error)
 	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error
 	UpdateProjectMCPPageSize(ctx context.Context, arg UpdateProjectMCPPageSizeParams) error
@@ -115,6 +136,8 @@ type Querier interface {
 	// "set to NULL".
 	UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsParams) (UpdateTaskFieldsRow, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
+	UpsertArchEdge(ctx context.Context, arg UpsertArchEdgeParams) (ArchEdge, error)
+	UpsertArchKind(ctx context.Context, arg UpsertArchKindParams) (ArchNodeKind, error)
 	UpsertProjectPriority(ctx context.Context, arg UpsertProjectPriorityParams) (UpsertProjectPriorityRow, error)
 	UpsertTaskCommit(ctx context.Context, arg UpsertTaskCommitParams) error
 	UserBelongsToProjectOrIsAdmin(ctx context.Context, arg UserBelongsToProjectOrIsAdminParams) (bool, error)

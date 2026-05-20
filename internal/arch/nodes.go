@@ -10,10 +10,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
-// Errors returned by node operations.
 var (
 	ErrNodeNotFound  = errors.New("node not found")
 	ErrInvalidKind   = errors.New("unknown kind for this project")
@@ -25,24 +27,20 @@ var (
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 
-// UpsertParams is the input to UpsertNode. When ID is zero a new node
-// is created (keyed by slug); when ID is set the existing node is
-// updated.
+// UpsertParams is the input to UpsertNode.
 type UpsertParams struct {
 	Slug          string
-	ParentSlug    string // empty for a root node
+	ParentSlug    string
 	Kind          string
 	Name          string
 	DescriptionMD string
 	Metadata      map[string]any
-	LinkedRepo    string // pass "" to clear
-	LinkedPath    string // pass "" to clear
+	LinkedRepo    string
+	LinkedPath    string
 	Position      *int
 }
 
 // UpsertNode creates or updates a node keyed by (project_id, slug).
-// It validates the kind against the project's catalogue and checks
-// that the optional parent_slug resolves and does not create a cycle.
 func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p UpsertParams) (*Node, error) {
 	if err := EnsureDefaultKinds(ctx, pool, projectID); err != nil {
 		return nil, err
@@ -62,8 +60,9 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	ok, err := kindExists(ctx, tx, projectID, p.Kind)
+	ok, err := kindExistsTx(ctx, q, projectID, p.Kind)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +72,7 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 
 	var parentID *uuid.UUID
 	if p.ParentSlug != "" {
-		var pid uuid.UUID
-		err := tx.QueryRow(ctx, `SELECT id FROM arch_nodes WHERE project_id = $1 AND slug = $2`, projectID, p.ParentSlug).Scan(&pid)
+		pid, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: p.ParentSlug})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrParentMissing
 		}
@@ -92,51 +90,47 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 		return nil, fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	linkedRepo := nullableString(p.LinkedRepo)
-	linkedPath := nullableString(p.LinkedPath)
-	position := 0
+	position := int32(0)
 	if p.Position != nil {
-		position = *p.Position
+		position = int32(*p.Position)
 	}
 
-	// Detect an existing row for this slug.
-	var existingID uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT id FROM arch_nodes WHERE project_id = $1 AND slug = $2`, projectID, p.Slug).Scan(&existingID)
+	existingID, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: p.Slug})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// create
-		var n Node
-		err := tx.QueryRow(ctx, `
-			INSERT INTO arch_nodes (project_id, slug, parent_id, kind, name, description_md,
-			                        metadata, linked_repo, linked_path, position)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			RETURNING id, project_id, slug, parent_id, kind, name, description_md,
-			          metadata, linked_repo, linked_path, position,
-			          created_at, updated_at
-		`, projectID, p.Slug, parentID, p.Kind, p.Name, p.DescriptionMD,
-			metadataJSON, linkedRepo, linkedPath, position,
-		).Scan(
-			&n.ID, &n.ProjectID, &n.Slug, &n.ParentID, &n.Kind, &n.Name, &n.DescriptionMD,
-			&metadataScanner{m: &n.Metadata}, &n.LinkedRepo, &n.LinkedPath, &n.Position,
-			&n.CreatedAt, &n.UpdatedAt,
-		)
+		row, err := q.InsertArchNode(ctx, dbq.InsertArchNodeParams{
+			ProjectID:     projectID,
+			Slug:          p.Slug,
+			ParentID:      parentID,
+			Kind:          p.Kind,
+			Name:          p.Name,
+			DescriptionMd: p.DescriptionMD,
+			Metadata:      metadataJSON,
+			LinkedRepo:    textOrNull(p.LinkedRepo),
+			LinkedPath:    textOrNull(p.LinkedPath),
+			Position:      position,
+		})
 		if err != nil {
 			return nil, err
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return nil, err
 		}
+		n := nodeFromInsertRow(row)
 		return &n, nil
 	case err != nil:
 		return nil, err
 	}
 
-	// update — guard against parent loop.
 	if parentID != nil && *parentID == existingID {
 		return nil, ErrCycle
 	}
 	if parentID != nil {
-		cycle, err := wouldCreateCycle(ctx, tx, projectID, existingID, *parentID)
+		cycle, err := q.ArchNodeCycleCheck(ctx, dbq.ArchNodeCycleCheckParams{
+			NewParentID: *parentID,
+			NodeID:      existingID,
+			ProjectID:   projectID,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -144,138 +138,100 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 			return nil, ErrCycle
 		}
 	}
-	var n Node
-	err = tx.QueryRow(ctx, `
-		UPDATE arch_nodes
-		SET parent_id = $2,
-		    kind = $3,
-		    name = $4,
-		    description_md = $5,
-		    metadata = $6,
-		    linked_repo = $7,
-		    linked_path = $8,
-		    position = $9
-		WHERE id = $1
-		RETURNING id, project_id, slug, parent_id, kind, name, description_md,
-		          metadata, linked_repo, linked_path, position,
-		          created_at, updated_at
-	`, existingID, parentID, p.Kind, p.Name, p.DescriptionMD,
-		metadataJSON, linkedRepo, linkedPath, position,
-	).Scan(
-		&n.ID, &n.ProjectID, &n.Slug, &n.ParentID, &n.Kind, &n.Name, &n.DescriptionMD,
-		&metadataScanner{m: &n.Metadata}, &n.LinkedRepo, &n.LinkedPath, &n.Position,
-		&n.CreatedAt, &n.UpdatedAt,
-	)
+	row, err := q.UpdateArchNode(ctx, dbq.UpdateArchNodeParams{
+		ID:            existingID,
+		ParentID:      parentID,
+		Kind:          p.Kind,
+		Name:          p.Name,
+		DescriptionMd: p.DescriptionMD,
+		Metadata:      metadataJSON,
+		LinkedRepo:    textOrNull(p.LinkedRepo),
+		LinkedPath:    textOrNull(p.LinkedPath),
+		Position:      position,
+	})
 	if err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	n := nodeFromUpdateRow(row)
 	return &n, nil
 }
 
 // GetNode fetches a node by slug.
 func GetNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, slug string) (*Node, error) {
-	var n Node
-	err := pool.QueryRow(ctx, `
-		SELECT id, project_id, slug, parent_id, kind, name, description_md,
-		       metadata, linked_repo, linked_path, position, created_at, updated_at
-		FROM arch_nodes
-		WHERE project_id = $1 AND slug = $2
-	`, projectID, slug).Scan(
-		&n.ID, &n.ProjectID, &n.Slug, &n.ParentID, &n.Kind, &n.Name, &n.DescriptionMD,
-		&metadataScanner{m: &n.Metadata}, &n.LinkedRepo, &n.LinkedPath, &n.Position,
-		&n.CreatedAt, &n.UpdatedAt,
-	)
+	row, err := dbq.New(pool).GetArchNodeBySlug(ctx, dbq.GetArchNodeBySlugParams{ProjectID: projectID, Slug: slug})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNodeNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	n := nodeFromGetRow(row)
 	return &n, nil
 }
 
-// ListNodes returns every node of a project. Optionally restrict to
-// the direct children of one parent (pass parentSlug "" together with
-// rootOnly=true to get root nodes).
+// ListNodes returns nodes optionally filtered by parent.
 func ListNodes(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, parentSlug string, rootOnly bool) ([]Node, error) {
-	q := `
-		SELECT id, project_id, slug, parent_id, kind, name, description_md,
-		       metadata, linked_repo, linked_path, position, created_at, updated_at
-		FROM arch_nodes
-		WHERE project_id = $1
-	`
-	args := []any{projectID}
+	var parent pgtype.Text
 	if parentSlug != "" {
-		q += ` AND parent_id = (SELECT id FROM arch_nodes WHERE project_id = $1 AND slug = $2)`
-		args = append(args, parentSlug)
-	} else if rootOnly {
-		q += ` AND parent_id IS NULL`
+		parent = pgtype.Text{String: parentSlug, Valid: true}
 	}
-	q += ` ORDER BY position, slug`
-
-	rows, err := pool.Query(ctx, q, args...)
+	rows, err := dbq.New(pool).ListArchNodes(ctx, dbq.ListArchNodesParams{
+		ProjectID:  projectID,
+		ParentSlug: parent,
+		RootOnly:   rootOnly,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Node{}
-	for rows.Next() {
-		var n Node
-		if err := rows.Scan(
-			&n.ID, &n.ProjectID, &n.Slug, &n.ParentID, &n.Kind, &n.Name, &n.DescriptionMD,
-			&metadataScanner{m: &n.Metadata}, &n.LinkedRepo, &n.LinkedPath, &n.Position,
-			&n.CreatedAt, &n.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, n)
+	out := make([]Node, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, nodeFromListRow(r))
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-// RemoveNode deletes the node (children cascade via FK). When cascade
-// is false and the node has any children, the call is rejected.
+// RemoveNode deletes a node.
 func RemoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, slug string, cascade bool) error {
+	q := dbq.New(pool)
 	n, err := GetNode(ctx, pool, projectID, slug)
 	if err != nil {
 		return err
 	}
 	if !cascade {
-		var children int
-		if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM arch_nodes WHERE parent_id = $1`, n.ID).Scan(&children); err != nil {
+		children, err := q.CountArchNodeChildren(ctx, &n.ID)
+		if err != nil {
 			return err
 		}
 		if children > 0 {
 			return fmt.Errorf("node has %d children — pass cascade=true to delete the subtree", children)
 		}
 	}
-	_, err = pool.Exec(ctx, `DELETE FROM arch_nodes WHERE id = $1`, n.ID)
-	return err
+	return q.DeleteArchNode(ctx, n.ID)
 }
 
-// MoveNode reparents a node. Use parentSlug = "" to make it a root.
+// MoveNode reparents a node.
 func MoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, slug, parentSlug string) (*Node, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	var nodeID uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT id FROM arch_nodes WHERE project_id = $1 AND slug = $2`, projectID, slug).Scan(&nodeID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNodeNotFound
-		}
+	nodeID, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: slug})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNodeNotFound
+	}
+	if err != nil {
 		return nil, err
 	}
 
 	var parentID *uuid.UUID
 	if parentSlug != "" {
-		var pid uuid.UUID
-		err := tx.QueryRow(ctx, `SELECT id FROM arch_nodes WHERE project_id = $1 AND slug = $2`, projectID, parentSlug).Scan(&pid)
+		pid, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: parentSlug})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrParentMissing
 		}
@@ -285,7 +241,11 @@ func MoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, slug
 		if pid == nodeID {
 			return nil, ErrCycle
 		}
-		cycle, err := wouldCreateCycle(ctx, tx, projectID, nodeID, pid)
+		cycle, err := q.ArchNodeCycleCheck(ctx, dbq.ArchNodeCycleCheckParams{
+			NewParentID: pid,
+			NodeID:      nodeID,
+			ProjectID:   projectID,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -295,93 +255,92 @@ func MoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, slug
 		parentID = &pid
 	}
 
-	var n Node
-	err = tx.QueryRow(ctx, `
-		UPDATE arch_nodes SET parent_id = $2 WHERE id = $1
-		RETURNING id, project_id, slug, parent_id, kind, name, description_md,
-		          metadata, linked_repo, linked_path, position, created_at, updated_at
-	`, nodeID, parentID).Scan(
-		&n.ID, &n.ProjectID, &n.Slug, &n.ParentID, &n.Kind, &n.Name, &n.DescriptionMD,
-		&metadataScanner{m: &n.Metadata}, &n.LinkedRepo, &n.LinkedPath, &n.Position,
-		&n.CreatedAt, &n.UpdatedAt,
-	)
+	row, err := q.MoveArchNode(ctx, dbq.MoveArchNodeParams{ID: nodeID, ParentID: parentID})
 	if err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	n := nodeFromMoveRow(row)
 	return &n, nil
 }
 
-// wouldCreateCycle returns true when making `nodeID`'s parent point
-// to `newParentID` would close a cycle (e.g. parent is a descendant
-// of the node itself).
-func wouldCreateCycle(ctx context.Context, q pgx.Tx, projectID, nodeID, newParentID uuid.UUID) (bool, error) {
-	var hit bool
-	err := q.QueryRow(ctx, `
-		WITH RECURSIVE ancestors(id) AS (
-			SELECT id FROM arch_nodes WHERE id = $1
-			UNION
-			SELECT a.parent_id FROM arch_nodes a
-			JOIN ancestors r ON r.id = a.id
-			WHERE a.parent_id IS NOT NULL
-		)
-		SELECT EXISTS (
-			SELECT 1
-			FROM ancestors anc
-			WHERE anc.id IN (
-				WITH RECURSIVE descendants(id) AS (
-					SELECT id FROM arch_nodes WHERE id = $2
-					UNION
-					SELECT a.id FROM arch_nodes a
-					JOIN descendants d ON d.id = a.parent_id
-					WHERE a.project_id = $3
-				)
-				SELECT id FROM descendants
-			)
-		)
-	`, newParentID, nodeID, projectID).Scan(&hit)
-	if err != nil {
-		return false, err
-	}
-	return hit, nil
-}
-
-func nullableString(s string) *string {
+func textOrNull(s string) pgtype.Text {
 	if s == "" {
-		return nil
+		return pgtype.Text{}
 	}
-	return &s
+	return pgtype.Text{String: s, Valid: true}
 }
 
-// metadataScanner decodes a jsonb column into a Go map.
-type metadataScanner struct {
-	m *map[string]any
-}
-
-func (s *metadataScanner) Scan(v any) error {
-	if v == nil {
-		*s.m = map[string]any{}
+func textPtr(t pgtype.Text) *string {
+	if !t.Valid {
 		return nil
 	}
-	var raw []byte
-	switch x := v.(type) {
-	case []byte:
-		raw = x
-	case string:
-		raw = []byte(x)
-	default:
-		return fmt.Errorf("unexpected jsonb scan type %T", v)
-	}
+	v := t.String
+	return &v
+}
+
+func decodeMetadata(raw []byte) map[string]any {
 	out := map[string]any{}
 	if len(raw) == 0 {
-		*s.m = out
-		return nil
+		return out
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return err
+	_ = json.Unmarshal(raw, &out)
+	return out
+}
+
+func nodeFromInsertRow(r dbq.InsertArchNodeRow) Node {
+	return Node{
+		ID: r.ID, ProjectID: r.ProjectID, Slug: r.Slug, ParentID: r.ParentID,
+		Kind: r.Kind, Name: r.Name, DescriptionMD: r.DescriptionMd,
+		Metadata:   decodeMetadata(r.Metadata),
+		LinkedRepo: textPtr(r.LinkedRepo), LinkedPath: textPtr(r.LinkedPath),
+		Position:  int(r.Position),
+		CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time,
 	}
-	*s.m = out
-	return nil
+}
+
+func nodeFromUpdateRow(r dbq.UpdateArchNodeRow) Node {
+	return Node{
+		ID: r.ID, ProjectID: r.ProjectID, Slug: r.Slug, ParentID: r.ParentID,
+		Kind: r.Kind, Name: r.Name, DescriptionMD: r.DescriptionMd,
+		Metadata:   decodeMetadata(r.Metadata),
+		LinkedRepo: textPtr(r.LinkedRepo), LinkedPath: textPtr(r.LinkedPath),
+		Position:  int(r.Position),
+		CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time,
+	}
+}
+
+func nodeFromGetRow(r dbq.GetArchNodeBySlugRow) Node {
+	return Node{
+		ID: r.ID, ProjectID: r.ProjectID, Slug: r.Slug, ParentID: r.ParentID,
+		Kind: r.Kind, Name: r.Name, DescriptionMD: r.DescriptionMd,
+		Metadata:   decodeMetadata(r.Metadata),
+		LinkedRepo: textPtr(r.LinkedRepo), LinkedPath: textPtr(r.LinkedPath),
+		Position:  int(r.Position),
+		CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time,
+	}
+}
+
+func nodeFromListRow(r dbq.ListArchNodesRow) Node {
+	return Node{
+		ID: r.ID, ProjectID: r.ProjectID, Slug: r.Slug, ParentID: r.ParentID,
+		Kind: r.Kind, Name: r.Name, DescriptionMD: r.DescriptionMd,
+		Metadata:   decodeMetadata(r.Metadata),
+		LinkedRepo: textPtr(r.LinkedRepo), LinkedPath: textPtr(r.LinkedPath),
+		Position:  int(r.Position),
+		CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time,
+	}
+}
+
+func nodeFromMoveRow(r dbq.MoveArchNodeRow) Node {
+	return Node{
+		ID: r.ID, ProjectID: r.ProjectID, Slug: r.Slug, ParentID: r.ParentID,
+		Kind: r.Kind, Name: r.Name, DescriptionMD: r.DescriptionMd,
+		Metadata:   decodeMetadata(r.Metadata),
+		LinkedRepo: textPtr(r.LinkedRepo), LinkedPath: textPtr(r.LinkedPath),
+		Position:  int(r.Position),
+		CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time,
+	}
 }

@@ -6,19 +6,20 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // ErrKindInUse is returned by DeleteKind when nodes still reference it.
 var ErrKindInUse = errors.New("kind in use by one or more nodes")
 
 // EnsureDefaultKinds seeds the default kind catalogue if the project
-// has no kinds at all. Safe to call repeatedly; it is a no-op once
-// at least one kind exists for the project.
+// has no kinds at all. Safe to call repeatedly.
 func EnsureDefaultKinds(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) error {
-	var count int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM arch_node_kinds WHERE project_id = $1`, projectID).Scan(&count); err != nil {
+	q := dbq.New(pool)
+	count, err := q.CountArchKinds(ctx, projectID)
+	if err != nil {
 		return err
 	}
 	if count > 0 {
@@ -29,94 +30,97 @@ func EnsureDefaultKinds(ctx context.Context, pool *pgxpool.Pool, projectID uuid.
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	tq := dbq.New(tx)
 	for _, k := range DefaultKinds {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO arch_node_kinds (project_id, key, label, icon, color, description, is_default)
-			VALUES ($1, $2, $3, $4, $5, $6, true)
-			ON CONFLICT DO NOTHING
-		`, projectID, k.Key, k.Label, k.Icon, k.Color, k.Description)
-		if err != nil {
+		if err := tq.InsertDefaultArchKind(ctx, dbq.InsertDefaultArchKindParams{
+			ProjectID:   projectID,
+			Key:         k.Key,
+			Label:       k.Label,
+			Icon:        k.Icon,
+			Color:       k.Color,
+			Description: k.Description,
+		}); err != nil {
 			return fmt.Errorf("seed kind %s: %w", k.Key, err)
 		}
 	}
 	return tx.Commit(ctx)
 }
 
-// ListKinds returns every kind defined for the project, seeding the
-// defaults if the project has never had any.
+// ListKinds returns every kind defined for the project.
 func ListKinds(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]Kind, error) {
 	if err := EnsureDefaultKinds(ctx, pool, projectID); err != nil {
 		return nil, err
 	}
-	rows, err := pool.Query(ctx, `
-		SELECT project_id, key, label, icon, color, description, is_default, created_at
-		FROM arch_node_kinds
-		WHERE project_id = $1
-		ORDER BY is_default DESC, label
-	`, projectID)
+	rows, err := dbq.New(pool).ListArchKinds(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Kind{}
-	for rows.Next() {
-		var k Kind
-		if err := rows.Scan(&k.ProjectID, &k.Key, &k.Label, &k.Icon, &k.Color, &k.Description, &k.IsDefault, &k.CreatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, k)
+	out := make([]Kind, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Kind{
+			ProjectID:   r.ProjectID,
+			Key:         r.Key,
+			Label:       r.Label,
+			Icon:        r.Icon,
+			Color:       r.Color,
+			Description: r.Description,
+			IsDefault:   r.IsDefault,
+			CreatedAt:   r.CreatedAt.Time,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-// UpsertKind creates or updates a kind. is_default is only set to
-// true by EnsureDefaultKinds; user/agent additions are always false.
+// UpsertKind creates or updates a kind.
 func UpsertKind(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, k Kind) (*Kind, error) {
 	if k.Key == "" || k.Label == "" {
 		return nil, errors.New("key and label are required")
 	}
-	var out Kind
-	err := pool.QueryRow(ctx, `
-		INSERT INTO arch_node_kinds (project_id, key, label, icon, color, description, is_default)
-		VALUES ($1, $2, $3, $4, $5, $6, false)
-		ON CONFLICT (project_id, key) DO UPDATE
-		SET label = EXCLUDED.label,
-		    icon = EXCLUDED.icon,
-		    color = EXCLUDED.color,
-		    description = EXCLUDED.description
-		RETURNING project_id, key, label, icon, color, description, is_default, created_at
-	`, projectID, k.Key, k.Label, k.Icon, k.Color, k.Description).Scan(
-		&out.ProjectID, &out.Key, &out.Label, &out.Icon, &out.Color, &out.Description, &out.IsDefault, &out.CreatedAt,
-	)
+	row, err := dbq.New(pool).UpsertArchKind(ctx, dbq.UpsertArchKindParams{
+		ProjectID:   projectID,
+		Key:         k.Key,
+		Label:       k.Label,
+		Icon:        k.Icon,
+		Color:       k.Color,
+		Description: k.Description,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return &Kind{
+		ProjectID:   row.ProjectID,
+		Key:         row.Key,
+		Label:       row.Label,
+		Icon:        row.Icon,
+		Color:       row.Color,
+		Description: row.Description,
+		IsDefault:   row.IsDefault,
+		CreatedAt:   row.CreatedAt.Time,
+	}, nil
 }
 
-// DeleteKind removes a kind. It refuses to delete a kind that is
-// still used by at least one node.
+// DeleteKind removes a kind, refusing if any node still uses it.
 func DeleteKind(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, key string) error {
-	var count int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM arch_nodes WHERE project_id = $1 AND kind = $2`, projectID, key).Scan(&count); err != nil {
+	q := dbq.New(pool)
+	count, err := q.CountNodesByKind(ctx, dbq.CountNodesByKindParams{ProjectID: projectID, Kind: key})
+	if err != nil {
 		return err
 	}
 	if count > 0 {
 		return ErrKindInUse
 	}
-	cmd, err := pool.Exec(ctx, `DELETE FROM arch_node_kinds WHERE project_id = $1 AND key = $2`, projectID, key)
+	rows, err := q.DeleteArchKind(ctx, dbq.DeleteArchKindParams{ProjectID: projectID, Key: key})
 	if err != nil {
 		return err
 	}
-	if cmd.RowsAffected() == 0 {
+	if rows == 0 {
 		return errors.New("kind not found")
 	}
 	return nil
 }
 
-// kindExists reports whether a kind key is known for the project.
-func kindExists(ctx context.Context, q pgx.Tx, projectID uuid.UUID, key string) (bool, error) {
-	var ok bool
-	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM arch_node_kinds WHERE project_id = $1 AND key = $2)`, projectID, key).Scan(&ok)
-	return ok, err
+// kindExistsTx reports whether a kind key is known for the project,
+// using the supplied dbq.Queries (typically bound to an open tx).
+func kindExistsTx(ctx context.Context, q *dbq.Queries, projectID uuid.UUID, key string) (bool, error) {
+	return q.ArchKindExists(ctx, dbq.ArchKindExistsParams{ProjectID: projectID, Key: key})
 }
