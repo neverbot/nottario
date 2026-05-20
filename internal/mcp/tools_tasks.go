@@ -220,6 +220,12 @@ func registerTasks(server *sdk.Server, d Deps) {
 			}
 			priority = &v
 		}
+		if priority == nil {
+			v, err := identity.DefaultPriorityValue(ctx, d.Pool, pid)
+			if err == nil {
+				priority = &v
+			}
+		}
 		params := tasks.CreateParams{
 			ProjectID:     pid,
 			Title:         in.Title,

@@ -65,6 +65,38 @@ func ResolvePriorityKey(ctx context.Context, pool *pgxpool.Pool, projectID uuid.
 	return v, err
 }
 
+// DefaultPriorityValue returns the value the project would like new
+// tasks created without an explicit priority to use. It prefers the
+// bucket whose key is "medium" (the seeded default). If that key
+// doesn't exist (admin renamed/removed it), the bucket whose value
+// is closest to 50 wins, with ties broken in favour of the higher
+// value. If the project has no priorities at all (shouldn't happen
+// post-seeding), returns 50 so the DB default still applies.
+func DefaultPriorityValue(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) (int, error) {
+	var v int
+	err := pool.QueryRow(ctx,
+		`SELECT value FROM project_priorities WHERE project_id = $1 AND key = 'medium'`,
+		projectID,
+	).Scan(&v)
+	if err == nil {
+		return v, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return 0, err
+	}
+	// No "medium" bucket — pick closest to 50, prefer the higher on tie.
+	err = pool.QueryRow(ctx, `
+		SELECT value FROM project_priorities
+		WHERE project_id = $1
+		ORDER BY abs(value - 50) ASC, value DESC
+		LIMIT 1
+	`, projectID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 50, nil
+	}
+	return v, err
+}
+
 // UpsertPriority creates or updates a priority bucket.
 func UpsertPriority(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, key string, value, position int) (*Priority, error) {
 	if key == "" {

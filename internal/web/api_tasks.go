@@ -225,7 +225,10 @@ func CreateTaskHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		// Resolve priority_key when no explicit numeric priority is given.
+		// Resolve priority_key when no explicit numeric priority is given;
+		// then fall back to the project's medium bucket so tasks created
+		// from the UI/REST don't end up off-bucket (raw 50 looks like
+		// "p50" in the Gantt when 50 isn't a bucket value).
 		priority := req.Priority
 		if priority == nil && req.PriorityKey != "" {
 			v, err := identity.ResolvePriorityKey(r.Context(), d.Pool, pid, req.PriorityKey)
@@ -234,6 +237,12 @@ func CreateTaskHandler(d TaskDeps) http.Handler {
 				return
 			}
 			priority = &v
+		}
+		if priority == nil {
+			v, err := identity.DefaultPriorityValue(r.Context(), d.Pool, pid)
+			if err == nil {
+				priority = &v
+			}
 		}
 		t, err := tasks.Create(r.Context(), d.Pool, tasks.CreateParams{
 			ProjectID:      pid,
