@@ -10,7 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // ErrNotFound is returned when a lookup yields no row.
@@ -85,30 +88,47 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	return &out, nil
 }
 
-// Get loads a task by id.
+// Get loads a task by id. Implemented via sqlc-generated dbq.GetTask
+// to bypass any chance of injection in this hot path. The hand-
+// written SQL it replaced lived inline above; the canonical version
+// now lives in internal/db/queries/tasks.sql.
 func Get(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Task, error) {
-	var t Task
-	err := pool.QueryRow(ctx, `
-		SELECT id, project_id, parent_task_id, type, title, description_md,
-		       state, priority, assignee_user_id, target_role_id,
-		       actual_start, actual_end,
-		       created_by_user_id, created_by_token_id,
-		       created_at, updated_at
-		FROM tasks WHERE id = $1
-	`, id).Scan(
-		&t.ID, &t.ProjectID, &t.ParentTaskID, &t.Type, &t.Title, &t.DescriptionMD,
-		&t.State, &t.Priority, &t.AssigneeUserID, &t.TargetRoleID,
-		&t.ActualStart, &t.ActualEnd,
-		&t.CreatedByUserID, &t.CreatedByTokenID,
-		&t.CreatedAt, &t.UpdatedAt,
-	)
+	row, err := dbq.New(pool).GetTask(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &t, nil
+	return &Task{
+		ID:               row.ID,
+		ProjectID:        row.ProjectID,
+		ParentTaskID:     row.ParentTaskID,
+		Type:             Type(row.Type),
+		Title:            row.Title,
+		DescriptionMD:    row.DescriptionMd,
+		State:            State(row.State),
+		Priority:         int(row.Priority),
+		AssigneeUserID:   row.AssigneeUserID,
+		TargetRoleID:     row.TargetRoleID,
+		ActualStart:      timestampPtr(row.ActualStart),
+		ActualEnd:        timestampPtr(row.ActualEnd),
+		CreatedByUserID:  row.CreatedByUserID,
+		CreatedByTokenID: row.CreatedByTokenID,
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+	}, nil
+}
+
+// timestampPtr returns a *time.Time when the dbq timestamp column was
+// non-null and nil otherwise, matching the shape callers expect on
+// Task.ActualStart / Task.ActualEnd.
+func timestampPtr(t pgtype.Timestamptz) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	v := t.Time
+	return &v
 }
 
 // ListFilter restricts a List call.
