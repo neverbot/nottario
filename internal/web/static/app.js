@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import './components/topbar.js';
 import './pages/login.js';
 import './pages/projects.js';
 import './pages/project-settings.js';
@@ -20,48 +21,6 @@ class NottarioShell extends LitElement {
       display: block;
       min-height: 100vh;
       background: var(--bg-subtle, #f6f8fa);
-    }
-    header.topbar {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 12px 24px;
-      background: #24292f;
-      color: #fff;
-      border-bottom: 1px solid #1b1f23;
-    }
-    header.topbar strong { font-size: 16px; }
-    /* The spacer absorbs the slack between the left nav and the right
-       cluster (search + user + sign out). When the viewport is narrow,
-       it collapses first so the right cluster keeps its layout. */
-    header.topbar .spacer { flex: 1 1 0; min-width: 0; }
-    header.topbar a, header.topbar button.link {
-      color: #fff;
-      opacity: 0.85;
-      padding: 4px 8px;
-      border-radius: 4px;
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    header.topbar a:hover, header.topbar button.link:hover {
-      opacity: 1;
-      background: rgba(255, 255, 255, 0.1);
-      text-decoration: none;
-    }
-    .user {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex: 0 0 auto;
-      white-space: nowrap;
-    }
-    header.topbar button.link { flex: 0 0 auto; white-space: nowrap; }
-    .user img {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
     }
     main {
       max-width: 1080px;
@@ -125,29 +84,14 @@ class NottarioShell extends LitElement {
     this.navigate('/');
   }
 
-  // Extract the current project_id from the URL, if the user is on
-  // a project-scoped page. Returns null for /, /tokens, etc.
-  activeProjectId() {
-    const m = this.route.match(/^\/projects\/([^/]+)/);
-    return m ? m[1] : null;
-  }
-
   renderTopbar() {
     if (!this.me) return null;
     return html`
-      <header class="topbar">
-        <strong>Nottario</strong>
-        <a href="/" @click=${this.linkNav('/')}>Projects</a>
-        <a href="/tokens" @click=${this.linkNav('/tokens')}>Tokens</a>
-        <div class="spacer"></div>
-        <nottario-search-box project-id=${this.activeProjectId() || ''}></nottario-search-box>
-        <div class="user">
-          ${this.me.avatar_url ? html`<img src=${this.me.avatar_url} alt="">` : ''}
-          <span>${this.me.display_name}</span>
-          ${this.me.is_admin ? html`<span class="badge admin">admin</span>` : ''}
-        </div>
-        <button class="link" @click=${() => this.logout()}>Sign out</button>
-      </header>
+      <nottario-topbar
+        .me=${this.me}
+        .route=${this.route}
+        @nottario-logout=${() => this.logout()}>
+      </nottario-topbar>
     `;
   }
 

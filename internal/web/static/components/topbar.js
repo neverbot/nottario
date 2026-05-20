@@ -1,0 +1,355 @@
+import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import '../pages/search.js';
+
+// <nottario-topbar> renders the persistent app-shell topbar that wraps
+// every authenticated page. It owns: brand, primary nav, search and
+// the user dropdown. Logout is fired upward as a 'nottario-logout'
+// event so the shell can refresh its session state without coupling
+// to fetch URLs.
+class NottarioTopbar extends LitElement {
+  static properties = {
+    me: { type: Object },
+    route: { type: String },
+    open: { state: true }, // user dropdown open flag
+  };
+
+  static styles = css`
+    :host {
+      box-sizing: border-box;
+      display: block;
+      color: #fff;
+      background: #1f2328; /* slightly cooler than the previous #24292f */
+      border-bottom: 1px solid #14171a;
+      font-size: 14px;
+    }
+    * { box-sizing: border-box; }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 10px 20px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: #fff;
+      text-decoration: none;
+      padding: 4px 6px 4px 4px;
+      border-radius: 6px;
+    }
+    .brand:hover { background: rgba(255,255,255,0.06); }
+    .brand-mark {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      background: linear-gradient(135deg, #2da44e 0%, #1f6feb 100%);
+      display: inline-block;
+    }
+    .brand-name { font-size: 15px; }
+
+    nav.primary {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: 6px;
+    }
+    nav.primary a {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 10px;
+      color: rgba(255,255,255,0.78);
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    nav.primary a:hover {
+      color: #fff;
+      background: rgba(255,255,255,0.06);
+    }
+    nav.primary a.active {
+      color: #fff;
+    }
+    nav.primary a.active::after {
+      content: "";
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: -10px;
+      height: 2px;
+      background: #ff8c42;
+      border-radius: 2px;
+    }
+
+    .spacer { flex: 1 1 0; min-width: 0; }
+
+    .right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+
+    .user-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 32px;
+      padding: 0 10px 0 4px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: #fff;
+      border-radius: 999px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .user-trigger:hover { background: rgba(255,255,255,0.06); }
+    .user-trigger[aria-expanded="true"] {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.16);
+    }
+    .user-trigger img,
+    .user-trigger .avatar-fallback {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #59636e;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      text-transform: uppercase;
+    }
+    .user-trigger .name {
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .user-trigger .chevron {
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 4px solid rgba(255,255,255,0.7);
+      margin-left: 2px;
+    }
+
+    .menu-wrap { position: relative; }
+    .menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 240px;
+      background: #ffffff;
+      color: #1f2328;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+      padding: 6px;
+      z-index: 50;
+    }
+    .menu .who {
+      padding: 8px 10px 10px;
+      border-bottom: 1px solid #eaeef2;
+      margin-bottom: 4px;
+    }
+    .menu .who .display { font-weight: 600; }
+    .menu .who .login { color: #59636e; font-size: 12px; }
+    .menu .who .badges { margin-top: 6px; }
+    .menu .who .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: #ddf4ff;
+      color: #0969da;
+      border: 1px solid #b6e3ff;
+    }
+    .menu .badge.admin {
+      background: #fff8c5;
+      color: #9a6700;
+      border-color: #eac54f;
+    }
+    .menu .item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 5px;
+      color: #1f2328;
+      text-decoration: none;
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+    .menu .item:hover,
+    .menu .item:focus-visible {
+      background: #f3f4f6;
+      outline: none;
+    }
+    .menu .item.danger { color: #cf222e; }
+    .menu .item.danger:hover,
+    .menu .item.danger:focus-visible { background: #ffebe9; }
+    .menu .sep { height: 1px; background: #eaeef2; margin: 4px 2px; }
+  `;
+
+  constructor() {
+    super();
+    this.me = null;
+    this.route = '/';
+    this.open = false;
+    this._onDocClick = (e) => {
+      if (!this.open) return;
+      if (e.composedPath().includes(this)) return;
+      this.open = false;
+    };
+    this._onKey = (e) => {
+      if (!this.open) return;
+      if (e.key === 'Escape') {
+        this.open = false;
+        const t = this.renderRoot.querySelector('.user-trigger');
+        if (t) t.focus();
+      }
+    };
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    document.addEventListener('click', this._onDocClick, true);
+    document.addEventListener('keydown', this._onKey);
+  }
+  disconnectedCallback() {
+    document.removeEventListener('click', this._onDocClick, true);
+    document.removeEventListener('keydown', this._onKey);
+    super.disconnectedCallback();
+  }
+
+  activeProjectId() {
+    const m = (this.route || '').match(/^\/projects\/([^/]+)/);
+    return m ? m[1] : null;
+  }
+
+  _go(path) {
+    return (e) => {
+      e.preventDefault();
+      this.open = false;
+      window.nottarioNavigate ? window.nottarioNavigate(path) : (window.location.href = path);
+    };
+  }
+
+  _toggleMenu(e) {
+    e.stopPropagation();
+    this.open = !this.open;
+    if (this.open) {
+      // Move focus to the first menu item on next tick so keyboard
+      // users land inside the dropdown immediately.
+      requestAnimationFrame(() => {
+        const first = this.renderRoot.querySelector('.menu .item');
+        if (first) first.focus();
+      });
+    }
+  }
+
+  _onMenuKey(e) {
+    const items = Array.from(this.renderRoot.querySelectorAll('.menu .item'));
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement === this ? null : this.shadowRoot.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      items[(i + 1 + items.length) % items.length].focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[(i - 1 + items.length) % items.length].focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0].focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1].focus();
+    }
+  }
+
+  _logout() {
+    this.open = false;
+    this.dispatchEvent(new CustomEvent('nottario-logout', { bubbles: true, composed: true }));
+  }
+
+  _isActive(path) {
+    if (path === '/') return this.route === '/' || this.route === '/projects';
+    return this.route === path || this.route.startsWith(path + '/');
+  }
+
+  _initials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/).slice(0, 2);
+    return parts.map(p => p.charAt(0)).join('');
+  }
+
+  render() {
+    if (!this.me) return null;
+    const proj = this.activeProjectId();
+    return html`
+      <div class="bar">
+        <a class="brand" href="/" @click=${this._go('/')}>
+          <span class="brand-mark"></span>
+          <span class="brand-name">Nottario</span>
+        </a>
+        <nav class="primary">
+          <a href="/" class=${this._isActive('/') ? 'active' : ''}
+             @click=${this._go('/')}>Projects</a>
+          <a href="/tokens" class=${this._isActive('/tokens') ? 'active' : ''}
+             @click=${this._go('/tokens')}>Tokens</a>
+        </nav>
+        <div class="spacer"></div>
+        <div class="right">
+          <nottario-search-box project-id=${proj || ''}></nottario-search-box>
+          <div class="menu-wrap">
+            <button class="user-trigger"
+                    aria-haspopup="menu"
+                    aria-expanded=${this.open ? 'true' : 'false'}
+                    @click=${this._toggleMenu}>
+              ${this.me.avatar_url
+                ? html`<img src=${this.me.avatar_url} alt="">`
+                : html`<span class="avatar-fallback">${this._initials(this.me.display_name)}</span>`}
+              <span class="name">${this.me.display_name || this.me.github_login}</span>
+              <span class="chevron"></span>
+            </button>
+            ${this.open ? html`
+              <div class="menu" role="menu" @keydown=${this._onMenuKey}>
+                <div class="who">
+                  <div class="display">${this.me.display_name || this.me.github_login}</div>
+                  ${this.me.github_login ? html`<div class="login">@${this.me.github_login}</div>` : ''}
+                  ${this.me.is_admin
+                    ? html`<div class="badges"><span class="badge admin">admin</span></div>`
+                    : ''}
+                </div>
+                <a class="item" role="menuitem" tabindex="0" href="/me" @click=${this._go('/me')}>Profile</a>
+                <a class="item" role="menuitem" tabindex="0" href="/tokens" @click=${this._go('/tokens')}>API tokens</a>
+                <div class="sep"></div>
+                <button class="item danger" role="menuitem" tabindex="0"
+                        @click=${() => this._logout()}>Sign out</button>
+              </div>
+            ` : null}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+customElements.define('nottario-topbar', NottarioTopbar);
