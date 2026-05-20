@@ -88,6 +88,24 @@ interface (for humans; architecture is read-only for them).
   messages, upload content to third-party tools) requires explicit
   confirmation from the human before execution.
 
+## Pre-commit gate
+
+Before **every** `git commit` on this repo:
+
+1. **Format**: `gofmt -l .` must list no files (or run `gofmt -w .`
+   to fix them). Equivalent: `go fmt ./...` until both stay quiet.
+2. **Vet / lint**: `go vet ./...` must pass clean. If the project ever
+   adopts `golangci-lint`, that becomes the canonical check.
+3. **Tests**: `go test ./...` must pass — every package, including
+   the concurrency / integration tests once they exist.
+
+If any of these fail, fix the underlying issue. Never bypass with
+`--no-verify` or by skipping packages.
+
+Frontend assets (`internal/web/static/**`) are vanilla JS without a
+build step, so no JS-side linting is required today; if a Lit/JS
+linter is added in the future, treat it the same as `go vet`.
+
 ## Project status
 
 Analysis phase. No code yet. Documents from this phase live in
