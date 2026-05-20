@@ -43,6 +43,15 @@ type Querier interface {
 	ListProjectRoles(ctx context.Context, projectID uuid.UUID) ([]ListProjectRolesRow, error)
 	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]TaskComment, error)
 	ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommitsRow, error)
+	// Optional filters: state, type, assignee, target_role, parent_task.
+	// include_children=false (default) restricts to parent IS NULL UNLESS
+	// parent_task_id is explicitly set.
+	ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTasksRow, error)
+	// Same filters as ListTasks plus keyset cursor on (priority DESC,
+	// created_at ASC, id ASC). The cursor params are all-or-nothing:
+	// pass them together or all NULL for the first page. The caller
+	// requests limit+1 rows to detect has_more.
+	ListTasksPaginated(ctx context.Context, arg ListTasksPaginatedParams) ([]ListTasksPaginatedRow, error)
 	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
 	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
@@ -58,6 +67,11 @@ type Querier interface {
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (UpdateProjectRoleRow, error)
+	// Optional fields: title, description, type, priority, assignee_user_id,
+	// target_role_id. assignee/target_role have an explicit "unset"
+	// boolean because COALESCE alone can't distinguish "leave alone" from
+	// "set to NULL".
+	UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsParams) (UpdateTaskFieldsRow, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
 	UpsertProjectPriority(ctx context.Context, arg UpsertProjectPriorityParams) (UpsertProjectPriorityRow, error)
 	UpsertTaskCommit(ctx context.Context, arg UpsertTaskCommitParams) error

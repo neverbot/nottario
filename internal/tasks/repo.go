@@ -200,65 +200,50 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Task, error)
 	if f.ProjectID == uuid.Nil {
 		return nil, errors.New("project_id is required")
 	}
-
-	query := `
-		SELECT id, project_id, parent_task_id, type, title, description_md,
-		       state, priority, assignee_user_id, target_role_id,
-		       actual_start, actual_end,
-		       created_by_user_id, created_by_token_id,
-		       created_at, updated_at
-		FROM tasks WHERE project_id = $1
-	`
-	args := []any{f.ProjectID}
-	idx := 2
-	if f.State != "" {
-		query += fmt.Sprintf(" AND state = $%d", idx)
-		args = append(args, f.State)
-		idx++
-	}
-	if f.Type != "" {
-		query += fmt.Sprintf(" AND type = $%d", idx)
-		args = append(args, f.Type)
-		idx++
-	}
-	if f.AssigneeUserID != nil {
-		query += fmt.Sprintf(" AND assignee_user_id = $%d", idx)
-		args = append(args, *f.AssigneeUserID)
-		idx++
-	}
-	if f.TargetRoleID != nil {
-		query += fmt.Sprintf(" AND target_role_id = $%d", idx)
-		args = append(args, *f.TargetRoleID)
-		idx++
-	}
-	if f.ParentTaskID != nil {
-		query += fmt.Sprintf(" AND parent_task_id = $%d", idx)
-		args = append(args, *f.ParentTaskID)
-	} else if !f.IncludeChildren {
-		query += " AND parent_task_id IS NULL"
-	}
-	query += " ORDER BY priority DESC, created_at ASC"
-
-	rows, err := pool.Query(ctx, query, args...)
+	rows, err := dbq.New(pool).ListTasks(ctx, dbq.ListTasksParams{
+		ProjectID:       f.ProjectID,
+		State:           pgtypeText(string(f.State)),
+		Type:            pgtypeText(string(f.Type)),
+		AssigneeUserID:  f.AssigneeUserID,
+		TargetRoleID:    f.TargetRoleID,
+		ParentTaskID:    f.ParentTaskID,
+		IncludeChildren: f.IncludeChildren,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Task{}
-	for rows.Next() {
-		var t Task
-		if err := rows.Scan(
-			&t.ID, &t.ProjectID, &t.ParentTaskID, &t.Type, &t.Title, &t.DescriptionMD,
-			&t.State, &t.Priority, &t.AssigneeUserID, &t.TargetRoleID,
-			&t.ActualStart, &t.ActualEnd,
-			&t.CreatedByUserID, &t.CreatedByTokenID,
-			&t.CreatedAt, &t.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, t)
+	out := make([]Task, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, taskFromListRow(r))
 	}
-	return out, rows.Err()
+	return out, nil
+}
+
+// pgtypeText returns a non-null pgtype.Text when s is non-empty and
+// a NULL one otherwise — matches the "" sentinel ListFilter uses.
+func pgtypeText(s string) pgtype.Text {
+	return pgtype.Text{String: s, Valid: s != ""}
+}
+
+func taskFromListRow(r dbq.ListTasksRow) Task {
+	return Task{
+		ID:               r.ID,
+		ProjectID:        r.ProjectID,
+		ParentTaskID:     r.ParentTaskID,
+		Type:             Type(r.Type),
+		Title:            r.Title,
+		DescriptionMD:    r.DescriptionMd,
+		State:            State(r.State),
+		Priority:         int(r.Priority),
+		AssigneeUserID:   r.AssigneeUserID,
+		TargetRoleID:     r.TargetRoleID,
+		ActualStart:      timestampPtr(r.ActualStart),
+		ActualEnd:        timestampPtr(r.ActualEnd),
+		CreatedByUserID:  r.CreatedByUserID,
+		CreatedByTokenID: r.CreatedByTokenID,
+		CreatedAt:        r.CreatedAt.Time,
+		UpdatedAt:        r.UpdatedAt.Time,
+	}
 }
 
 // ListPaginated runs the same filters as List but with a keyset
@@ -275,81 +260,48 @@ func ListPaginated(ctx context.Context, pool *pgxpool.Pool, f ListFilter, limit 
 	} else if limit > 500 {
 		limit = 500
 	}
-
-	query := `
-		SELECT id, project_id, parent_task_id, type, title, description_md,
-		       state, priority, assignee_user_id, target_role_id,
-		       actual_start, actual_end,
-		       created_by_user_id, created_by_token_id,
-		       created_at, updated_at
-		FROM tasks WHERE project_id = $1
-	`
-	args := []any{f.ProjectID}
-	idx := 2
-	if f.State != "" {
-		query += fmt.Sprintf(" AND state = $%d", idx)
-		args = append(args, f.State)
-		idx++
-	}
-	if f.Type != "" {
-		query += fmt.Sprintf(" AND type = $%d", idx)
-		args = append(args, f.Type)
-		idx++
-	}
-	if f.AssigneeUserID != nil {
-		query += fmt.Sprintf(" AND assignee_user_id = $%d", idx)
-		args = append(args, *f.AssigneeUserID)
-		idx++
-	}
-	if f.TargetRoleID != nil {
-		query += fmt.Sprintf(" AND target_role_id = $%d", idx)
-		args = append(args, *f.TargetRoleID)
-		idx++
-	}
-	if f.ParentTaskID != nil {
-		query += fmt.Sprintf(" AND parent_task_id = $%d", idx)
-		args = append(args, *f.ParentTaskID)
-		idx++
-	} else if !f.IncludeChildren {
-		query += " AND parent_task_id IS NULL"
+	params := dbq.ListTasksPaginatedParams{
+		ProjectID:       f.ProjectID,
+		State:           pgtypeText(string(f.State)),
+		Type:            pgtypeText(string(f.Type)),
+		AssigneeUserID:  f.AssigneeUserID,
+		TargetRoleID:    f.TargetRoleID,
+		ParentTaskID:    f.ParentTaskID,
+		IncludeChildren: f.IncludeChildren,
+		PageLimit:       int32(limit + 1),
 	}
 	if after != nil {
-		query += fmt.Sprintf(`
-			AND (
-			  priority <  $%d
-			  OR (priority = $%d AND created_at > $%d)
-			  OR (priority = $%d AND created_at = $%d AND id > $%d)
-			)`,
-			idx, idx, idx+1, idx, idx+1, idx+2)
-		args = append(args, after.Priority, after.CreatedAt, after.ID)
-		idx += 3
+		params.CursorPriority = pgtype.Int4{Int32: int32(after.Priority), Valid: true}
+		params.CursorCreatedAt = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
+		params.CursorID = &after.ID
 	}
-	query += fmt.Sprintf(" ORDER BY priority DESC, created_at ASC, id ASC LIMIT $%d", idx)
-	args = append(args, limit+1)
-
-	rows, err := pool.Query(ctx, query, args...)
+	rows, err := dbq.New(pool).ListTasksPaginated(ctx, params)
 	if err != nil {
 		return Page{}, err
 	}
-	defer rows.Close()
-	out := []Task{}
-	for rows.Next() {
-		var t Task
-		if err := rows.Scan(
-			&t.ID, &t.ProjectID, &t.ParentTaskID, &t.Type, &t.Title, &t.DescriptionMD,
-			&t.State, &t.Priority, &t.AssigneeUserID, &t.TargetRoleID,
-			&t.ActualStart, &t.ActualEnd,
-			&t.CreatedByUserID, &t.CreatedByTokenID,
-			&t.CreatedAt, &t.UpdatedAt,
-		); err != nil {
-			return Page{}, err
-		}
-		out = append(out, t)
+	out := make([]Task, 0, len(rows))
+	for _, r := range rows {
+		// ListTasksPaginatedRow has the same columns as ListTasksRow;
+		// reuse the converter by name-conversion.
+		out = append(out, Task{
+			ID:               r.ID,
+			ProjectID:        r.ProjectID,
+			ParentTaskID:     r.ParentTaskID,
+			Type:             Type(r.Type),
+			Title:            r.Title,
+			DescriptionMD:    r.DescriptionMd,
+			State:            State(r.State),
+			Priority:         int(r.Priority),
+			AssigneeUserID:   r.AssigneeUserID,
+			TargetRoleID:     r.TargetRoleID,
+			ActualStart:      timestampPtr(r.ActualStart),
+			ActualEnd:        timestampPtr(r.ActualEnd),
+			CreatedByUserID:  r.CreatedByUserID,
+			CreatedByTokenID: r.CreatedByTokenID,
+			CreatedAt:        r.CreatedAt.Time,
+			UpdatedAt:        r.UpdatedAt.Time,
+		})
 	}
-	if err := rows.Err(); err != nil {
-		return Page{}, err
-	}
-
 	page := Page{}
 	if len(out) > limit {
 		page.HasMore = true
@@ -379,57 +331,73 @@ type UpdateParams struct {
 
 // Update mutates the fields enumerated in p.
 func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParams) (*Task, error) {
+	if p.Type != nil && !ValidType(*p.Type) {
+		return nil, fmt.Errorf("invalid type: %q", *p.Type)
+	}
 	if p.TargetRoleID != nil || p.AssigneeUserID != nil {
-		// Resolve task's project to validate against.
-		var projectID uuid.UUID
-		if err := pool.QueryRow(ctx, `SELECT project_id FROM tasks WHERE id = $1`, id).Scan(&projectID); err != nil {
+		q := dbq.New(pool)
+		projectID, err := q.ProjectIDForTask(ctx, id)
+		if err != nil {
 			return nil, err
 		}
 		if err := validateTaskAssignments(ctx, pool, projectID, p.TargetRoleID, p.AssigneeUserID); err != nil {
 			return nil, err
 		}
 	}
-	sets := []string{}
-	args := []any{id}
-	idx := 2
-	add := func(expr string, value any) {
-		sets = append(sets, fmt.Sprintf("%s = $%d", expr, idx))
-		args = append(args, value)
-		idx++
+	params := dbq.UpdateTaskFieldsParams{
+		ID:              id,
+		Title:           pgtype.Text{Valid: p.Title != nil, String: derefString(p.Title)},
+		DescriptionMd:   pgtype.Text{Valid: p.DescriptionMD != nil, String: derefString(p.DescriptionMD)},
+		Type:            pgtype.Text{Valid: p.Type != nil, String: stringFromType(p.Type)},
+		Priority:        pgtype.Int4{Valid: p.Priority != nil, Int32: int32(derefInt(p.Priority))},
+		UnsetAssignee:   p.UnsetAssignee,
+		AssigneeUserID:  p.AssigneeUserID,
+		UnsetTargetRole: p.UnsetTargetRole,
+		TargetRoleID:    p.TargetRoleID,
 	}
-	if p.Title != nil {
-		add("title", *p.Title)
-	}
-	if p.DescriptionMD != nil {
-		add("description_md", *p.DescriptionMD)
-	}
-	if p.Type != nil {
-		if !ValidType(*p.Type) {
-			return nil, fmt.Errorf("invalid type: %q", *p.Type)
-		}
-		add("type", *p.Type)
-	}
-	if p.Priority != nil {
-		add("priority", *p.Priority)
-	}
-	if p.UnsetAssignee {
-		sets = append(sets, "assignee_user_id = NULL")
-	} else if p.AssigneeUserID != nil {
-		add("assignee_user_id", *p.AssigneeUserID)
-	}
-	if p.UnsetTargetRole {
-		sets = append(sets, "target_role_id = NULL")
-	} else if p.TargetRoleID != nil {
-		add("target_role_id", *p.TargetRoleID)
-	}
-	if len(sets) == 0 {
-		return Get(ctx, pool, id)
-	}
-	query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = $1", joinComma(sets))
-	if _, err := pool.Exec(ctx, query, args...); err != nil {
+	row, err := dbq.New(pool).UpdateTaskFields(ctx, params)
+	if err != nil {
 		return nil, err
 	}
-	return Get(ctx, pool, id)
+	return &Task{
+		ID:               row.ID,
+		ProjectID:        row.ProjectID,
+		ParentTaskID:     row.ParentTaskID,
+		Type:             Type(row.Type),
+		Title:            row.Title,
+		DescriptionMD:    row.DescriptionMd,
+		State:            State(row.State),
+		Priority:         int(row.Priority),
+		AssigneeUserID:   row.AssigneeUserID,
+		TargetRoleID:     row.TargetRoleID,
+		ActualStart:      timestampPtr(row.ActualStart),
+		ActualEnd:        timestampPtr(row.ActualEnd),
+		CreatedByUserID:  row.CreatedByUserID,
+		CreatedByTokenID: row.CreatedByTokenID,
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+	}, nil
+}
+
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func derefInt(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+func stringFromType(p *Type) string {
+	if p == nil {
+		return ""
+	}
+	return string(*p)
 }
 
 // SetState changes the state and manages actual_start / actual_end
@@ -604,15 +572,4 @@ func validateTaskAssignments(ctx context.Context, pool *pgxpool.Pool, projectID 
 		}
 	}
 	return nil
-}
-
-func joinComma(parts []string) string {
-	out := ""
-	for i, p := range parts {
-		if i > 0 {
-			out += ", "
-		}
-		out += p
-	}
-	return out
 }

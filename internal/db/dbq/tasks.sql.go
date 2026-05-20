@@ -186,6 +186,222 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertT
 	return i, err
 }
 
+const listTasks = `-- name: ListTasks :many
+SELECT id, project_id, parent_task_id, type, title, description_md,
+       state, priority, assignee_user_id, target_role_id,
+       actual_start, actual_end,
+       created_by_user_id, created_by_token_id,
+       created_at, updated_at
+FROM tasks
+WHERE project_id = $1
+  AND ($2::text IS NULL OR state = $2::text)
+  AND ($3::text IS NULL OR type = $3::text)
+  AND ($4::uuid IS NULL OR assignee_user_id = $4::uuid)
+  AND ($5::uuid IS NULL OR target_role_id = $5::uuid)
+  AND (
+    CASE
+      WHEN $6::uuid IS NOT NULL THEN parent_task_id = $6::uuid
+      WHEN $7::bool THEN TRUE
+      ELSE parent_task_id IS NULL
+    END
+  )
+ORDER BY priority DESC, created_at ASC
+`
+
+type ListTasksParams struct {
+	ProjectID       uuid.UUID
+	State           pgtype.Text
+	Type            pgtype.Text
+	AssigneeUserID  *uuid.UUID
+	TargetRoleID    *uuid.UUID
+	ParentTaskID    *uuid.UUID
+	IncludeChildren bool
+}
+
+type ListTasksRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	State            string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      pgtype.Timestamptz
+	ActualEnd        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// Optional filters: state, type, assignee, target_role, parent_task.
+// include_children=false (default) restricts to parent IS NULL UNLESS
+// parent_task_id is explicitly set.
+func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTasksRow, error) {
+	rows, err := q.db.Query(ctx, listTasks,
+		arg.ProjectID,
+		arg.State,
+		arg.Type,
+		arg.AssigneeUserID,
+		arg.TargetRoleID,
+		arg.ParentTaskID,
+		arg.IncludeChildren,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTasksRow{}
+	for rows.Next() {
+		var i ListTasksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ParentTaskID,
+			&i.Type,
+			&i.Title,
+			&i.DescriptionMd,
+			&i.State,
+			&i.Priority,
+			&i.AssigneeUserID,
+			&i.TargetRoleID,
+			&i.ActualStart,
+			&i.ActualEnd,
+			&i.CreatedByUserID,
+			&i.CreatedByTokenID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTasksPaginated = `-- name: ListTasksPaginated :many
+SELECT id, project_id, parent_task_id, type, title, description_md,
+       state, priority, assignee_user_id, target_role_id,
+       actual_start, actual_end,
+       created_by_user_id, created_by_token_id,
+       created_at, updated_at
+FROM tasks
+WHERE project_id = $1
+  AND ($2::text IS NULL OR state = $2::text)
+  AND ($3::text IS NULL OR type = $3::text)
+  AND ($4::uuid IS NULL OR assignee_user_id = $4::uuid)
+  AND ($5::uuid IS NULL OR target_role_id = $5::uuid)
+  AND (
+    CASE
+      WHEN $6::uuid IS NOT NULL THEN parent_task_id = $6::uuid
+      WHEN $7::bool THEN TRUE
+      ELSE parent_task_id IS NULL
+    END
+  )
+  AND (
+    $8::int IS NULL
+    OR priority < $8::int
+    OR (priority = $8::int AND created_at > $9::timestamptz)
+    OR (priority = $8::int
+        AND created_at = $9::timestamptz
+        AND id > $10::uuid)
+  )
+ORDER BY priority DESC, created_at ASC, id ASC
+LIMIT $11::int
+`
+
+type ListTasksPaginatedParams struct {
+	ProjectID       uuid.UUID
+	State           pgtype.Text
+	Type            pgtype.Text
+	AssigneeUserID  *uuid.UUID
+	TargetRoleID    *uuid.UUID
+	ParentTaskID    *uuid.UUID
+	IncludeChildren bool
+	CursorPriority  pgtype.Int4
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        *uuid.UUID
+	PageLimit       int32
+}
+
+type ListTasksPaginatedRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	State            string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      pgtype.Timestamptz
+	ActualEnd        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// Same filters as ListTasks plus keyset cursor on (priority DESC,
+// created_at ASC, id ASC). The cursor params are all-or-nothing:
+// pass them together or all NULL for the first page. The caller
+// requests limit+1 rows to detect has_more.
+func (q *Queries) ListTasksPaginated(ctx context.Context, arg ListTasksPaginatedParams) ([]ListTasksPaginatedRow, error) {
+	rows, err := q.db.Query(ctx, listTasksPaginated,
+		arg.ProjectID,
+		arg.State,
+		arg.Type,
+		arg.AssigneeUserID,
+		arg.TargetRoleID,
+		arg.ParentTaskID,
+		arg.IncludeChildren,
+		arg.CursorPriority,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTasksPaginatedRow{}
+	for rows.Next() {
+		var i ListTasksPaginatedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ParentTaskID,
+			&i.Type,
+			&i.Title,
+			&i.DescriptionMd,
+			&i.State,
+			&i.Priority,
+			&i.AssigneeUserID,
+			&i.TargetRoleID,
+			&i.ActualStart,
+			&i.ActualEnd,
+			&i.CreatedByUserID,
+			&i.CreatedByTokenID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUnresolvedPreconditions = `-- name: ListUnresolvedPreconditions :many
 SELECT t.id, t.title, t.state
 FROM task_dependencies td
@@ -292,6 +508,100 @@ WHERE id = $1
 func (q *Queries) SetTaskTodo(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setTaskTodo, id)
 	return err
+}
+
+const updateTaskFields = `-- name: UpdateTaskFields :one
+UPDATE tasks SET
+  title = COALESCE($2::text, title),
+  description_md = COALESCE($3::text, description_md),
+  type = COALESCE($4::text, type),
+  priority = COALESCE($5::int, priority),
+  assignee_user_id = CASE
+    WHEN $6::bool THEN NULL
+    WHEN $7::uuid IS NOT NULL THEN $7::uuid
+    ELSE assignee_user_id
+  END,
+  target_role_id = CASE
+    WHEN $8::bool THEN NULL
+    WHEN $9::uuid IS NOT NULL THEN $9::uuid
+    ELSE target_role_id
+  END,
+  updated_at = now()
+WHERE id = $1
+RETURNING id, project_id, parent_task_id, type, title, description_md,
+          state, priority, assignee_user_id, target_role_id,
+          actual_start, actual_end,
+          created_by_user_id, created_by_token_id,
+          created_at, updated_at
+`
+
+type UpdateTaskFieldsParams struct {
+	ID              uuid.UUID
+	Title           pgtype.Text
+	DescriptionMd   pgtype.Text
+	Type            pgtype.Text
+	Priority        pgtype.Int4
+	UnsetAssignee   bool
+	AssigneeUserID  *uuid.UUID
+	UnsetTargetRole bool
+	TargetRoleID    *uuid.UUID
+}
+
+type UpdateTaskFieldsRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	State            string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      pgtype.Timestamptz
+	ActualEnd        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// Optional fields: title, description, type, priority, assignee_user_id,
+// target_role_id. assignee/target_role have an explicit "unset"
+// boolean because COALESCE alone can't distinguish "leave alone" from
+// "set to NULL".
+func (q *Queries) UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsParams) (UpdateTaskFieldsRow, error) {
+	row := q.db.QueryRow(ctx, updateTaskFields,
+		arg.ID,
+		arg.Title,
+		arg.DescriptionMd,
+		arg.Type,
+		arg.Priority,
+		arg.UnsetAssignee,
+		arg.AssigneeUserID,
+		arg.UnsetTargetRole,
+		arg.TargetRoleID,
+	)
+	var i UpdateTaskFieldsRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ParentTaskID,
+		&i.Type,
+		&i.Title,
+		&i.DescriptionMd,
+		&i.State,
+		&i.Priority,
+		&i.AssigneeUserID,
+		&i.TargetRoleID,
+		&i.ActualStart,
+		&i.ActualEnd,
+		&i.CreatedByUserID,
+		&i.CreatedByTokenID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const userBelongsToProjectOrIsAdmin = `-- name: UserBelongsToProjectOrIsAdmin :one
