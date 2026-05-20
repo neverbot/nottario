@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // LinkCommit attaches a git commit to a task. Repo must be in
@@ -16,43 +18,40 @@ func LinkCommit(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, repo,
 	if repo == "" || sha == "" {
 		return errInvalid("repo and sha are required")
 	}
-	_, err := pool.Exec(ctx, `
-		INSERT INTO task_commits (task_id, repo, sha, message, added_by_user_id, added_by_token_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (task_id, repo, sha) DO UPDATE SET message = EXCLUDED.message
-	`, taskID, repo, sha, message, by.UserID, by.TokenID)
-	return err
+	return dbq.New(pool).UpsertTaskCommit(ctx, dbq.UpsertTaskCommitParams{
+		TaskID:         taskID,
+		Repo:           repo,
+		Sha:            sha,
+		Message:        message,
+		AddedByUserID:  by.UserID,
+		AddedByTokenID: by.TokenID,
+	})
 }
 
 // UnlinkCommit removes the (repo, sha) link from the task.
 func UnlinkCommit(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, repo, sha string) error {
-	_, err := pool.Exec(ctx, `
-		DELETE FROM task_commits WHERE task_id = $1 AND repo = $2 AND sha = $3
-	`, taskID, repo, sha)
-	return err
+	return dbq.New(pool).DeleteTaskCommit(ctx, dbq.DeleteTaskCommitParams{
+		TaskID: taskID, Repo: repo, Sha: sha,
+	})
 }
 
 // ListCommits returns the commits attached to a task.
 func ListCommits(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID) ([]CommitLink, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT task_id, repo, sha, message, added_at
-		FROM task_commits
-		WHERE task_id = $1
-		ORDER BY added_at DESC
-	`, taskID)
+	rows, err := dbq.New(pool).ListTaskCommits(ctx, taskID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []CommitLink{}
-	for rows.Next() {
-		var c CommitLink
-		if err := rows.Scan(&c.TaskID, &c.Repo, &c.SHA, &c.Message, &c.AddedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
+	out := make([]CommitLink, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, CommitLink{
+			TaskID:  r.TaskID,
+			Repo:    r.Repo,
+			SHA:     r.Sha,
+			Message: r.Message,
+			AddedAt: r.AddedAt.Time,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 type invalidErr string

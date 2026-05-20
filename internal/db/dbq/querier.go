@@ -18,6 +18,7 @@ type Querier interface {
 	DeleteProjectPriority(ctx context.Context, arg DeleteProjectPriorityParams) (int64, error)
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
@@ -27,6 +28,7 @@ type Querier interface {
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
 	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) error
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
+	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (TaskComment, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
 	ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error)
@@ -35,6 +37,8 @@ type Querier interface {
 	ListProjectPriorities(ctx context.Context, projectID uuid.UUID) ([]ListProjectPrioritiesRow, error)
 	ListProjectRoleIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
 	ListProjectRoles(ctx context.Context, projectID uuid.UUID) ([]ListProjectRolesRow, error)
+	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]TaskComment, error)
+	ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommitsRow, error)
 	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
 	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
@@ -50,6 +54,7 @@ type Querier interface {
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (UpdateProjectRoleRow, error)
 	UpsertProjectPriority(ctx context.Context, arg UpsertProjectPriorityParams) (UpsertProjectPriorityRow, error)
+	UpsertTaskCommit(ctx context.Context, arg UpsertTaskCommitParams) error
 	UserBelongsToProjectOrIsAdmin(ctx context.Context, arg UserBelongsToProjectOrIsAdminParams) (bool, error)
 	WouldCreateCycle(ctx context.Context, arg WouldCreateCycleParams) (pgtype.Bool, error)
 }
