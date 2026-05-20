@@ -11,67 +11,66 @@ class NottarioProjectSettings extends LitElement {
     roles: { state: true },
     members: { state: true },
     priorities: { state: true },
+    activeTab: { state: true },
     error: { state: true },
-    _activeAnchor: { state: true },
   };
 
   static styles = [buttonStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
-    /* Two-column layout: scrolled content on the left, sticky anchor
-       rail on the right. Below 900px the rail collapses (display:none
-       via media query) and sections stack full-width. */
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 200px;
-      gap: 28px;
+    /* Tabs: four entries. Active tab gets a thin coloured underline.
+       The underline colour stays muted (orange) so it never reads as
+       a primary CTA. */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #d1d9e0;
     }
-    @media (max-width: 900px) {
-      .layout { grid-template-columns: 1fr; }
-      .rail { display: none; }
+    .tab {
+      padding: 8px 14px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      color: #59636e;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: #1f2328; }
+    .tab.active {
+      color: #1f2328;
+      border-bottom-color: #ff8c42;
+    }
+    .tab:focus-visible {
+      outline: 2px solid #0969da;
+      outline-offset: 2px;
+      border-radius: 4px;
     }
 
-    section.block {
-      scroll-margin-top: 96px;
-      padding: 4px 0 20px;
-      border-bottom: 1px solid #eaeef2;
+    /* Sub-sections within a tab (e.g. General → Default view + Advanced)
+       are separated by a hairline and a small uppercase eyebrow. */
+    .subsection {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid #eaeef2;
     }
-    section.block:last-of-type { border-bottom: none; padding-bottom: 0; }
-    section.block > h2 {
-      margin: 0 0 12px;
-      font-size: 14px;
+    .subsection > h3 {
+      margin: 0 0 10px;
+      font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: #59636e;
       font-weight: 600;
     }
-    section.block .helper {
+    .subsection .helper {
       color: #59636e;
       font-size: 12px;
-      margin: -6px 0 12px;
+      margin: -4px 0 12px;
     }
-
-    /* Anchor rail */
-    .rail {
-      position: sticky;
-      top: 84px;
-      align-self: start;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      font-size: 13px;
-    }
-    .rail a {
-      padding: 6px 10px;
-      border-radius: 6px;
-      color: #59636e;
-      text-decoration: none;
-      border-left: 2px solid transparent;
-      transition: background-color 60ms ease-out, color 60ms ease-out;
-    }
-    .rail a:hover { color: #1f2328; background: #f3f4f6; }
-    .rail a.active { color: #1f2328; background: #f3f4f6; border-left-color: #1f6feb; }
 
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eaeef2; }
@@ -159,30 +158,8 @@ class NottarioProjectSettings extends LitElement {
     this.roles = [];
     this.members = [];
     this.priorities = [];
+    this.activeTab = 'general';
     this.error = '';
-    this._activeAnchor = 'general';
-  }
-
-  firstUpdated() {
-    // Scroll-spy: highlight the rail entry whose section is closest
-    // to the top of the viewport. IntersectionObserver fires when at
-    // least 60% of the section is visible OR when the top of the
-    // section crosses the topbar offset.
-    const io = new IntersectionObserver((entries) => {
-      // Prefer the most-visible entry; fall back to the topmost
-      // intersecting one.
-      const visible = entries.filter(e => e.isIntersecting);
-      if (!visible.length) return;
-      visible.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-      const id = visible[0].target.id;
-      if (id) this._activeAnchor = id;
-    }, { rootMargin: '-96px 0px -55% 0px', threshold: [0, 0.5, 1] });
-    this.renderRoot.querySelectorAll('section.block').forEach(s => io.observe(s));
-    this._io = io;
-  }
-  disconnectedCallback() {
-    this._io?.disconnect();
-    super.disconnectedCallback();
   }
 
   connectedCallback() {
@@ -281,37 +258,28 @@ class NottarioProjectSettings extends LitElement {
     if (!this.project) {
       return html`<div>Loading…${this.error ? html`<div class="error">${this.error}</div>` : ''}</div>`;
     }
-    const sections = [
-      { id: 'general',      label: 'General',      body: () => this.renderGeneral() },
-      { id: 'default-view', label: 'Default view', body: () => this.renderDefaultView() },
-      { id: 'roles',        label: 'Roles',        body: () => this.renderRoles() },
-      { id: 'priorities',   label: 'Priorities',   body: () => this.renderPriorities() },
-      { id: 'members',      label: 'Members',      body: () => this.renderMembers() },
-      { id: 'advanced',     label: 'Advanced',     body: () => this.renderAdvanced() },
+    const tabs = [
+      { id: 'general',    label: 'General',    body: () => this.renderGeneral() },
+      { id: 'roles',      label: 'Roles',      body: () => this.renderRoles() },
+      { id: 'priorities', label: 'Priorities', body: () => this.renderPriorities() },
+      { id: 'members',    label: 'Members',    body: () => this.renderMembers() },
     ];
+    const active = tabs.find(t => t.id === this.activeTab) || tabs[0];
     return html`
       <nottario-page-header
         title="Settings"
         .subtitle=${this.project.Slug}>
       </nottario-page-header>
-      ${this.error ? html`<div class="error">${this.error}</div>` : null}
-      <div class="layout">
-        <div class="content">
-          ${sections.map(s => html`
-            <section class="block" id=${s.id}>
-              <h2>${s.label}</h2>
-              ${s.body()}
-            </section>
-          `)}
-        </div>
-        <nav class="rail" aria-label="Settings sections">
-          ${sections.map(s => html`
-            <a href=${`#${s.id}`}
-               class=${this._activeAnchor === s.id ? 'active' : ''}
-               @click=${(e) => this._scrollTo(e, s.id)}>${s.label}</a>
-          `)}
-        </nav>
+      <div class="tabs" role="tablist">
+        ${tabs.map(t => html`
+          <button class=${'tab' + (t.id === active.id ? ' active' : '')}
+                  role="tab"
+                  aria-selected=${t.id === active.id ? 'true' : 'false'}
+                  @click=${() => this.activeTab = t.id}>${t.label}</button>
+        `)}
       </div>
+      ${this.error ? html`<div class="error">${this.error}</div>` : null}
+      ${active.body()}
     `;
   }
 
@@ -363,24 +331,56 @@ class NottarioProjectSettings extends LitElement {
           <button type="submit" class="btn primary">Save changes</button>
         </div>
       </form>
+
+      ${this._renderDefaultViewSubsection()}
+      ${this._renderAdvancedSubsection()}
     `;
   }
 
-  renderDefaultView() {
+  _renderDefaultViewSubsection() {
     const p = this.project;
     const admin = this.me?.is_admin;
     const currentView = viewByKey(p.DefaultView || 'board/kanban');
     return html`
-      <p class="helper">Clicking a project card on the home page navigates here.</p>
-      <div class="field" style="max-width:320px">
-        ${admin
-          ? html`
-            <select @change=${(e) => this.saveDefaultView(e.target.value)}>
-              ${PROJECT_VIEWS.map(v => html`
-                <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
-              `)}
-            </select>`
-          : html`<div>${currentView.label} <span class="muted">(admin only)</span></div>`}
+      <div class="subsection">
+        <h3>Default view</h3>
+        <p class="helper">Clicking a project card on the home page navigates here.</p>
+        <div class="field" style="max-width:320px;margin-bottom:0">
+          ${admin
+            ? html`
+              <select @change=${(e) => this.saveDefaultView(e.target.value)}>
+                ${PROJECT_VIEWS.map(v => html`
+                  <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
+                `)}
+              </select>`
+            : html`<div>${currentView.label} <span class="muted">(admin only)</span></div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  _renderAdvancedSubsection() {
+    const p = this.project;
+    const admin = this.me?.is_admin;
+    return html`
+      <div class="subsection">
+        <h3>Advanced</h3>
+        <p class="helper">Settings that affect how this project is exposed over the MCP server.</p>
+        <div class="field" style="max-width:320px;margin-bottom:0">
+          <label>Default page size for <code>tasks.list</code></label>
+          ${admin
+            ? html`
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
+                       @change=${(e) => this.saveMCPPageSize(e.target.value)}
+                       style="width:100px"> <span class="muted" style="font-size:13px">tasks per page</span>
+              </div>
+              <p class="muted" style="margin:6px 0 0;font-size:12px">
+                Agents that call <code>nottario.tasks.list</code> without an explicit
+                <code>limit</code> get this many tasks per page. Hard range: 1–500.
+              </p>`
+            : html`${p.MCPPageSize || 50} tasks per page <span class="muted">(admin only)</span>`}
+        </div>
       </div>
     `;
   }
@@ -404,18 +404,6 @@ class NottarioProjectSettings extends LitElement {
       if (!res.ok) throw new Error((await res.json()).error || 'failed');
       await this.load();
     } catch (err) { this.error = err.message; }
-  }
-
-  _scrollTo(e, id) {
-    e.preventDefault();
-    const target = this.renderRoot.querySelector(`#${id}`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Reflect in the URL hash without re-running the page route. The
-    // shell's hashchange listener only reacts to <something>#anchor
-    // *between pages*; within-page anchors update silently.
-    history.replaceState(null, '', `#${id}`);
-    this._activeAnchor = id;
   }
 
   async saveDefaultView(value) {
@@ -559,33 +547,6 @@ class NottarioProjectSettings extends LitElement {
           <button type="submit" class="btn primary">Add bucket</button>
         </form>
       ` : null}
-    `;
-  }
-
-  renderAdvanced() {
-    const p = this.project;
-    const admin = this.me?.is_admin;
-    return html`
-      <p class="muted" style="margin:0 0 12px">
-        Settings that affect how this project is exposed over the MCP server.
-      </p>
-      <dl>
-        <dt><strong>Default page size for <code>tasks.list</code></strong></dt>
-        <dd>
-          ${admin
-            ? html`
-              <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
-                     @change=${(e) => this.saveMCPPageSize(e.target.value)}
-                     style="width:100px"> tasks per page
-              <p class="muted" style="margin:6px 0 0;font-size:12px">
-                Agents that call <code>nottario.tasks.list</code> without an explicit
-                <code>limit</code> get this many tasks per page. They iterate the
-                returned <code>next_cursor</code> until <code>has_more</code> is false.
-                Hard range: 1–500.
-              </p>`
-            : html`${p.MCPPageSize || 50} tasks per page <span class="muted">(admin only)</span>`}
-        </dd>
-      </dl>
     `;
   }
 
