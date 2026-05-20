@@ -32,8 +32,9 @@ class NottarioBoardPage extends LitElement {
       background: #f6f8fa;
       border-radius: 8px;
       padding: 8px;
-      min-height: 200px;
+      align-self: start; /* don't stretch to match the tallest column */
     }
+    .col.empty { padding: 6px 8px; }
     .col h3 {
       margin: 4px 4px 8px 4px;
       font-size: 13px;
@@ -42,6 +43,13 @@ class NottarioBoardPage extends LitElement {
       display: flex;
       align-items: center;
       gap: 8px;
+    }
+    .col.empty h3 { margin-bottom: 4px; }
+    .col .empty-note {
+      font-size: 12px;
+      color: #8b949e;
+      padding: 0 4px 2px;
+      font-style: italic;
     }
     .count {
       background: #eaeef2;
@@ -223,6 +231,15 @@ class NottarioBoardPage extends LitElement {
 
   back() { window.nottarioNavigate('/'); }
 
+  _emptyCopy(state) {
+    switch (state) {
+      case 'todo':  return 'Backlog clear.';
+      case 'doing': return 'Nothing in progress.';
+      case 'done':  return 'No completed tasks yet.';
+      default:      return 'Empty.';
+    }
+  }
+
   byState(s) {
     return this.tasks.filter(t => t.State === s);
   }
@@ -357,12 +374,18 @@ class NottarioBoardPage extends LitElement {
                   @task-selected=${(e) => this.open(e.detail.task)}></nottario-gantt>`
         : html`
           <div class="columns">
-            ${['todo', 'doing', 'done'].map(s => html`
-              <div class="col">
-                <h3>${s} <span class="count">${this.byState(s).length}</span></h3>
-                ${this.byState(s).map(t => this.renderCard(t))}
-              </div>
-            `)}
+            ${['todo', 'doing', 'done'].map(s => {
+              const items = this.byState(s);
+              const isEmpty = items.length === 0;
+              return html`
+                <div class=${isEmpty ? 'col empty' : 'col'}>
+                  <h3>${s} <span class="count">${items.length}</span></h3>
+                  ${isEmpty
+                    ? html`<div class="empty-note">${this._emptyCopy(s)}</div>`
+                    : items.map(t => this.renderCard(t))}
+                </div>
+              `;
+            })}
           </div>
         `}
       ${this.showCreate ? this.renderCreate() : null}
