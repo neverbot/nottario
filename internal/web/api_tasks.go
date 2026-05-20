@@ -351,6 +351,16 @@ func SetTaskStateHandler(d TaskDeps) http.Handler {
 		}
 		t, err := tasks.SetState(r.Context(), d.Pool, tid, req.State)
 		if err != nil {
+			// Surface the unresolved-precondition detail to clients so
+			// they can render a useful message without an extra round-trip.
+			var uerr *tasks.UnresolvedPreconditionsError
+			if errors.As(err, &uerr) {
+				writeJSON(w, http.StatusConflict, map[string]any{
+					"error":         uerr.Error(),
+					"preconditions": uerr.Preconditions,
+				})
+				return
+			}
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

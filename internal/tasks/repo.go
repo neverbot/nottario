@@ -396,9 +396,74 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParam
 
 // SetState changes the state and manages actual_start / actual_end
 // transitions atomically.
+// UnresolvedPreconditionsError is returned by SetState when an agent
+// (or REST caller) tries to close a task whose `depends_on` graph
+// still has at least one non-done precondition. The Preconditions
+// slice carries enough detail for the caller to surface a useful
+// message ("you still owe: A, B, C").
+type UnresolvedPreconditionsError struct {
+	TaskID         uuid.UUID         `json:"task_id"`
+	Preconditions  []PreconditionRef `json:"preconditions"`
+}
+
+// PreconditionRef is the minimal shape a caller needs to find an
+// unresolved precondition without an extra round-trip.
+type PreconditionRef struct {
+	ID    uuid.UUID `json:"id"`
+	Title string    `json:"title"`
+	State State     `json:"state"`
+}
+
+func (e *UnresolvedPreconditionsError) Error() string {
+	n := len(e.Preconditions)
+	if n == 1 {
+		return fmt.Sprintf("cannot close task: 1 unresolved precondition (%s, %s)",
+			e.Preconditions[0].Title, e.Preconditions[0].State)
+	}
+	return fmt.Sprintf("cannot close task: %d unresolved preconditions", n)
+}
+
 func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*Task, error) {
 	if !ValidState(s) {
 		return nil, fmt.Errorf("invalid state: %q", s)
+	}
+	// When closing a non-feature task, require every direct precondition
+	// to be `done`. Features are rolled up automatically by the engine
+	// (see rollUpParentDone) so this check would race with itself; we
+	// skip it for them.
+	if s == StateDone {
+		var taskType string
+		if err := pool.QueryRow(ctx,
+			`SELECT type FROM tasks WHERE id = $1`, id).Scan(&taskType); err != nil {
+			return nil, err
+		}
+		if taskType != "feature" {
+			rows, err := pool.Query(ctx, `
+				SELECT t.id, t.title, t.state
+				FROM task_dependencies td
+				JOIN tasks t ON t.id = td.depends_on_id
+				WHERE td.task_id = $1 AND t.state <> 'done'
+				ORDER BY t.actual_end NULLS LAST, t.created_at
+			`, id)
+			if err != nil {
+				return nil, err
+			}
+			defer rows.Close()
+			var unresolved []PreconditionRef
+			for rows.Next() {
+				var p PreconditionRef
+				if err := rows.Scan(&p.ID, &p.Title, &p.State); err != nil {
+					return nil, err
+				}
+				unresolved = append(unresolved, p)
+			}
+			if err := rows.Err(); err != nil {
+				return nil, err
+			}
+			if len(unresolved) > 0 {
+				return nil, &UnresolvedPreconditionsError{TaskID: id, Preconditions: unresolved}
+			}
+		}
 	}
 	var actualStartSQL, actualEndSQL string
 	switch s {

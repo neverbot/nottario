@@ -317,6 +317,13 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		t, err := tasks.SetState(ctx, d.Pool, tid, tasks.State(in.State))
 		if err != nil {
+			var uerr *tasks.UnresolvedPreconditionsError
+			if errors.As(err, &uerr) {
+				return jsonResult(map[string]any{
+					"error":         uerr.Error(),
+					"preconditions": uerr.Preconditions,
+				})
+			}
 			return toolError(err.Error())
 		}
 		return jsonResult(t)
