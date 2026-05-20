@@ -22,8 +22,11 @@ type NextFilter struct {
 // - no unresolved dependencies (every depends_on is in state 'done')
 // - matching the assignee/role filter if provided
 //
-// Tasks of type 'feature' are skipped: features are containers, the
-// actual work lives in their children.
+// Feature tasks are normally skipped because they're containers — work
+// lives in their children. EXCEPTION: a feature with zero children, or
+// whose children are all done already, is something the engine would
+// otherwise auto-rollUp; surfacing it here lets agents discover and
+// close it when the rollUp didn't fire (or was filed without children).
 func Next(ctx context.Context, pool *pgxpool.Pool, f NextFilter) (*Task, error) {
 	if f.ProjectID == uuid.Nil {
 		return nil, errors.New("project_id is required")
@@ -38,7 +41,13 @@ func Next(ctx context.Context, pool *pgxpool.Pool, f NextFilter) (*Task, error) 
 		FROM tasks t
 		WHERE t.project_id = $1
 		  AND t.state = 'todo'
-		  AND t.type <> 'feature'
+		  AND (
+		    t.type <> 'feature'
+		    OR NOT EXISTS (
+		        SELECT 1 FROM tasks c
+		        WHERE c.parent_task_id = t.id AND c.state <> 'done'
+		    )
+		  )
 		  AND NOT EXISTS (
 		      SELECT 1
 		      FROM task_dependencies d
