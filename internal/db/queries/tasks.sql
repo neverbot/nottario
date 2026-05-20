@@ -96,6 +96,118 @@ RETURNING id, project_id, parent_task_id, type, title, description_md,
           created_by_user_id, created_by_token_id,
           created_at, updated_at;
 
+-- name: NextEligibleTask :one
+-- Preview: returns the next pickable task without claiming it. Same
+-- eligibility rules as ClaimNextEligibleTask but no row lock and no
+-- mutation. Use ClaimNextEligibleTask for atomic pickup.
+SELECT t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_md,
+       t.state, t.priority, t.assignee_user_id, t.target_role_id,
+       t.actual_start, t.actual_end,
+       t.created_by_user_id, t.created_by_token_id,
+       t.created_at, t.updated_at
+FROM tasks t
+WHERE t.project_id = $1
+  AND t.state = 'todo'
+  AND (
+    t.type <> 'feature'
+    OR NOT EXISTS (
+      SELECT 1 FROM tasks c
+      WHERE c.parent_task_id = t.id AND c.state <> 'done'
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM task_dependencies d
+    JOIN tasks d2 ON d2.id = d.depends_on_id
+    WHERE d.task_id = t.id AND d2.state <> 'done'
+  )
+  AND (
+    CASE
+      WHEN sqlc.narg('assignee_user_id')::uuid IS NOT NULL
+           AND coalesce(array_length(sqlc.arg('user_role_ids')::uuid[], 1), 0) > 0 THEN
+        t.assignee_user_id = sqlc.narg('assignee_user_id')::uuid
+        OR (t.assignee_user_id IS NULL AND
+            (t.target_role_id IS NULL
+             OR t.target_role_id = ANY(sqlc.arg('user_role_ids')::uuid[])))
+      WHEN sqlc.narg('assignee_user_id')::uuid IS NOT NULL THEN
+        t.assignee_user_id = sqlc.narg('assignee_user_id')::uuid
+      WHEN sqlc.narg('role_id')::uuid IS NOT NULL THEN
+        t.target_role_id = sqlc.narg('role_id')::uuid OR t.target_role_id IS NULL
+      ELSE TRUE
+    END
+  )
+ORDER BY t.priority DESC, t.created_at ASC
+LIMIT 1;
+
+-- name: ClaimNextEligibleTask :one
+-- Atomic claim: same eligibility filter as NextEligibleTask, picked
+-- via SELECT … FOR UPDATE SKIP LOCKED so two concurrent agents never
+-- claim the same row. Marks the row assignee = caller, state = doing,
+-- actual_start filled if previously null, all in one UPDATE.
+WITH candidate AS (
+  SELECT t.id FROM tasks t
+  WHERE t.project_id = $1
+    AND t.state = 'todo'
+    AND (
+      t.type <> 'feature'
+      OR NOT EXISTS (
+        SELECT 1 FROM tasks c
+        WHERE c.parent_task_id = t.id AND c.state <> 'done'
+      )
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM task_dependencies d
+      JOIN tasks d2 ON d2.id = d.depends_on_id
+      WHERE d.task_id = t.id AND d2.state <> 'done'
+    )
+    AND (
+      CASE
+        WHEN sqlc.narg('assignee_user_id')::uuid IS NOT NULL
+             AND coalesce(array_length(sqlc.arg('user_role_ids')::uuid[], 1), 0) > 0 THEN
+          t.assignee_user_id = sqlc.narg('assignee_user_id')::uuid
+          OR (t.assignee_user_id IS NULL AND
+              (t.target_role_id IS NULL
+               OR t.target_role_id = ANY(sqlc.arg('user_role_ids')::uuid[])))
+        WHEN sqlc.narg('assignee_user_id')::uuid IS NOT NULL THEN
+          t.assignee_user_id = sqlc.narg('assignee_user_id')::uuid
+        WHEN sqlc.narg('role_id')::uuid IS NOT NULL THEN
+          t.target_role_id = sqlc.narg('role_id')::uuid OR t.target_role_id IS NULL
+        ELSE TRUE
+      END
+    )
+  ORDER BY t.priority DESC, t.created_at ASC
+  FOR UPDATE SKIP LOCKED
+  LIMIT 1
+)
+UPDATE tasks t
+SET assignee_user_id = sqlc.arg('caller_user_id')::uuid,
+    state = 'doing',
+    actual_start = COALESCE(t.actual_start, now()),
+    updated_at = now()
+FROM candidate
+WHERE t.id = candidate.id
+RETURNING t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_md,
+          t.state, t.priority, t.assignee_user_id, t.target_role_id,
+          t.actual_start, t.actual_end,
+          t.created_by_user_id, t.created_by_token_id,
+          t.created_at, t.updated_at;
+
+-- name: GetTaskForUpdate :one
+SELECT id, project_id, parent_task_id, type, title, description_md,
+       state, priority, assignee_user_id, target_role_id,
+       actual_start, actual_end,
+       created_by_user_id, created_by_token_id,
+       created_at, updated_at
+FROM tasks WHERE id = $1
+FOR UPDATE;
+
+-- name: ClaimTask :exec
+UPDATE tasks SET
+  assignee_user_id = $2,
+  state = 'doing',
+  actual_start = COALESCE(actual_start, now()),
+  updated_at = now()
+WHERE id = $1;
+
 -- name: LockTaskTypeAndParent :one
 SELECT type, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE;
 

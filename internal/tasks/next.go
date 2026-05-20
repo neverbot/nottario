@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // NextFilter narrows what counts as the "next" task.
@@ -22,82 +24,48 @@ type NextFilter struct {
 // - no unresolved dependencies (every depends_on is in state 'done')
 // - matching the assignee/role filter if provided
 //
-// Feature tasks are normally skipped because they're containers — work
-// lives in their children. EXCEPTION: a feature with zero children, or
-// whose children are all done already, is something the engine would
-// otherwise auto-rollUp; surfacing it here lets agents discover and
-// close it when the rollUp didn't fire (or was filed without children).
+// PREVIEW ONLY (no side effects). For atomic claim use ClaimNext.
 func Next(ctx context.Context, pool *pgxpool.Pool, f NextFilter) (*Task, error) {
 	if f.ProjectID == uuid.Nil {
 		return nil, errors.New("project_id is required")
 	}
-
-	query := `
-		SELECT t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_md,
-		       t.state, t.priority, t.assignee_user_id, t.target_role_id,
-		       t.actual_start, t.actual_end,
-		       t.created_by_user_id, t.created_by_token_id,
-		       t.created_at, t.updated_at
-		FROM tasks t
-		WHERE t.project_id = $1
-		  AND t.state = 'todo'
-		  AND (
-		    t.type <> 'feature'
-		    OR NOT EXISTS (
-		        SELECT 1 FROM tasks c
-		        WHERE c.parent_task_id = t.id AND c.state <> 'done'
-		    )
-		  )
-		  AND NOT EXISTS (
-		      SELECT 1
-		      FROM task_dependencies d
-		      JOIN tasks d2 ON d2.id = d.depends_on_id
-		      WHERE d.task_id = t.id AND d2.state <> 'done'
-		  )
-	`
-	args := []any{f.ProjectID}
-	idx := 2
-
-	switch {
-	case f.AssigneeUserID != nil && len(f.UserRoleIDs) > 0:
-		query += " AND (t.assignee_user_id = $2 OR (t.assignee_user_id IS NULL AND (t.target_role_id IS NULL OR t.target_role_id = ANY($3))))"
-		args = append(args, *f.AssigneeUserID, uuidSliceToArray(f.UserRoleIDs))
-		idx = 4
-	case f.AssigneeUserID != nil:
-		query += " AND t.assignee_user_id = $2"
-		args = append(args, *f.AssigneeUserID)
-		idx = 3
-	case f.RoleID != nil:
-		query += " AND (t.target_role_id = $2 OR t.target_role_id IS NULL)"
-		args = append(args, *f.RoleID)
-		idx = 3
-	}
-	_ = idx
-
-	query += " ORDER BY t.priority DESC, t.created_at ASC LIMIT 1"
-
-	var t Task
-	err := pool.QueryRow(ctx, query, args...).Scan(
-		&t.ID, &t.ProjectID, &t.ParentTaskID, &t.Type, &t.Title, &t.DescriptionMD,
-		&t.State, &t.Priority, &t.AssigneeUserID, &t.TargetRoleID,
-		&t.ActualStart, &t.ActualEnd,
-		&t.CreatedByUserID, &t.CreatedByTokenID,
-		&t.CreatedAt, &t.UpdatedAt,
-	)
+	row, err := dbq.New(pool).NextEligibleTask(ctx, dbq.NextEligibleTaskParams{
+		ProjectID:      f.ProjectID,
+		AssigneeUserID: f.AssigneeUserID,
+		UserRoleIds:    nonNilUUIDs(f.UserRoleIDs),
+		RoleID:         f.RoleID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &t, nil
+	return &Task{
+		ID:               row.ID,
+		ProjectID:        row.ProjectID,
+		ParentTaskID:     row.ParentTaskID,
+		Type:             Type(row.Type),
+		Title:            row.Title,
+		DescriptionMD:    row.DescriptionMd,
+		State:            State(row.State),
+		Priority:         int(row.Priority),
+		AssigneeUserID:   row.AssigneeUserID,
+		TargetRoleID:     row.TargetRoleID,
+		ActualStart:      timestampPtr(row.ActualStart),
+		ActualEnd:        timestampPtr(row.ActualEnd),
+		CreatedByUserID:  row.CreatedByUserID,
+		CreatedByTokenID: row.CreatedByTokenID,
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+	}, nil
 }
 
-// uuidSliceToArray converts a Go slice into a value pgx will encode
-// as a PostgreSQL uuid[] array.
-func uuidSliceToArray(ids []uuid.UUID) []uuid.UUID {
-	if ids == nil {
+// nonNilUUIDs ensures pgx receives an empty slice rather than a nil
+// one — sqlc's array_length() helper distinguishes them.
+func nonNilUUIDs(in []uuid.UUID) []uuid.UUID {
+	if in == nil {
 		return []uuid.UUID{}
 	}
-	return ids
+	return in
 }

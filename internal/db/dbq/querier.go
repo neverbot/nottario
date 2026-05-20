@@ -13,6 +13,12 @@ import (
 
 type Querier interface {
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
+	// Atomic claim: same eligibility filter as NextEligibleTask, picked
+	// via SELECT … FOR UPDATE SKIP LOCKED so two concurrent agents never
+	// claim the same row. Marks the row assignee = caller, state = doing,
+	// actual_start filled if previously null, all in one UPDATE.
+	ClaimNextEligibleTask(ctx context.Context, arg ClaimNextEligibleTaskParams) (ClaimNextEligibleTaskRow, error)
+	ClaimTask(ctx context.Context, arg ClaimTaskParams) error
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
@@ -24,6 +30,7 @@ type Querier interface {
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
+	GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error)
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
@@ -57,6 +64,10 @@ type Querier interface {
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
+	// Preview: returns the next pickable task without claiming it. Same
+	// eligibility rules as ClaimNextEligibleTask but no row lock and no
+	// mutation. Use ClaimNextEligibleTask for atomic pickup.
+	NextEligibleTask(ctx context.Context, arg NextEligibleTaskParams) (NextEligibleTaskRow, error)
 	ProjectIDForTask(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
 	RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error)

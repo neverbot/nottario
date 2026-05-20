@@ -12,6 +12,136 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimNextEligibleTask = `-- name: ClaimNextEligibleTask :one
+WITH candidate AS (
+  SELECT t.id FROM tasks t
+  WHERE t.project_id = $1
+    AND t.state = 'todo'
+    AND (
+      t.type <> 'feature'
+      OR NOT EXISTS (
+        SELECT 1 FROM tasks c
+        WHERE c.parent_task_id = t.id AND c.state <> 'done'
+      )
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM task_dependencies d
+      JOIN tasks d2 ON d2.id = d.depends_on_id
+      WHERE d.task_id = t.id AND d2.state <> 'done'
+    )
+    AND (
+      CASE
+        WHEN $3::uuid IS NOT NULL
+             AND coalesce(array_length($4::uuid[], 1), 0) > 0 THEN
+          t.assignee_user_id = $3::uuid
+          OR (t.assignee_user_id IS NULL AND
+              (t.target_role_id IS NULL
+               OR t.target_role_id = ANY($4::uuid[])))
+        WHEN $3::uuid IS NOT NULL THEN
+          t.assignee_user_id = $3::uuid
+        WHEN $5::uuid IS NOT NULL THEN
+          t.target_role_id = $5::uuid OR t.target_role_id IS NULL
+        ELSE TRUE
+      END
+    )
+  ORDER BY t.priority DESC, t.created_at ASC
+  FOR UPDATE SKIP LOCKED
+  LIMIT 1
+)
+UPDATE tasks t
+SET assignee_user_id = $2::uuid,
+    state = 'doing',
+    actual_start = COALESCE(t.actual_start, now()),
+    updated_at = now()
+FROM candidate
+WHERE t.id = candidate.id
+RETURNING t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_md,
+          t.state, t.priority, t.assignee_user_id, t.target_role_id,
+          t.actual_start, t.actual_end,
+          t.created_by_user_id, t.created_by_token_id,
+          t.created_at, t.updated_at
+`
+
+type ClaimNextEligibleTaskParams struct {
+	ProjectID      uuid.UUID
+	CallerUserID   uuid.UUID
+	AssigneeUserID *uuid.UUID
+	UserRoleIds    []uuid.UUID
+	RoleID         *uuid.UUID
+}
+
+type ClaimNextEligibleTaskRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	State            string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      pgtype.Timestamptz
+	ActualEnd        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// Atomic claim: same eligibility filter as NextEligibleTask, picked
+// via SELECT … FOR UPDATE SKIP LOCKED so two concurrent agents never
+// claim the same row. Marks the row assignee = caller, state = doing,
+// actual_start filled if previously null, all in one UPDATE.
+func (q *Queries) ClaimNextEligibleTask(ctx context.Context, arg ClaimNextEligibleTaskParams) (ClaimNextEligibleTaskRow, error) {
+	row := q.db.QueryRow(ctx, claimNextEligibleTask,
+		arg.ProjectID,
+		arg.CallerUserID,
+		arg.AssigneeUserID,
+		arg.UserRoleIds,
+		arg.RoleID,
+	)
+	var i ClaimNextEligibleTaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ParentTaskID,
+		&i.Type,
+		&i.Title,
+		&i.DescriptionMd,
+		&i.State,
+		&i.Priority,
+		&i.AssigneeUserID,
+		&i.TargetRoleID,
+		&i.ActualStart,
+		&i.ActualEnd,
+		&i.CreatedByUserID,
+		&i.CreatedByTokenID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const claimTask = `-- name: ClaimTask :exec
+UPDATE tasks SET
+  assignee_user_id = $2,
+  state = 'doing',
+  actual_start = COALESCE(actual_start, now()),
+  updated_at = now()
+WHERE id = $1
+`
+
+type ClaimTaskParams struct {
+	ID             uuid.UUID
+	AssigneeUserID *uuid.UUID
+}
+
+func (q *Queries) ClaimTask(ctx context.Context, arg ClaimTaskParams) error {
+	_, err := q.db.Exec(ctx, claimTask, arg.ID, arg.AssigneeUserID)
+	return err
+}
+
 const countNonDoneChildren = `-- name: CountNonDoneChildren :one
 SELECT COUNT(*)::int FROM tasks
 WHERE parent_task_id = $1 AND state <> 'done'
@@ -84,6 +214,59 @@ type GetTaskRow struct {
 func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error) {
 	row := q.db.QueryRow(ctx, getTask, id)
 	var i GetTaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ParentTaskID,
+		&i.Type,
+		&i.Title,
+		&i.DescriptionMd,
+		&i.State,
+		&i.Priority,
+		&i.AssigneeUserID,
+		&i.TargetRoleID,
+		&i.ActualStart,
+		&i.ActualEnd,
+		&i.CreatedByUserID,
+		&i.CreatedByTokenID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTaskForUpdate = `-- name: GetTaskForUpdate :one
+SELECT id, project_id, parent_task_id, type, title, description_md,
+       state, priority, assignee_user_id, target_role_id,
+       actual_start, actual_end,
+       created_by_user_id, created_by_token_id,
+       created_at, updated_at
+FROM tasks WHERE id = $1
+FOR UPDATE
+`
+
+type GetTaskForUpdateRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	State            string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      pgtype.Timestamptz
+	ActualEnd        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getTaskForUpdate, id)
+	var i GetTaskForUpdateRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
@@ -449,6 +632,104 @@ func (q *Queries) LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (Lock
 	row := q.db.QueryRow(ctx, lockTaskTypeAndParent, id)
 	var i LockTaskTypeAndParentRow
 	err := row.Scan(&i.Type, &i.ParentTaskID)
+	return i, err
+}
+
+const nextEligibleTask = `-- name: NextEligibleTask :one
+SELECT t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_md,
+       t.state, t.priority, t.assignee_user_id, t.target_role_id,
+       t.actual_start, t.actual_end,
+       t.created_by_user_id, t.created_by_token_id,
+       t.created_at, t.updated_at
+FROM tasks t
+WHERE t.project_id = $1
+  AND t.state = 'todo'
+  AND (
+    t.type <> 'feature'
+    OR NOT EXISTS (
+      SELECT 1 FROM tasks c
+      WHERE c.parent_task_id = t.id AND c.state <> 'done'
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM task_dependencies d
+    JOIN tasks d2 ON d2.id = d.depends_on_id
+    WHERE d.task_id = t.id AND d2.state <> 'done'
+  )
+  AND (
+    CASE
+      WHEN $2::uuid IS NOT NULL
+           AND coalesce(array_length($3::uuid[], 1), 0) > 0 THEN
+        t.assignee_user_id = $2::uuid
+        OR (t.assignee_user_id IS NULL AND
+            (t.target_role_id IS NULL
+             OR t.target_role_id = ANY($3::uuid[])))
+      WHEN $2::uuid IS NOT NULL THEN
+        t.assignee_user_id = $2::uuid
+      WHEN $4::uuid IS NOT NULL THEN
+        t.target_role_id = $4::uuid OR t.target_role_id IS NULL
+      ELSE TRUE
+    END
+  )
+ORDER BY t.priority DESC, t.created_at ASC
+LIMIT 1
+`
+
+type NextEligibleTaskParams struct {
+	ProjectID      uuid.UUID
+	AssigneeUserID *uuid.UUID
+	UserRoleIds    []uuid.UUID
+	RoleID         *uuid.UUID
+}
+
+type NextEligibleTaskRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	State            string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      pgtype.Timestamptz
+	ActualEnd        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// Preview: returns the next pickable task without claiming it. Same
+// eligibility rules as ClaimNextEligibleTask but no row lock and no
+// mutation. Use ClaimNextEligibleTask for atomic pickup.
+func (q *Queries) NextEligibleTask(ctx context.Context, arg NextEligibleTaskParams) (NextEligibleTaskRow, error) {
+	row := q.db.QueryRow(ctx, nextEligibleTask,
+		arg.ProjectID,
+		arg.AssigneeUserID,
+		arg.UserRoleIds,
+		arg.RoleID,
+	)
+	var i NextEligibleTaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ParentTaskID,
+		&i.Type,
+		&i.Title,
+		&i.DescriptionMd,
+		&i.State,
+		&i.Priority,
+		&i.AssigneeUserID,
+		&i.TargetRoleID,
+		&i.ActualStart,
+		&i.ActualEnd,
+		&i.CreatedByUserID,
+		&i.CreatedByTokenID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 

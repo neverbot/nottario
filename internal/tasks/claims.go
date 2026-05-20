@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // ClaimConflictError is returned by Claim (the by-id variant) when the
@@ -41,71 +43,37 @@ func ClaimNext(ctx context.Context, pool *pgxpool.Pool, f NextFilter, callerUser
 	if callerUserID == uuid.Nil {
 		return nil, errors.New("caller user_id is required")
 	}
-
-	candidate := `
-		SELECT t.id
-		FROM tasks t
-		WHERE t.project_id = $1
-		  AND t.state = 'todo'
-		  AND (
-		    t.type <> 'feature'
-		    OR NOT EXISTS (
-		        SELECT 1 FROM tasks c
-		        WHERE c.parent_task_id = t.id AND c.state <> 'done'
-		    )
-		  )
-		  AND NOT EXISTS (
-		      SELECT 1
-		      FROM task_dependencies d
-		      JOIN tasks d2 ON d2.id = d.depends_on_id
-		      WHERE d.task_id = t.id AND d2.state <> 'done'
-		  )
-	`
-	args := []any{f.ProjectID, callerUserID}
-	switch {
-	case f.AssigneeUserID != nil && len(f.UserRoleIDs) > 0:
-		candidate += " AND (t.assignee_user_id = $3 OR (t.assignee_user_id IS NULL AND (t.target_role_id IS NULL OR t.target_role_id = ANY($4))))"
-		args = append(args, *f.AssigneeUserID, uuidSliceToArray(f.UserRoleIDs))
-	case f.AssigneeUserID != nil:
-		candidate += " AND (t.assignee_user_id = $3 OR t.assignee_user_id IS NULL)"
-		args = append(args, *f.AssigneeUserID)
-	case f.RoleID != nil:
-		candidate += " AND (t.target_role_id = $3 OR t.target_role_id IS NULL)"
-		args = append(args, *f.RoleID)
-	}
-	candidate += " ORDER BY t.priority DESC, t.created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1"
-
-	query := fmt.Sprintf(`
-		WITH candidate AS (%s)
-		UPDATE tasks t
-		SET assignee_user_id = $2,
-		    state = 'doing',
-		    actual_start = COALESCE(t.actual_start, now()),
-		    updated_at = now()
-		FROM candidate
-		WHERE t.id = candidate.id
-		RETURNING t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_md,
-		          t.state, t.priority, t.assignee_user_id, t.target_role_id,
-		          t.actual_start, t.actual_end,
-		          t.created_by_user_id, t.created_by_token_id,
-		          t.created_at, t.updated_at
-	`, candidate)
-
-	var t Task
-	err := pool.QueryRow(ctx, query, args...).Scan(
-		&t.ID, &t.ProjectID, &t.ParentTaskID, &t.Type, &t.Title, &t.DescriptionMD,
-		&t.State, &t.Priority, &t.AssigneeUserID, &t.TargetRoleID,
-		&t.ActualStart, &t.ActualEnd,
-		&t.CreatedByUserID, &t.CreatedByTokenID,
-		&t.CreatedAt, &t.UpdatedAt,
-	)
+	row, err := dbq.New(pool).ClaimNextEligibleTask(ctx, dbq.ClaimNextEligibleTaskParams{
+		ProjectID:      f.ProjectID,
+		CallerUserID:   callerUserID,
+		AssigneeUserID: f.AssigneeUserID,
+		UserRoleIds:    nonNilUUIDs(f.UserRoleIDs),
+		RoleID:         f.RoleID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &t, nil
+	return &Task{
+		ID:               row.ID,
+		ProjectID:        row.ProjectID,
+		ParentTaskID:     row.ParentTaskID,
+		Type:             Type(row.Type),
+		Title:            row.Title,
+		DescriptionMD:    row.DescriptionMd,
+		State:            State(row.State),
+		Priority:         int(row.Priority),
+		AssigneeUserID:   row.AssigneeUserID,
+		TargetRoleID:     row.TargetRoleID,
+		ActualStart:      timestampPtr(row.ActualStart),
+		ActualEnd:        timestampPtr(row.ActualEnd),
+		CreatedByUserID:  row.CreatedByUserID,
+		CreatedByTokenID: row.CreatedByTokenID,
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+	}, nil
 }
 
 // Claim atomically claims a SPECIFIC task by id for callerUserID.
@@ -126,109 +94,92 @@ func Claim(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, callerUserID u
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	var t Task
-	err = tx.QueryRow(ctx, `
-		SELECT id, project_id, parent_task_id, type, title, description_md,
-		       state, priority, assignee_user_id, target_role_id,
-		       actual_start, actual_end,
-		       created_by_user_id, created_by_token_id,
-		       created_at, updated_at
-		FROM tasks WHERE id = $1
-		FOR UPDATE
-	`, id).Scan(
-		&t.ID, &t.ProjectID, &t.ParentTaskID, &t.Type, &t.Title, &t.DescriptionMD,
-		&t.State, &t.Priority, &t.AssigneeUserID, &t.TargetRoleID,
-		&t.ActualStart, &t.ActualEnd,
-		&t.CreatedByUserID, &t.CreatedByTokenID,
-		&t.CreatedAt, &t.UpdatedAt,
-	)
+	row, err := q.GetTaskForUpdate(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-
+	state := State(row.State)
 	conflict := &ClaimConflictError{
 		TaskID:                id,
-		CurrentState:          t.State,
-		CurrentAssigneeUserID: t.AssigneeUserID,
+		CurrentState:          state,
+		CurrentAssigneeUserID: row.AssigneeUserID,
 	}
-	switch t.State {
+	switch state {
 	case StateDone:
 		conflict.Reason = "task is already done"
 		return nil, conflict
 	case StateDoing:
-		// Idempotent if the caller already owns it.
-		if t.AssigneeUserID != nil && *t.AssigneeUserID == callerUserID {
-			return &t, tx.Commit(ctx)
+		if row.AssigneeUserID != nil && *row.AssigneeUserID == callerUserID {
+			if err := tx.Commit(ctx); err != nil {
+				return nil, err
+			}
+			return rowToTaskFromForUpdate(row), nil
 		}
 		conflict.Reason = "task is already claimed by another user"
 		return nil, conflict
 	}
-	// state == todo from here.
-	if t.AssigneeUserID != nil && *t.AssigneeUserID != callerUserID {
+	if row.AssigneeUserID != nil && *row.AssigneeUserID != callerUserID {
 		conflict.Reason = "task is already assigned to another user"
 		return nil, conflict
 	}
-	// Feature with non-done children.
-	if t.Type == TypeFeature {
-		var pending int
-		if err := tx.QueryRow(ctx, `
-			SELECT COUNT(*) FROM tasks
-			WHERE parent_task_id = $1 AND state <> 'done'
-		`, id).Scan(&pending); err != nil {
+	if Type(row.Type) == TypeFeature {
+		pending, err := q.CountNonDoneChildren(ctx, &id)
+		if err != nil {
 			return nil, err
 		}
 		if pending > 0 {
-			conflict.PendingChildrenCount = pending
+			conflict.PendingChildrenCount = int(pending)
 			conflict.Reason = fmt.Sprintf("feature has %d non-done child task(s); the engine rolls it up automatically when they all finish", pending)
 			return nil, conflict
 		}
 	}
-	// Unresolved preconditions.
-	rows, err := tx.Query(ctx, `
-		SELECT t.id, t.title, t.state
-		FROM task_dependencies d
-		JOIN tasks t ON t.id = d.depends_on_id
-		WHERE d.task_id = $1 AND t.state <> 'done'
-		ORDER BY t.created_at
-	`, id)
+	preconds, err := q.ListUnresolvedPreconditions(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	var unresolved []PreconditionRef
-	for rows.Next() {
-		var p PreconditionRef
-		if err := rows.Scan(&p.ID, &p.Title, &p.State); err != nil {
-			rows.Close()
-			return nil, err
+	if len(preconds) > 0 {
+		unresolved := make([]PreconditionRef, 0, len(preconds))
+		for _, p := range preconds {
+			unresolved = append(unresolved, PreconditionRef{ID: p.ID, Title: p.Title, State: State(p.State)})
 		}
-		unresolved = append(unresolved, p)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(unresolved) > 0 {
 		conflict.Preconditions = unresolved
 		conflict.Reason = fmt.Sprintf("%d unresolved precondition(s)", len(unresolved))
 		return nil, conflict
 	}
-	// All good — claim it.
-	if _, err := tx.Exec(ctx, `
-		UPDATE tasks SET
-		  assignee_user_id = $1,
-		  state = 'doing',
-		  actual_start = COALESCE(actual_start, now()),
-		  updated_at = now()
-		WHERE id = $2
-	`, callerUserID, id); err != nil {
+	if err := q.ClaimTask(ctx, dbq.ClaimTaskParams{
+		ID:             id,
+		AssigneeUserID: &callerUserID,
+	}); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return Get(ctx, pool, id)
+}
+
+func rowToTaskFromForUpdate(r dbq.GetTaskForUpdateRow) *Task {
+	return &Task{
+		ID:               r.ID,
+		ProjectID:        r.ProjectID,
+		ParentTaskID:     r.ParentTaskID,
+		Type:             Type(r.Type),
+		Title:            r.Title,
+		DescriptionMD:    r.DescriptionMd,
+		State:            State(r.State),
+		Priority:         int(r.Priority),
+		AssigneeUserID:   r.AssigneeUserID,
+		TargetRoleID:     r.TargetRoleID,
+		ActualStart:      timestampPtr(r.ActualStart),
+		ActualEnd:        timestampPtr(r.ActualEnd),
+		CreatedByUserID:  r.CreatedByUserID,
+		CreatedByTokenID: r.CreatedByTokenID,
+		CreatedAt:        r.CreatedAt.Time,
+		UpdatedAt:        r.UpdatedAt.Time,
+	}
 }
