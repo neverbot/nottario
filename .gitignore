@@ -36,3 +36,6 @@ node_modules/
 # Logs and local data
 *.log
 /data/
+
+# Throwaway screenshots from chrome-devtools MCP sessions
+tmp-*.png
