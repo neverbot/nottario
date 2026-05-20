@@ -11,44 +11,68 @@ class NottarioProjectSettings extends LitElement {
     roles: { state: true },
     members: { state: true },
     priorities: { state: true },
-    activeTab: { state: true },
     error: { state: true },
+    _activeAnchor: { state: true },
   };
 
   static styles = [buttonStyles, css`
-    :host { display: block; }
-    .header {
-      display: flex;
-      align-items: baseline;
-      gap: 16px;
-      margin-bottom: 16px;
+    :host { display: block; box-sizing: border-box; }
+    * { box-sizing: border-box; }
+
+    /* Two-column layout: scrolled content on the left, sticky anchor
+       rail on the right. Below 900px the rail collapses (display:none
+       via media query) and sections stack full-width. */
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 200px;
+      gap: 28px;
     }
-    .header h2 { margin: 0; }
-    .tabs {
-      border-bottom: 1px solid #d1d9e0;
-      margin-bottom: 16px;
-      display: flex;
-      gap: 4px;
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .rail { display: none; }
     }
-    .tab {
-      padding: 8px 16px;
-      background: transparent;
-      border: none;
-      border-bottom: 2px solid transparent;
-      cursor: pointer;
+
+    section.block {
+      scroll-margin-top: 96px;
+      padding: 4px 0 20px;
+      border-bottom: 1px solid #eaeef2;
+    }
+    section.block:last-of-type { border-bottom: none; padding-bottom: 0; }
+    section.block > h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
       color: #59636e;
+      font-weight: 600;
     }
-    .tab.active {
-      color: #1f2328;
-      border-bottom-color: #fd8c73;
-      font-weight: 500;
+    section.block .helper {
+      color: #59636e;
+      font-size: 12px;
+      margin: -6px 0 12px;
     }
-    .panel {
-      background: #fff;
-      border: 1px solid #d1d9e0;
-      border-radius: 8px;
-      padding: 16px;
+
+    /* Anchor rail */
+    .rail {
+      position: sticky;
+      top: 84px;
+      align-self: start;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 13px;
     }
+    .rail a {
+      padding: 6px 10px;
+      border-radius: 6px;
+      color: #59636e;
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: background-color 60ms ease-out, color 60ms ease-out;
+    }
+    .rail a:hover { color: #1f2328; background: #f3f4f6; }
+    .rail a.active { color: #1f2328; background: #f3f4f6; border-left-color: #1f6feb; }
+
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eaeef2; }
     th { font-size: 12px; text-transform: uppercase; color: #59636e; }
@@ -62,6 +86,31 @@ class NottarioProjectSettings extends LitElement {
     }
     .row-actions { text-align: right; }
     .row-actions button { margin-left: 4px; }
+
+    /* Quieter destructive buttons in table rows: at rest a small
+       ghost ✕; armed/hover swaps to the loud red `.btn.danger`.
+       Keeps tables visually calm while still putting the destructive
+       affordance one click away. */
+    .row-actions .delete {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      font-size: 12px;
+      line-height: 1;
+      color: #8b949e;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .row-actions .delete:hover,
+    .row-actions .delete:focus-visible {
+      color: #cf222e;
+      border-color: rgba(207, 34, 46, 0.4);
+      background: #ffebe9;
+      outline: none;
+    }
     .add-row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
     .add-row input { flex: 1; }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
@@ -110,8 +159,30 @@ class NottarioProjectSettings extends LitElement {
     this.roles = [];
     this.members = [];
     this.priorities = [];
-    this.activeTab = 'general';
     this.error = '';
+    this._activeAnchor = 'general';
+  }
+
+  firstUpdated() {
+    // Scroll-spy: highlight the rail entry whose section is closest
+    // to the top of the viewport. IntersectionObserver fires when at
+    // least 60% of the section is visible OR when the top of the
+    // section crosses the topbar offset.
+    const io = new IntersectionObserver((entries) => {
+      // Prefer the most-visible entry; fall back to the topmost
+      // intersecting one.
+      const visible = entries.filter(e => e.isIntersecting);
+      if (!visible.length) return;
+      visible.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+      const id = visible[0].target.id;
+      if (id) this._activeAnchor = id;
+    }, { rootMargin: '-96px 0px -55% 0px', threshold: [0, 0.5, 1] });
+    this.renderRoot.querySelectorAll('section.block').forEach(s => io.observe(s));
+    this._io = io;
+  }
+  disconnectedCallback() {
+    this._io?.disconnect();
+    super.disconnectedCallback();
   }
 
   connectedCallback() {
@@ -208,28 +279,38 @@ class NottarioProjectSettings extends LitElement {
 
   render() {
     if (!this.project) {
-      return html`<div class="panel">Loading…${this.error ? html`<div class="error">${this.error}</div>` : ''}</div>`;
+      return html`<div>Loading…${this.error ? html`<div class="error">${this.error}</div>` : ''}</div>`;
     }
+    const sections = [
+      { id: 'general',      label: 'General',      body: () => this.renderGeneral() },
+      { id: 'default-view', label: 'Default view', body: () => this.renderDefaultView() },
+      { id: 'roles',        label: 'Roles',        body: () => this.renderRoles() },
+      { id: 'priorities',   label: 'Priorities',   body: () => this.renderPriorities() },
+      { id: 'members',      label: 'Members',      body: () => this.renderMembers() },
+      { id: 'advanced',     label: 'Advanced',     body: () => this.renderAdvanced() },
+    ];
     return html`
       <nottario-page-header
         title="Settings"
         .subtitle=${this.project.Slug}>
       </nottario-page-header>
-      <div class="tabs">
-        ${['general', 'roles', 'priorities', 'mcp', 'members'].map(t => html`
-          <button class="tab ${this.activeTab === t ? 'active' : ''}"
-                  @click=${() => this.activeTab = t}>
-            ${t === 'mcp' ? 'MCP' : t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        `)}
-      </div>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
-      <div class="panel">
-        ${this.activeTab === 'general' ? this.renderGeneral() : null}
-        ${this.activeTab === 'roles' ? this.renderRoles() : null}
-        ${this.activeTab === 'priorities' ? this.renderPriorities() : null}
-        ${this.activeTab === 'mcp' ? this.renderMCP() : null}
-        ${this.activeTab === 'members' ? this.renderMembers() : null}
+      <div class="layout">
+        <div class="content">
+          ${sections.map(s => html`
+            <section class="block" id=${s.id}>
+              <h2>${s.label}</h2>
+              ${s.body()}
+            </section>
+          `)}
+        </div>
+        <nav class="rail" aria-label="Settings sections">
+          ${sections.map(s => html`
+            <a href=${`#${s.id}`}
+               class=${this._activeAnchor === s.id ? 'active' : ''}
+               @click=${(e) => this._scrollTo(e, s.id)}>${s.label}</a>
+          `)}
+        </nav>
       </div>
     `;
   }
@@ -237,7 +318,6 @@ class NottarioProjectSettings extends LitElement {
   renderGeneral() {
     const p = this.project;
     const admin = this.me?.is_admin;
-    const currentView = viewByKey(p.DefaultView || 'board/kanban');
     if (!admin) {
       return html`
         <dl>
@@ -245,8 +325,6 @@ class NottarioProjectSettings extends LitElement {
           <dt><strong>Description</strong></dt><dd>${p.Description || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Primary language</strong></dt><dd>${p.PrimaryLanguage || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Project type</strong></dt><dd>${p.ProjectType || html`<span class="muted">none</span>`}</dd>
-          <dt><strong>Default view</strong></dt>
-          <dd>${currentView.label} <span class="muted">(admin only)</span></dd>
           <dt><strong>Repositories</strong></dt>
           <dd>${p.Repos && p.Repos.length
                 ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map(r => html`<li>${r}</li>`)}</ul>`
@@ -285,18 +363,24 @@ class NottarioProjectSettings extends LitElement {
           <button type="submit" class="btn primary">Save changes</button>
         </div>
       </form>
+    `;
+  }
 
-      <div class="field" style="margin-top:24px">
-        <label>Default view</label>
-        <select @change=${(e) => this.saveDefaultView(e.target.value)}>
-          ${PROJECT_VIEWS.map(v => html`
-            <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
-          `)}
-        </select>
-        <p class="muted" style="margin:6px 0 0;font-size:12px">
-          Clicking a project card on the home page navigates here.
-          Currently: <strong>${currentView.label}</strong>.
-        </p>
+  renderDefaultView() {
+    const p = this.project;
+    const admin = this.me?.is_admin;
+    const currentView = viewByKey(p.DefaultView || 'board/kanban');
+    return html`
+      <p class="helper">Clicking a project card on the home page navigates here.</p>
+      <div class="field" style="max-width:320px">
+        ${admin
+          ? html`
+            <select @change=${(e) => this.saveDefaultView(e.target.value)}>
+              ${PROJECT_VIEWS.map(v => html`
+                <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
+              `)}
+            </select>`
+          : html`<div>${currentView.label} <span class="muted">(admin only)</span></div>`}
       </div>
     `;
   }
@@ -320,6 +404,18 @@ class NottarioProjectSettings extends LitElement {
       if (!res.ok) throw new Error((await res.json()).error || 'failed');
       await this.load();
     } catch (err) { this.error = err.message; }
+  }
+
+  _scrollTo(e, id) {
+    e.preventDefault();
+    const target = this.renderRoot.querySelector(`#${id}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Reflect in the URL hash without re-running the page route. The
+    // shell's hashchange listener only reacts to <something>#anchor
+    // *between pages*; within-page anchors update silently.
+    history.replaceState(null, '', `#${id}`);
+    this._activeAnchor = id;
   }
 
   async saveDefaultView(value) {
@@ -360,7 +456,8 @@ class NottarioProjectSettings extends LitElement {
               <td>${r.Label}</td>
               <td>${r.Color ? html`<span class="color-dot" style=${`background:${r.Color}`}></span>${r.Color}` : ''}</td>
               <td class="row-actions">
-                ${canDrag ? html`<button class="btn danger" @click=${() => this.deleteRole(r.ID)}>Delete</button>` : null}
+                ${canDrag ? html`<button class="delete" title="Delete role" aria-label="Delete role"
+                                          @click=${() => this.deleteRole(r.ID)}>✕</button>` : null}
               </td>
             </tr>
           `)}
@@ -447,7 +544,8 @@ class NottarioProjectSettings extends LitElement {
               </td>
               <td class="row-actions">
                 ${this.me?.is_admin
-                  ? html`<button class="btn danger" @click=${() => this.deletePriority(p.Key)}>Delete</button>`
+                  ? html`<button class="delete" title="Delete priority" aria-label="Delete priority"
+                                  @click=${() => this.deletePriority(p.Key)}>✕</button>`
                   : null}
               </td>
             </tr>
@@ -464,7 +562,7 @@ class NottarioProjectSettings extends LitElement {
     `;
   }
 
-  renderMCP() {
+  renderAdvanced() {
     const p = this.project;
     const admin = this.me?.is_admin;
     return html`
