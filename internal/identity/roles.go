@@ -6,64 +6,72 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // ListRoles returns the role catalogue of a project, ordered by
 // the admin-defined position (then by label as a tiebreaker).
 func ListRoles(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]Role, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT id, project_id, key, label, COALESCE(color, ''), position, created_at
-		FROM roles
-		WHERE project_id = $1
-		ORDER BY position, label
-	`, projectID)
+	rows, err := dbq.New(pool).ListProjectRoles(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Role{}
-	for rows.Next() {
-		var r Role
-		if err := rows.Scan(&r.ID, &r.ProjectID, &r.Key, &r.Label, &r.Color, &r.Position, &r.CreatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
+	out := make([]Role, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Role{
+			ID:        r.ID,
+			ProjectID: r.ProjectID,
+			Key:       r.Key,
+			Label:     r.Label,
+			Color:     r.Color,
+			Position:  int(r.Position),
+			CreatedAt: r.CreatedAt.Time,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // CreateRole appends a role to a project's catalogue. The new role
 // receives the highest position so it lands at the bottom of the list.
 func CreateRole(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, key, label, color string) (*Role, error) {
-	var r Role
-	err := pool.QueryRow(ctx, `
-		INSERT INTO roles (project_id, key, label, color, position)
-		VALUES ($1, $2, $3, NULLIF($4, ''),
-		        COALESCE((SELECT MAX(position) + 1 FROM roles WHERE project_id = $1), 0))
-		RETURNING id, project_id, key, label, COALESCE(color, ''), position, created_at
-	`, projectID, key, label, color).Scan(
-		&r.ID, &r.ProjectID, &r.Key, &r.Label, &r.Color, &r.Position, &r.CreatedAt,
-	)
+	row, err := dbq.New(pool).InsertProjectRole(ctx, dbq.InsertProjectRoleParams{
+		ProjectID: projectID,
+		Key:       key,
+		Label:     label,
+		Color:     color,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &r, nil
+	return &Role{
+		ID:        row.ID,
+		ProjectID: row.ProjectID,
+		Key:       row.Key,
+		Label:     row.Label,
+		Color:     row.Color,
+		Position:  int(row.Position),
+		CreatedAt: row.CreatedAt.Time,
+	}, nil
 }
 
 // UpdateRole edits the label and color of a role.
 func UpdateRole(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, label, color string) (*Role, error) {
-	var r Role
-	err := pool.QueryRow(ctx, `
-		UPDATE roles SET label = $2, color = NULLIF($3, '')
-		WHERE id = $1
-		RETURNING id, project_id, key, label, COALESCE(color, ''), position, created_at
-	`, id, label, color).Scan(
-		&r.ID, &r.ProjectID, &r.Key, &r.Label, &r.Color, &r.Position, &r.CreatedAt,
-	)
+	row, err := dbq.New(pool).UpdateProjectRole(ctx, dbq.UpdateProjectRoleParams{
+		ID: id, Label: label, Color: color,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &r, nil
+	return &Role{
+		ID:        row.ID,
+		ProjectID: row.ProjectID,
+		Key:       row.Key,
+		Label:     row.Label,
+		Color:     row.Color,
+		Position:  int(row.Position),
+		CreatedAt: row.CreatedAt.Time,
+	}, nil
 }
 
 // MoveRole rewrites the positions of every role in the project so the
@@ -80,22 +88,16 @@ func MoveRole(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, orde
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	// Validate every id belongs to the project.
-	rows, err := tx.Query(ctx, `SELECT id FROM roles WHERE project_id = $1`, projectID)
+	allIDs, err := q.ListProjectRoleIDs(ctx, projectID)
 	if err != nil {
 		return err
 	}
-	known := map[uuid.UUID]bool{}
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
+	known := make(map[uuid.UUID]bool, len(allIDs))
+	for _, id := range allIDs {
 		known[id] = true
 	}
-	rows.Close()
 
 	seen := map[uuid.UUID]bool{}
 	pos := 0
@@ -107,35 +109,18 @@ func MoveRole(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, orde
 			continue
 		}
 		seen[id] = true
-		if _, err := tx.Exec(ctx, `UPDATE roles SET position = $1 WHERE id = $2`, pos, id); err != nil {
+		if err := q.SetRolePosition(ctx, dbq.SetRolePositionParams{ID: id, Position: int32(pos)}); err != nil {
 			return err
 		}
 		pos++
 	}
 	// Anything not mentioned keeps trailing slots in creation order so a
 	// partial reorder doesn't drop roles off the bottom.
-	rows2, err := tx.Query(ctx, `
-		SELECT id FROM roles
-		WHERE project_id = $1
-		ORDER BY created_at, id
-	`, projectID)
-	if err != nil {
-		return err
-	}
-	var trailing []uuid.UUID
-	for rows2.Next() {
-		var id uuid.UUID
-		if err := rows2.Scan(&id); err != nil {
-			rows2.Close()
-			return err
+	for _, id := range allIDs {
+		if seen[id] {
+			continue
 		}
-		if !seen[id] {
-			trailing = append(trailing, id)
-		}
-	}
-	rows2.Close()
-	for _, id := range trailing {
-		if _, err := tx.Exec(ctx, `UPDATE roles SET position = $1 WHERE id = $2`, pos, id); err != nil {
+		if err := q.SetRolePosition(ctx, dbq.SetRolePositionParams{ID: id, Position: int32(pos)}); err != nil {
 			return err
 		}
 		pos++
@@ -146,6 +131,5 @@ func MoveRole(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, orde
 
 // DeleteRole removes a role. Memberships referencing it cascade.
 func DeleteRole(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
-	_, err := pool.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
-	return err
+	return dbq.New(pool).DeleteProjectRole(ctx, id)
 }
