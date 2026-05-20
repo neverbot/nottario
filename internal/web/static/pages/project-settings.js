@@ -65,6 +65,33 @@ class NottarioProjectSettings extends LitElement {
     .add-row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
     .add-row input { flex: 1; }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
+    .field { margin-bottom: 12px; }
+    .field label {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 500;
+      font-size: 13px;
+      color: #1f2328;
+    }
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font: inherit;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus {
+      outline: 2px solid #0969da;
+      outline-offset: 0;
+      border-color: #0969da;
+    }
+    .field textarea { resize: vertical; min-height: 60px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
     tr[draggable] { cursor: grab; }
     tr.dragging { opacity: 0.45; }
     tr.drag-over td:first-child { box-shadow: inset 2px 0 0 0 #1f6feb; }
@@ -211,33 +238,88 @@ class NottarioProjectSettings extends LitElement {
     const p = this.project;
     const admin = this.me?.is_admin;
     const currentView = viewByKey(p.DefaultView || 'board/kanban');
+    if (!admin) {
+      return html`
+        <dl>
+          <dt><strong>Name</strong></dt><dd>${p.Name}</dd>
+          <dt><strong>Description</strong></dt><dd>${p.Description || html`<span class="muted">none</span>`}</dd>
+          <dt><strong>Primary language</strong></dt><dd>${p.PrimaryLanguage || html`<span class="muted">none</span>`}</dd>
+          <dt><strong>Project type</strong></dt><dd>${p.ProjectType || html`<span class="muted">none</span>`}</dd>
+          <dt><strong>Default view</strong></dt>
+          <dd>${currentView.label} <span class="muted">(admin only)</span></dd>
+          <dt><strong>Repositories</strong></dt>
+          <dd>${p.Repos && p.Repos.length
+                ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map(r => html`<li>${r}</li>`)}</ul>`
+                : html`<span class="muted">none</span>`}</dd>
+        </dl>
+      `;
+    }
+    const reposText = (p.Repos || []).join('\n');
     return html`
-      <dl>
-        <dt><strong>Name</strong></dt><dd>${p.Name}</dd>
-        <dt><strong>Description</strong></dt><dd>${p.Description || html`<span class="muted">none</span>`}</dd>
-        <dt><strong>Primary language</strong></dt><dd>${p.PrimaryLanguage || html`<span class="muted">none</span>`}</dd>
-        <dt><strong>Project type</strong></dt><dd>${p.ProjectType || html`<span class="muted">none</span>`}</dd>
-        <dt><strong>Default view</strong></dt>
-        <dd>
-          ${admin
-            ? html`
-              <select @change=${(e) => this.saveDefaultView(e.target.value)}>
-                ${PROJECT_VIEWS.map(v => html`
-                  <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
-                `)}
-              </select>
-              <p class="muted" style="margin:6px 0 0;font-size:12px">
-                Clicking a project card on the home page navigates here.
-                Currently: <strong>${currentView.label}</strong>.
-              </p>`
-            : html`${currentView.label} <span class="muted">(admin only)</span>`}
-        </dd>
-        <dt><strong>Repositories</strong></dt>
-        <dd>${p.Repos && p.Repos.length
-              ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map(r => html`<li>${r}</li>`)}</ul>`
-              : html`<span class="muted">none</span>`}</dd>
-      </dl>
+      <form class="general-form" @submit=${(e) => this.saveGeneral(e)}>
+        <div class="field">
+          <label>Name</label>
+          <input name="name" required .value=${p.Name}>
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <input name="description" .value=${p.Description || ''}>
+        </div>
+        <div class="field" style="display:flex;gap:12px">
+          <div style="flex:1">
+            <label>Primary language</label>
+            <input name="primary_language" placeholder="go, typescript, python…"
+                   .value=${p.PrimaryLanguage || ''}>
+          </div>
+          <div style="flex:1">
+            <label>Project type</label>
+            <input name="project_type" placeholder="web-app, cli-tool, library…"
+                   .value=${p.ProjectType || ''}>
+          </div>
+        </div>
+        <div class="field">
+          <label>Repositories <span class="muted" style="font-weight:400">one per line or comma-separated, format owner/repo</span></label>
+          <textarea name="repos" rows="3" .value=${reposText}></textarea>
+        </div>
+        <div class="actions-row" style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+          <button type="submit" class="btn primary">Save changes</button>
+        </div>
+      </form>
+
+      <div class="field" style="margin-top:24px">
+        <label>Default view</label>
+        <select @change=${(e) => this.saveDefaultView(e.target.value)}>
+          ${PROJECT_VIEWS.map(v => html`
+            <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
+          `)}
+        </select>
+        <p class="muted" style="margin:6px 0 0;font-size:12px">
+          Clicking a project card on the home page navigates here.
+          Currently: <strong>${currentView.label}</strong>.
+        </p>
+      </div>
     `;
+  }
+
+  async saveGeneral(e) {
+    e.preventDefault();
+    const f = e.target;
+    const payload = {
+      name: f.name.value.trim(),
+      description: f.description.value.trim(),
+      primary_language: f.primary_language.value.trim(),
+      project_type: f.project_type.value.trim(),
+      repos: f.repos.value.split(/\s*,\s*|\n+/).map(s => s.trim()).filter(Boolean),
+    };
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'failed');
+      await this.load();
+    } catch (err) { this.error = err.message; }
   }
 
   async saveDefaultView(value) {
