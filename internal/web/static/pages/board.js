@@ -357,7 +357,17 @@ class NottarioBoardPage extends LitElement {
   }
 
   byState(s) {
-    return this.tasks.filter(t => t.State === s);
+    const items = this.tasks.filter(t => t.State === s);
+    if (s === 'done') {
+      // Most recently finished at the top — fall back to UpdatedAt
+      // when ActualEnd is null (legacy rows / manual edits).
+      items.sort((a, b) => {
+        const at = new Date(a.ActualEnd || a.UpdatedAt).getTime();
+        const bt = new Date(b.ActualEnd || b.UpdatedAt).getTime();
+        return bt - at;
+      });
+    }
+    return items;
   }
 
   open(t) {
