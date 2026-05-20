@@ -14,13 +14,14 @@ LDFLAGS := -s -w \
 	-X github.com/neverbot/nottario/internal/version.Commit=$(COMMIT) \
 	-X github.com/neverbot/nottario/internal/version.Date=$(DATE)
 
-# Pinned linter versions so `make check` is reproducible across machines.
+# Pinned tool versions so `make check` is reproducible across machines.
 GOLANGCI_LINT_VERSION ?= v1.62.2
+SQLC_VERSION          ?= v1.31.1
 
 # Where 'go install' drops binaries (works inside and outside CI).
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
 
-.PHONY: help build test run tidy docker lint check tools
+.PHONY: help build test run tidy docker lint check tools sqlc
 
 help:
 	@echo "Targets:"
@@ -42,6 +43,19 @@ test:
 tools:
 	@command -v $(GOBIN)/golangci-lint >/dev/null 2>&1 \
 		|| $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@command -v $(GOBIN)/sqlc >/dev/null 2>&1 \
+		|| $(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+
+# Regenerate type-safe Go from internal/db/queries/*.sql against the
+# migrations schema. Run after editing any .sql file; commit the
+# generated internal/db/dbq/* alongside the change.
+sqlc: tools
+	$(GOBIN)/sqlc generate
+
+# Verifies the committed sqlc output is in sync with the .sql sources
+# (CI-friendly: fails if someone changed a query but forgot to regenerate).
+sqlc-check: tools
+	$(GOBIN)/sqlc diff
 
 lint: tools
 	$(GOBIN)/golangci-lint run ./...
@@ -59,6 +73,7 @@ check:
 	@test -z "$$(gofmt -l .)" || { echo "gofmt -l reports unformatted files; run 'gofmt -w .'"; exit 1; }
 	$(GO) vet ./...
 	$(MAKE) lint
+	$(MAKE) sqlc-check
 	$(GO) test ./...
 
 run: build
