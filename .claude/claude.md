@@ -136,6 +136,20 @@ artefacts written to disk must be in English regardless.
 - **Default priority is bucket `medium` per project.** Prefer
   `priority_key` over raw integers; the buckets live in
   `nottario.projects.list_priorities`.
+- **File new work BEFORE doing it.** When the user mentions a
+  task / bug / feature that is *not* what you're currently working
+  on (a side comment, a "we should also…", a bug they spotted), the
+  first action is `nottario.tasks.create` to record it — with the
+  right `target_role`, an honest description, dependencies linked
+  if relevant, and split into role children when multi-role. Only
+  then decide whether to keep going with the original task or pivot.
+  Verbatim quotes from the user (the bug repro, the half-formed
+  idea) belong in the description: future-you will not remember
+  them. The bar is "if I had to leave the session right now, would
+  someone else be able to pick this up?" — if not, file more
+  context. Doing the work without filing the row leaves the
+  backlog incoherent and other agents can't see the work in
+  flight.
 
 ### SQL conventions (sqlc workflow)
 - **All new queries land in `internal/db/queries/<domain>.sql`.** One

@@ -313,6 +313,40 @@ nottario.tasks.create {
 
 Then continue with your current task.
 
+### "The user just mentioned a different task / bug / feature"
+
+Same rule, broader scope: whenever the human (or any teammate) drops
+a side-comment about work that is **not** what you're currently
+executing — a "we should also…", a half-formed feature idea, a
+visual bug they noticed, a recommendation about a future page — the
+FIRST action is `nottario.tasks.create`. Only after the row exists
+do you decide whether to keep going with your current task or pivot
+to the new one.
+
+The reasoning is identical for humans and for other agents reading
+the backlog later: if the item only lives in conversation, it's
+invisible. Multi-agent and multi-session work depend on the backlog
+being the single source of truth. Doing the work without filing it
+silently destroys that property.
+
+What to capture in the description:
+- Verbatim what the user said (the bug repro, the design hunch).
+  Future-you will not remember the phrasing.
+- The current state-of-the-code that triggered it (a file path,
+  a screenshot reference, the URL of the broken view).
+- The proposed direction if you have one — even if uncertain. Mark
+  it "tentative" rather than omit it.
+- The role split when the work obviously crosses backend / frontend
+  / design / qa. Either file as a `type=feature` parent with role
+  children, or as one task with a clear role-split note in the body.
+
+When to pivot vs. keep going: cheap context-switch (≤5 min of work
+to make the side comment visibly better, no architectural decision
+required) → pivot, file, fix, return. Otherwise: file with enough
+context that someone else can pick it up, and resume your current
+task. The bar is "if I had to leave the session right now, would
+someone else be able to pick this up?" — if no, add more context.
+
 ### "Block this until X is done"
 
 After you create both tasks, declare the order:
