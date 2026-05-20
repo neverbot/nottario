@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // DefaultRoleCatalogue is seeded into every new project.
@@ -27,61 +29,53 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 	if err != nil {
 		return nil, err
 	}
-
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	var p Project
-	err = tx.QueryRow(ctx, `
-		INSERT INTO projects (slug, name, description, primary_language, project_type, created_by_user_id)
-		VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6)
-		RETURNING id, slug, name, description,
-		          COALESCE(primary_language, ''), COALESCE(project_type, ''),
-		          mcp_page_size,
-		          created_by_user_id, created_at, updated_at
-	`, slug, name, description, primaryLanguage, projectType, createdByUserID).Scan(
-		&p.ID, &p.Slug, &p.Name, &p.Description,
-		&p.PrimaryLanguage, &p.ProjectType,
-		&p.MCPPageSize,
-		&p.CreatedByUserID, &p.CreatedAt, &p.UpdatedAt,
-	)
+	row, err := q.InsertProject(ctx, dbq.InsertProjectParams{
+		Slug:            slug,
+		Name:            name,
+		Description:     description,
+		PrimaryLanguage: primaryLanguage,
+		ProjectType:     projectType,
+		CreatedByUserID: &createdByUserID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
 	}
+	p := projectFromInsertRow(row)
 
 	for i, r := range DefaultRoleCatalogue {
-		_, err = tx.Exec(ctx, `
-			INSERT INTO roles (project_id, key, label, color, position)
-			VALUES ($1, $2, $3, $4, $5)
-		`, p.ID, r.Key, r.Label, r.Color, i)
-		if err != nil {
+		if err := q.InsertSeedRole(ctx, dbq.InsertSeedRoleParams{
+			ProjectID: p.ID,
+			Key:       r.Key,
+			Label:     r.Label,
+			Color:     pgtype.Text{String: r.Color, Valid: r.Color != ""},
+			Position:  int32(i),
+		}); err != nil {
 			return nil, fmt.Errorf("seed role %s: %w", r.Key, err)
 		}
 	}
-
 	if err := seedDefaultPriorities(ctx, tx, p.ID); err != nil {
 		return nil, err
 	}
-
 	for _, repo := range repos {
 		repo = strings.TrimSpace(repo)
 		if repo == "" {
 			continue
 		}
-		_, err = tx.Exec(ctx, `
-			INSERT INTO project_repos (project_id, repo)
-			VALUES ($1, $2)
-			ON CONFLICT DO NOTHING
-		`, p.ID, repo)
-		if err != nil {
+		if err := q.InsertProjectRepo(ctx, dbq.InsertProjectRepoParams{
+			ProjectID: p.ID,
+			Repo:      repo,
+		}); err != nil {
 			return nil, fmt.Errorf("attach repo %s: %w", repo, err)
 		}
 		p.Repos = append(p.Repos, repo)
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
@@ -92,52 +86,51 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 // every project; others see only the projects where they have a
 // membership.
 func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUID, isAdmin bool) ([]Project, error) {
-	var rows pgx.Rows
-	var err error
-	if isAdmin {
-		rows, err = pool.Query(ctx, `
-			SELECT id, slug, name, description,
-			       COALESCE(primary_language, ''), COALESCE(project_type, ''),
-			       mcp_page_size,
-			       created_by_user_id, created_at, updated_at
-			FROM projects ORDER BY name
-		`)
-	} else {
-		rows, err = pool.Query(ctx, `
-			SELECT DISTINCT p.id, p.slug, p.name, p.description,
-			       COALESCE(p.primary_language, ''), COALESCE(p.project_type, ''),
-			       p.mcp_page_size,
-			       p.created_by_user_id, p.created_at, p.updated_at
-			FROM projects p
-			JOIN memberships m ON m.project_id = p.id
-			WHERE m.user_id = $1
-			ORDER BY p.name
-		`, callerUserID)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+	q := dbq.New(pool)
 	var out []Project
-	for rows.Next() {
-		var p Project
-		if err := rows.Scan(
-			&p.ID, &p.Slug, &p.Name, &p.Description,
-			&p.PrimaryLanguage, &p.ProjectType,
-			&p.MCPPageSize,
-			&p.CreatedByUserID, &p.CreatedAt, &p.UpdatedAt,
-		); err != nil {
+	if isAdmin {
+		rows, err := q.ListProjectsAdmin(ctx)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, p)
+		out = make([]Project, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, Project{
+				ID:              r.ID,
+				Slug:            r.Slug,
+				Name:            r.Name,
+				Description:     r.Description,
+				PrimaryLanguage: r.PrimaryLanguage,
+				ProjectType:     r.ProjectType,
+				MCPPageSize:     int(r.McpPageSize),
+				CreatedByUserID: r.CreatedByUserID,
+				CreatedAt:       r.CreatedAt.Time,
+				UpdatedAt:       r.UpdatedAt.Time,
+			})
+		}
+	} else {
+		rows, err := q.ListProjectsForUser(ctx, callerUserID)
+		if err != nil {
+			return nil, err
+		}
+		out = make([]Project, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, Project{
+				ID:              r.ID,
+				Slug:            r.Slug,
+				Name:            r.Name,
+				Description:     r.Description,
+				PrimaryLanguage: r.PrimaryLanguage,
+				ProjectType:     r.ProjectType,
+				MCPPageSize:     int(r.McpPageSize),
+				CreatedByUserID: r.CreatedByUserID,
+				CreatedAt:       r.CreatedAt.Time,
+				UpdatedAt:       r.UpdatedAt.Time,
+			})
+		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
 	for i := range out {
-		repos, err := listProjectRepos(ctx, pool, out[i].ID)
+		repos, err := q.ListProjectRepos(ctx, out[i].ID)
 		if err != nil {
 			return nil, err
 		}
@@ -148,24 +141,24 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 
 // GetProject loads a single project by uuid or slug.
 func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Project, error) {
-	var p Project
-	row := pool.QueryRow(ctx, `
-		SELECT id, slug, name, description,
-		       COALESCE(primary_language, ''), COALESCE(project_type, ''),
-		       mcp_page_size,
-		       created_by_user_id, created_at, updated_at
-		FROM projects
-		WHERE id::text = $1 OR slug = $1
-	`, idOrSlug)
-	if err := row.Scan(
-		&p.ID, &p.Slug, &p.Name, &p.Description,
-		&p.PrimaryLanguage, &p.ProjectType,
-		&p.MCPPageSize,
-		&p.CreatedByUserID, &p.CreatedAt, &p.UpdatedAt,
-	); err != nil {
+	q := dbq.New(pool)
+	row, err := q.GetProjectByIDOrSlug(ctx, idOrSlug)
+	if err != nil {
 		return nil, err
 	}
-	repos, err := listProjectRepos(ctx, pool, p.ID)
+	p := Project{
+		ID:              row.ID,
+		Slug:            row.Slug,
+		Name:            row.Name,
+		Description:     row.Description,
+		PrimaryLanguage: row.PrimaryLanguage,
+		ProjectType:     row.ProjectType,
+		MCPPageSize:     int(row.McpPageSize),
+		CreatedByUserID: row.CreatedByUserID,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+	}
+	repos, err := q.ListProjectRepos(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -180,22 +173,19 @@ func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, 
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	_, err = tx.Exec(ctx, `
-		UPDATE projects
-		SET name = $2,
-		    description = $3,
-		    primary_language = NULLIF($4, ''),
-		    project_type = NULLIF($5, ''),
-		    updated_at = now()
-		WHERE id = $1
-	`, id, name, description, primaryLanguage, projectType)
-	if err != nil {
+	if err := q.UpdateProjectFields(ctx, dbq.UpdateProjectFieldsParams{
+		ID:              id,
+		Name:            name,
+		Description:     description,
+		PrimaryLanguage: primaryLanguage,
+		ProjectType:     projectType,
+	}); err != nil {
 		return nil, err
 	}
-
 	if repos != nil {
-		if _, err := tx.Exec(ctx, `DELETE FROM project_repos WHERE project_id = $1`, id); err != nil {
+		if err := q.ClearProjectRepos(ctx, id); err != nil {
 			return nil, err
 		}
 		for _, r := range repos {
@@ -203,15 +193,13 @@ func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, 
 			if r == "" {
 				continue
 			}
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO project_repos (project_id, repo) VALUES ($1, $2)
-				ON CONFLICT DO NOTHING
-			`, id, r); err != nil {
+			if err := q.InsertProjectRepo(ctx, dbq.InsertProjectRepoParams{
+				ProjectID: id, Repo: r,
+			}); err != nil {
 				return nil, err
 			}
 		}
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -225,9 +213,10 @@ func UpdateProjectMCPPageSize(ctx context.Context, pool *pgxpool.Pool, id uuid.U
 	if pageSize < 1 || pageSize > 500 {
 		return nil, errors.New("mcp_page_size must be between 1 and 500")
 	}
-	if _, err := pool.Exec(ctx, `
-		UPDATE projects SET mcp_page_size = $2, updated_at = now() WHERE id = $1
-	`, id, pageSize); err != nil {
+	if err := dbq.New(pool).UpdateProjectMCPPageSize(ctx, dbq.UpdateProjectMCPPageSizeParams{
+		ID:          id,
+		McpPageSize: int32(pageSize),
+	}); err != nil {
 		return nil, err
 	}
 	return GetProject(ctx, pool, id.String())
@@ -235,25 +224,22 @@ func UpdateProjectMCPPageSize(ctx context.Context, pool *pgxpool.Pool, id uuid.U
 
 // DeleteProject removes a project and cascades all dependent rows.
 func DeleteProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
-	_, err := pool.Exec(ctx, `DELETE FROM projects WHERE id = $1`, id)
-	return err
+	return dbq.New(pool).DeleteProjectByID(ctx, id)
 }
 
-func listProjectRepos(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]string, error) {
-	rows, err := pool.Query(ctx, `SELECT repo FROM project_repos WHERE project_id = $1 ORDER BY repo`, projectID)
-	if err != nil {
-		return nil, err
+func projectFromInsertRow(r dbq.InsertProjectRow) Project {
+	return Project{
+		ID:              r.ID,
+		Slug:            r.Slug,
+		Name:            r.Name,
+		Description:     r.Description,
+		PrimaryLanguage: r.PrimaryLanguage,
+		ProjectType:     r.ProjectType,
+		MCPPageSize:     int(r.McpPageSize),
+		CreatedByUserID: r.CreatedByUserID,
+		CreatedAt:       r.CreatedAt.Time,
+		UpdatedAt:       r.UpdatedAt.Time,
 	}
-	defer rows.Close()
-	out := []string{}
-	for rows.Next() {
-		var r string
-		if err := rows.Scan(&r); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
 }
 
 var slugSafe = regexp.MustCompile(`[^a-z0-9-]+`)
@@ -274,11 +260,11 @@ func Slugify(name string) string {
 }
 
 func uniqueSlug(ctx context.Context, pool *pgxpool.Pool, name string) (string, error) {
+	q := dbq.New(pool)
 	base := Slugify(name)
 	candidate := base
 	for i := 2; i < 100; i++ {
-		var exists bool
-		err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM projects WHERE slug = $1)`, candidate).Scan(&exists)
+		exists, err := q.ProjectSlugExists(ctx, candidate)
 		if err != nil {
 			return "", err
 		}

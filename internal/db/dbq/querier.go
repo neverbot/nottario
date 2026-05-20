@@ -19,9 +19,11 @@ type Querier interface {
 	// actual_start filled if previously null, all in one UPDATE.
 	ClaimNextEligibleTask(ctx context.Context, arg ClaimNextEligibleTaskParams) (ClaimNextEligibleTaskRow, error)
 	ClaimTask(ctx context.Context, arg ClaimTaskParams) error
+	ClearProjectRepos(ctx context.Context, projectID uuid.UUID) error
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
+	DeleteProjectByID(ctx context.Context, id uuid.UUID) error
 	DeleteProjectPriority(ctx context.Context, arg DeleteProjectPriorityParams) (int64, error)
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
@@ -29,12 +31,15 @@ type Querier interface {
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
+	GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (GetProjectByIDOrSlugRow, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
 	GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error)
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
 	InsertMembership(ctx context.Context, arg InsertMembershipParams) error
+	InsertProject(ctx context.Context, arg InsertProjectParams) (InsertProjectRow, error)
+	InsertProjectRepo(ctx context.Context, arg InsertProjectRepoParams) error
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
 	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) error
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
@@ -46,8 +51,11 @@ type Querier interface {
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
 	ListProjectPriorities(ctx context.Context, projectID uuid.UUID) ([]ListProjectPrioritiesRow, error)
+	ListProjectRepos(ctx context.Context, projectID uuid.UUID) ([]string, error)
 	ListProjectRoleIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
 	ListProjectRoles(ctx context.Context, projectID uuid.UUID) ([]ListProjectRolesRow, error)
+	ListProjectsAdmin(ctx context.Context) ([]ListProjectsAdminRow, error)
+	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]ListProjectsForUserRow, error)
 	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]TaskComment, error)
 	ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommitsRow, error)
 	// Optional filters: state, type, assignee, target_role, parent_task.
@@ -69,6 +77,7 @@ type Querier interface {
 	// mutation. Use ClaimNextEligibleTask for atomic pickup.
 	NextEligibleTask(ctx context.Context, arg NextEligibleTaskParams) (NextEligibleTaskRow, error)
 	ProjectIDForTask(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	ProjectSlugExists(ctx context.Context, slug string) (bool, error)
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
 	RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error)
 	SeedDefaultPriority(ctx context.Context, arg SeedDefaultPriorityParams) error
@@ -77,6 +86,8 @@ type Querier interface {
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
+	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error
+	UpdateProjectMCPPageSize(ctx context.Context, arg UpdateProjectMCPPageSizeParams) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (UpdateProjectRoleRow, error)
 	// Optional fields: title, description, type, priority, assignee_user_id,
 	// target_role_id. assignee/target_role have an explicit "unset"
