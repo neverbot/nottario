@@ -150,6 +150,102 @@ func (q *Queries) InsertProjectRepo(ctx context.Context, arg InsertProjectRepoPa
 	return err
 }
 
+const listAllProjectMembers = `-- name: ListAllProjectMembers :many
+SELECT DISTINCT ON (m.project_id, u.id)
+       m.project_id,
+       u.id            AS user_id,
+       u.github_login,
+       u.display_name,
+       COALESCE(u.avatar_url, '')::text AS avatar_url
+FROM memberships m
+JOIN users u ON u.id = m.user_id
+ORDER BY m.project_id, u.id, u.display_name
+`
+
+type ListAllProjectMembersRow struct {
+	ProjectID   uuid.UUID
+	UserID      uuid.UUID
+	GithubLogin string
+	DisplayName string
+	AvatarUrl   string
+}
+
+// Lightweight roster across every project, deduped (a user with
+// multiple roles in the same project appears once). Used by the
+// projects list cards to render an avatar stack.
+func (q *Queries) ListAllProjectMembers(ctx context.Context) ([]ListAllProjectMembersRow, error) {
+	rows, err := q.db.Query(ctx, listAllProjectMembers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllProjectMembersRow{}
+	for rows.Next() {
+		var i ListAllProjectMembersRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.UserID,
+			&i.GithubLogin,
+			&i.DisplayName,
+			&i.AvatarUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllProjectTaskStats = `-- name: ListAllProjectTaskStats :many
+SELECT project_id,
+       COUNT(*) FILTER (WHERE state = 'todo'  AND type != 'feature')::int AS todo_count,
+       COUNT(*) FILTER (WHERE state = 'doing' AND type != 'feature')::int AS doing_count,
+       COUNT(*) FILTER (WHERE state = 'done'  AND type != 'feature')::int AS done_count,
+       MAX(updated_at)::timestamptz                                       AS last_activity_at
+FROM tasks
+GROUP BY project_id
+`
+
+type ListAllProjectTaskStatsRow struct {
+	ProjectID      uuid.UUID
+	TodoCount      int32
+	DoingCount     int32
+	DoneCount      int32
+	LastActivityAt pgtype.Timestamptz
+}
+
+// Aggregated counts per project for the projects list cards.
+// Feature parents are excluded — they're aggregates, not work units;
+// same call we already make for the Gantt priority buckets.
+func (q *Queries) ListAllProjectTaskStats(ctx context.Context) ([]ListAllProjectTaskStatsRow, error) {
+	rows, err := q.db.Query(ctx, listAllProjectTaskStats)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllProjectTaskStatsRow{}
+	for rows.Next() {
+		var i ListAllProjectTaskStatsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.TodoCount,
+			&i.DoingCount,
+			&i.DoneCount,
+			&i.LastActivityAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectRepos = `-- name: ListProjectRepos :many
 SELECT repo FROM project_repos WHERE project_id = $1 ORDER BY repo
 `

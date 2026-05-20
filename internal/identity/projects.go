@@ -138,7 +138,55 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 		}
 		out[i].Repos = repos
 	}
+	if err := enrichProjects(ctx, q, out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// enrichProjects attaches Stats and Members to every project in the
+// slice using two batch queries. Best-effort: a failure attaching
+// stats does not blank the whole list (the cards degrade to
+// language/type/repos only).
+func enrichProjects(ctx context.Context, q *dbq.Queries, projects []Project) error {
+	if len(projects) == 0 {
+		return nil
+	}
+	statsByID := map[uuid.UUID]*ProjectStats{}
+	if rows, err := q.ListAllProjectTaskStats(ctx); err == nil {
+		for _, r := range rows {
+			s := &ProjectStats{
+				TodoCount:  int(r.TodoCount),
+				DoingCount: int(r.DoingCount),
+				DoneCount:  int(r.DoneCount),
+			}
+			if r.LastActivityAt.Valid {
+				v := r.LastActivityAt.Time
+				s.LastActivityAt = &v
+			}
+			statsByID[r.ProjectID] = s
+		}
+	}
+	membersByID := map[uuid.UUID][]ProjectMember{}
+	if rows, err := q.ListAllProjectMembers(ctx); err == nil {
+		for _, r := range rows {
+			membersByID[r.ProjectID] = append(membersByID[r.ProjectID], ProjectMember{
+				UserID:      r.UserID,
+				GithubLogin: r.GithubLogin,
+				DisplayName: r.DisplayName,
+				AvatarURL:   r.AvatarUrl,
+			})
+		}
+	}
+	for i := range projects {
+		if s, ok := statsByID[projects[i].ID]; ok {
+			projects[i].Stats = s
+		} else {
+			projects[i].Stats = &ProjectStats{}
+		}
+		projects[i].Members = membersByID[projects[i].ID]
+	}
+	return nil
 }
 
 // GetProject loads a single project by uuid or slug.

@@ -36,6 +36,10 @@ type Session struct {
 // Project is a unit of work that groups tasks, documents and an
 // architectural diagram. It has a list of GitHub repos as metadata
 // and its own catalogue of roles.
+//
+// Stats and Members are optional cheap enrichments populated by
+// ListProjects for the projects-list cards; they remain nil on
+// endpoints that don't need them (GetProject, Insert/Update).
 type Project struct {
 	ID              uuid.UUID
 	Slug            string
@@ -49,6 +53,27 @@ type Project struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	Repos           []string
+	Stats           *ProjectStats   `json:",omitempty"`
+	Members         []ProjectMember `json:",omitempty"`
+}
+
+// ProjectStats summarises a project's task counts and most recent
+// activity. Feature parents are excluded from the counts because
+// they're aggregates of their children.
+type ProjectStats struct {
+	TodoCount      int
+	DoingCount     int
+	DoneCount      int
+	LastActivityAt *time.Time
+}
+
+// ProjectMember is a lightweight user reference attached to a
+// project for display purposes (avatar stack on the cards).
+type ProjectMember struct {
+	UserID      uuid.UUID
+	GithubLogin string
+	DisplayName string
+	AvatarURL   string
 }
 
 // Role is a per-project label (backend, frontend, qa, ...).

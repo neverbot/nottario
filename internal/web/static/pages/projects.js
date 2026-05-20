@@ -24,15 +24,15 @@ class NottarioProjectsPage extends LitElement {
     .spacer { flex: 1; }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 14px;
     }
     .card {
       position: relative;
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      padding: 14px 16px 12px;
+      gap: 10px;
+      padding: 16px 18px 14px;
       background: #fff;
       border: 1px solid #d1d9e0;
       border-radius: 8px;
@@ -56,7 +56,7 @@ class NottarioProjectsPage extends LitElement {
     }
     .card h3 {
       margin: 0;
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 600;
       flex: 1;
       min-width: 0;
@@ -101,30 +101,103 @@ class NottarioProjectsPage extends LitElement {
       border-color: #d0d7de;
     }
     .card .desc {
-      color: #59636e;
+      color: #1f2328;
       font-size: 13px;
-      line-height: 1.4;
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
-      text-overflow: ellipsis;
+      min-height: calc(1.45em * 2);
+    }
+    .card .desc.placeholder { color: #59636e; opacity: 0.7; font-style: italic; min-height: 0; }
+    .card .stats {
+      display: flex;
+      gap: 14px;
+      font-size: 12px;
+      color: #59636e;
+    }
+    .card .stats .stat {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .card .stats .stat .n {
+      font-weight: 600;
+      font-size: 13px;
+      color: #1f2328;
+      font-variant-numeric: tabular-nums;
+    }
+    .card .stats .stat.doing .n { color: #1f883d; }
+    .card .stats .activity {
+      margin-left: auto;
+      font-size: 11px;
+      color: #59636e;
       white-space: nowrap;
     }
-    .card .desc.placeholder { opacity: 0.55; font-style: italic; }
+    .card .stats.empty { font-style: italic; opacity: 0.7; }
     .card .meta {
       display: flex;
       gap: 4px 6px;
       flex-wrap: wrap;
       font-size: 12px;
       color: #59636e;
-      margin-top: 2px;
     }
     .card .meta .sep { opacity: 0.5; }
     .card .meta .lang,
-    .card .meta .ptype,
-    .card .meta .repos { white-space: nowrap; }
+    .card .meta .ptype { white-space: nowrap; }
     .card .meta .lang {
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
       font-size: 11px;
     }
+    .card .repos {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+      font-size: 11px;
+      color: #59636e;
+      max-height: calc(1.5em * 3);
+      overflow: hidden;
+    }
+    .card .repos .more { font-family: inherit; color: #8b949e; }
+    .card .footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: auto;
+      padding-top: 6px;
+      border-top: 1px solid #eaeef2;
+    }
+    .card .avatars {
+      display: inline-flex;
+      align-items: center;
+    }
+    .card .avatars .avatar {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #d0d7de;
+      border: 2px solid #fff;
+      box-sizing: content-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: #fff;
+      text-transform: uppercase;
+      margin-left: -6px;
+    }
+    .card .avatars .avatar:first-child { margin-left: 0; }
+    .card .avatars .more {
+      margin-left: 6px;
+      font-size: 11px;
+      color: #59636e;
+    }
+    .card .footer .spacer { flex: 1; }
     .empty {
       padding: 40px 24px;
       text-align: center;
@@ -248,15 +321,13 @@ class NottarioProjectsPage extends LitElement {
     const destLabel = viewByKey(p.DefaultView || 'board/kanban').label;
     const stop = (e, path) => { e.stopPropagation(); this.goto(path); };
     const stopOnly = (e) => { e.stopPropagation(); };
+
     const meta = [];
     if (p.PrimaryLanguage) meta.push(html`<span class="lang">${p.PrimaryLanguage}</span>`);
     if (p.ProjectType) meta.push(html`<span class="ptype">${p.ProjectType}</span>`);
-    const repoCount = (p.Repos || []).length;
-    if (repoCount > 0) {
-      meta.push(html`<span class="repos">${repoCount} ${repoCount === 1 ? 'repo' : 'repos'}</span>`);
-    }
     const metaWithSeps = meta.flatMap((node, i) =>
       i === 0 ? [node] : [html`<span class="sep">·</span>`, node]);
+
     return html`
       <div class="card" role="link" tabindex="0"
            @click=${() => this.goto(dest)}
@@ -274,9 +345,89 @@ class NottarioProjectsPage extends LitElement {
         <div class=${p.Description ? 'desc' : 'desc placeholder'} title=${p.Description || ''}>
           ${p.Description || 'No description'}
         </div>
+        ${this._renderStats(p)}
         ${meta.length ? html`<div class="meta">${metaWithSeps}</div>` : null}
+        ${this._renderRepos(p)}
+        ${this._renderFooter(p)}
       </div>
     `;
+  }
+
+  _renderStats(p) {
+    const s = p.Stats;
+    if (!s) return null;
+    const total = s.TodoCount + s.DoingCount + s.DoneCount;
+    if (total === 0) {
+      return html`<div class="stats empty"><span>Empty backlog.</span></div>`;
+    }
+    return html`
+      <div class="stats">
+        <span class="stat"><span class="n">${s.TodoCount}</span> todo</span>
+        <span class="stat doing"><span class="n">${s.DoingCount}</span> doing</span>
+        <span class="stat"><span class="n">${s.DoneCount}</span> done</span>
+        ${s.LastActivityAt
+          ? html`<span class="activity" title=${new Date(s.LastActivityAt).toLocaleString()}>
+                   ${this._relativeTime(s.LastActivityAt)}
+                 </span>`
+          : null}
+      </div>
+    `;
+  }
+
+  _renderRepos(p) {
+    const repos = p.Repos || [];
+    if (repos.length === 0) return null;
+    const shown = repos.slice(0, 3);
+    const extra = repos.length - shown.length;
+    return html`
+      <div class="repos">
+        ${shown.map(r => html`<span>${r}</span>`)}
+        ${extra > 0 ? html`<span class="more">+${extra} more</span>` : null}
+      </div>
+    `;
+  }
+
+  _renderFooter(p) {
+    const members = p.Members || [];
+    if (members.length === 0) return null;
+    const shown = members.slice(0, 5);
+    const extra = members.length - shown.length;
+    return html`
+      <div class="footer">
+        <div class="avatars">
+          ${shown.map(m => m.AvatarURL
+            ? html`<img class="avatar" src=${m.AvatarURL}
+                       alt=${m.DisplayName || m.GithubLogin}
+                       title=${m.DisplayName || m.GithubLogin}>`
+            : html`<span class="avatar" title=${m.DisplayName || m.GithubLogin}>${this._initials(m.DisplayName || m.GithubLogin)}</span>`)}
+          ${extra > 0 ? html`<span class="more">+${extra}</span>` : null}
+        </div>
+        <div class="spacer"></div>
+      </div>
+    `;
+  }
+
+  _initials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/).slice(0, 2);
+    return parts.map(p => p.charAt(0)).join('');
+  }
+
+  // Tiny relative-time formatter: "5m", "3h", "2d", "3w". Falls back
+  // to a date for anything older than ~12 weeks. No new dep.
+  _relativeTime(iso) {
+    const then = new Date(iso).getTime();
+    const diff = Date.now() - then;
+    if (diff < 60_000) return 'just now';
+    const m = Math.floor(diff / 60_000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d}d ago`;
+    const w = Math.floor(d / 7);
+    if (w < 12) return `${w}w ago`;
+    return new Date(iso).toLocaleDateString();
   }
 
   render() {

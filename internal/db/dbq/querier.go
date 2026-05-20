@@ -68,6 +68,14 @@ type Querier interface {
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (TaskComment, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error)
+	// Lightweight roster across every project, deduped (a user with
+	// multiple roles in the same project appears once). Used by the
+	// projects list cards to render an avatar stack.
+	ListAllProjectMembers(ctx context.Context) ([]ListAllProjectMembersRow, error)
+	// Aggregated counts per project for the projects list cards.
+	// Feature parents are excluded — they're aggregates, not work units;
+	// same call we already make for the Gantt priority buckets.
+	ListAllProjectTaskStats(ctx context.Context) ([]ListAllProjectTaskStatsRow, error)
 	ListArchEdges(ctx context.Context, arg ListArchEdgesParams) ([]ListArchEdgesRow, error)
 	ListArchKinds(ctx context.Context, projectID uuid.UUID) ([]ArchNodeKind, error)
 	ListArchNodeLinks(ctx context.Context, nodeID uuid.UUID) ([]ArchNodeLink, error)
