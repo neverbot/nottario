@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // Priority is one bucket in the project's priority vocabulary.
@@ -30,39 +32,36 @@ var DefaultPriorities = []Priority{
 // ListPriorities returns the priority buckets defined for a project,
 // ordered by position.
 func ListPriorities(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]Priority, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT project_id, key, value, position, is_default
-		FROM project_priorities
-		WHERE project_id = $1
-		ORDER BY position, value DESC
-	`, projectID)
+	rows, err := dbq.New(pool).ListProjectPriorities(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Priority{}
-	for rows.Next() {
-		var p Priority
-		if err := rows.Scan(&p.ProjectID, &p.Key, &p.Value, &p.Position, &p.IsDefault); err != nil {
-			return nil, err
-		}
-		out = append(out, p)
+	out := make([]Priority, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Priority{
+			ProjectID: r.ProjectID,
+			Key:       r.Key,
+			Value:     int(r.Value),
+			Position:  int(r.Position),
+			IsDefault: r.IsDefault,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // ResolvePriorityKey returns the numeric value for a key, or an error
 // if the key is unknown for that project.
 func ResolvePriorityKey(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, key string) (int, error) {
-	var v int
-	err := pool.QueryRow(ctx,
-		`SELECT value FROM project_priorities WHERE project_id = $1 AND key = $2`,
-		projectID, key,
-	).Scan(&v)
+	v, err := dbq.New(pool).GetPriorityValue(ctx, dbq.GetPriorityValueParams{
+		ProjectID: projectID, Key: key,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, fmt.Errorf("unknown priority key %q for this project", key)
 	}
-	return v, err
+	if err != nil {
+		return 0, err
+	}
+	return int(v), nil
 }
 
 // DefaultPriorityValue returns the value the project would like new
@@ -73,28 +72,22 @@ func ResolvePriorityKey(ctx context.Context, pool *pgxpool.Pool, projectID uuid.
 // value. If the project has no priorities at all (shouldn't happen
 // post-seeding), returns 50 so the DB default still applies.
 func DefaultPriorityValue(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) (int, error) {
-	var v int
-	err := pool.QueryRow(ctx,
-		`SELECT value FROM project_priorities WHERE project_id = $1 AND key = 'medium'`,
-		projectID,
-	).Scan(&v)
+	q := dbq.New(pool)
+	v, err := q.GetPriorityValue(ctx, dbq.GetPriorityValueParams{ProjectID: projectID, Key: "medium"})
 	if err == nil {
-		return v, nil
+		return int(v), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return 0, err
 	}
-	// No "medium" bucket — pick closest to 50, prefer the higher on tie.
-	err = pool.QueryRow(ctx, `
-		SELECT value FROM project_priorities
-		WHERE project_id = $1
-		ORDER BY abs(value - 50) ASC, value DESC
-		LIMIT 1
-	`, projectID).Scan(&v)
+	v, err = q.GetPriorityClosestTo50(ctx, projectID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 50, nil
 	}
-	return v, err
+	if err != nil {
+		return 0, err
+	}
+	return int(v), nil
 }
 
 // UpsertPriority creates or updates a priority bucket.
@@ -105,47 +98,51 @@ func UpsertPriority(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID
 	if value < 0 || value > 1000 {
 		return nil, errors.New("priority value must be between 0 and 1000")
 	}
-	var p Priority
-	err := pool.QueryRow(ctx, `
-		INSERT INTO project_priorities (project_id, key, value, position, is_default)
-		VALUES ($1, $2, $3, $4, false)
-		ON CONFLICT (project_id, key) DO UPDATE
-		SET value = EXCLUDED.value, position = EXCLUDED.position
-		RETURNING project_id, key, value, position, is_default
-	`, projectID, key, value, position).Scan(&p.ProjectID, &p.Key, &p.Value, &p.Position, &p.IsDefault)
+	row, err := dbq.New(pool).UpsertProjectPriority(ctx, dbq.UpsertProjectPriorityParams{
+		ProjectID: projectID,
+		Key:       key,
+		Value:     int32(value),
+		Position:  int32(position),
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &p, nil
+	return &Priority{
+		ProjectID: row.ProjectID,
+		Key:       row.Key,
+		Value:     int(row.Value),
+		Position:  int(row.Position),
+		IsDefault: row.IsDefault,
+	}, nil
 }
 
 // RemovePriority deletes a priority bucket. Tasks already using its
 // numeric value keep their integer priority unchanged; the bucket
 // only disappears from the project's vocabulary.
 func RemovePriority(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, key string) error {
-	cmd, err := pool.Exec(ctx,
-		`DELETE FROM project_priorities WHERE project_id = $1 AND key = $2`,
-		projectID, key,
-	)
+	rows, err := dbq.New(pool).DeleteProjectPriority(ctx, dbq.DeleteProjectPriorityParams{
+		ProjectID: projectID, Key: key,
+	})
 	if err != nil {
 		return err
 	}
-	if cmd.RowsAffected() == 0 {
+	if rows == 0 {
 		return errors.New("priority not found")
 	}
 	return nil
 }
 
-// SeedDefaultPriorities is called from CreateProject so every new
+// seedDefaultPriorities is called from CreateProject so every new
 // project starts with the default catalogue.
 func seedDefaultPriorities(ctx context.Context, tx pgx.Tx, projectID uuid.UUID) error {
+	q := dbq.New(tx)
 	for _, p := range DefaultPriorities {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO project_priorities (project_id, key, value, position, is_default)
-			VALUES ($1, $2, $3, $4, true)
-			ON CONFLICT DO NOTHING
-		`, projectID, p.Key, p.Value, p.Position)
-		if err != nil {
+		if err := q.SeedDefaultPriority(ctx, dbq.SeedDefaultPriorityParams{
+			ProjectID: projectID,
+			Key:       p.Key,
+			Value:     int32(p.Value),
+			Position:  int32(p.Position),
+		}); err != nil {
 			return fmt.Errorf("seed priority %s: %w", p.Key, err)
 		}
 	}
