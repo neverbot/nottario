@@ -48,6 +48,9 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	if !ValidType(t) {
 		return nil, fmt.Errorf("invalid type: %q", t)
 	}
+	if err := validateTaskAssignments(ctx, pool, p.ProjectID, p.TargetRoleID, p.AssigneeUserID); err != nil {
+		return nil, err
+	}
 	priority := 50
 	if p.Priority != nil {
 		priority = *p.Priority
@@ -351,6 +354,16 @@ type UpdateParams struct {
 
 // Update mutates the fields enumerated in p.
 func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParams) (*Task, error) {
+	if p.TargetRoleID != nil || p.AssigneeUserID != nil {
+		// Resolve task's project to validate against.
+		var projectID uuid.UUID
+		if err := pool.QueryRow(ctx, `SELECT project_id FROM tasks WHERE id = $1`, id).Scan(&projectID); err != nil {
+			return nil, err
+		}
+		if err := validateTaskAssignments(ctx, pool, projectID, p.TargetRoleID, p.AssigneeUserID); err != nil {
+			return nil, err
+		}
+	}
 	sets := []string{}
 	args := []any{id}
 	idx := 2
@@ -553,6 +566,44 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
 	}
 	if cmd.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// validateTaskAssignments ensures the role and assignee, when given,
+// belong to the project. A clear error makes the agent recover by
+// calling projects.list_roles / projects.list_members instead of
+// silently storing an unusable foreign key.
+func validateTaskAssignments(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, roleID *uuid.UUID, userID *uuid.UUID) error {
+	if roleID != nil {
+		var exists bool
+		if err := pool.QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND project_id = $2)`,
+			*roleID, projectID,
+		).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("target_role_id %s does not belong to this project (call projects.list_roles to discover valid role ids)", roleID)
+		}
+	}
+	if userID != nil {
+		// Admins can be assigned even without an explicit membership;
+		// otherwise the user must be a member of the project.
+		var ok bool
+		if err := pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM users WHERE id = $1 AND is_admin = true
+			) OR EXISTS (
+				SELECT 1 FROM memberships
+				WHERE user_id = $1 AND project_id = $2
+			)
+		`, *userID, projectID).Scan(&ok); err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("assignee_user_id %s is not a member of this project (use projects/{id}/members to grant a role first)", userID)
+		}
 	}
 	return nil
 }
