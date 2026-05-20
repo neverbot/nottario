@@ -77,11 +77,13 @@ class NottarioProfilePage extends LitElement {
 
     table.memberships {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       background: #fff;
       border: 1px solid #d1d9e0;
       border-radius: 8px;
       overflow: hidden;
+      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
     }
     table.memberships th,
     table.memberships td {
