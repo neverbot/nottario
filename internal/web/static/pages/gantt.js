@@ -608,15 +608,25 @@ class NottarioGantt extends LitElement {
     const futurePriorityBuckets = [];   // [{ depth, priority, x }] for labels
     {
       // tasksByDepth: depth -> [task]
-      // Feature parents are aggregates rendered on the Features lane,
-      // not in the priority sub-columns of the future zone — they
-      // never occupy an x slot here. Excluding them stops empty
-      // priority columns appearing just because a feature parent
-      // happens to carry that priority value.
+      //
+      // Feature parents WITH descendants render either as an
+      // aggregate (folded) or as their hidden self with kids showing
+      // through (unfolded). Their own priority is irrelevant to the
+      // future-zone column grid, so we skip them. Otherwise (a
+      // childless feature, common when an idea is parked as a top-
+      // level `type=feature` row before role children are filed) the
+      // feature renders as a standalone card and DOES need a slot —
+      // include it so it lands in its own priority sub-column instead
+      // of falling through to the leftmost (which reads as "critical"
+      // and is the bug the user spotted).
+      const hasDescendants = new Set();
+      for (const t of this.tasks || []) {
+        if (t.ParentTaskID) hasDescendants.add(t.ParentTaskID);
+      }
       const tasksByDepth = new Map();
       for (const t of this.tasks || []) {
         if (t.State !== 'todo') continue;
-        if (t.Type === 'feature') continue;
+        if (t.Type === 'feature' && hasDescendants.has(t.ID)) continue;
         const d = globalDepths.get(t.ID) || 0;
         if (!tasksByDepth.has(d)) tasksByDepth.set(d, []);
         tasksByDepth.get(d).push(t);
