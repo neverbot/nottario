@@ -607,10 +607,16 @@ class NottarioGantt extends LitElement {
     const futureSubColumnX = new Map(); // taskID -> x offset
     const futurePriorityBuckets = [];   // [{ depth, priority, x }] for labels
     {
-      // tasksByDepth: depth -> [{ priority, count }]
+      // tasksByDepth: depth -> [task]
+      // Feature parents are aggregates rendered on the Features lane,
+      // not in the priority sub-columns of the future zone — they
+      // never occupy an x slot here. Excluding them stops empty
+      // priority columns appearing just because a feature parent
+      // happens to carry that priority value.
       const tasksByDepth = new Map();
       for (const t of this.tasks || []) {
         if (t.State !== 'todo') continue;
+        if (t.Type === 'feature') continue;
         const d = globalDepths.get(t.ID) || 0;
         if (!tasksByDepth.has(d)) tasksByDepth.set(d, []);
         tasksByDepth.get(d).push(t);
