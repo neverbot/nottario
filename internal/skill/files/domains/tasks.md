@@ -59,6 +59,32 @@ Filter parameters (all optional except `project_id`):
 
 Ordering: `priority DESC, created_at ASC`.
 
+#### Pagination
+
+`tasks.list` is **paginated** with a keyset cursor:
+
+- `limit` — page size, 1..500. Omit to use the project's configured
+  `mcp_page_size` (default 50, editable in the web UI under
+  *Project settings → MCP*).
+- `cursor` — opaque string. Empty/omitted ⇒ first page. Otherwise pass
+  the previous response's `next_cursor`.
+
+Each response is now `{tasks, next_cursor, has_more}` (instead of just
+`{tasks}`). The canonical walk loops while `has_more`:
+
+```text
+cursor = ""
+loop:
+  page = tasks.list { project_id, state: "todo", cursor }
+  process page.tasks
+  if not page.has_more: break
+  cursor = page.next_cursor
+```
+
+Filters can change between calls (e.g. swap `state` mid-walk) without
+corrupting the cursor — the ordering is stable across mutations
+because the cursor encodes `(priority, created_at, id)`.
+
 ### `nottario.tasks.next`
 
 Returns the next eligible task or `{task: null}` if nothing is
