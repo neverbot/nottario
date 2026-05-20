@@ -104,6 +104,7 @@ class NottarioProjectSettings extends LitElement {
       background: #fff;
       box-sizing: border-box;
     }
+    .prefs-control select { max-width: 260px; }
     .prefs-control input[type="number"] { width: 96px; font-variant-numeric: tabular-nums; }
 
     /* Hide the browser-native number spinner everywhere on this page.
