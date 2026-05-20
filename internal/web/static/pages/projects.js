@@ -12,7 +12,8 @@ class NottarioProjectsPage extends LitElement {
   };
 
   static styles = css`
-    :host { display: block; }
+    :host { display: block; box-sizing: border-box; }
+    * { box-sizing: border-box; }
     .header {
       display: flex;
       align-items: center;
@@ -23,12 +24,15 @@ class NottarioProjectsPage extends LitElement {
     .spacer { flex: 1; }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       gap: 12px;
     }
     .card {
       position: relative;
-      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 14px 16px 12px;
       background: #fff;
       border: 1px solid #d1d9e0;
       border-radius: 8px;
@@ -45,34 +49,91 @@ class NottarioProjectsPage extends LitElement {
       outline: 2px solid #0969da;
       outline-offset: 2px;
     }
-    .card h3 { margin: 0 0 4px 0; font-size: 16px; }
-    .card .default-hint {
-      margin-top: 10px;
-      font-size: 12px;
-      color: #59636e;
-    }
-    .card .repos {
-      margin-top: 8px;
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
-      font-size: 12px;
-      color: #59636e;
-    }
-    .card .repos span {
-      display: block;
-    }
-    .card .actions {
-      margin-top: 12px;
+    .card .top {
       display: flex;
+      align-items: center;
       gap: 8px;
     }
+    .card h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card .dest-chip {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid #d0d7de;
+      background: #f6f8fa;
+      color: #59636e;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .card .settings-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      color: #59636e;
+      text-decoration: none;
+      border: 1px solid transparent;
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+    }
+    .card .settings-link:hover {
+      color: #1f2328;
+      background: #f3f4f6;
+      border-color: #d0d7de;
+    }
+    .card .desc {
+      color: #59636e;
+      font-size: 13px;
+      line-height: 1.4;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card .desc.placeholder { opacity: 0.55; font-style: italic; }
+    .card .meta {
+      display: flex;
+      gap: 4px 6px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: #59636e;
+      margin-top: 2px;
+    }
+    .card .meta .sep { opacity: 0.5; }
+    .card .meta .lang,
+    .card .meta .ptype,
+    .card .meta .repos { white-space: nowrap; }
+    .card .meta .lang {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+      font-size: 11px;
+    }
     .empty {
-      padding: 32px;
+      padding: 40px 24px;
       text-align: center;
       color: #59636e;
       background: #fff;
       border: 1px dashed #d1d9e0;
       border-radius: 8px;
     }
+    .empty strong { display: block; color: #1f2328; font-size: 15px; margin-bottom: 4px; }
     .dialog {
       position: fixed;
       inset: 0;
@@ -182,6 +243,42 @@ class NottarioProjectsPage extends LitElement {
     window.nottarioNavigate(path);
   }
 
+  _renderCard(p) {
+    const dest = defaultPathFor(p);
+    const destLabel = viewByKey(p.DefaultView || 'board/kanban').label;
+    const stop = (e, path) => { e.stopPropagation(); this.goto(path); };
+    const stopOnly = (e) => { e.stopPropagation(); };
+    const meta = [];
+    if (p.PrimaryLanguage) meta.push(html`<span class="lang">${p.PrimaryLanguage}</span>`);
+    if (p.ProjectType) meta.push(html`<span class="ptype">${p.ProjectType}</span>`);
+    const repoCount = (p.Repos || []).length;
+    if (repoCount > 0) {
+      meta.push(html`<span class="repos">${repoCount} ${repoCount === 1 ? 'repo' : 'repos'}</span>`);
+    }
+    const metaWithSeps = meta.flatMap((node, i) =>
+      i === 0 ? [node] : [html`<span class="sep">·</span>`, node]);
+    return html`
+      <div class="card" role="link" tabindex="0"
+           @click=${() => this.goto(dest)}
+           @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.goto(dest); } }}>
+        <div class="top">
+          <h3 title=${p.Name}>${p.Name}</h3>
+          <span class="dest-chip" title="Default view">${destLabel}</span>
+          ${this.me?.is_admin
+            ? html`<button class="settings-link" title="Project settings"
+                          aria-label="Settings"
+                          @click=${(e) => stop(e, `/projects/${p.ID}/settings`)}
+                          @keydown=${stopOnly}>⚙</button>`
+            : null}
+        </div>
+        <div class=${p.Description ? 'desc' : 'desc placeholder'} title=${p.Description || ''}>
+          ${p.Description || 'No description'}
+        </div>
+        ${meta.length ? html`<div class="meta">${metaWithSeps}</div>` : null}
+      </div>
+    `;
+  }
+
   render() {
     if (this.projects === null) {
       return html`<div class="empty">Loading projects…</div>`;
@@ -195,33 +292,15 @@ class NottarioProjectsPage extends LitElement {
           : null}
       </div>
       ${this.projects.length === 0
-        ? html`<div class="empty">No projects yet.${this.me?.is_admin ? html` Click <strong>New project</strong> to create one.` : ''}</div>`
+        ? html`<div class="empty">
+            <strong>No projects yet.</strong>
+            ${this.me?.is_admin
+              ? html`Click <strong>New project</strong> to seed one with default roles, priorities and an empty backlog.`
+              : html`Ask an admin to add you to one, or to create the first project.`}
+          </div>`
         : html`
           <div class="grid">
-            ${this.projects.map(p => {
-              const dest = defaultPathFor(p);
-              const destLabel = viewByKey(p.DefaultView || 'board/kanban').label;
-              const stop = (e, path) => { e.stopPropagation(); this.goto(path); };
-              return html`
-                <div class="card" role="link" tabindex="0"
-                     @click=${() => this.goto(dest)}
-                     @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.goto(dest); } }}>
-                  <h3>${p.Name}</h3>
-                  <div class="muted">${p.Description || html`<span style="opacity:0.6">no description</span>`}</div>
-                  ${p.Repos && p.Repos.length
-                    ? html`<div class="repos">${p.Repos.map(r => html`<span>${r}</span>`)}</div>`
-                    : null}
-                  <div class="default-hint">Opens <strong>${destLabel}</strong></div>
-                  <div class="actions">
-                    <button @click=${(e) => stop(e, `/projects/${p.ID}/board/kanban`)}>Kanban</button>
-                    <button @click=${(e) => stop(e, `/projects/${p.ID}/board/gantt`)}>Gantt</button>
-                    <button @click=${(e) => stop(e, `/projects/${p.ID}/docs`)}>Docs</button>
-                    <button @click=${(e) => stop(e, `/projects/${p.ID}/arch`)}>Architecture</button>
-                    <button @click=${(e) => stop(e, `/projects/${p.ID}/settings`)}>Settings</button>
-                  </div>
-                </div>
-              `;
-            })}
+            ${this.projects.map(p => this._renderCard(p))}
           </div>
         `}
       ${this.showCreate ? this.renderCreateDialog() : null}
