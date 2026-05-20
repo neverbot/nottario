@@ -281,6 +281,42 @@ class NottarioGantt extends LitElement {
     });
   }
 
+  _roleLabel(id) {
+    const r = (this.roles || []).find(x => x.ID === id);
+    return r ? r.Label : '';
+  }
+
+  _featureRoles(featureID) {
+    // List the distinct roles of the feature's non-feature descendants,
+    // separated by commas, in the project's role order.
+    const taskByID = new Map((this.tasks || []).map(t => [t.ID, t]));
+    const childrenByParent = new Map();
+    for (const t of this.tasks || []) {
+      if (!t.ParentTaskID) continue;
+      if (!childrenByParent.has(t.ParentTaskID)) childrenByParent.set(t.ParentTaskID, []);
+      childrenByParent.get(t.ParentTaskID).push(t.ID);
+    }
+    const seen = new Set();
+    const walk = (id) => {
+      for (const c of childrenByParent.get(id) || []) {
+        if (seen.has(c)) continue;
+        seen.add(c);
+        walk(c);
+      }
+    };
+    walk(featureID);
+    const roleIDs = new Set();
+    for (const id of seen) {
+      const t = taskByID.get(id);
+      if (t && t.Type !== 'feature' && t.TargetRoleID) roleIDs.add(t.TargetRoleID);
+    }
+    const sortedRoles = [...this.roles || []]
+      .filter(r => roleIDs.has(r.ID))
+      .sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0))
+      .map(r => r.Label.toLowerCase());
+    return sortedRoles.length ? sortedRoles.join(', ') : 'no roles';
+  }
+
   _priorityLabel(value) {
     if (this.priorities && this.priorities.length) {
       const exact = this.priorities.find(p => p.Value === value);
@@ -771,11 +807,16 @@ class NottarioGantt extends LitElement {
           <!-- "now" marker -->
           <line class="now-line"
                 x1=${presentX + presentWidth / 2} y1=${headerH - 8}
-                x2=${presentX + presentWidth / 2} y2=${totalHeight}></line>
+                x2=${presentX + presentWidth / 2} y2=${totalHeight}>
+            <title>${this.now ? this.now.toLocaleString() : ''}</title>
+          </line>
           <text class="now-label"
                 x=${presentX + presentWidth / 2}
                 y=${headerH - 12}
-                text-anchor="middle">now</text>
+                text-anchor="middle">
+            <title>${this.now ? this.now.toLocaleString() : ''}</title>
+            now
+          </text>
 
           <!-- Tasks placed in their lane -->
           ${positions.map(p => {
@@ -808,7 +849,9 @@ class NottarioGantt extends LitElement {
                       stroke-dasharray="6 3"
                       style="cursor:pointer"
                       @click=${(e) => { e.stopPropagation(); this._toggleFold(t.ID); }}>
-                  <title>${t.Title} — feature with ${childCount} task${childCount === 1 ? '' : 's'} (click to expand)</title>
+                  <title>${t.Title}
+${childCount} task${childCount === 1 ? '' : 's'} across ${this._featureRoles(t.ID)}
+click to expand</title>
                 </rect>
                 <text class="task-label" x=${labelX} y=${y + taskHeight / 2 + 4}
                       style="pointer-events:none">
@@ -834,7 +877,8 @@ class NottarioGantt extends LitElement {
                     fill=${t.State === 'done' ? '#d1d9e0' : (t.State === 'doing' ? color : 'transparent')}
                     stroke=${color}
                     @click=${(e) => { e.stopPropagation(); this._emitSelect(t); }}>
-                <title>${t.Title}${user ? ` — assigned to ${user.DisplayName}` : ''}</title>
+                <title>${t.Title}
+${t.State} · ${this._priorityLabel(t.Priority)}${t.TargetRoleID ? ` · ${this._roleLabel(t.TargetRoleID)}` : ''}${user ? `\nassigned to ${user.DisplayName}` : ''}</title>
               </rect>
               ${user && user.AvatarURL ? svg`
                 <g transform=${`translate(${avatarX}, ${avatarY})`} style="pointer-events:none">
