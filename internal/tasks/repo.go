@@ -470,80 +470,59 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
 	// Lock the task row for the rest of this transaction. AddDependency
 	// (and any other writer that may want to mutate this task's deps)
 	// takes the same lock, so they serialize: the precondition check
 	// below sees a stable view, and a concurrent add_dependency either
 	// waits or finds the task already in 'done'.
-	var taskType string
-	var parentTaskID *uuid.UUID
-	if err := tx.QueryRow(ctx,
-		`SELECT type, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&taskType, &parentTaskID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
-		}
+	header, err := q.LockTaskTypeAndParent(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
 		return nil, err
 	}
 
 	// When closing a non-feature task, require every direct precondition
 	// to be `done`. Features are rolled up automatically by the engine
-	// (see rollUpParentDone) so this check would race with itself; we
+	// (see rollUpParentDoneTx) so this check would race with itself; we
 	// skip it for them.
-	if s == StateDone && taskType != "feature" {
-		rows, err := tx.Query(ctx, `
-			SELECT t.id, t.title, t.state
-			FROM task_dependencies td
-			JOIN tasks t ON t.id = td.depends_on_id
-			WHERE td.task_id = $1 AND t.state <> 'done'
-			ORDER BY t.actual_end NULLS LAST, t.created_at
-		`, id)
+	if s == StateDone && header.Type != "feature" {
+		rows, err := q.ListUnresolvedPreconditions(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		var unresolved []PreconditionRef
-		for rows.Next() {
-			var p PreconditionRef
-			if err := rows.Scan(&p.ID, &p.Title, &p.State); err != nil {
-				rows.Close()
-				return nil, err
+		if len(rows) > 0 {
+			unresolved := make([]PreconditionRef, 0, len(rows))
+			for _, r := range rows {
+				unresolved = append(unresolved, PreconditionRef{
+					ID:    r.ID,
+					Title: r.Title,
+					State: State(r.State),
+				})
 			}
-			unresolved = append(unresolved, p)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-		if len(unresolved) > 0 {
 			return nil, &UnresolvedPreconditionsError{TaskID: id, Preconditions: unresolved}
 		}
 	}
 
-	var actualStartSQL, actualEndSQL string
 	switch s {
 	case StateTodo:
-		actualStartSQL = "actual_start = NULL"
-		actualEndSQL = "actual_end = NULL"
+		err = q.SetTaskTodo(ctx, id)
 	case StateDoing:
-		actualStartSQL = "actual_start = COALESCE(actual_start, now())"
-		actualEndSQL = "actual_end = NULL"
+		err = q.SetTaskDoing(ctx, id)
 	case StateDone:
-		actualStartSQL = "actual_start = COALESCE(actual_start, now())"
-		actualEndSQL = "actual_end = now()"
+		err = q.SetTaskDone(ctx, id)
 	}
-	query := fmt.Sprintf(
-		"UPDATE tasks SET state = $2, %s, %s, updated_at = now() WHERE id = $1",
-		actualStartSQL, actualEndSQL,
-	)
-	if _, err := tx.Exec(ctx, query, id, s); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
 	// Bubble "done" upward inside the same transaction so two siblings
 	// closing concurrently can't both miss the parent.
 	if s == StateDone {
-		if err := rollUpParentDoneTx(ctx, tx, parentTaskID); err != nil {
+		if err := rollUpParentDoneTx(ctx, tx, header.ParentTaskID); err != nil {
 			return nil, err
 		}
 	}
@@ -559,37 +538,26 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 // child closures serialize on the parent. No-op when parent is nil,
 // already done, or has at least one non-done child.
 func rollUpParentDoneTx(ctx context.Context, tx pgx.Tx, parentID *uuid.UUID) error {
+	q := dbq.New(tx)
 	for parentID != nil {
-		var pState string
-		var pNext *uuid.UUID
-		if err := tx.QueryRow(ctx, `
-			SELECT state, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE
-		`, *parentID).Scan(&pState, &pNext); err != nil {
+		header, err := q.GetParentStateAndGrandparent(ctx, *parentID)
+		if err != nil {
 			return err
 		}
-		if pState == "done" {
+		if header.State == "done" {
 			return nil
 		}
-		var pending int
-		if err := tx.QueryRow(ctx, `
-			SELECT COUNT(*) FROM tasks
-			WHERE parent_task_id = $1 AND state <> 'done'
-		`, *parentID).Scan(&pending); err != nil {
+		pending, err := q.CountNonDoneChildren(ctx, parentID)
+		if err != nil {
 			return err
 		}
 		if pending > 0 {
 			return nil
 		}
-		if _, err := tx.Exec(ctx, `
-			UPDATE tasks SET state = 'done',
-			       actual_start = COALESCE(actual_start, now()),
-			       actual_end = now(),
-			       updated_at = now()
-			 WHERE id = $1
-		`, *parentID); err != nil {
+		if err := q.SetTaskDone(ctx, *parentID); err != nil {
 			return err
 		}
-		parentID = pNext
+		parentID = header.ParentTaskID
 	}
 	return nil
 }
@@ -612,30 +580,23 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
 // calling projects.list_roles / projects.list_members instead of
 // silently storing an unusable foreign key.
 func validateTaskAssignments(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, roleID *uuid.UUID, userID *uuid.UUID) error {
+	q := dbq.New(pool)
 	if roleID != nil {
-		var exists bool
-		if err := pool.QueryRow(ctx,
-			`SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND project_id = $2)`,
-			*roleID, projectID,
-		).Scan(&exists); err != nil {
+		ok, err := q.RoleExistsInProject(ctx, dbq.RoleExistsInProjectParams{
+			ID: *roleID, ProjectID: projectID,
+		})
+		if err != nil {
 			return err
 		}
-		if !exists {
+		if !ok {
 			return fmt.Errorf("target_role_id %s does not belong to this project (call projects.list_roles to discover valid role ids)", roleID)
 		}
 	}
 	if userID != nil {
-		// Admins can be assigned even without an explicit membership;
-		// otherwise the user must be a member of the project.
-		var ok bool
-		if err := pool.QueryRow(ctx, `
-			SELECT EXISTS (
-				SELECT 1 FROM users WHERE id = $1 AND is_admin = true
-			) OR EXISTS (
-				SELECT 1 FROM memberships
-				WHERE user_id = $1 AND project_id = $2
-			)
-		`, *userID, projectID).Scan(&ok); err != nil {
+		ok, err := q.UserBelongsToProjectOrIsAdmin(ctx, dbq.UserBelongsToProjectOrIsAdminParams{
+			ID: *userID, ProjectID: projectID,
+		})
+		if err != nil {
 			return err
 		}
 		if !ok {

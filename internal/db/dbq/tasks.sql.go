@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countNonDoneChildren = `-- name: CountNonDoneChildren :one
+SELECT COUNT(*)::int FROM tasks
+WHERE parent_task_id = $1 AND state <> 'done'
+`
+
+func (q *Queries) CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countNonDoneChildren, parentTaskID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteTask = `-- name: DeleteTask :execrows
 DELETE FROM tasks WHERE id = $1
 `
@@ -22,6 +34,22 @@ func (q *Queries) DeleteTask(ctx context.Context, id uuid.UUID) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getParentStateAndGrandparent = `-- name: GetParentStateAndGrandparent :one
+SELECT state, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE
+`
+
+type GetParentStateAndGrandparentRow struct {
+	State        string
+	ParentTaskID *uuid.UUID
+}
+
+func (q *Queries) GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error) {
+	row := q.db.QueryRow(ctx, getParentStateAndGrandparent, id)
+	var i GetParentStateAndGrandparentRow
+	err := row.Scan(&i.State, &i.ParentTaskID)
+	return i, err
 }
 
 const getTask = `-- name: GetTask :one
@@ -156,4 +184,131 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertT
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listUnresolvedPreconditions = `-- name: ListUnresolvedPreconditions :many
+SELECT t.id, t.title, t.state
+FROM task_dependencies td
+JOIN tasks t ON t.id = td.depends_on_id
+WHERE td.task_id = $1 AND t.state <> 'done'
+ORDER BY t.actual_end NULLS LAST, t.created_at
+`
+
+type ListUnresolvedPreconditionsRow struct {
+	ID    uuid.UUID
+	Title string
+	State string
+}
+
+func (q *Queries) ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error) {
+	rows, err := q.db.Query(ctx, listUnresolvedPreconditions, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnresolvedPreconditionsRow{}
+	for rows.Next() {
+		var i ListUnresolvedPreconditionsRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.State); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockTaskTypeAndParent = `-- name: LockTaskTypeAndParent :one
+SELECT type, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE
+`
+
+type LockTaskTypeAndParentRow struct {
+	Type         string
+	ParentTaskID *uuid.UUID
+}
+
+func (q *Queries) LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error) {
+	row := q.db.QueryRow(ctx, lockTaskTypeAndParent, id)
+	var i LockTaskTypeAndParentRow
+	err := row.Scan(&i.Type, &i.ParentTaskID)
+	return i, err
+}
+
+const roleExistsInProject = `-- name: RoleExistsInProject :one
+SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND project_id = $2)::bool
+`
+
+type RoleExistsInProjectParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, roleExistsInProject, arg.ID, arg.ProjectID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const setTaskDoing = `-- name: SetTaskDoing :exec
+UPDATE tasks SET
+  state = 'doing',
+  actual_start = COALESCE(actual_start, now()),
+  actual_end = NULL,
+  updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) SetTaskDoing(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setTaskDoing, id)
+	return err
+}
+
+const setTaskDone = `-- name: SetTaskDone :exec
+UPDATE tasks SET
+  state = 'done',
+  actual_start = COALESCE(actual_start, now()),
+  actual_end = now(),
+  updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) SetTaskDone(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setTaskDone, id)
+	return err
+}
+
+const setTaskTodo = `-- name: SetTaskTodo :exec
+UPDATE tasks SET
+  state = 'todo',
+  actual_start = NULL,
+  actual_end = NULL,
+  updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) SetTaskTodo(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setTaskTodo, id)
+	return err
+}
+
+const userBelongsToProjectOrIsAdmin = `-- name: UserBelongsToProjectOrIsAdmin :one
+SELECT (
+  EXISTS (SELECT 1 FROM users WHERE id = $1 AND is_admin = true)
+  OR EXISTS (SELECT 1 FROM memberships WHERE user_id = $1 AND project_id = $2)
+)::bool
+`
+
+type UserBelongsToProjectOrIsAdminParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) UserBelongsToProjectOrIsAdmin(ctx context.Context, arg UserBelongsToProjectOrIsAdminParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userBelongsToProjectOrIsAdmin, arg.ID, arg.ProjectID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }

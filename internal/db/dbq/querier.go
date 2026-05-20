@@ -13,17 +13,26 @@ import (
 
 type Querier interface {
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
+	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
+	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
+	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
+	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	ProjectIDForTask(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
+	RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error)
+	SetTaskDoing(ctx context.Context, id uuid.UUID) error
+	SetTaskDone(ctx context.Context, id uuid.UUID) error
+	SetTaskTodo(ctx context.Context, id uuid.UUID) error
+	UserBelongsToProjectOrIsAdmin(ctx context.Context, arg UserBelongsToProjectOrIsAdminParams) (bool, error)
 	WouldCreateCycle(ctx context.Context, arg WouldCreateCycleParams) (pgtype.Bool, error)
 }
 
