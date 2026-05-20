@@ -419,7 +419,65 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 	if _, err := pool.Exec(ctx, query, id, s); err != nil {
 		return nil, err
 	}
-	return Get(ctx, pool, id)
+	t, err := Get(ctx, pool, id)
+	if err != nil {
+		return nil, err
+	}
+	// Bubble "done" upward: every ancestor feature whose children are
+	// all done becomes done too. The skill bundle promises this; we now
+	// honour it. We only roll forward (never un-done a parent when a
+	// child reopens) because that would surprise a human who manually
+	// closed a feature.
+	if s == StateDone {
+		if err := rollUpParentDone(ctx, pool, t.ParentTaskID); err != nil {
+			return nil, err
+		}
+		// Re-fetch the task in case its own parent chain mutated other
+		// rows that observers care about. (Cheap.)
+		t, err = Get(ctx, pool, id)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
+}
+
+// rollUpParentDone walks the parent chain and marks any parent feature
+// whose children are now all `done` as done too. No-op when parent is
+// nil, already done, or has at least one non-done child.
+func rollUpParentDone(ctx context.Context, pool *pgxpool.Pool, parentID *uuid.UUID) error {
+	for parentID != nil {
+		var pState string
+		var pNext *uuid.UUID
+		if err := pool.QueryRow(ctx, `
+			SELECT state, parent_task_id FROM tasks WHERE id = $1
+		`, *parentID).Scan(&pState, &pNext); err != nil {
+			return err
+		}
+		if pState == "done" {
+			return nil
+		}
+		var pending int
+		if err := pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM tasks
+			WHERE parent_task_id = $1 AND state <> 'done'
+		`, *parentID).Scan(&pending); err != nil {
+			return err
+		}
+		if pending > 0 {
+			return nil
+		}
+		if _, err := pool.Exec(ctx, `
+			UPDATE tasks SET state = 'done',
+			       actual_start = COALESCE(actual_start, now()),
+			       actual_end = now()
+			 WHERE id = $1
+		`, *parentID); err != nil {
+			return err
+		}
+		parentID = pNext
+	}
+	return nil
 }
 
 // Delete removes the task. Children and links cascade.
