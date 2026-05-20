@@ -6,10 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // Errors returned by this package.
@@ -29,28 +33,17 @@ type Authorship struct {
 
 // WriteParams carries the input to create or update a document.
 type WriteParams struct {
-	Scope     Scope
-	ProjectID *uuid.UUID
-	Path      string
-	// ContentMD is the markdown including its frontmatter (if any).
-	// The server splits, parses and stores them separately while
-	// keeping the body verbatim.
-	ContentMD string
-	// Kind defaults to the value parsed from frontmatter, then to
-	// 'context' when neither is present. Pass it explicitly to
-	// override.
-	Kind Kind
-	// Message is a short explanation stored on the version row.
-	Message string
-	// ExpectedVersion enforces optimistic concurrency on updates.
-	// When nil, the write proceeds without a check (used for
-	// creation).
+	Scope           Scope
+	ProjectID       *uuid.UUID
+	Path            string
+	ContentMD       string
+	Kind            Kind
+	Message         string
 	ExpectedVersion *int
 }
 
 // Write creates a new document or updates an existing one keyed by
-// (scope, project_id, path). It maintains the document_versions
-// history and runs the optimistic concurrency check.
+// (scope, project_id, path).
 func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship) (*Document, error) {
 	if err := validateScope(p.Scope, p.ProjectID); err != nil {
 		return nil, err
@@ -94,51 +87,46 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	// Look up the existing row, if any.
-	var existing struct {
-		id             uuid.UUID
-		currentVersion int
-	}
-	row := tx.QueryRow(ctx, `
-		SELECT id, current_version
-		FROM documents
-		WHERE scope = $1 AND project_id IS NOT DISTINCT FROM $2 AND path = $3
-	`, string(p.Scope), p.ProjectID, p.Path)
-	err = row.Scan(&existing.id, &existing.currentVersion)
+	existing, err := q.GetDocumentByPath(ctx, dbq.GetDocumentByPathParams{
+		Scope:     string(p.Scope),
+		ProjectID: p.ProjectID,
+		Path:      p.Path,
+	})
 
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// Create — expected_version (if provided) must equal 0.
 		if p.ExpectedVersion != nil && *p.ExpectedVersion != 0 {
 			return nil, ErrVersionConflict
 		}
-		var d Document
-		err := tx.QueryRow(ctx, `
-			INSERT INTO documents (
-				scope, project_id, path, kind, title, description, content_md, frontmatter,
-				current_version, created_by_user_id, created_by_token_id,
-				updated_by_user_id, updated_by_token_id
-			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, $10, $9, $10)
-			RETURNING id, scope, project_id, path, kind, title, description, content_md,
-			          frontmatter, current_version, deleted_at,
-			          created_by_user_id, created_by_token_id,
-			          updated_by_user_id, updated_by_token_id,
-			          created_at, updated_at
-		`, string(p.Scope), p.ProjectID, p.Path, string(kind), title, description,
-			body, fmJSON, by.UserID, by.TokenID,
-		).Scan(
-			&d.ID, &d.Scope, &d.ProjectID, &d.Path, &d.Kind, &d.Title, &d.Description, &d.ContentMD,
-			&fmJSONBytes{m: &d.Frontmatter}, &d.CurrentVersion, &d.DeletedAt,
-			&d.CreatedByUserID, &d.CreatedByTokenID,
-			&d.UpdatedByUserID, &d.UpdatedByTokenID,
-			&d.CreatedAt, &d.UpdatedAt,
-		)
+		row, err := q.InsertDocument(ctx, dbq.InsertDocumentParams{
+			Scope:            string(p.Scope),
+			ProjectID:        p.ProjectID,
+			Path:             p.Path,
+			Kind:             string(kind),
+			Title:            title,
+			Description:      description,
+			ContentMd:        body,
+			Frontmatter:      fmJSON,
+			CreatedByUserID:  by.UserID,
+			CreatedByTokenID: by.TokenID,
+		})
 		if err != nil {
 			return nil, err
 		}
-		if err := insertVersion(ctx, tx, d.ID, 1, title, description, body, fmJSON, p.Message, by); err != nil {
+		d := documentFromInsertRow(row)
+		if err := q.InsertDocumentVersion(ctx, dbq.InsertDocumentVersionParams{
+			DocumentID:    d.ID,
+			Version:       1,
+			Title:         title,
+			Description:   description,
+			ContentMd:     body,
+			Frontmatter:   fmJSON,
+			Message:       p.Message,
+			AuthorUserID:  by.UserID,
+			AuthorTokenID: by.TokenID,
+		}); err != nil {
 			return nil, err
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -150,36 +138,37 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 		return nil, err
 	}
 
-	// Update path.
-	if p.ExpectedVersion != nil && *p.ExpectedVersion != existing.currentVersion {
+	if p.ExpectedVersion != nil && *p.ExpectedVersion != int(existing.CurrentVersion) {
 		return nil, ErrVersionConflict
 	}
-	newVersion := existing.currentVersion + 1
+	newVersion := int(existing.CurrentVersion) + 1
 
-	var d Document
-	err = tx.QueryRow(ctx, `
-		UPDATE documents
-		SET kind = $2, title = $3, description = $4, content_md = $5, frontmatter = $6,
-		    current_version = $7,
-		    updated_by_user_id = $8, updated_by_token_id = $9,
-		    deleted_at = NULL
-		WHERE id = $1
-		RETURNING id, scope, project_id, path, kind, title, description, content_md,
-		          frontmatter, current_version, deleted_at,
-		          created_by_user_id, created_by_token_id,
-		          updated_by_user_id, updated_by_token_id,
-		          created_at, updated_at
-	`, existing.id, string(kind), title, description, body, fmJSON, newVersion, by.UserID, by.TokenID).Scan(
-		&d.ID, &d.Scope, &d.ProjectID, &d.Path, &d.Kind, &d.Title, &d.Description, &d.ContentMD,
-		&fmJSONBytes{m: &d.Frontmatter}, &d.CurrentVersion, &d.DeletedAt,
-		&d.CreatedByUserID, &d.CreatedByTokenID,
-		&d.UpdatedByUserID, &d.UpdatedByTokenID,
-		&d.CreatedAt, &d.UpdatedAt,
-	)
+	row, err := q.UpdateDocument(ctx, dbq.UpdateDocumentParams{
+		ID:               existing.ID,
+		Kind:             string(kind),
+		Title:            title,
+		Description:      description,
+		ContentMd:        body,
+		Frontmatter:      fmJSON,
+		CurrentVersion:   int32(newVersion),
+		UpdatedByUserID:  by.UserID,
+		UpdatedByTokenID: by.TokenID,
+	})
 	if err != nil {
 		return nil, err
 	}
-	if err := insertVersion(ctx, tx, d.ID, newVersion, title, description, body, fmJSON, p.Message, by); err != nil {
+	d := documentFromUpdateRow(row)
+	if err := q.InsertDocumentVersion(ctx, dbq.InsertDocumentVersionParams{
+		DocumentID:    d.ID,
+		Version:       int32(newVersion),
+		Title:         title,
+		Description:   description,
+		ContentMd:     body,
+		Frontmatter:   fmJSON,
+		Message:       p.Message,
+		AuthorUserID:  by.UserID,
+		AuthorTokenID: by.TokenID,
+	}); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -193,34 +182,22 @@ func Read(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uuid.
 	if err := validateScope(scope, projectID); err != nil {
 		return nil, err
 	}
-	var d Document
-	err := pool.QueryRow(ctx, `
-		SELECT id, scope, project_id, path, kind, title, description, content_md,
-		       frontmatter, current_version, deleted_at,
-		       created_by_user_id, created_by_token_id,
-		       updated_by_user_id, updated_by_token_id,
-		       created_at, updated_at
-		FROM documents
-		WHERE scope = $1 AND project_id IS NOT DISTINCT FROM $2 AND path = $3
-		  AND deleted_at IS NULL
-	`, string(scope), projectID, path).Scan(
-		&d.ID, &d.Scope, &d.ProjectID, &d.Path, &d.Kind, &d.Title, &d.Description, &d.ContentMD,
-		&fmJSONBytes{m: &d.Frontmatter}, &d.CurrentVersion, &d.DeletedAt,
-		&d.CreatedByUserID, &d.CreatedByTokenID,
-		&d.UpdatedByUserID, &d.UpdatedByTokenID,
-		&d.CreatedAt, &d.UpdatedAt,
-	)
+	row, err := dbq.New(pool).ReadDocument(ctx, dbq.ReadDocumentParams{
+		Scope:     string(scope),
+		ProjectID: projectID,
+		Path:      path,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	d := documentFromReadRow(row)
 	return &d, nil
 }
 
-// ListFilter narrows a List call. ProjectID is required for scope =
-// project; ignored for scope = global.
+// ListFilter narrows a List call.
 type ListFilter struct {
 	Scope      Scope
 	ProjectID  *uuid.UUID
@@ -228,8 +205,7 @@ type ListFilter struct {
 	Kind       Kind
 }
 
-// List returns documents matching the filter, lightweight rows (no
-// content_md, no frontmatter — those need a Read call).
+// Summary is a lightweight document view returned by List.
 type Summary struct {
 	ID               uuid.UUID
 	Scope            Scope
@@ -241,7 +217,7 @@ type Summary struct {
 	CurrentVersion   int
 	UpdatedByUserID  *uuid.UUID
 	UpdatedByTokenID *uuid.UUID
-	UpdatedAt        interface{}
+	UpdatedAt        time.Time
 }
 
 // List returns lightweight document summaries.
@@ -249,59 +225,56 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Summary, err
 	if err := validateScope(f.Scope, f.ProjectID); err != nil {
 		return nil, err
 	}
-	q := `
-		SELECT id, scope, project_id, path, kind, title, description, current_version,
-		       updated_by_user_id, updated_by_token_id, updated_at
-		FROM documents
-		WHERE scope = $1 AND project_id IS NOT DISTINCT FROM $2 AND deleted_at IS NULL
-	`
-	args := []any{string(f.Scope), f.ProjectID}
-	idx := 3
+	var pathPrefix pgtype.Text
 	if f.PathPrefix != "" {
-		q += fmt.Sprintf(" AND path LIKE $%d", idx)
-		args = append(args, f.PathPrefix+"%")
-		idx++
+		pathPrefix = pgtype.Text{String: f.PathPrefix + "%", Valid: true}
 	}
+	var kind pgtype.Text
 	if f.Kind != "" {
-		q += fmt.Sprintf(" AND kind = $%d", idx)
-		args = append(args, string(f.Kind))
+		kind = pgtype.Text{String: string(f.Kind), Valid: true}
 	}
-	q += " ORDER BY path"
-
-	rows, err := pool.Query(ctx, q, args...)
+	rows, err := dbq.New(pool).ListDocuments(ctx, dbq.ListDocumentsParams{
+		Scope:      string(f.Scope),
+		ProjectID:  f.ProjectID,
+		PathPrefix: pathPrefix,
+		Kind:       kind,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Summary{}
-	for rows.Next() {
-		var s Summary
-		if err := rows.Scan(
-			&s.ID, &s.Scope, &s.ProjectID, &s.Path, &s.Kind, &s.Title, &s.Description,
-			&s.CurrentVersion, &s.UpdatedByUserID, &s.UpdatedByTokenID, &s.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, s)
+	out := make([]Summary, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Summary{
+			ID:               r.ID,
+			Scope:            Scope(r.Scope),
+			ProjectID:        r.ProjectID,
+			Path:             r.Path,
+			Kind:             Kind(r.Kind),
+			Title:            r.Title,
+			Description:      r.Description,
+			CurrentVersion:   int(r.CurrentVersion),
+			UpdatedByUserID:  r.UpdatedByUserID,
+			UpdatedByTokenID: r.UpdatedByTokenID,
+			UpdatedAt:        r.UpdatedAt.Time,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-// SearchFilter narrows a Search call. Same semantics as ListFilter.
+// SearchFilter narrows a Search call.
 type SearchFilter struct {
 	Scope     Scope
 	ProjectID *uuid.UUID
 	Kind      Kind
 }
 
-// SearchHit is a search result with its rank, suitable for display.
+// SearchHit is a search result with its rank.
 type SearchHit struct {
 	Summary
 	Rank float32
 }
 
 // Search returns documents matching the FTS query, ordered by rank.
-// The query is parsed via plainto_tsquery for tolerance to user input.
 func Search(ctx context.Context, pool *pgxpool.Pool, query string, f SearchFilter) ([]SearchHit, error) {
 	if err := validateScope(f.Scope, f.ProjectID); err != nil {
 		return nil, err
@@ -309,100 +282,103 @@ func Search(ctx context.Context, pool *pgxpool.Pool, query string, f SearchFilte
 	if strings.TrimSpace(query) == "" {
 		return nil, errors.New("query is required")
 	}
-	q := `
-		SELECT id, scope, project_id, path, kind, title, description, current_version,
-		       updated_by_user_id, updated_by_token_id, updated_at,
-		       ts_rank(search_vector, plainto_tsquery('simple', $3)) AS rank
-		FROM documents
-		WHERE scope = $1 AND project_id IS NOT DISTINCT FROM $2 AND deleted_at IS NULL
-		  AND search_vector @@ plainto_tsquery('simple', $3)
-	`
-	args := []any{string(f.Scope), f.ProjectID, query}
-	idx := 4
+	var kind pgtype.Text
 	if f.Kind != "" {
-		q += fmt.Sprintf(" AND kind = $%d", idx)
-		args = append(args, string(f.Kind))
+		kind = pgtype.Text{String: string(f.Kind), Valid: true}
 	}
-	q += " ORDER BY rank DESC, path"
-
-	rows, err := pool.Query(ctx, q, args...)
+	rows, err := dbq.New(pool).SearchDocuments(ctx, dbq.SearchDocumentsParams{
+		Query:     query,
+		Scope:     string(f.Scope),
+		ProjectID: f.ProjectID,
+		Kind:      kind,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []SearchHit{}
-	for rows.Next() {
-		var s SearchHit
-		if err := rows.Scan(
-			&s.ID, &s.Scope, &s.ProjectID, &s.Path, &s.Kind, &s.Title, &s.Description,
-			&s.CurrentVersion, &s.UpdatedByUserID, &s.UpdatedByTokenID, &s.UpdatedAt,
-			&s.Rank,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, s)
+	out := make([]SearchHit, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, SearchHit{
+			Summary: Summary{
+				ID:               r.ID,
+				Scope:            Scope(r.Scope),
+				ProjectID:        r.ProjectID,
+				Path:             r.Path,
+				Kind:             Kind(r.Kind),
+				Title:            r.Title,
+				Description:      r.Description,
+				CurrentVersion:   int(r.CurrentVersion),
+				UpdatedByUserID:  r.UpdatedByUserID,
+				UpdatedByTokenID: r.UpdatedByTokenID,
+				UpdatedAt:        r.UpdatedAt.Time,
+			},
+			Rank: r.Rank,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-// History returns the version metadata for a document, newest first.
-// Bodies are omitted; use ReadVersion to fetch one.
+// VersionSummary is one version row without its body.
 type VersionSummary struct {
 	Version       int
 	Title         string
 	Message       string
 	AuthorUserID  *uuid.UUID
 	AuthorTokenID *uuid.UUID
-	CreatedAt     interface{}
+	CreatedAt     time.Time
 }
 
 // History returns the version metadata for a document, newest first.
 func History(ctx context.Context, pool *pgxpool.Pool, documentID uuid.UUID) ([]VersionSummary, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT version, title, message, author_user_id, author_token_id, created_at
-		FROM document_versions
-		WHERE document_id = $1
-		ORDER BY version DESC
-	`, documentID)
+	rows, err := dbq.New(pool).ListDocumentVersions(ctx, documentID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []VersionSummary{}
-	for rows.Next() {
-		var v VersionSummary
-		if err := rows.Scan(&v.Version, &v.Title, &v.Message, &v.AuthorUserID, &v.AuthorTokenID, &v.CreatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, v)
+	out := make([]VersionSummary, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, VersionSummary{
+			Version:       int(r.Version),
+			Title:         r.Title,
+			Message:       r.Message,
+			AuthorUserID:  r.AuthorUserID,
+			AuthorTokenID: r.AuthorTokenID,
+			CreatedAt:     r.CreatedAt.Time,
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // ReadVersion returns a specific historical version of a document.
 func ReadVersion(ctx context.Context, pool *pgxpool.Pool, documentID uuid.UUID, version int) (*Version, error) {
-	var v Version
-	err := pool.QueryRow(ctx, `
-		SELECT id, document_id, version, title, description, content_md, frontmatter, message,
-		       author_user_id, author_token_id, created_at
-		FROM document_versions
-		WHERE document_id = $1 AND version = $2
-	`, documentID, version).Scan(
-		&v.ID, &v.DocumentID, &v.Version, &v.Title, &v.Description, &v.ContentMD,
-		&fmJSONBytes{m: &v.Frontmatter}, &v.Message,
-		&v.AuthorUserID, &v.AuthorTokenID, &v.CreatedAt,
-	)
+	row, err := dbq.New(pool).GetDocumentVersion(ctx, dbq.GetDocumentVersionParams{
+		DocumentID: documentID,
+		Version:    int32(version),
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &v, nil
+	fm, err := decodeFrontmatter(row.Frontmatter)
+	if err != nil {
+		return nil, err
+	}
+	return &Version{
+		ID:            row.ID,
+		DocumentID:    row.DocumentID,
+		Version:       int(row.Version),
+		Title:         row.Title,
+		Description:   row.Description,
+		ContentMD:     row.ContentMd,
+		Frontmatter:   fm,
+		Message:       row.Message,
+		AuthorUserID:  row.AuthorUserID,
+		AuthorTokenID: row.AuthorTokenID,
+		CreatedAt:     row.CreatedAt.Time,
+	}, nil
 }
 
-// Delete soft-deletes the document (rows in document_versions stay).
-// Re-writing the same path resurrects it.
+// Delete soft-deletes the document.
 func Delete(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uuid.UUID, path, message string, by Authorship) error {
 	if err := validateScope(scope, projectID); err != nil {
 		return err
@@ -412,17 +388,13 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uui
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
 
-	var doc Document
-	err = tx.QueryRow(ctx, `
-		SELECT id, current_version, title, description, content_md, frontmatter
-		FROM documents
-		WHERE scope = $1 AND project_id IS NOT DISTINCT FROM $2 AND path = $3
-		  AND deleted_at IS NULL
-	`, string(scope), projectID, path).Scan(
-		&doc.ID, &doc.CurrentVersion, &doc.Title, &doc.Description, &doc.ContentMD,
-		&fmJSONBytes{m: &doc.Frontmatter},
-	)
+	row, err := q.GetDocumentForDelete(ctx, dbq.GetDocumentForDeleteParams{
+		Scope:     string(scope),
+		ProjectID: projectID,
+		Path:      path,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -430,21 +402,26 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uui
 		return err
 	}
 
-	newVersion := doc.CurrentVersion + 1
-	_, err = tx.Exec(ctx, `
-		UPDATE documents
-		SET deleted_at = now(),
-		    current_version = $2,
-		    updated_by_user_id = $3,
-		    updated_by_token_id = $4
-		WHERE id = $1
-	`, doc.ID, newVersion, by.UserID, by.TokenID)
-	if err != nil {
+	newVersion := int(row.CurrentVersion) + 1
+	if err := q.SoftDeleteDocument(ctx, dbq.SoftDeleteDocumentParams{
+		ID:               row.ID,
+		CurrentVersion:   int32(newVersion),
+		UpdatedByUserID:  by.UserID,
+		UpdatedByTokenID: by.TokenID,
+	}); err != nil {
 		return err
 	}
-
-	fmJSON, _ := json.Marshal(doc.Frontmatter)
-	if err := insertVersion(ctx, tx, doc.ID, newVersion, doc.Title, doc.Description, doc.ContentMD, fmJSON, message, by); err != nil {
+	if err := q.InsertDocumentVersion(ctx, dbq.InsertDocumentVersionParams{
+		DocumentID:    row.ID,
+		Version:       int32(newVersion),
+		Title:         row.Title,
+		Description:   row.Description,
+		ContentMd:     row.ContentMd,
+		Frontmatter:   row.Frontmatter,
+		Message:       message,
+		AuthorUserID:  by.UserID,
+		AuthorTokenID: by.TokenID,
+	}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -463,17 +440,6 @@ func validateScope(s Scope, projectID *uuid.UUID) error {
 	return nil
 }
 
-func insertVersion(ctx context.Context, tx pgx.Tx, documentID uuid.UUID, version int, title, description, body string, fmJSON []byte, message string, by Authorship) error {
-	_, err := tx.Exec(ctx, `
-		INSERT INTO document_versions (
-			document_id, version, title, description, content_md, frontmatter,
-			message, author_user_id, author_token_id
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, documentID, version, title, description, body, fmJSON, message, by.UserID, by.TokenID)
-	return err
-}
-
 func deriveTitleFromBody(body string) string {
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
@@ -487,33 +453,90 @@ func deriveTitleFromBody(body string) string {
 	return ""
 }
 
-// fmJSONBytes is a pgx Scanner that decodes a jsonb column into a map.
-type fmJSONBytes struct {
-	m *map[string]any
-}
-
-func (s *fmJSONBytes) Scan(v any) error {
-	if v == nil {
-		*s.m = map[string]any{}
-		return nil
-	}
-	var raw []byte
-	switch x := v.(type) {
-	case []byte:
-		raw = x
-	case string:
-		raw = []byte(x)
-	default:
-		return fmt.Errorf("unexpected jsonb scan type %T", v)
-	}
+func decodeFrontmatter(raw []byte) (map[string]any, error) {
 	out := map[string]any{}
 	if len(raw) == 0 {
-		*s.m = out
-		return nil
+		return out, nil
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return err
+		return nil, err
 	}
-	*s.m = out
-	return nil
+	return out, nil
+}
+
+func documentFromInsertRow(r dbq.InsertDocumentRow) Document {
+	fm, _ := decodeFrontmatter(r.Frontmatter)
+	return Document{
+		ID:               r.ID,
+		Scope:            Scope(r.Scope),
+		ProjectID:        r.ProjectID,
+		Path:             r.Path,
+		Kind:             Kind(r.Kind),
+		Title:            r.Title,
+		Description:      r.Description,
+		ContentMD:        r.ContentMd,
+		Frontmatter:      fm,
+		CurrentVersion:   int(r.CurrentVersion),
+		DeletedAt:        timestampPtr(r.DeletedAt),
+		CreatedByUserID:  r.CreatedByUserID,
+		CreatedByTokenID: r.CreatedByTokenID,
+		UpdatedByUserID:  r.UpdatedByUserID,
+		UpdatedByTokenID: r.UpdatedByTokenID,
+		CreatedAt:        r.CreatedAt.Time,
+		UpdatedAt:        r.UpdatedAt.Time,
+	}
+}
+
+func documentFromUpdateRow(r dbq.UpdateDocumentRow) Document {
+	fm, _ := decodeFrontmatter(r.Frontmatter)
+	return Document{
+		ID:               r.ID,
+		Scope:            Scope(r.Scope),
+		ProjectID:        r.ProjectID,
+		Path:             r.Path,
+		Kind:             Kind(r.Kind),
+		Title:            r.Title,
+		Description:      r.Description,
+		ContentMD:        r.ContentMd,
+		Frontmatter:      fm,
+		CurrentVersion:   int(r.CurrentVersion),
+		DeletedAt:        timestampPtr(r.DeletedAt),
+		CreatedByUserID:  r.CreatedByUserID,
+		CreatedByTokenID: r.CreatedByTokenID,
+		UpdatedByUserID:  r.UpdatedByUserID,
+		UpdatedByTokenID: r.UpdatedByTokenID,
+		CreatedAt:        r.CreatedAt.Time,
+		UpdatedAt:        r.UpdatedAt.Time,
+	}
+}
+
+func documentFromReadRow(r dbq.ReadDocumentRow) Document {
+	fm, _ := decodeFrontmatter(r.Frontmatter)
+	return Document{
+		ID:               r.ID,
+		Scope:            Scope(r.Scope),
+		ProjectID:        r.ProjectID,
+		Path:             r.Path,
+		Kind:             Kind(r.Kind),
+		Title:            r.Title,
+		Description:      r.Description,
+		ContentMD:        r.ContentMd,
+		Frontmatter:      fm,
+		CurrentVersion:   int(r.CurrentVersion),
+		DeletedAt:        timestampPtr(r.DeletedAt),
+		CreatedByUserID:  r.CreatedByUserID,
+		CreatedByTokenID: r.CreatedByTokenID,
+		UpdatedByUserID:  r.UpdatedByUserID,
+		UpdatedByTokenID: r.UpdatedByTokenID,
+		CreatedAt:        r.CreatedAt.Time,
+		UpdatedAt:        r.UpdatedAt.Time,
+	}
+}
+
+func timestampPtr(ts pgtype.Timestamptz) *time.Time {
+	if !ts.Valid {
+		return nil
+	}
+	v := ts.Time
+	return &v
 }

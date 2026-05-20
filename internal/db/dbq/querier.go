@@ -30,6 +30,9 @@ type Querier interface {
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
 	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
+	GetDocumentByPath(ctx context.Context, arg GetDocumentByPathParams) (GetDocumentByPathRow, error)
+	GetDocumentForDelete(ctx context.Context, arg GetDocumentForDeleteParams) (GetDocumentForDeleteRow, error)
+	GetDocumentVersion(ctx context.Context, arg GetDocumentVersionParams) (DocumentVersion, error)
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
@@ -40,6 +43,8 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error)
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
+	InsertDocument(ctx context.Context, arg InsertDocumentParams) (InsertDocumentRow, error)
+	InsertDocumentVersion(ctx context.Context, arg InsertDocumentVersionParams) error
 	InsertMembership(ctx context.Context, arg InsertMembershipParams) error
 	InsertProject(ctx context.Context, arg InsertProjectParams) (InsertProjectRow, error)
 	InsertProjectRepo(ctx context.Context, arg InsertProjectRepoParams) error
@@ -51,6 +56,8 @@ type Querier interface {
 	InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
+	ListDocumentVersions(ctx context.Context, documentID uuid.UUID) ([]ListDocumentVersionsRow, error)
+	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]ListDocumentsRow, error)
 	ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error)
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
@@ -84,17 +91,21 @@ type Querier interface {
 	NextEligibleTask(ctx context.Context, arg NextEligibleTaskParams) (NextEligibleTaskRow, error)
 	ProjectIDForTask(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	ProjectSlugExists(ctx context.Context, slug string) (bool, error)
+	ReadDocument(ctx context.Context, arg ReadDocumentParams) (ReadDocumentRow, error)
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
 	RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) (int64, error)
 	RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error)
+	SearchDocuments(ctx context.Context, arg SearchDocumentsParams) ([]SearchDocumentsRow, error)
 	SeedDefaultPriority(ctx context.Context, arg SeedDefaultPriorityParams) error
 	SetRolePosition(ctx context.Context, arg SetRolePositionParams) error
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
+	SoftDeleteDocument(ctx context.Context, arg SoftDeleteDocumentParams) error
 	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
+	UpdateDocument(ctx context.Context, arg UpdateDocumentParams) (UpdateDocumentRow, error)
 	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error
 	UpdateProjectMCPPageSize(ctx context.Context, arg UpdateProjectMCPPageSizeParams) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (UpdateProjectRoleRow, error)
