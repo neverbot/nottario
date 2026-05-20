@@ -48,6 +48,16 @@ class NottarioGantt extends LitElement {
     .band-bg.alt {
       fill: #fff;
     }
+    .band-bg.features {
+      fill: #f0f2f5;
+    }
+    .features-label {
+      fill: #57606a;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 600;
+    }
     .band-label {
       fill: #1f2328;
       font-size: 12px;
@@ -525,57 +535,79 @@ class NottarioGantt extends LitElement {
     });
 
     // ---- Aggregate positions for folded features ----
-    const featureAggregates = new Map(); // featureID -> {from, to, bi}
+    // First pass collects from/to plus the distinct set of role bands
+    // each feature's non-feature descendants live in. If a feature has
+    // descendants in 2+ role bands it's "cross-role" — we'll hoist it
+    // into a dedicated Features lane (decided below). Single-role
+    // features stay inside their natural role band.
+    const featureAggregates = new Map(); // featureID -> {from, to, bi, crossRole}
+    let anyCrossRole = false;
     for (const fid of this.foldedFeatures) {
       const feat = taskByID.get(fid);
       if (!feat || feat.Type !== 'feature') continue;
       const desc = collectDescendants(fid, new Set());
       if (!desc.size) continue;
       let lo = Infinity, hi = -Infinity;
+      const bandsSeen = new Set();
       const bandVotes = new Map();
       for (const did of desc) {
         const d = taskByID.get(did);
-        if (!d || d.Type === 'feature') continue; // ignore sub-features
+        if (!d || d.Type === 'feature') continue;
         const p = rawPositions.get(did);
         if (!p) continue;
         lo = Math.min(lo, p.from);
         hi = Math.max(hi, p.to);
+        bandsSeen.add(p.bi);
         bandVotes.set(p.bi, (bandVotes.get(p.bi) || 0) + 1);
       }
       if (lo === Infinity) continue;
-      // Feature's own band if it has a target_role; else the band that
-      // contains the most descendants; else the general fallback.
-      let bi = bandIndexByTaskID.get(fid);
-      if (bi == null) {
+      const crossRole = bandsSeen.size > 1;
+      if (crossRole) anyCrossRole = true;
+      // Natural band (used when not cross-role): feature's own
+      // target_role if set, else the band with the most descendants.
+      let naturalBi = bandIndexByTaskID.get(fid);
+      if (naturalBi == null) {
         let best = -1, max = -1;
         for (const [k, v] of bandVotes) if (v > max) { max = v; best = k; }
-        bi = best >= 0 ? best : 0;
+        naturalBi = best >= 0 ? best : 0;
       }
-      featureAggregates.set(fid, { from: lo, to: hi, bi });
+      featureAggregates.set(fid, { from: lo, to: hi, bi: naturalBi, crossRole });
     }
 
-    // ---- Visible entries per band ----
-    const visiblePerBand = bands.map(() => []);
+    // ---- Optional Features lane (only when there's something to put in it) ----
+    // When a folded feature spans 2+ role bands, we hoist its aggregate
+    // into a synthetic lane at the top of the chart. The display order
+    // of bands becomes [Features?, ...roleBands]; everything keyed by
+    // band index is shifted by the offset.
+    const featuresBand = anyCrossRole
+      ? { role: { ID: '__features__', Key: 'features', Label: 'Features', Color: '#6e7781' }, tasks: [] }
+      : null;
+    const displayBands = featuresBand ? [featuresBand, ...bands] : bands;
+    const bandOffset = featuresBand ? 1 : 0;
+
+    // ---- Visible entries per (display) band ----
+    const visiblePerBand = displayBands.map(() => []);
     for (const t of this.tasks || []) {
       if (hiddenByFold.has(t.ID)) continue;
       if (t.Type === 'feature') {
         if (this.foldedFeatures.has(t.ID) && featureAggregates.has(t.ID)) {
           const agg = featureAggregates.get(t.ID);
-          visiblePerBand[agg.bi].push({ task: t, from: agg.from, to: agg.to, kind: 'feature-agg' });
+          const targetBi = agg.crossRole ? 0 : agg.bi + bandOffset;
+          visiblePerBand[targetBi].push({ task: t, from: agg.from, to: agg.to, kind: 'feature-agg', crossRole: agg.crossRole });
         } else if (!childrenByParent.has(t.ID)) {
           const p = rawPositions.get(t.ID);
-          if (p) visiblePerBand[p.bi].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
+          if (p) visiblePerBand[p.bi + bandOffset].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
         }
         // unfolded feature with children: feature itself hidden, kids show through
         continue;
       }
       const p = rawPositions.get(t.ID);
-      if (p) visiblePerBand[p.bi].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
+      if (p) visiblePerBand[p.bi + bandOffset].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
     }
 
     // ---- Lane assignment per band (greedy) ----
     const positions = []; // { task, bi, lane, from, to, kind }
-    const lanesPerBand = bands.map(() => 1);
+    const lanesPerBand = displayBands.map(() => 1);
     visiblePerBand.forEach((entries, bi) => {
       entries.sort((a, b) => a.from - b.from);
       const laneEnds = [];
@@ -596,7 +628,7 @@ class NottarioGantt extends LitElement {
     const bandHeights = [];
     {
       let cursor = headerH;
-      for (let bi = 0; bi < bands.length; bi++) {
+      for (let bi = 0; bi < displayBands.length; bi++) {
         bandTops.push(cursor);
         const h = lanesPerBand[bi] * laneHeight + bandPad * 2 - laneGap;
         bandHeights.push(h);
@@ -682,15 +714,22 @@ class NottarioGantt extends LitElement {
           `)}
 
           <!-- Band rows -->
-          ${bands.map((b, bi) => svg`
-            <rect class=${`band-bg ${bi % 2 ? 'alt' : ''}`}
-                  x="0" y=${bandTops[bi]}
-                  width=${width} height=${bandHeights[bi]}></rect>
-            <text class="band-label"
-                  x="8" y=${bandTops[bi] + bandHeights[bi] / 2 + 4}>
-              ${b.role.Label}
-            </text>
-          `)}
+          ${displayBands.map((b, bi) => {
+            const isFeatures = b.role.ID === '__features__';
+            const cls = isFeatures
+              ? 'band-bg features'
+              : `band-bg ${bi % 2 ? 'alt' : ''}`;
+            const labelCls = isFeatures ? 'band-label features-label' : 'band-label';
+            return svg`
+              <rect class=${cls}
+                    x="0" y=${bandTops[bi]}
+                    width=${width} height=${bandHeights[bi]}></rect>
+              <text class=${labelCls}
+                    x="8" y=${bandTops[bi] + bandHeights[bi] / 2 + 4}>
+                ${isFeatures ? 'FEATURES' : b.role.Label}
+              </text>
+            `;
+          })}
 
           <!-- Zone dividers -->
           <line class="zone-divider" x1=${labelWidth} y1="0" x2=${labelWidth} y2=${totalHeight}></line>
@@ -709,7 +748,7 @@ class NottarioGantt extends LitElement {
           <!-- Tasks placed in their lane -->
           ${positions.map(p => {
             const t = p.task;
-            const color = bands[p.bi].role.Color || '#59636e';
+            const color = displayBands[p.bi].role.Color || '#59636e';
             const y = taskY(p.bi, p.lane);
             const w = Math.max(8, p.to - p.from);
             const user = t.AssigneeUserID ? usersById.get(t.AssigneeUserID) : null;
