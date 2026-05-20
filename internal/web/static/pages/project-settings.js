@@ -88,7 +88,7 @@ class NottarioProjectSettings extends LitElement {
     .row-actions button { margin-left: 4px; }
 
     /* Quieter destructive buttons in table rows: at rest a small
-       ghost ✕; armed/hover swaps to the loud red `.btn.danger`.
+       ghost X; armed/hover swaps to the loud red .btn.danger.
        Keeps tables visually calm while still putting the destructive
        affordance one click away. */
     .row-actions .delete {
