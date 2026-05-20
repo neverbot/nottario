@@ -41,24 +41,35 @@ If you need the role catalogue (to assign a task to "any backend"), call
 
 The expected flow when the human says "carry on" or "do the next thing":
 
-1. **Find what to do.** Call `nottario.tasks.next` with the project_id
-   (and optionally `assignee_user_id` set to your own `user_id` from
-   `whoami`). It returns the highest-priority `todo` task whose
-   dependencies are satisfied.
-2. **Mark you've started.** Call `nottario.tasks.set_state` with
-   `state="doing"`. This records `actual_start` automatically.
-3. **Do the work in the human's repo locally.** Nottario does not store
+1. **Atomic claim.** Call `nottario.tasks.claim_next` with the
+   project_id (and optionally `assignee_user_id = your user_id` from
+   `whoami`, or a `role_id`). It picks the highest-priority eligible
+   `todo` task AND marks it `assignee = you`, `state = doing` in a
+   single SQL — safe to run from multiple agents in parallel without
+   colliding on the same task. Returns `{task: null}` if nothing is
+   eligible.
+2. **Do the work in the human's repo locally.** Nottario does not store
    code; you work in the existing checkout as you always would.
-4. **Commit and link.** When you commit, call
+3. **Commit and link.** When you commit, call
    `nottario.tasks.link_commit` with `repo="owner/repo"` and the SHA so
    that future readers can trace the work.
-5. **Note non-obvious things.** Use `nottario.tasks.add_comment` for
+4. **Note non-obvious things.** Use `nottario.tasks.add_comment` for
    anything a future reader (human or agent) would benefit from: tricky
    trade-offs, follow-up ideas, why you chose A over B.
-6. **Close.** `nottario.tasks.set_state` with `state="done"`. This
-   records `actual_end`.
-7. **Loop.** If the human wants you to keep going, call
-   `nottario.tasks.next` again.
+5. **Close.** `nottario.tasks.set_state` with `state="done"`. This
+   records `actual_end`. The server rejects the close if the task
+   still has unresolved preconditions.
+6. **Loop.** Call `nottario.tasks.claim_next` again.
+
+When the human narrows the pickup ("the next task about topic X" or
+"work on this id"), discover candidates via `nottario.tasks.list` and
+then take one atomically with `nottario.tasks.claim {task_id}` — see
+`domains/tasks.md` for the canonical loops, including how to read the
+409-shaped conflict if you lose the race or the task isn't eligible.
+
+`nottario.tasks.next` is now a **preview-only** tool: it returns what
+`claim_next` would pick, without mutating anything. Do not use it as
+the first step of pickup — always go through `claim_next` / `claim`.
 
 ## Filing work as you discover it
 

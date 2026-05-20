@@ -237,31 +237,68 @@ needed).
 
 ### "Carry on" — the loop
 
-**Required order of operations.** Always assign the task to yourself
-(your `whoami.user_id`) BEFORE moving it to `doing`. Without that,
-the task sits in `doing` with no owner; humans cannot tell which
-agent is working on what, and two agents may pick up the same task.
+Use **`nottario.tasks.claim_next`** to atomically pick AND claim the
+next eligible task in one MCP call. It sets `assignee = you` and
+`state = doing` in a single Postgres UPDATE backed by `SELECT … FOR
+UPDATE SKIP LOCKED`, so two agents running this loop in parallel get
+two DIFFERENT tasks — no double-claim, no race.
 
 ```
 loop:
-  me   = nottario.whoami { }
-  task = nottario.tasks.next { project_id, assignee_user_id: me.user_id }
-  if task is null: tell the human "no eligible tasks" and stop
-
-  // 1) Take ownership before flipping state.
-  nottario.tasks.update    { task_id: task.id, assignee_user_id: me.user_id }
-  nottario.tasks.set_state { task_id: task.id, state: "doing" }
+  result = nottario.tasks.claim_next {
+    project_id,
+    assignee_user_id: me.user_id   # optional: include role-matched todos for me
+  }
+  if result.task is null: tell the human "no eligible tasks" and stop
+  task = result.task
 
   ...do the work in the local repo...
 
   nottario.tasks.link_commit { task_id: task.id, repo, sha }
-  nottario.tasks.add_comment { task_id: task.id, body: "..." }   // optional
+  nottario.tasks.add_comment { task_id: task.id, body: "..." }   # optional
   nottario.tasks.set_state   { task_id: task.id, state: "done" }
 goto loop
 ```
 
-If a task you want to pick up is already assigned to another user,
-leave a comment before stealing it, or ask the human first.
+#### "Take the next task about topic X"
+
+When the human (or your own judgement) narrows the pickup to a topic,
+discover candidates with `tasks.list`, then **claim a specific id
+atomically** with `nottario.tasks.claim`. The claim either succeeds or
+returns a 409-shaped conflict with details; if it loses the race or
+the task isn't eligible, try the next candidate.
+
+```
+candidates = nottario.tasks.list { project_id, state: "todo" }
+relevant   = filter(candidates, matches=topic_X)   # client-side reasoning
+for t in relevant:                                 # already ordered priority DESC, created_at ASC
+  result = nottario.tasks.claim { project_id, task_id: t.ID }
+  if result.error:
+    # 409: somebody else just took it OR preconditions still pending OR feature has open children
+    # See result.reason, result.current_state, result.current_assignee_user_id,
+    #     result.preconditions[], result.pending_children_count.
+    continue
+  task = result   # task is yours, already in doing
+  break
+```
+
+#### "Work on this specific task"
+
+If the human hands you an id, call `claim` directly. Read the
+conflict shape on failure and surface it to the human ("that task is
+already in doing assigned to X", "preconditions still pending: …").
+
+#### Why the old three-call pattern is gone
+
+The historical `tasks.next` + `tasks.update {assignee}` + `set_state
+doing` sequence is **racy**: between any two calls another agent can
+slip in and claim the same task. `tasks.next` still exists but is now
+a PREVIEW with no side effects — useful to inspect what `claim_next`
+would pick, never to actually take a task.
+
+If a task you want is already claimed by another user, the right
+moves are: leave a comment with `nottario.tasks.add_comment`, or
+escalate to the human. Do not silently re-assign.
 
 ### "I found a bug while doing my task"
 
