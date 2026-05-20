@@ -35,6 +35,64 @@ class NottarioBoardPage extends LitElement {
       align-self: start; /* don't stretch to match the tallest column */
     }
     .col.empty { padding: 6px 8px; }
+    .col.empty.doing { padding: 8px; }
+    .upnext {
+      background: #fff;
+      border: 1px dashed #afb8c1;
+      border-radius: 8px;
+      padding: 12px 12px 10px;
+      margin: 4px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .upnext .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #59636e;
+      font-weight: 600;
+    }
+    .upnext .title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #1f2328;
+      line-height: 1.3;
+    }
+    .upnext .meta {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: #59636e;
+    }
+    .upnext .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 4px;
+    }
+    .upnext .row .spacer { flex: 1; }
+    .upnext button.start {
+      background: #1f883d;
+      color: #fff;
+      border: 1px solid rgba(31, 35, 40, 0.15);
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .upnext button.start:hover { background: #1a7f37; }
+    .upnext button.peek {
+      background: transparent;
+      color: #0969da;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 6px;
+    }
+    .upnext button.peek:hover { text-decoration: underline; }
     .col h3 {
       margin: 4px 4px 8px 4px;
       font-size: 13px;
@@ -202,12 +260,13 @@ class NottarioBoardPage extends LitElement {
   async load() {
     if (!this.projectId) return;
     try {
-      const [pr, tr, rr, mr, qr] = await Promise.all([
+      const [pr, tr, rr, mr, qr, dr] = await Promise.all([
         fetch(`/api/projects/${this.projectId}`),
         fetch(`/api/projects/${this.projectId}/tasks?include_children=true`),
         fetch(`/api/projects/${this.projectId}/roles`),
         fetch(`/api/projects/${this.projectId}/members`),
         fetch(`/api/projects/${this.projectId}/priorities`),
+        fetch(`/api/projects/${this.projectId}/tasks/dependencies`),
       ]);
       if (!pr.ok) throw new Error('project not found');
       this.project = await pr.json();
@@ -215,9 +274,31 @@ class NottarioBoardPage extends LitElement {
       this.roles = (await rr.json()).roles || [];
       this.members = (await mr.json()).members || [];
       this.priorities = (await qr.json()).priorities || [];
+      this.deps = (await dr.json()).dependencies || [];
     } catch (e) {
       this.error = e.message;
     }
+  }
+
+  // Next eligible todo task: highest priority among todo tasks whose
+  // preconditions (if any) are already done. Mirrors the same logic
+  // tasks.next exposes over MCP — so the empty `doing` column shows
+  // exactly what an agent would pick up next.
+  _nextEligible() {
+    if (!this.tasks || !this.tasks.length) return null;
+    const taskByID = new Map(this.tasks.map(t => [t.ID, t]));
+    const blocked = new Set();
+    for (const d of (this.deps || [])) {
+      const preID = d.DependsOnID || d.depends_on_id || d.depends_on_task_id;
+      const tid = d.TaskID || d.task_id;
+      const pre = taskByID.get(preID);
+      if (pre && pre.State !== 'done') blocked.add(tid);
+    }
+    const eligible = this.tasks
+      .filter(t => t.State === 'todo' && t.Type !== 'feature' && !blocked.has(t.ID))
+      .sort((a, b) => b.Priority - a.Priority
+        || (new Date(a.CreatedAt) - new Date(b.CreatedAt)));
+    return eligible[0] || null;
   }
 
   roleByID(id) { return this.roles.find(r => r.ID === id); }
@@ -238,6 +319,41 @@ class NottarioBoardPage extends LitElement {
       case 'done':  return 'No completed tasks yet.';
       default:      return 'Empty.';
     }
+  }
+
+  // Empty-column bodies. `doing` is special: instead of a passive
+  // note, surface the next eligible task with a Start affordance, so
+  // the column's empty state IS a workflow handoff. Other columns
+  // (todo/done) keep the muted note — they don't carry the same
+  // "what should happen next" semantic.
+  _renderEmptyBody(state) {
+    if (state === 'doing') {
+      const next = this._nextEligible();
+      if (!next) {
+        return html`<div class="empty-note">${
+          this.byState('todo').length === 0 ? 'All caught up.' : 'Nothing eligible to start.'
+        }</div>`;
+      }
+      const role = next.TargetRoleID ? this.roleByID(next.TargetRoleID) : null;
+      return html`
+        <div class="upnext">
+          <div class="eyebrow">Up next</div>
+          <div class="title">${next.Title}</div>
+          <div class="meta">
+            <span class="badge ${next.Type}">${next.Type}</span>
+            <span class="prio">${this._priorityLabel(next.Priority)}</span>
+            ${role ? html`<span class="badge"
+              style=${`background:${role.Color || '#eee'}1a; border-color:${role.Color || '#ddd'}`}>${role.Label}</span>` : ''}
+          </div>
+          <div class="row">
+            <button class="start" @click=${() => this.setState(next.ID, 'doing')}>Start</button>
+            <button class="peek" @click=${() => this.open(next)}>Open</button>
+            <div class="spacer"></div>
+          </div>
+        </div>
+      `;
+    }
+    return html`<div class="empty-note">${this._emptyCopy(state)}</div>`;
   }
 
   byState(s) {
@@ -377,11 +493,14 @@ class NottarioBoardPage extends LitElement {
             ${['todo', 'doing', 'done'].map(s => {
               const items = this.byState(s);
               const isEmpty = items.length === 0;
+              const cls = isEmpty
+                ? (s === 'doing' ? 'col empty doing' : 'col empty')
+                : 'col';
               return html`
-                <div class=${isEmpty ? 'col empty' : 'col'}>
+                <div class=${cls}>
                   <h3>${s} <span class="count">${items.length}</span></h3>
                   ${isEmpty
-                    ? html`<div class="empty-note">${this._emptyCopy(s)}</div>`
+                    ? this._renderEmptyBody(s)
                     : items.map(t => this.renderCard(t))}
                 </div>
               `;
