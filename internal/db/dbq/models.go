@@ -129,6 +129,7 @@ type Project struct {
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	McpPageSize     int32
+	DefaultView     string
 }
 
 type ProjectPriority struct {

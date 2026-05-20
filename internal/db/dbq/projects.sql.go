@@ -34,7 +34,7 @@ const getProjectByIDOrSlug = `-- name: GetProjectByIDOrSlug :one
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size,
+       mcp_page_size, default_view,
        created_by_user_id, created_at, updated_at
 FROM projects
 WHERE id::text = $1::text
@@ -49,6 +49,7 @@ type GetProjectByIDOrSlugRow struct {
 	PrimaryLanguage string
 	ProjectType     string
 	McpPageSize     int32
+	DefaultView     string
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -65,6 +66,7 @@ func (q *Queries) GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (Ge
 		&i.PrimaryLanguage,
 		&i.ProjectType,
 		&i.McpPageSize,
+		&i.DefaultView,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -79,7 +81,7 @@ VALUES ($1, $2, $3, NULLIF($5::text, ''),
 RETURNING id, slug, name, description,
           COALESCE(primary_language, '')::text AS primary_language,
           COALESCE(project_type, '')::text AS project_type,
-          mcp_page_size,
+          mcp_page_size, default_view,
           created_by_user_id, created_at, updated_at
 `
 
@@ -100,6 +102,7 @@ type InsertProjectRow struct {
 	PrimaryLanguage string
 	ProjectType     string
 	McpPageSize     int32
+	DefaultView     string
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -123,6 +126,7 @@ func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) (I
 		&i.PrimaryLanguage,
 		&i.ProjectType,
 		&i.McpPageSize,
+		&i.DefaultView,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -174,7 +178,7 @@ const listProjectsAdmin = `-- name: ListProjectsAdmin :many
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size,
+       mcp_page_size, default_view,
        created_by_user_id, created_at, updated_at
 FROM projects
 ORDER BY name
@@ -188,6 +192,7 @@ type ListProjectsAdminRow struct {
 	PrimaryLanguage string
 	ProjectType     string
 	McpPageSize     int32
+	DefaultView     string
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -210,6 +215,7 @@ func (q *Queries) ListProjectsAdmin(ctx context.Context) ([]ListProjectsAdminRow
 			&i.PrimaryLanguage,
 			&i.ProjectType,
 			&i.McpPageSize,
+			&i.DefaultView,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -228,7 +234,7 @@ const listProjectsForUser = `-- name: ListProjectsForUser :many
 SELECT DISTINCT p.id, p.slug, p.name, p.description,
        COALESCE(p.primary_language, '')::text AS primary_language,
        COALESCE(p.project_type, '')::text AS project_type,
-       p.mcp_page_size,
+       p.mcp_page_size, p.default_view,
        p.created_by_user_id, p.created_at, p.updated_at
 FROM projects p
 JOIN memberships m ON m.project_id = p.id
@@ -244,6 +250,7 @@ type ListProjectsForUserRow struct {
 	PrimaryLanguage string
 	ProjectType     string
 	McpPageSize     int32
+	DefaultView     string
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -266,6 +273,7 @@ func (q *Queries) ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]
 			&i.PrimaryLanguage,
 			&i.ProjectType,
 			&i.McpPageSize,
+			&i.DefaultView,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -289,6 +297,21 @@ func (q *Queries) ProjectSlugExists(ctx context.Context, slug string) (bool, err
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const updateProjectDefaultView = `-- name: UpdateProjectDefaultView :exec
+UPDATE projects SET default_view = $1::text, updated_at = now()
+WHERE id = $2::uuid
+`
+
+type UpdateProjectDefaultViewParams struct {
+	DefaultView string
+	ID          uuid.UUID
+}
+
+func (q *Queries) UpdateProjectDefaultView(ctx context.Context, arg UpdateProjectDefaultViewParams) error {
+	_, err := q.db.Exec(ctx, updateProjectDefaultView, arg.DefaultView, arg.ID)
+	return err
 }
 
 const updateProjectFields = `-- name: UpdateProjectFields :exec

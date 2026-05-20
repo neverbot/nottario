@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 
 class NottarioProjectSettings extends LitElement {
   static properties = {
@@ -207,18 +208,47 @@ class NottarioProjectSettings extends LitElement {
 
   renderGeneral() {
     const p = this.project;
+    const admin = this.me?.is_admin;
+    const currentView = viewByKey(p.DefaultView || 'board/kanban');
     return html`
       <dl>
         <dt><strong>Name</strong></dt><dd>${p.Name}</dd>
         <dt><strong>Description</strong></dt><dd>${p.Description || html`<span class="muted">none</span>`}</dd>
         <dt><strong>Primary language</strong></dt><dd>${p.PrimaryLanguage || html`<span class="muted">none</span>`}</dd>
         <dt><strong>Project type</strong></dt><dd>${p.ProjectType || html`<span class="muted">none</span>`}</dd>
+        <dt><strong>Default view</strong></dt>
+        <dd>
+          ${admin
+            ? html`
+              <select @change=${(e) => this.saveDefaultView(e.target.value)}>
+                ${PROJECT_VIEWS.map(v => html`
+                  <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
+                `)}
+              </select>
+              <p class="muted" style="margin:6px 0 0;font-size:12px">
+                Clicking a project card on the home page navigates here.
+                Currently: <strong>${currentView.label}</strong>.
+              </p>`
+            : html`${currentView.label} <span class="muted">(admin only)</span>`}
+        </dd>
         <dt><strong>Repositories</strong></dt>
         <dd>${p.Repos && p.Repos.length
               ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map(r => html`<li>${r}</li>`)}</ul>`
               : html`<span class="muted">none</span>`}</dd>
       </dl>
     `;
+  }
+
+  async saveDefaultView(value) {
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/default_view`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ default_view: value }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'failed');
+      await this.load();
+    } catch (err) { this.error = err.message; }
   }
 
   renderRoles() {

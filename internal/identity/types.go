@@ -44,6 +44,7 @@ type Project struct {
 	PrimaryLanguage string
 	ProjectType     string
 	MCPPageSize     int
+	DefaultView     string
 	CreatedByUserID *uuid.UUID
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

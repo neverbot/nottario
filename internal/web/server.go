@@ -60,6 +60,7 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/projects/{id}", GetProjectHandler(proj))
 	mux.Handle("PATCH /api/projects/{id}", UpdateProjectHandler(proj))
 	mux.Handle("PATCH /api/projects/{id}/mcp", UpdateProjectMCPHandler(proj))
+	mux.Handle("PATCH /api/projects/{id}/default_view", UpdateProjectDefaultViewHandler(proj))
 	mux.Handle("DELETE /api/projects/{id}", DeleteProjectHandler(proj))
 
 	mux.Handle("GET /api/projects/{id}/roles", ListRolesHandler(proj))

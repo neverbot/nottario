@@ -103,6 +103,7 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 				PrimaryLanguage: r.PrimaryLanguage,
 				ProjectType:     r.ProjectType,
 				MCPPageSize:     int(r.McpPageSize),
+				DefaultView:     r.DefaultView,
 				CreatedByUserID: r.CreatedByUserID,
 				CreatedAt:       r.CreatedAt.Time,
 				UpdatedAt:       r.UpdatedAt.Time,
@@ -123,6 +124,7 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 				PrimaryLanguage: r.PrimaryLanguage,
 				ProjectType:     r.ProjectType,
 				MCPPageSize:     int(r.McpPageSize),
+				DefaultView:     r.DefaultView,
 				CreatedByUserID: r.CreatedByUserID,
 				CreatedAt:       r.CreatedAt.Time,
 				UpdatedAt:       r.UpdatedAt.Time,
@@ -154,6 +156,7 @@ func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Proj
 		PrimaryLanguage: row.PrimaryLanguage,
 		ProjectType:     row.ProjectType,
 		MCPPageSize:     int(row.McpPageSize),
+		DefaultView:     row.DefaultView,
 		CreatedByUserID: row.CreatedByUserID,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -222,6 +225,33 @@ func UpdateProjectMCPPageSize(ctx context.Context, pool *pgxpool.Pool, id uuid.U
 	return GetProject(ctx, pool, id.String())
 }
 
+// ValidDefaultViews is the allowlist of view keys mirrored from the
+// frontend's view registry (internal/web/static/views.js) and enforced
+// also by a CHECK constraint on the column. Keep the two in sync when
+// new views are added.
+var ValidDefaultViews = map[string]bool{
+	"board/kanban": true,
+	"board/gantt":  true,
+	"docs":         true,
+	"arch/diagram": true,
+	"arch/tree":    true,
+}
+
+// UpdateProjectDefaultView sets the per-project landing view used by
+// the project cards on `/`. Value must be one of ValidDefaultViews.
+func UpdateProjectDefaultView(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, view string) (*Project, error) {
+	if !ValidDefaultViews[view] {
+		return nil, errors.New("invalid default_view")
+	}
+	if err := dbq.New(pool).UpdateProjectDefaultView(ctx, dbq.UpdateProjectDefaultViewParams{
+		ID:          id,
+		DefaultView: view,
+	}); err != nil {
+		return nil, err
+	}
+	return GetProject(ctx, pool, id.String())
+}
+
 // DeleteProject removes a project and cascades all dependent rows.
 func DeleteProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
 	return dbq.New(pool).DeleteProjectByID(ctx, id)
@@ -236,6 +266,7 @@ func projectFromInsertRow(r dbq.InsertProjectRow) Project {
 		PrimaryLanguage: r.PrimaryLanguage,
 		ProjectType:     r.ProjectType,
 		MCPPageSize:     int(r.McpPageSize),
+		DefaultView:     r.DefaultView,
 		CreatedByUserID: r.CreatedByUserID,
 		CreatedAt:       r.CreatedAt.Time,
 		UpdatedAt:       r.UpdatedAt.Time,

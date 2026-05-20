@@ -5,14 +5,14 @@ VALUES ($1, $2, $3, NULLIF(sqlc.arg('primary_language')::text, ''),
 RETURNING id, slug, name, description,
           COALESCE(primary_language, '')::text AS primary_language,
           COALESCE(project_type, '')::text AS project_type,
-          mcp_page_size,
+          mcp_page_size, default_view,
           created_by_user_id, created_at, updated_at;
 
 -- name: ListProjectsAdmin :many
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size,
+       mcp_page_size, default_view,
        created_by_user_id, created_at, updated_at
 FROM projects
 ORDER BY name;
@@ -21,7 +21,7 @@ ORDER BY name;
 SELECT DISTINCT p.id, p.slug, p.name, p.description,
        COALESCE(p.primary_language, '')::text AS primary_language,
        COALESCE(p.project_type, '')::text AS project_type,
-       p.mcp_page_size,
+       p.mcp_page_size, p.default_view,
        p.created_by_user_id, p.created_at, p.updated_at
 FROM projects p
 JOIN memberships m ON m.project_id = p.id
@@ -32,7 +32,7 @@ ORDER BY p.name;
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size,
+       mcp_page_size, default_view,
        created_by_user_id, created_at, updated_at
 FROM projects
 WHERE id::text = sqlc.arg('id_or_slug')::text
@@ -49,6 +49,10 @@ WHERE id = $1;
 
 -- name: UpdateProjectMCPPageSize :exec
 UPDATE projects SET mcp_page_size = $2, updated_at = now() WHERE id = $1;
+
+-- name: UpdateProjectDefaultView :exec
+UPDATE projects SET default_view = sqlc.arg('default_view')::text, updated_at = now()
+WHERE id = sqlc.arg('id')::uuid;
 
 -- name: DeleteProjectByID :exec
 DELETE FROM projects WHERE id = $1;

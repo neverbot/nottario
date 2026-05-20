@@ -168,6 +168,40 @@ func UpdateProjectMCPHandler(d ProjectDeps) http.Handler {
 	})
 }
 
+// UpdateProjectDefaultViewHandler sets the per-project landing view used
+// by the project cards on `/`. Admin-only.
+func UpdateProjectDefaultViewHandler(d ProjectDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		if !c.IsAdmin {
+			writeError(w, http.StatusForbidden, "admin only")
+			return
+		}
+		id, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		var body struct {
+			DefaultView string `json:"default_view"`
+		}
+		if err := decodeJSON(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		p, err := identity.UpdateProjectDefaultView(r.Context(), d.Pool, id, body.DefaultView)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+	})
+}
+
 // DeleteProjectHandler removes a project. Admin-only.
 func DeleteProjectHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

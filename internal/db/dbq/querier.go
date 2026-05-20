@@ -127,6 +127,7 @@ type Querier interface {
 	UnifiedSearch(ctx context.Context, arg UnifiedSearchParams) ([]UnifiedSearchRow, error)
 	UpdateArchNode(ctx context.Context, arg UpdateArchNodeParams) (UpdateArchNodeRow, error)
 	UpdateDocument(ctx context.Context, arg UpdateDocumentParams) (UpdateDocumentRow, error)
+	UpdateProjectDefaultView(ctx context.Context, arg UpdateProjectDefaultViewParams) error
 	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error
 	UpdateProjectMCPPageSize(ctx context.Context, arg UpdateProjectMCPPageSizeParams) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (UpdateProjectRoleRow, error)

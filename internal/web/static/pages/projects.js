@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { defaultPathFor, viewByKey } from '/static/views.js';
 
 class NottarioProjectsPage extends LitElement {
   static properties = {
@@ -25,13 +26,30 @@ class NottarioProjectsPage extends LitElement {
       gap: 12px;
     }
     .card {
+      position: relative;
       padding: 16px;
       background: #fff;
       border: 1px solid #d1d9e0;
       border-radius: 8px;
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+      cursor: pointer;
+      transition: border-color 80ms ease-out, box-shadow 80ms ease-out;
+    }
+    .card:hover {
+      border-color: #afb8c1;
+      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04),
+                  0 4px 12px rgba(31, 35, 40, 0.06);
+    }
+    .card:focus-visible {
+      outline: 2px solid #0969da;
+      outline-offset: 2px;
     }
     .card h3 { margin: 0 0 4px 0; font-size: 16px; }
+    .card .default-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #59636e;
+    }
     .card .repos {
       margin-top: 8px;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
@@ -176,21 +194,30 @@ class NottarioProjectsPage extends LitElement {
         ? html`<div class="empty">No projects yet.${this.me?.is_admin ? html` Click <strong>New project</strong> to create one.` : ''}</div>`
         : html`
           <div class="grid">
-            ${this.projects.map(p => html`
-              <div class="card">
-                <h3>${p.Name}</h3>
-                <div class="muted">${p.Description || html`<span style="opacity:0.6">no description</span>`}</div>
-                ${p.Repos && p.Repos.length
-                  ? html`<div class="repos">${p.Repos.map(r => html`<span>${r}</span>`)}</div>`
-                  : null}
-                <div class="actions">
-                  <button class="primary" @click=${() => this.goto(`/projects/${p.ID}/board`)}>Open board</button>
-                  <button @click=${() => this.goto(`/projects/${p.ID}/docs`)}>Docs</button>
-                  <button @click=${() => this.goto(`/projects/${p.ID}/arch`)}>Architecture</button>
-                  <button @click=${() => this.goto(`/projects/${p.ID}/settings`)}>Settings</button>
+            ${this.projects.map(p => {
+              const dest = defaultPathFor(p);
+              const destLabel = viewByKey(p.DefaultView || 'board/kanban').label;
+              const stop = (e, path) => { e.stopPropagation(); this.goto(path); };
+              return html`
+                <div class="card" role="link" tabindex="0"
+                     @click=${() => this.goto(dest)}
+                     @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.goto(dest); } }}>
+                  <h3>${p.Name}</h3>
+                  <div class="muted">${p.Description || html`<span style="opacity:0.6">no description</span>`}</div>
+                  ${p.Repos && p.Repos.length
+                    ? html`<div class="repos">${p.Repos.map(r => html`<span>${r}</span>`)}</div>`
+                    : null}
+                  <div class="default-hint">Opens <strong>${destLabel}</strong></div>
+                  <div class="actions">
+                    <button @click=${(e) => stop(e, `/projects/${p.ID}/board/kanban`)}>Kanban</button>
+                    <button @click=${(e) => stop(e, `/projects/${p.ID}/board/gantt`)}>Gantt</button>
+                    <button @click=${(e) => stop(e, `/projects/${p.ID}/docs`)}>Docs</button>
+                    <button @click=${(e) => stop(e, `/projects/${p.ID}/arch`)}>Architecture</button>
+                    <button @click=${(e) => stop(e, `/projects/${p.ID}/settings`)}>Settings</button>
+                  </div>
                 </div>
-              </div>
-            `)}
+              `;
+            })}
           </div>
         `}
       ${this.showCreate ? this.renderCreateDialog() : null}
