@@ -51,16 +51,11 @@ class NottarioGantt extends LitElement {
     .band-bg.features {
       fill: #f0f2f5;
     }
-    .features-label {
+    .band-label, .features-label {
       fill: #57606a;
       font-size: 10px;
       letter-spacing: 0.06em;
       font-family: ui-monospace, SFMono-Regular, monospace;
-      font-weight: 600;
-    }
-    .band-label {
-      fill: #1f2328;
-      font-size: 12px;
       font-weight: 600;
     }
     .zone-label {
@@ -350,7 +345,7 @@ class NottarioGantt extends LitElement {
   // tasks without target_role_id.
   bands() {
     const order = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
-    const general = { ID: '__general__', Key: 'general', Label: 'general', Color: '#59636e' };
+    const general = { ID: '__general__', Key: 'general', Label: 'General', Color: '#59636e' };
     const result = order.map(r => ({ role: r, tasks: [] }));
     result.push({ role: general, tasks: [] });
     const byID = new Map(order.map(r => [r.ID, result.find(b => b.role.ID === r.ID)]));
@@ -796,13 +791,17 @@ class NottarioGantt extends LitElement {
     });
 
     // ---- Compute each band's Y top from the lane counts ----
+    // Empty bands collapse to zero height so the synthetic "General"
+    // band (and any other band without visible entries today) doesn't
+    // leave a dead row in the chart.
     const bandTops = [];
     const bandHeights = [];
     {
       let cursor = headerH;
       for (let bi = 0; bi < displayBands.length; bi++) {
         bandTops.push(cursor);
-        const h = lanesPerBand[bi] * laneHeight + bandPad * 2 - laneGap;
+        const isEmpty = visiblePerBand[bi].length === 0;
+        const h = isEmpty ? 0 : (lanesPerBand[bi] * laneHeight + bandPad * 2 - laneGap);
         bandHeights.push(h);
         cursor += h;
       }
@@ -885,18 +884,18 @@ class NottarioGantt extends LitElement {
             <text class="priority-label" x=${b.x + 4} y=${headerH - 4}>${this._priorityLabel(b.priority)}</text>
           `)}
 
-          <!-- Band rows -->
+          <!-- Band rows (empty bands collapse to height 0 and skip render). -->
           ${displayBands.map((b, bi) => {
+            if (bandHeights[bi] === 0) return null;
             const isFeatures = b.role.ID === '__features__';
             const cls = isFeatures
               ? 'band-bg features'
               : `band-bg ${bi % 2 ? 'alt' : ''}`;
-            const labelCls = isFeatures ? 'band-label features-label' : 'band-label';
             return svg`
               <rect class=${cls}
                     x="0" y=${bandTops[bi]}
                     width=${width} height=${bandHeights[bi]}></rect>
-              <text class=${labelCls}
+              <text class="band-label"
                     x="8" y=${bandTops[bi] + bandHeights[bi] / 2 + 4}>
                 ${isFeatures ? 'Features' : b.role.Label}
               </text>
