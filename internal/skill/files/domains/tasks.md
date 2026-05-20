@@ -174,6 +174,38 @@ The only correct way to move a task between states. It manages
 - `doing` → fills `actual_start` (only if currently null).
 - `done` → fills `actual_end` and preserves any earlier `actual_start`.
 
+#### Preconditions are enforced
+
+Closing a task (`state: "done"`) is **rejected** when the task has at
+least one direct dependency whose own state is not `done`. The
+response carries a `preconditions` array listing what's still open:
+
+```jsonc
+{
+  "error": "cannot close task: 2 unresolved preconditions",
+  "preconditions": [
+    { "id": "…", "title": "Backend migration", "state": "doing" },
+    { "id": "…", "title": "API endpoint",      "state": "todo"  }
+  ]
+}
+```
+
+The fix is always to close the preconditions first, never to bypass.
+Canonical pattern when an agent hits this:
+
+```text
+me = nottario.whoami { }
+# walk every unresolved precondition; pick whichever is yours.
+for p in error.preconditions:
+    if p.assignee_user_id == me.user_id and p.state == "todo":
+        # work on p first.
+        ...
+```
+
+Feature parents (`type: feature`) are an exception — the engine rolls
+them up automatically when all their children are `done`, so the
+check is skipped for them.
+
 ### `nottario.tasks.add_dependency` / `remove_dependency`
 
 `add_dependency` rejects edges that would form a cycle:
