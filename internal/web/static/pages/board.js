@@ -15,6 +15,7 @@ class NottarioBoardPage extends LitElement {
     priorities: { state: true },
     showCreate: { state: true },
     selected: { state: true },
+    expandDoing: { state: true },
     error: { state: true },
   };
 
@@ -236,6 +237,7 @@ class NottarioBoardPage extends LitElement {
     this.members = [];
     this.showCreate = false;
     this.selected = null;
+    this.expandDoing = false;
     this.error = '';
   }
 
@@ -298,6 +300,11 @@ class NottarioBoardPage extends LitElement {
       this.members = (await mr.json()).members || [];
       this.priorities = (await qr.json()).priorities || [];
       this.deps = (await dr.json()).dependencies || [];
+      // Auto-reset the manual expand toggle on every load: if no tasks
+      // are doing, the column hides again with its pill. Once the user
+      // clicks the pill the Up-next card is exposed for as long as the
+      // user stays on this snapshot.
+      if (this.byState('doing').length > 0) this.expandDoing = false;
     } catch (e) {
       this.error = e.message;
     }
@@ -498,11 +505,19 @@ class NottarioBoardPage extends LitElement {
 
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
+    const doingCount = this.byState('doing').length;
+    const hideDoing = this.view === 'kanban' && doingCount === 0 && !this.expandDoing;
     return html`
       <div class="header">
         <button @click=${() => this.back()}>← Back</button>
         <h2>${this.project.Name}</h2>
         <span class="muted">${this.view === 'gantt' ? 'gantt' : 'board'}</span>
+        ${hideDoing
+          ? html`<button class="doing-pill" title="Show the doing column"
+                         @click=${() => this.expandDoing = true}>
+                   <span class="dot"></span> 0 doing
+                 </button>`
+          : null}
         <div class="spacer"></div>
         <div role="tablist" style="display:flex;gap:4px">
           <button class=${this.view === 'kanban' ? 'primary' : ''}
@@ -522,8 +537,8 @@ class NottarioBoardPage extends LitElement {
                   .projectId=${this.projectId}
                   @task-selected=${(e) => this.open(e.detail.task)}></nottario-gantt>`
         : html`
-          <div class="columns">
-            ${['todo', 'doing', 'done'].map(s => {
+          <div class=${hideDoing ? 'columns two' : 'columns'}>
+            ${(hideDoing ? ['todo', 'done'] : ['todo', 'doing', 'done']).map(s => {
               const items = this.byState(s);
               const isEmpty = items.length === 0;
               const cls = isEmpty
