@@ -9,11 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // SessionCookieName is the cookie used to carry the session id.
@@ -30,54 +34,57 @@ var ErrSessionInvalid = errors.New("session invalid")
 // NewSession creates a new session row for the user.
 func NewSession(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, ua, ip string) (*Session, error) {
 	expiresAt := time.Now().Add(SessionTTL)
-	var s Session
-	var ipArg any = nil
+	var ipAddr *netip.Addr
 	if ip != "" {
-		ipArg = ip
+		if a, err := netip.ParseAddr(ip); err == nil {
+			ipAddr = &a
+		}
 	}
-	err := pool.QueryRow(ctx, `
-		INSERT INTO sessions (user_id, expires_at, user_agent, ip)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, user_id, created_at, last_seen_at, expires_at,
-		          COALESCE(user_agent, ''), COALESCE(host(ip), '')
-	`, userID, expiresAt, ua, ipArg).Scan(
-		&s.ID, &s.UserID, &s.CreatedAt, &s.LastSeenAt, &s.ExpiresAt,
-		&s.UserAgent, &s.IP,
-	)
+	row, err := dbq.New(pool).InsertSession(ctx, dbq.InsertSessionParams{
+		UserID:    userID,
+		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		UserAgent: pgtype.Text{String: ua, Valid: ua != ""},
+		Ip:        ipAddr,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("insert session: %w", err)
 	}
-	return &s, nil
+	return &Session{
+		ID:         row.ID,
+		UserID:     row.UserID,
+		CreatedAt:  row.CreatedAt.Time,
+		LastSeenAt: row.LastSeenAt.Time,
+		ExpiresAt:  row.ExpiresAt.Time,
+		UserAgent:  row.UserAgent,
+		IP:         row.Ip,
+	}, nil
 }
 
 // GetSession fetches an active session by id.
 func GetSession(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Session, error) {
-	var s Session
-	err := pool.QueryRow(ctx, `
-		SELECT id, user_id, created_at, last_seen_at, expires_at,
-		       COALESCE(user_agent, ''), COALESCE(host(ip), '')
-		FROM sessions
-		WHERE id = $1 AND expires_at > now()
-	`, id).Scan(
-		&s.ID, &s.UserID, &s.CreatedAt, &s.LastSeenAt, &s.ExpiresAt,
-		&s.UserAgent, &s.IP,
-	)
+	row, err := dbq.New(pool).GetActiveSession(ctx, id)
 	if err != nil {
 		return nil, ErrSessionInvalid
 	}
-	return &s, nil
+	return &Session{
+		ID:         row.ID,
+		UserID:     row.UserID,
+		CreatedAt:  row.CreatedAt.Time,
+		LastSeenAt: row.LastSeenAt.Time,
+		ExpiresAt:  row.ExpiresAt.Time,
+		UserAgent:  row.UserAgent,
+		IP:         row.Ip,
+	}, nil
 }
 
 // TouchSession bumps last_seen_at; called from auth middleware.
 func TouchSession(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
-	_, err := pool.Exec(ctx, `UPDATE sessions SET last_seen_at = now() WHERE id = $1`, id)
-	return err
+	return dbq.New(pool).TouchSessionLastSeen(ctx, id)
 }
 
 // DeleteSession removes a session (used on logout).
 func DeleteSession(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
-	_, err := pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id)
-	return err
+	return dbq.New(pool).DeleteSessionByID(ctx, id)
 }
 
 // EncodeCookie produces a signed cookie value carrying the session id.

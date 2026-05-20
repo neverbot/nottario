@@ -26,8 +26,10 @@ type Querier interface {
 	DeleteProjectByID(ctx context.Context, id uuid.UUID) error
 	DeleteProjectPriority(ctx context.Context, arg DeleteProjectPriorityParams) (int64, error)
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
+	DeleteSessionByID(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
+	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
@@ -43,6 +45,7 @@ type Querier interface {
 	InsertProjectRepo(ctx context.Context, arg InsertProjectRepoParams) error
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
 	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) error
+	InsertSession(ctx context.Context, arg InsertSessionParams) (InsertSessionRow, error)
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (TaskComment, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error)
@@ -89,6 +92,7 @@ type Querier interface {
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
+	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
 	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error
