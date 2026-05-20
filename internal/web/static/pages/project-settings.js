@@ -105,6 +105,18 @@ class NottarioProjectSettings extends LitElement {
       box-sizing: border-box;
     }
     .prefs-control input[type="number"] { width: 96px; font-variant-numeric: tabular-nums; }
+
+    /* Hide the browser-native number spinner everywhere on this page.
+       It's a system-styled control that clashes with our chrome, and
+       GitHub-likes hide it by convention. The keyboard (↑/↓) and
+       typing still work. */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      appearance: none;
+      margin: 0;
+    }
+    input[type="number"] { -moz-appearance: textfield; }
     .prefs-control select:focus,
     .prefs-control input[type="number"]:focus {
       outline: 2px solid #0969da;
