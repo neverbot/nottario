@@ -36,6 +36,7 @@ type Querier interface {
 	GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error)
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
+	InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error)
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
 	InsertMembership(ctx context.Context, arg InsertMembershipParams) error
 	InsertProject(ctx context.Context, arg InsertProjectParams) (InsertProjectRow, error)
@@ -69,9 +70,11 @@ type Querier interface {
 	ListTasksPaginated(ctx context.Context, arg ListTasksPaginatedParams) ([]ListTasksPaginatedRow, error)
 	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
 	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
+	ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
+	LookupAPIToken(ctx context.Context, tokenHash []byte) (LookupAPITokenRow, error)
 	// Preview: returns the next pickable task without claiming it. Same
 	// eligibility rules as ClaimNextEligibleTask but no row lock and no
 	// mutation. Use ClaimNextEligibleTask for atomic pickup.
@@ -79,12 +82,14 @@ type Querier interface {
 	ProjectIDForTask(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	ProjectSlugExists(ctx context.Context, slug string) (bool, error)
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
+	RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) (int64, error)
 	RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error)
 	SeedDefaultPriority(ctx context.Context, arg SeedDefaultPriorityParams) error
 	SetRolePosition(ctx context.Context, arg SetRolePositionParams) error
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
+	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
 	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error
 	UpdateProjectMCPPageSize(ctx context.Context, arg UpdateProjectMCPPageSizeParams) error

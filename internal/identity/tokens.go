@@ -7,10 +7,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
 // TokenPrefix is the textual prefix prepended to every plaintext
@@ -33,95 +37,112 @@ func IssueToken(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, name 
 	hash := sha256.Sum256([]byte(plaintext))
 	prefix := plaintext[:min(12, len(plaintext))]
 
-	var t APIToken
-	err = pool.QueryRow(ctx, `
-		INSERT INTO api_tokens (user_id, name, token_hash, prefix, default_role_id)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, user_id, name, prefix, default_role_id,
-		          created_at, last_used_at, revoked_at
-	`, userID, name, hash[:], prefix, defaultRoleID).Scan(
-		&t.ID, &t.UserID, &t.Name, &t.Prefix, &t.DefaultRoleID,
-		&t.CreatedAt, &t.LastUsedAt, &t.RevokedAt,
-	)
+	row, err := dbq.New(pool).InsertAPIToken(ctx, dbq.InsertAPITokenParams{
+		UserID:        userID,
+		Name:          name,
+		TokenHash:     hash[:],
+		Prefix:        prefix,
+		DefaultRoleID: defaultRoleID,
+	})
 	if err != nil {
 		return "", nil, fmt.Errorf("insert token: %w", err)
 	}
-	return plaintext, &t, nil
+	return plaintext, tokenFromInsertRow(row), nil
 }
 
 // LookupToken validates a plaintext token, returns the (token, user)
 // pair and bumps last_used_at. Revoked tokens are rejected.
 func LookupToken(ctx context.Context, pool *pgxpool.Pool, plaintext string) (*APIToken, *User, error) {
 	hash := sha256.Sum256([]byte(plaintext))
-	var t APIToken
-	var u User
-	err := pool.QueryRow(ctx, `
-		SELECT t.id, t.user_id, t.name, t.prefix, t.default_role_id,
-		       t.created_at, t.last_used_at, t.revoked_at,
-		       u.id, u.github_login, u.github_id, u.display_name,
-		       COALESCE(u.avatar_url, ''), u.is_admin, u.created_at, u.last_seen_at
-		FROM api_tokens t
-		JOIN users u ON u.id = t.user_id
-		WHERE t.token_hash = $1 AND t.revoked_at IS NULL
-	`, hash[:]).Scan(
-		&t.ID, &t.UserID, &t.Name, &t.Prefix, &t.DefaultRoleID,
-		&t.CreatedAt, &t.LastUsedAt, &t.RevokedAt,
-		&u.ID, &u.GithubLogin, &u.GithubID, &u.DisplayName,
-		&u.AvatarURL, &u.IsAdmin, &u.CreatedAt, &u.LastSeenAt,
-	)
+	q := dbq.New(pool)
+	row, err := q.LookupAPIToken(ctx, hash[:])
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil, ErrTokenInvalid
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("lookup token: %w", err)
 	}
-	_, _ = pool.Exec(ctx, `UPDATE api_tokens SET last_used_at = now() WHERE id = $1`, t.ID)
+	_ = q.TouchTokenLastUsed(ctx, row.TokenID)
+	t := APIToken{
+		ID:            row.TokenID,
+		UserID:        row.UserID,
+		Name:          row.TokenName,
+		Prefix:        row.Prefix,
+		DefaultRoleID: row.DefaultRoleID,
+		CreatedAt:     row.TokenCreatedAt.Time,
+		LastUsedAt:    timeOrNil(row.LastUsedAt),
+		RevokedAt:     timeOrNil(row.RevokedAt),
+	}
+	u := User{
+		ID:          row.UserIDFull,
+		GithubLogin: row.GithubLogin,
+		GithubID:    row.GithubID,
+		DisplayName: row.DisplayName,
+		AvatarURL:   row.AvatarUrl,
+		IsAdmin:     row.IsAdmin,
+		CreatedAt:   row.UserCreatedAt.Time,
+		LastSeenAt:  timeOrNil(row.LastSeenAt),
+	}
 	return &t, &u, nil
 }
 
 // ListTokens returns the tokens owned by a user.
 func ListTokens(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]APIToken, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT id, user_id, name, prefix, default_role_id,
-		       created_at, last_used_at, revoked_at
-		FROM api_tokens
-		WHERE user_id = $1
-		ORDER BY created_at DESC
-	`, userID)
+	rows, err := dbq.New(pool).ListUserTokens(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []APIToken
-	for rows.Next() {
-		var t APIToken
-		if err := rows.Scan(
-			&t.ID, &t.UserID, &t.Name, &t.Prefix, &t.DefaultRoleID,
-			&t.CreatedAt, &t.LastUsedAt, &t.RevokedAt,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, t)
+	out := make([]APIToken, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, APIToken{
+			ID:            r.ID,
+			UserID:        r.UserID,
+			Name:          r.Name,
+			Prefix:        r.Prefix,
+			DefaultRoleID: r.DefaultRoleID,
+			CreatedAt:     r.CreatedAt.Time,
+			LastUsedAt:    timeOrNil(r.LastUsedAt),
+			RevokedAt:     timeOrNil(r.RevokedAt),
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // RevokeToken marks a token revoked. Only the owner or an admin may
 // revoke; this is enforced by passing the requesting caller's
 // (userID, isAdmin) pair.
 func RevokeToken(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, requestingUserID uuid.UUID, isAdmin bool) error {
-	cmd, err := pool.Exec(ctx, `
-		UPDATE api_tokens
-		SET revoked_at = now()
-		WHERE id = $1
-		  AND revoked_at IS NULL
-		  AND ($2::bool OR user_id = $3)
-	`, id, isAdmin, requestingUserID)
+	rows, err := dbq.New(pool).RevokeAPIToken(ctx, dbq.RevokeAPITokenParams{
+		ID:              id,
+		IsAdmin:         isAdmin,
+		RequesterUserID: requestingUserID,
+	})
 	if err != nil {
 		return err
 	}
-	if cmd.RowsAffected() == 0 {
+	if rows == 0 {
 		return ErrTokenInvalid
 	}
 	return nil
+}
+
+func tokenFromInsertRow(r dbq.InsertAPITokenRow) *APIToken {
+	return &APIToken{
+		ID:            r.ID,
+		UserID:        r.UserID,
+		Name:          r.Name,
+		Prefix:        r.Prefix,
+		DefaultRoleID: r.DefaultRoleID,
+		CreatedAt:     r.CreatedAt.Time,
+		LastUsedAt:    timeOrNil(r.LastUsedAt),
+		RevokedAt:     timeOrNil(r.RevokedAt),
+	}
+}
+
+func timeOrNil(ts pgtype.Timestamptz) *time.Time {
+	if !ts.Valid {
+		return nil
+	}
+	v := ts.Time
+	return &v
 }

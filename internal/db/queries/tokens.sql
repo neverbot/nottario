@@ -1,0 +1,34 @@
+-- name: InsertAPIToken :one
+INSERT INTO api_tokens (user_id, name, token_hash, prefix, default_role_id)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, name, prefix, default_role_id,
+          created_at, last_used_at, revoked_at;
+
+-- name: LookupAPIToken :one
+SELECT t.id AS token_id, t.user_id, t.name AS token_name,
+       t.prefix, t.default_role_id,
+       t.created_at AS token_created_at,
+       t.last_used_at, t.revoked_at,
+       u.id AS user_id_full, u.github_login, u.github_id, u.display_name,
+       COALESCE(u.avatar_url, '')::text AS avatar_url,
+       u.is_admin, u.created_at AS user_created_at, u.last_seen_at
+FROM api_tokens t
+JOIN users u ON u.id = t.user_id
+WHERE t.token_hash = $1 AND t.revoked_at IS NULL;
+
+-- name: TouchTokenLastUsed :exec
+UPDATE api_tokens SET last_used_at = now() WHERE id = $1;
+
+-- name: ListUserTokens :many
+SELECT id, user_id, name, prefix, default_role_id,
+       created_at, last_used_at, revoked_at
+FROM api_tokens
+WHERE user_id = $1
+ORDER BY created_at DESC;
+
+-- name: RevokeAPIToken :execrows
+UPDATE api_tokens
+SET revoked_at = now()
+WHERE id = $1
+  AND revoked_at IS NULL
+  AND (sqlc.arg('is_admin')::bool OR user_id = sqlc.arg('requester_user_id')::uuid);
