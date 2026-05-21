@@ -6,6 +6,7 @@ import { fieldStyles } from '/static/components/fields.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/field.js';
 import '/static/components/avatar.js';
+import '/static/components/tabs.js';
 import '/static/components/page-header.js';
 
 class NottarioProjectSettings extends LitElement {
@@ -23,39 +24,6 @@ class NottarioProjectSettings extends LitElement {
   static styles = [buttonStyles, tableStyles, fieldStyles, badgeStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
-
-    /* Tabs: four entries. Active tab gets a thin coloured underline.
-       The underline colour stays muted (orange) so it never reads as
-       a primary CTA. */
-    .tabs {
-      display: flex;
-      gap: 4px;
-      margin-bottom: 16px;
-      border-bottom: 1px solid #d1d9e0;
-    }
-    .tab {
-      padding: 8px 14px;
-      background: transparent;
-      border: none;
-      border-bottom: 2px solid transparent;
-      cursor: pointer;
-      color: #59636e;
-      font: inherit;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: -1px;
-    }
-    .tab:hover { color: #1f2328; }
-    .tab.active {
-      color: #1f2328;
-      border-bottom-color: #ff8c42;
-    }
-    .tab:focus-visible {
-      outline: 2px solid #0969da;
-      outline-offset: 2px;
-      border-radius: 4px;
-    }
-
 
     .color-dot {
       display: inline-block;
@@ -265,14 +233,11 @@ class NottarioProjectSettings extends LitElement {
         title="Settings"
         .subtitle=${this.project.Slug}>
       </nottario-page-header>
-      <div class="tabs" role="tablist">
-        ${tabs.map(t => html`
-          <button class=${'tab' + (t.id === active.id ? ' active' : '')}
-                  role="tab"
-                  aria-selected=${t.id === active.id ? 'true' : 'false'}
-                  @click=${() => this.activeTab = t.id}>${t.label}</button>
-        `)}
-      </div>
+      <nottario-tabs
+        .options=${tabs.map(t => ({ id: t.id, label: t.label }))}
+        .value=${active.id}
+        @change=${(e) => this.activeTab = e.detail.value}>
+      </nottario-tabs>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${active.body()}
     `;
