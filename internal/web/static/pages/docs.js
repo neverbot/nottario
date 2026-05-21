@@ -43,7 +43,9 @@ class NottarioDocsPage extends LitElement {
     }
     .rail {
       border-right: 1px solid #d1d9e0;
-      padding: 12px 12px 24px 0;
+      /* Left padding gives focus outlines and active-row chrome room
+         to render without clipping against the page's left edge. */
+      padding: 12px 12px 24px 4px;
       max-height: calc(100vh - 200px);
       overflow: auto;
     }
@@ -74,19 +76,34 @@ class NottarioDocsPage extends LitElement {
     }
     .rail-search .clear {
       position: absolute;
-      right: 6px;
+      right: 4px;
       top: 50%;
       transform: translateY(-50%);
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       background: transparent;
-      border: none;
+      border: 1px solid transparent;
       cursor: pointer;
       color: #59636e;
-      padding: 4px 6px;
+      padding: 0;
       line-height: 1;
-      font-size: 14px;
+      font-size: 16px;
+      font-weight: 600;
       border-radius: 4px;
+      font-family: inherit;
     }
-    .rail-search .clear:hover { color: #1f2328; background: #f6f8fa; }
+    .rail-search .clear:hover {
+      color: #1f2328;
+      background: #f6f8fa;
+      border-color: #d0d7de;
+    }
+    .rail-search .clear:focus-visible {
+      outline: 2px solid #0969da;
+      outline-offset: 0;
+    }
     .rail-search .hint {
       display: block;
       margin-top: 4px;
