@@ -25,6 +25,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/neverbot/nottario/internal/db/dbq"
 	"gopkg.in/yaml.v3"
 )
 
@@ -111,19 +112,11 @@ func List(ctx context.Context, pool *pgxpool.Pool) ([]Entry, error) {
 
 	// Global overrides (and global-only additions).
 	if pool != nil {
-		rows, err := pool.Query(ctx, `
-			SELECT path FROM documents
-			WHERE scope = 'global' AND kind = 'skill' AND deleted_at IS NULL
-			  AND path LIKE $1
-		`, globalSkillPrefix+"%")
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var p string
-				if err := rows.Scan(&p); err == nil {
-					rel := strings.TrimPrefix(p, globalSkillPrefix)
-					out[rel] = OriginGlobal
-				}
+		paths, qerr := dbq.New(pool).ListSkillOverridePaths(ctx, globalSkillPrefix+"%")
+		if qerr == nil {
+			for _, p := range paths {
+				rel := strings.TrimPrefix(p, globalSkillPrefix)
+				out[rel] = OriginGlobal
 			}
 		}
 	}
@@ -140,22 +133,15 @@ func List(ctx context.Context, pool *pgxpool.Pool) ([]Entry, error) {
 // found, it reconstructs the markdown (frontmatter YAML + body) and
 // returns it.
 func readOverride(ctx context.Context, pool *pgxpool.Pool, path string) ([]byte, bool) {
-	row := pool.QueryRow(ctx, `
-		SELECT content_md, frontmatter
-		FROM documents
-		WHERE scope = 'global' AND kind = 'skill' AND deleted_at IS NULL
-		  AND path = $1
-	`, globalSkillPrefix+path)
-
-	var body string
-	var rawFM []byte
-	err := row.Scan(&body, &rawFM)
+	row, err := dbq.New(pool).GetSkillOverride(ctx, globalSkillPrefix+path)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false
 	}
 	if err != nil {
 		return nil, false
 	}
+	body := row.ContentMd
+	rawFM := row.Frontmatter
 
 	// Reconstruct: if the document has a non-empty frontmatter object,
 	// emit it as YAML at the top followed by the body.
