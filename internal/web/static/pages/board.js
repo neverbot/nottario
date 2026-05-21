@@ -7,6 +7,7 @@ import { fieldStyles } from '/static/components/fields.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/field.js';
 import '/static/components/page-header.js';
+import '/static/components/markdown.js';
 import './gantt.js';
 
 class NottarioBoardPage extends LitElement {
@@ -608,7 +609,12 @@ class NottarioBoardPage extends LitElement {
               <div>${deps.map(id => html`<code style="font-size:11px">${id}</code> `)}</div>
             ` : null}
           </div>
-          ${task.DescriptionMD ? html`<pre style="white-space:pre-wrap">${task.DescriptionMD}</pre>` : null}
+          ${task.DescriptionMD ? html`
+            <nottario-markdown
+              project-id=${this.projectId}
+              .source=${task.DescriptionMD}
+              style="margin-top:12px"></nottario-markdown>
+          ` : null}
 
           <div class="commits">
             <strong>Commits</strong>
@@ -621,7 +627,9 @@ class NottarioBoardPage extends LitElement {
             ${comments.length === 0 ? html`<p class="muted">No comments yet.</p>` :
               comments.map(c => html`<div class="item">
                 <div class="author">${new Date(c.CreatedAt).toLocaleString()}</div>
-                <div>${c.BodyMD}</div>
+                <nottario-markdown
+                  project-id=${this.projectId}
+                  .source=${c.BodyMD || ''}></nottario-markdown>
               </div>`)}
             <form @submit=${(e) => { e.preventDefault(); const t = e.target.body; this.addComment(task.ID, t.value); t.value = ''; }}>
               <textarea name="body" rows="2" placeholder="Add a comment…" style="margin-top:8px"></textarea>
