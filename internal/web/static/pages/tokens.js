@@ -3,6 +3,7 @@ import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
 import { fieldStyles } from '/static/components/fields.js';
+import '/static/components/field.js';
 import '/static/components/page-header.js';
 
 class NottarioTokensPage extends LitElement {
@@ -180,10 +181,9 @@ class NottarioTokensPage extends LitElement {
           <h3>New API token</h3>
           ${this.error ? html`<div class="error">${this.error}</div>` : null}
           <form @submit=${(e) => this.issue(e)}>
-            <div class="field">
-              <label>Name (so you remember which machine uses it)</label>
+            <nottario-field label="Name" hint="so you remember which machine uses it">
               <input name="name" required autofocus placeholder="laptop, ci-runner, …">
-            </div>
+            </nottario-field>
             <div class="actions-row">
               <button type="button" class="btn secondary" @click=${() => this.close()}>Cancel</button>
               <button type="submit" class="btn primary">Issue</button>

@@ -4,6 +4,7 @@ import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles } from '/static/components/surfaces.js';
 import { fieldStyles } from '/static/components/fields.js';
 import { badgeStyles } from '/static/components/badges.js';
+import '/static/components/field.js';
 import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
@@ -105,6 +106,8 @@ class NottarioProjectSettings extends LitElement {
     }
     .add-row .field { margin-bottom: 0; flex: 1; min-width: 120px; }
     .add-row .field.narrow { flex: 0 0 110px; }
+    .add-row nottario-field { margin-bottom: 0; flex: 1; min-width: 120px; }
+    .add-row nottario-field.narrow { flex: 0 0 110px; }
     .add-row .add-action { display: flex; align-items: center; height: 32px; }
 
     /* Inline-edit number input inside table cells. Matches the
@@ -297,39 +300,33 @@ class NottarioProjectSettings extends LitElement {
     const reposText = (p.Repos || []).join('\n');
     return html`
       <form class="general-form" @submit=${(e) => this.saveGeneral(e)}>
-        <div class="field">
-          <label>Name</label>
+        <nottario-field label="Name">
           <input name="name" required .value=${p.Name}>
-        </div>
-        <div class="field">
-          <label>Description</label>
+        </nottario-field>
+        <nottario-field label="Description">
           <input name="description" .value=${p.Description || ''}>
-        </div>
-        <div class="field" style="display:flex;gap:12px">
-          <div style="flex:1">
-            <label>Primary language</label>
+        </nottario-field>
+        <div style="display:flex;gap:12px">
+          <nottario-field label="Primary language" style="flex:1">
             <input name="primary_language" placeholder="go, typescript, python…"
                    .value=${p.PrimaryLanguage || ''}>
-          </div>
-          <div style="flex:1">
-            <label>Project type</label>
+          </nottario-field>
+          <nottario-field label="Project type" style="flex:1">
             <input name="project_type" placeholder="web-app, cli-tool, library…"
                    .value=${p.ProjectType || ''}>
-          </div>
+          </nottario-field>
         </div>
-        <div class="field">
-          <label>Default view <span class="muted" style="font-weight:400">where a project card on the home page navigates</span></label>
+        <nottario-field label="Default view" hint="where a project card on the home page navigates">
           <select name="default_view" style="max-width:260px">
             ${PROJECT_VIEWS.map(v => html`
               <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
             `)}
           </select>
-        </div>
-        <div class="field">
-          <label>Repositories <span class="muted" style="font-weight:400">one per line or comma-separated, format owner/repo</span></label>
+        </nottario-field>
+        <nottario-field label="Repositories" hint="one per line or comma-separated, format owner/repo">
           <textarea name="repos" rows="3" .value=${reposText}></textarea>
-        </div>
-        <div class="actions-row" style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+        </nottario-field>
+        <div class="actions-row" style="justify-content:flex-end;margin-top:8px">
           <button type="submit" class="btn primary">Save changes</button>
         </div>
       </form>
@@ -421,18 +418,15 @@ class NottarioProjectSettings extends LitElement {
       </table>
       ${canDrag ? html`
         <form class="add-row" @submit=${(e) => this.addRole(e)}>
-          <div class="field">
-            <label>Key</label>
+          <nottario-field label="Key">
             <input name="key" placeholder="backend" required>
-          </div>
-          <div class="field">
-            <label>Label</label>
+          </nottario-field>
+          <nottario-field label="Label">
             <input name="label" placeholder="Backend" required>
-          </div>
-          <div class="field narrow">
-            <label>Color</label>
+          </nottario-field>
+          <nottario-field label="Color" class="narrow">
             <input name="color" placeholder="#1f6feb">
-          </div>
+          </nottario-field>
           <div class="add-action">
             <button type="submit" class="btn primary">Add role</button>
           </div>
@@ -521,14 +515,12 @@ class NottarioProjectSettings extends LitElement {
       </table>
       ${this.me?.is_admin ? html`
         <form class="add-row" @submit=${(e) => this.addPriority(e)}>
-          <div class="field">
-            <label>Key</label>
+          <nottario-field label="Key">
             <input name="key" placeholder="urgent" required>
-          </div>
-          <div class="field narrow">
-            <label>Value</label>
+          </nottario-field>
+          <nottario-field label="Value" class="narrow">
             <input name="value" type="number" min="0" max="100" placeholder="0-100" required>
-          </div>
+          </nottario-field>
           <div class="add-action">
             <button type="submit" class="btn primary">Add bucket</button>
           </div>

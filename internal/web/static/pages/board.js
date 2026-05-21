@@ -5,6 +5,7 @@ import { buttonStyles } from '/static/components/buttons.js';
 import { dialogStyles } from '/static/components/surfaces.js';
 import { fieldStyles } from '/static/components/fields.js';
 import { badgeStyles } from '/static/components/badges.js';
+import '/static/components/field.js';
 import '/static/components/page-header.js';
 import './gantt.js';
 
@@ -540,17 +541,14 @@ class NottarioBoardPage extends LitElement {
         <div class="panel">
           <h3>New task</h3>
           <form @submit=${(e) => this.createTask(e)}>
-            <div class="field">
-              <label>Title</label>
+            <nottario-field label="Title">
               <input name="title" required autofocus>
-            </div>
-            <div class="field">
-              <label>Description (markdown)</label>
+            </nottario-field>
+            <nottario-field label="Description" hint="markdown">
               <textarea name="description" rows="4"></textarea>
-            </div>
-            <div class="field" style="display:flex;gap:12px">
-              <div style="flex:1">
-                <label>Type</label>
+            </nottario-field>
+            <div style="display:flex;gap:12px">
+              <nottario-field label="Type" style="flex:1">
                 <select name="type">
                   <option value="task">task</option>
                   <option value="bug">bug</option>
@@ -558,21 +556,19 @@ class NottarioBoardPage extends LitElement {
                   <option value="spike">spike</option>
                   <option value="feature">feature</option>
                 </select>
-              </div>
-              <div style="flex:1">
-                <label>Priority</label>
+              </nottario-field>
+              <nottario-field label="Priority" style="flex:1">
                 <select name="priority_key">
                   ${[...this.priorities].sort((a, b) => b.Value - a.Value).map(p =>
                     html`<option value=${p.Key} ?selected=${p.Key === 'medium'}>${p.Key} (${p.Value})</option>`)}
                 </select>
-              </div>
-              <div style="flex:1">
-                <label>Target role</label>
+              </nottario-field>
+              <nottario-field label="Target role" style="flex:1">
                 <select name="target_role_id">
                   <option value="">— none —</option>
                   ${this.roles.map(r => html`<option value=${r.ID}>${r.Label}</option>`)}
                 </select>
-              </div>
+              </nottario-field>
             </div>
             <div class="actions-row">
               <button type="button" class="btn secondary" @click=${() => this.showCreate = false}>Cancel</button>

@@ -4,6 +4,7 @@ import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, dialogStyles } from '/static/components/surfaces.js';
 import { fieldStyles } from '/static/components/fields.js';
+import '/static/components/field.js';
 import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
@@ -406,26 +407,21 @@ class NottarioProjectsPage extends LitElement {
           <h3>New project</h3>
           ${this.error ? html`<div class="error">${this.error}</div>` : null}
           <form @submit=${(e) => this.submitCreate(e)}>
-            <div class="field">
-              <label>Name</label>
+            <nottario-field label="Name">
               <input name="name" required autofocus>
-            </div>
-            <div class="field">
-              <label>Description</label>
+            </nottario-field>
+            <nottario-field label="Description">
               <input name="description">
-            </div>
-            <div class="field">
-              <label>Primary language (optional)</label>
+            </nottario-field>
+            <nottario-field label="Primary language" hint="optional">
               <input name="primary_language" placeholder="go, typescript, python…">
-            </div>
-            <div class="field">
-              <label>Project type (optional)</label>
+            </nottario-field>
+            <nottario-field label="Project type" hint="optional">
               <input name="project_type" placeholder="web-app, cli-tool, library…">
-            </div>
-            <div class="field">
-              <label>Repos (comma or newline separated, format owner/repo)</label>
+            </nottario-field>
+            <nottario-field label="Repos" hint="comma or newline separated, format owner/repo">
               <textarea name="repos" rows="3"></textarea>
-            </div>
+            </nottario-field>
             <div class="actions-row">
               <button type="button" class="btn secondary" @click=${() => this.closeCreate()}>Cancel</button>
               <button type="submit" class="btn primary" ?disabled=${this.creating}>
