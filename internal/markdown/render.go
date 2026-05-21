@@ -44,6 +44,16 @@ import (
 // list keep those spans in the final output.
 var chipRe = regexp.MustCompile(`\[\[(task|doc|arch):([^\]\s][^\]]*)\]\]`)
 
+// codeRe identifies markdown code regions whose contents must NOT be
+// touched by chip substitution: fenced code blocks (```...``` across
+// newlines) and inline code spans (`...` on one line). When a user
+// writes `[[task:N]]` to describe the chip syntax, that token lives
+// inside a code span and should reach goldmark verbatim so it renders
+// as literal text. Without this guard the chip pre-pass would replace
+// it with HTML, goldmark would then escape that HTML, and the user
+// would see <span class="..."> as visible text.
+var codeRe = regexp.MustCompile("(?s)(?:```.*?```|`[^`\n]+`)")
+
 // Render parses md as CommonMark + GFM, resolves Nottario link chips
 // against pool (skipped when projectID is nil), sanitizes the
 // resulting HTML and returns it.
@@ -114,6 +124,19 @@ func substituteChips(ctx context.Context, pool *pgxpool.Pool, md string, project
 	if len(matches) == 0 {
 		return md, nil
 	}
+	// Find code regions whose interior must be left alone. A chip
+	// inside `…` or ```…``` is documentation of the chip syntax,
+	// not an actual reference; skipping these makes the chip syntax
+	// itself render as `[[task:N]]` verbatim.
+	codeRanges := codeRe.FindAllStringIndex(md, -1)
+	insideCode := func(start, end int) bool {
+		for _, r := range codeRanges {
+			if start >= r[0] && end <= r[1] {
+				return true
+			}
+		}
+		return false
+	}
 	// We iterate the chips ascending so the cache below shares
 	// resolution within one Render call. Then we build the output
 	// with a single strings.Builder.
@@ -124,12 +147,18 @@ func substituteChips(ctx context.Context, pool *pgxpool.Pool, md string, project
 	}
 	chips := make([]chip, 0, len(matches))
 	for _, m := range matches {
+		if insideCode(m[0], m[1]) {
+			continue
+		}
 		// m: [matchStart, matchEnd, group1Start, group1End, group2Start, group2End]
 		chips = append(chips, chip{
 			start: m[0], end: m[1],
 			kind: md[m[2]:m[3]],
 			ref:  strings.TrimSpace(md[m[4]:m[5]]),
 		})
+	}
+	if len(chips) == 0 {
+		return md, nil
 	}
 	// Resolve each chip; degrade gracefully on errors.
 	for i := range chips {
