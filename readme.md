@@ -7,41 +7,6 @@ and their AI agents.
 
 Pre-alpha. Foundation, identity and tasks milestones complete.
 
-## Tech stack
-
-Lightweight is a first-order goal. Single Go binary with embedded
-assets, vanilla web components on the frontend, Postgres for state.
-Every dependency below earned its place; nothing here is incidental.
-
-### Backend (Go)
-
-- [pgx/v5](https://github.com/jackc/pgx) — Postgres driver, used directly via the connection pool.
-- [sqlc](https://sqlc.dev) ([sqlc-dev/sqlc](https://github.com/sqlc-dev/sqlc)) — generates type-safe Go from `internal/db/queries/*.sql` at build time. All queries live there; runtime code never builds SQL by string concatenation (a custom lint analyzer enforces it).
-- [goose](https://github.com/pressly/goose) — schema migrations under `internal/db/migrations/`, applied on every container boot.
-- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — MCP server. Uses the streamable-HTTP transport in [stateless mode](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk/mcp#StreamableHTTPOptions) so client sessions survive container rebuilds.
-- [golang.org/x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) — GitHub OAuth for human sign-in.
-- [google/uuid](https://github.com/google/uuid) — UUIDs (`uuid.UUID`, sqlc maps `uuid` ↔ `uuid.UUID` natively).
-- [yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) — YAML frontmatter parsing for documents.
-- [joho/godotenv](https://github.com/joho/godotenv) — `.env` loading for local dev.
-- [golang.org/x/tools](https://pkg.go.dev/golang.org/x/tools) — `go/analysis` framework, powers the custom `internal/tools/sqlcheck` analyzer that blocks `fmt.Sprintf` / string concatenation into pgx `Query`/`Exec` calls.
-
-### Frontend (vanilla, no build step)
-
-- [Lit](https://lit.dev) 3.x — ~5KB web-components framework. Every page is a `LitElement` under `internal/web/static/pages/`; shared chrome lives under `internal/web/static/components/`. Vendored at `internal/web/static/vendor/lit/lit.js` so the browser loads it as a normal ES module.
-- [dagre](https://github.com/dagrejs/dagre) 0.8.5 — directed-graph layout engine for the architecture view's SVG renderer. Vendored. **Documented exception** to the "no JS libraries" rule; it is the only visualisation library allowed.
-- Hand-rolled SVG for Gantt and Kanban (no charting library).
-
-### Infrastructure
-
-- **Postgres 16.** Single supported database; SQLite is off the table.
-- **Docker / Docker Compose.** `compose.yml` brings up Nottario + Postgres; deployment is `docker compose up`.
-- **Server-Sent Events** for realtime, fed by Postgres `LISTEN/NOTIFY` triggers. No WebSockets.
-
-### Tooling
-
-- `gofmt`, `go vet`, [`golangci-lint`](https://golangci-lint.run) (gosec, govet, staticcheck, ineffassign, unused, errcheck).
-- `make check` chains `gofmt -l`, `go vet`, `make lint`, `make sqlc-check` (verifies `sqlc diff` is clean), and `go test ./...`. Pinned versions installed with `make tools`.
-
 ## Prerequisites
 
 - Docker and Docker Compose.
@@ -245,6 +210,34 @@ required):
 ```bash
 go test ./...
 ```
+
+## Tech stack
+
+Backend (Go):
+
+- [pgx/v5](https://github.com/jackc/pgx) — Postgres driver.
+- [sqlc](https://sqlc.dev) — type-safe Go from SQL.
+- [goose](https://github.com/pressly/goose) — schema migrations.
+- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — MCP server.
+- [golang.org/x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) — GitHub OAuth.
+- [google/uuid](https://github.com/google/uuid) — UUIDs.
+- [yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) — YAML parsing.
+- [joho/godotenv](https://github.com/joho/godotenv) — `.env` loader.
+- [golang.org/x/tools](https://pkg.go.dev/golang.org/x/tools) — analyzer framework for the custom SQL-injection lint.
+
+Frontend (vanilla, no build step):
+
+- [Lit](https://lit.dev) — web-components framework.
+- [dagre](https://github.com/dagrejs/dagre) — graph layout for the architecture view.
+
+Infrastructure:
+
+- [Postgres](https://www.postgresql.org/) — primary datastore.
+- [Docker](https://www.docker.com/) / [Docker Compose](https://docs.docker.com/compose/) — local and deploy runtime.
+
+Tooling:
+
+- [gofmt](https://pkg.go.dev/cmd/gofmt), [go vet](https://pkg.go.dev/cmd/vet), [golangci-lint](https://golangci-lint.run) — lint stack.
 
 ## License
 
