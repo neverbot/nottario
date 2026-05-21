@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
+import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
@@ -12,7 +13,7 @@ class NottarioUsersPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, surfaceStyles, tableStyles, css`
+  static styles = [buttonStyles, surfaceStyles, tableStyles, badgeStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
     .spacer { flex: 1; }
@@ -29,16 +30,6 @@ class NottarioUsersPage extends LitElement {
       gap: 10px;
     }
     .login { color: #59636e; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
-    .badge.admin {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: #fff8c5;
-      color: #9a6700;
-      border: 1px solid #eac54f;
-    }
     .muted { color: #59636e; }
     .error { color: #cf222e; font-size: 13px; margin-bottom: 8px; }
   `];

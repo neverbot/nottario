@@ -2,6 +2,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { fieldStyles } from '/static/components/fields.js';
+import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
 
 class NottarioDocsPage extends LitElement {
@@ -21,7 +22,7 @@ class NottarioDocsPage extends LitElement {
     hits: { state: true },
   };
 
-  static styles = [buttonStyles, fieldStyles, css`
+  static styles = [buttonStyles, fieldStyles, badgeStyles, css`
     :host { display: block; }
     .layout {
       display: grid;
@@ -113,16 +114,6 @@ class NottarioDocsPage extends LitElement {
     .actions-row { margin-top: 12px; justify-content: flex-start; }
     .error { color: #cf222e; background: #ffebe9; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }
     .info  { color: #1f883d; background: #ddf4d1; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }
-    .badge {
-      display: inline-block;
-      padding: 1px 7px;
-      border-radius: 2em;
-      font-size: 11px;
-      border: 1px solid #d1d9e0;
-    }
-    .badge.skill   { background: #ddf4ff; color: #0969da; border-color: #8ec0ff; }
-    .badge.context { background: #f6f8fa; color: #1f2328; }
-    .badge.note    { background: #fff8c5; color: #7d4e00; border-color: #d4a72c; }
     .group { margin-bottom: 8px; }
     .group-title { font-size: 11px; color: #57606a; padding-left: 4px; }
   `];

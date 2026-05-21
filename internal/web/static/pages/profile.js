@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
+import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
@@ -10,7 +11,7 @@ class NottarioProfilePage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, surfaceStyles, tableStyles, css`
+  static styles = [buttonStyles, surfaceStyles, tableStyles, badgeStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -53,18 +54,8 @@ class NottarioProfilePage extends LitElement {
       font-size: 12px;
       margin-top: 6px;
     }
-    .badge.admin {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 1px 7px;
-      border-radius: 999px;
-      background: #fff8c5;
-      color: #9a6700;
-      border: 1px solid #eac54f;
-      margin-left: 8px;
-      vertical-align: 2px;
-    }
+    /* profile-only override: extra left margin when stacked next to name. */
+    .badge.admin { margin-left: 8px; }
 
     table.memberships .roles {
       display: flex;

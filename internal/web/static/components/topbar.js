@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { badgeStyles } from './badges.js';
 import './avatar.js';
 import '../pages/search.js';
 
@@ -15,7 +16,7 @@ class NottarioTopbar extends LitElement {
     _projectName: { state: true }, // cached name of the active project
   };
 
-  static styles = css`
+  static styles = [badgeStyles, css`
     :host {
       box-sizing: border-box;
       display: block;
@@ -199,21 +200,6 @@ class NottarioTopbar extends LitElement {
     .menu .who .display { font-weight: 600; }
     .menu .who .login { color: #59636e; font-size: 12px; }
     .menu .who .badges { margin-top: 6px; }
-    .menu .who .badge {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: #ddf4ff;
-      color: #0969da;
-      border: 1px solid #b6e3ff;
-    }
-    .menu .badge.admin {
-      background: #fff8c5;
-      color: #9a6700;
-      border-color: #eac54f;
-    }
     .menu .item {
       display: flex;
       align-items: center;
@@ -238,7 +224,7 @@ class NottarioTopbar extends LitElement {
     .menu .item.danger:hover,
     .menu .item.danger:focus-visible { background: #ffebe9; }
     .menu .sep { height: 1px; background: #eaeef2; margin: 4px 2px; }
-  `;
+  `];
 
   constructor() {
     super();

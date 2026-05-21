@@ -4,6 +4,7 @@ import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { dialogStyles } from '/static/components/surfaces.js';
 import { fieldStyles } from '/static/components/fields.js';
+import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
 import './gantt.js';
 
@@ -24,7 +25,7 @@ class NottarioBoardPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, dialogStyles, fieldStyles, css`
+  static styles = [buttonStyles, dialogStyles, fieldStyles, badgeStyles, css`
     :host { display: block; }
     .spacer { flex: 1; }
     .columns {
@@ -162,18 +163,6 @@ class NottarioBoardPage extends LitElement {
       font-size: 12px;
       color: #59636e;
     }
-    .badge {
-      display: inline-block;
-      padding: 1px 7px;
-      border-radius: 2em;
-      font-size: 11px;
-      border: 1px solid #d1d9e0;
-      background: #fff;
-    }
-    .badge.bug { background: #ffebe9; border-color: #ffabab; color: #cf222e; }
-    .badge.feature { background: #ddf4ff; border-color: #8ec0ff; color: #0969da; }
-    .badge.chore { background: #fff8c5; border-color: #d4a72c; color: #7d4e00; }
-    .badge.spike { background: #ddf4d1; border-color: #95d57e; color: #1a7f37; }
     .prio { font-family: ui-monospace, SFMono-Regular, monospace; }
     /* Detail panel wider than the shared default; everything else
        inherits from dialogStyles in components/surfaces.js. */

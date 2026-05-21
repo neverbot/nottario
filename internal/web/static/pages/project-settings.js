@@ -3,6 +3,7 @@ import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles } from '/static/components/surfaces.js';
 import { fieldStyles } from '/static/components/fields.js';
+import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
@@ -18,7 +19,7 @@ class NottarioProjectSettings extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, tableStyles, fieldStyles, css`
+  static styles = [buttonStyles, tableStyles, fieldStyles, badgeStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -127,18 +128,8 @@ class NottarioProjectSettings extends LitElement {
     .user-cell { display: flex; align-items: center; gap: 10px; }
     .user-cell .user-text { line-height: 1.3; }
     .user-cell .login { color: #59636e; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
-    .badge.admin {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: #fff8c5;
-      color: #9a6700;
-      border: 1px solid #eac54f;
-      margin-left: 6px;
-      vertical-align: 2px;
-    }
+    /* project-settings-only override: separation from inline name. */
+    .badge.admin { margin-left: 6px; }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
     tr[draggable] { cursor: grab; }
     tr.dragging { opacity: 0.45; }
