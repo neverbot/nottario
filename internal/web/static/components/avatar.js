@@ -80,9 +80,13 @@ class NottarioAvatar extends LitElement {
 
   render() {
     if (this.src) {
-      return html`<img src=${this.src} alt=${this.name || ''}>`;
+      // alt="" because every consumer renders the user's name as text
+      // next to the avatar. Letting `alt` repeat the name doubles the
+      // accessible name of the parent control (the user-trigger pill
+      // reads "Name Name" otherwise).
+      return html`<img src=${this.src} alt="">`;
     }
-    return html`<span class="initials">${NottarioAvatar.initials(this.name)}</span>`;
+    return html`<span class="initials" aria-hidden="true">${NottarioAvatar.initials(this.name)}</span>`;
   }
 }
 
