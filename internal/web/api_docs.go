@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neverbot/nottario/internal/docs"
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/markdown"
 )
 
 // DocsDeps wires the docs HTTP endpoints.
@@ -136,6 +137,13 @@ func ReadDocHandler(d DocsDeps) http.Handler {
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+		// Render markdown → HTML server-side so the docs reader can
+		// drop the chrome in directly without a second round-trip.
+		if html, rerr := markdown.Render(r.Context(), d.Pool, doc.ContentMD, doc.ProjectID); rerr == nil {
+			doc.ContentHTML = html
+		} else {
+			log.Printf("api docs.read: markdown render failed for %q: %v", path, rerr)
 		}
 		writeJSON(w, http.StatusOK, doc)
 	})
@@ -331,6 +339,11 @@ func ReadDocVersionHandler(d DocsDeps) http.Handler {
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+		if html, rerr := markdown.Render(r.Context(), d.Pool, ver.ContentMD, doc.ProjectID); rerr == nil {
+			ver.ContentHTML = html
+		} else {
+			log.Printf("api docs.read-version: markdown render failed for %q v%d: %v", path, v, rerr)
 		}
 		writeJSON(w, http.StatusOK, ver)
 	})

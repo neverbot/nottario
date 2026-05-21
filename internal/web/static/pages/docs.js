@@ -5,6 +5,7 @@ import { fieldStyles } from '/static/components/fields.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
 import '/static/components/search-input.js';
+import '/static/components/markdown.js';
 
 class NottarioDocsPage extends LitElement {
   static properties = {
@@ -204,30 +205,12 @@ class NottarioDocsPage extends LitElement {
       border-color: #0969da;
     }
 
-    /* Prose container. Neutral on white, mono for the current <pre>
-       reality, capped at a comfortable measure so paragraphs are
-       readable on a 27" monitor. When goldmark replaces <pre> with
-       rendered HTML, the same .prose container will host it without
-       any chrome change. */
-    .prose {
+    /* The prose container now lives inside <nottario-markdown>; the
+       reader only owns the description line above it. */
+    nottario-markdown { display: block; margin: 24px 0 0; }
+    .description {
       max-width: 76ch;
       margin: 24px 0 0;
-      color: #1f2328;
-    }
-    .prose pre {
-      margin: 0;
-      padding: 0;
-      background: transparent;
-      border: none;
-      white-space: pre-wrap;
-      word-break: break-word;
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
-      font-size: 13px;
-      line-height: 1.65;
-      color: inherit;
-    }
-    .prose .description {
-      margin: 0 0 16px;
       color: #59636e;
       font-style: italic;
       font-size: 14px;
@@ -925,12 +908,13 @@ class NottarioDocsPage extends LitElement {
           </div>
         ` : null}
 
-        <div class="prose">
-          ${(viewing ? viewing.Description : s.Description)
-            ? html`<p class="description">${viewing ? viewing.Description : s.Description}</p>`
-            : null}
-          <pre>${(viewing ? viewing.ContentMD : s.ContentMD) || ''}</pre>
-        </div>
+        ${(viewing ? viewing.Description : s.Description)
+          ? html`<p class="description">${viewing ? viewing.Description : s.Description}</p>`
+          : null}
+        <nottario-markdown
+          project-id=${this.projectId}
+          .html=${(viewing ? viewing.ContentHTML : s.ContentHTML) || ''}>
+        </nottario-markdown>
       </div>
     `;
   }

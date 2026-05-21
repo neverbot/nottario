@@ -52,6 +52,11 @@ type Document struct {
 	UpdatedByTokenID *uuid.UUID
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	// ContentHTML is filled by the web layer before serialization
+	// (see ReadDocHandler / ReadDocVersionHandler). It is never
+	// persisted and never set by the docs repo. Empty when the
+	// caller did not request HTML.
+	ContentHTML string `json:",omitempty"`
 }
 
 // Version is one entry in `document_versions`.
@@ -67,6 +72,9 @@ type Version struct {
 	AuthorUserID  *uuid.UUID
 	AuthorTokenID *uuid.UUID
 	CreatedAt     time.Time
+	// ContentHTML is filled by the web layer before serialization;
+	// see the comment on Document.ContentHTML.
+	ContentHTML string `json:",omitempty"`
 }
 
 // ValidScope reports whether s is a recognised scope.

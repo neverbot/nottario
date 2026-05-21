@@ -128,6 +128,9 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/docs/history", HistoryDocHandler(docsDeps))
 	mux.Handle("GET /api/docs/read-version", ReadDocVersionHandler(docsDeps))
 
+	mdDeps := MarkdownDeps{Pool: d.Pool, Resolver: d.Resolver}
+	mux.Handle("POST /api/markdown/render", RenderMarkdownHandler(mdDeps))
+
 	searchDeps := SearchDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/search", SearchHandler(searchDeps))
 
