@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import './avatar.js';
 import '../pages/search.js';
 
 // <nottario-topbar> renders the persistent app-shell topbar that wraps
@@ -160,21 +161,6 @@ class NottarioTopbar extends LitElement {
     .user-trigger[aria-expanded="true"] {
       background: rgba(255,255,255,0.10);
       border-color: rgba(255,255,255,0.16);
-    }
-    .user-trigger img,
-    .user-trigger .avatar-fallback {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: #59636e;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 600;
-      color: #fff;
-      text-transform: uppercase;
     }
     .user-trigger .name {
       max-width: 140px;
@@ -381,11 +367,6 @@ class NottarioTopbar extends LitElement {
     return items;
   }
 
-  _initials(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(/\s+/).slice(0, 2);
-    return parts.map(p => p.charAt(0)).join('');
-  }
 
   render() {
     if (!this.me) return null;
@@ -411,9 +392,10 @@ class NottarioTopbar extends LitElement {
                     aria-haspopup="menu"
                     aria-expanded=${this.open ? 'true' : 'false'}
                     @click=${this._toggleMenu}>
-              ${this.me.avatar_url
-                ? html`<img src=${this.me.avatar_url} alt="">`
-                : html`<span class="avatar-fallback">${this._initials(this.me.display_name)}</span>`}
+              <nottario-avatar
+                .src=${this.me.avatar_url || ''}
+                .name=${this.me.display_name || this.me.github_login || ''}
+                .size=${24}></nottario-avatar>
               <span class="name">${this.me.display_name || this.me.github_login}</span>
               <span class="chevron"></span>
             </button>

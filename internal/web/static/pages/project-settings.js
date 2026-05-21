@@ -3,6 +3,7 @@ import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles } from '/static/components/surfaces.js';
 import { fieldStyles } from '/static/components/fields.js';
+import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
 class NottarioProjectSettings extends LitElement {
@@ -126,21 +127,6 @@ class NottarioProjectSettings extends LitElement {
     .user-cell { display: flex; align-items: center; gap: 10px; }
     .user-cell .user-text { line-height: 1.3; }
     .user-cell .login { color: #59636e; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
-    .member-avatar {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: #d0d7de;
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 600;
-      color: #fff;
-      text-transform: uppercase;
-    }
     .badge.admin {
       display: inline-block;
       font-size: 11px;
@@ -587,9 +573,10 @@ class NottarioProjectSettings extends LitElement {
               <tr>
                 <td>
                   <div class="user-cell">
-                    ${m.AvatarURL
-                      ? html`<img class="member-avatar" src=${m.AvatarURL} alt="">`
-                      : html`<span class="member-avatar fallback">${this._initials(m.DisplayName || m.GithubLogin)}</span>`}
+                    <nottario-avatar
+                      .src=${m.AvatarURL || ''}
+                      .name=${m.DisplayName || m.GithubLogin || ''}
+                      .size=${28}></nottario-avatar>
                     <div class="user-text">
                       <div>${m.DisplayName || m.GithubLogin}
                         ${m.IsAdmin ? html`<span class="badge admin">admin</span>` : ''}
@@ -610,11 +597,6 @@ class NottarioProjectSettings extends LitElement {
     `;
   }
 
-  _initials(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(/\s+/).slice(0, 2);
-    return parts.map(p => p.charAt(0)).join('');
-  }
 }
 
 customElements.define('nottario-project-settings', NottarioProjectSettings);

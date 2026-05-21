@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
+import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
 class NottarioProfilePage extends LitElement {
@@ -40,19 +41,6 @@ class NottarioProfilePage extends LitElement {
       border-radius: 10px;
       padding: 18px 20px;
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
-    }
-    .identity .avatar {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: #d0d7de;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      font-weight: 600;
-      color: #fff;
     }
     .identity .name { font-size: 20px; font-weight: 600; margin: 0; }
     .identity .login {
@@ -144,12 +132,6 @@ class NottarioProfilePage extends LitElement {
     this.error = '';
   }
 
-  _initials(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(/\s+/).slice(0, 2);
-    return parts.map(p => p.charAt(0)).join('');
-  }
-
   _groupedMemberships() {
     const memberships = this.me?.memberships || [];
     const byProject = new Map();
@@ -199,9 +181,10 @@ class NottarioProfilePage extends LitElement {
 
         <h2>Profile</h2>
         <div class="identity">
-          ${me.avatar_url
-            ? html`<img class="avatar" src=${me.avatar_url} alt="">`
-            : html`<span class="avatar">${this._initials(me.display_name)}</span>`}
+          <nottario-avatar
+            .src=${me.avatar_url || ''}
+            .name=${me.display_name || me.github_login || ''}
+            .size=${56}></nottario-avatar>
           <div>
             <div class="name">
               ${me.display_name || me.github_login}

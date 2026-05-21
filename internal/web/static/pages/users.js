@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
+import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
 class NottarioUsersPage extends LitElement {
@@ -26,21 +27,6 @@ class NottarioUsersPage extends LitElement {
       display: flex;
       align-items: center;
       gap: 10px;
-    }
-    .avatar {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: #d0d7de;
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 600;
-      color: #fff;
-      text-transform: uppercase;
     }
     .login { color: #59636e; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
     .badge.admin {
@@ -88,11 +74,6 @@ class NottarioUsersPage extends LitElement {
       (u.GithubLogin || '').toLowerCase().includes(q));
   }
 
-  _initials(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(/\s+/).slice(0, 2);
-    return parts.map(p => p.charAt(0)).join('');
-  }
 
   render() {
     if (this.users === null) {
@@ -125,9 +106,10 @@ class NottarioUsersPage extends LitElement {
                 <tr>
                   <td>
                     <div class="user-cell">
-                      ${u.AvatarURL
-                        ? html`<img class="avatar" src=${u.AvatarURL} alt="">`
-                        : html`<span class="avatar">${this._initials(u.DisplayName)}</span>`}
+                      <nottario-avatar
+                        .src=${u.AvatarURL || ''}
+                        .name=${u.DisplayName || u.GithubLogin || ''}
+                        .size=${28}></nottario-avatar>
                       <div>
                         <div>${u.DisplayName || u.GithubLogin}</div>
                         <div class="login">@${u.GithubLogin}</div>

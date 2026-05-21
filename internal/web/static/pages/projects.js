@@ -4,6 +4,7 @@ import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, dialogStyles } from '/static/components/surfaces.js';
 import { fieldStyles } from '/static/components/fields.js';
+import '/static/components/avatar.js';
 import '/static/components/page-header.js';
 
 class NottarioProjectsPage extends LitElement {
@@ -170,24 +171,13 @@ class NottarioProjectsPage extends LitElement {
       display: inline-flex;
       align-items: center;
     }
-    .card .avatars .avatar {
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: #d0d7de;
+    /* Stack: each avatar overlaps the previous by 6px, framed by a
+       2px white border so the circles remain distinguishable. */
+    .card .avatars nottario-avatar {
       border: 2px solid #fff;
-      box-sizing: content-box;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 600;
-      color: #fff;
-      text-transform: uppercase;
       margin-left: -6px;
     }
-    .card .avatars .avatar:first-child { margin-left: 0; }
+    .card .avatars nottario-avatar:first-child { margin-left: 0; }
     .card .avatars .more {
       margin-left: 6px;
       font-size: 11px;
@@ -352,22 +342,17 @@ class NottarioProjectsPage extends LitElement {
     return html`
       <div class="footer">
         <div class="avatars">
-          ${shown.map(m => m.AvatarURL
-            ? html`<img class="avatar" src=${m.AvatarURL}
-                       alt=${m.DisplayName || m.GithubLogin}
-                       title=${m.DisplayName || m.GithubLogin}>`
-            : html`<span class="avatar" title=${m.DisplayName || m.GithubLogin}>${this._initials(m.DisplayName || m.GithubLogin)}</span>`)}
+          ${shown.map(m => html`
+            <nottario-avatar
+              .src=${m.AvatarURL || ''}
+              .name=${m.DisplayName || m.GithubLogin || ''}
+              .size=${22}
+              title=${m.DisplayName || m.GithubLogin}></nottario-avatar>`)}
           ${extra > 0 ? html`<span class="more">+${extra}</span>` : null}
         </div>
         <div class="spacer"></div>
       </div>
     `;
-  }
-
-  _initials(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(/\s+/).slice(0, 2);
-    return parts.map(p => p.charAt(0)).join('');
   }
 
   // Tiny relative-time formatter: "5m", "3h", "2d", "3w". Falls back
