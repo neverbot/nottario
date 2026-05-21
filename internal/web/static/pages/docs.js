@@ -148,15 +148,18 @@ class NottarioDocsPage extends LitElement {
     .reader-title .actions { display: flex; align-items: center; gap: 4px; }
     .reader-title .actions .btn { font-size: 12px; padding: 4px 10px; }
 
-    /* Delete demoted to a hover-revealed icon button, matching the
-       project-settings.js .row-actions .delete pattern. At rest a
-       small ghost X; on hover it picks up the danger colour. */
+    /* Delete is a quiet trash-icon button at rest, picking up the
+       danger colour on hover. Trash icon (not an X) because the
+       header already has a "close-style" X in many places elsewhere
+       and "X next to Edit/History" reads as "close the view", not
+       "delete the document". */
     .actions .delete {
       width: 28px;
       height: 28px;
       padding: 0;
-      font-size: 13px;
-      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       color: #8b949e;
       background: transparent;
       border: 1px solid transparent;
@@ -164,6 +167,7 @@ class NottarioDocsPage extends LitElement {
       cursor: pointer;
       font: inherit;
     }
+    .actions .delete svg { display: block; }
     .actions .delete:hover,
     .actions .delete:focus-visible {
       color: #cf222e;
@@ -887,7 +891,12 @@ class NottarioDocsPage extends LitElement {
               ${this.historyOpen ? this.renderHistoryPop() : null}
             </div>
             ${viewing ? null : html`
-              <button class="delete" title="Delete" aria-label="Delete document" @click=${() => this.del()}>✕</button>
+              <button class="delete" title="Delete document" aria-label="Delete document" @click=${() => this.del()}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M6 2.5h4M3 4.5h10M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2M6.8 7v4M9.2 7v4"
+                        stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
             `}
           </div>
         </div>
