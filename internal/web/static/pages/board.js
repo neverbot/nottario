@@ -259,7 +259,9 @@ class NottarioBoardPage extends LitElement {
     if (!this.projectId) return;
     this._unsub = subscribe(this.projectId, (ev) => {
       if (!ev.type) return;
-      if (ev.type.startsWith('task.')) {
+      // 'realtime.reconnected' fires after EventSource recovers from a
+      // disconnect — any events during the gap were lost, so reload.
+      if (ev.type === 'realtime.reconnected' || ev.type.startsWith('task.')) {
         this.load();
         if (this.selected) this.loadDetail(this.selected.task.ID);
       }

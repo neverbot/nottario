@@ -184,7 +184,7 @@ class NottarioArchPage extends LitElement {
     this._unsub?.();
     if (!this.projectId) return;
     this._unsub = subscribe(this.projectId, (ev) => {
-      if (!ev.type?.startsWith('arch.')) return;
+      if (ev.type !== 'realtime.reconnected' && !ev.type?.startsWith('arch.')) return;
       this.load();
       if (this.selectedSlug) {
         // refresh the open node detail

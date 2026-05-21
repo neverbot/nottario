@@ -164,6 +164,11 @@ class NottarioDocsPage extends LitElement {
     this._unsub?.();
     if (!this.projectId) return;
     this._unsub = subscribe(this.projectId, (ev) => {
+      if (ev.type === 'realtime.reconnected') {
+        this.load();
+        if (this.selected) this.open(this.selected.Path);
+        return;
+      }
       if (!ev.type?.startsWith('doc.')) return;
       this.load();
       // Refresh the open document if it was the one that changed.

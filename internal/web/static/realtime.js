@@ -22,6 +22,16 @@ export function subscribe(projectId, onEvent) {
   if (!projectId) return () => {};
   const url = `/events?project_id=${encodeURIComponent(projectId)}`;
   const es = new EventSource(url);
+  let opened = false;
+  es.onopen = () => {
+    // EventSource auto-reconnects after a transient disconnect (network
+    // blip, container rebuild). Events that fired during the gap are
+    // lost — the server doesn't replay them. Surface a synthetic
+    // 'realtime.reconnected' on every open after the first so consumers
+    // can do a full reload and catch up.
+    if (opened) onEvent({ type: 'realtime.reconnected' });
+    opened = true;
+  };
   es.onmessage = (e) => {
     if (!e.data) return;
     try {

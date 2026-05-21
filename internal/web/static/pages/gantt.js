@@ -271,8 +271,9 @@ class NottarioGantt extends LitElement {
     if (!this.projectId) return;
     this._unsub = subscribe(this.projectId, (ev) => {
       // Tasks and dependencies are what the gantt draws; reload on
-      // any related event.
-      if (ev.type?.startsWith('task.')) this.load();
+      // any related event. 'realtime.reconnected' catches events that
+      // happened while EventSource was reconnecting.
+      if (ev.type === 'realtime.reconnected' || ev.type?.startsWith('task.')) this.load();
     });
   }
 
