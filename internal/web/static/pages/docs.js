@@ -4,6 +4,7 @@ import { buttonStyles } from '/static/components/buttons.js';
 import { fieldStyles } from '/static/components/fields.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
+import '/static/components/search-input.js';
 
 class NottarioDocsPage extends LitElement {
   static properties = {
@@ -54,63 +55,7 @@ class NottarioDocsPage extends LitElement {
       min-width: 0;
     }
 
-    /* Search input takes the full rail width, sits flush. The
-       clear button is an inline glyph so the input stays one row. */
-    .rail-search {
-      position: relative;
-      margin-bottom: 12px;
-    }
-    .rail-search input {
-      width: 100%;
-      padding: 6px 28px 6px 10px;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      font: inherit;
-      font-size: 13px;
-      background: #ffffff;
-    }
-    .rail-search input:focus {
-      outline: 2px solid #0969da;
-      outline-offset: 0;
-      border-color: #0969da;
-    }
-    .rail-search .clear {
-      position: absolute;
-      right: 4px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 22px;
-      height: 22px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: transparent;
-      border: 1px solid transparent;
-      cursor: pointer;
-      color: #59636e;
-      padding: 0;
-      line-height: 1;
-      font-size: 16px;
-      font-weight: 600;
-      border-radius: 4px;
-      font-family: inherit;
-    }
-    .rail-search .clear:hover {
-      color: #1f2328;
-      background: #f6f8fa;
-      border-color: #d0d7de;
-    }
-    .rail-search .clear:focus-visible {
-      outline: 2px solid #0969da;
-      outline-offset: 0;
-    }
-    .rail-search .hint {
-      display: block;
-      margin-top: 4px;
-      font-size: 11px;
-      color: #8b949e;
-      padding-left: 2px;
-    }
+    .rail-search { margin-bottom: 12px; }
     kbd {
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 10px;
@@ -525,9 +470,9 @@ class NottarioDocsPage extends LitElement {
     if (isFormFocus) return;
 
     if (e.key === '/') {
-      const input = this.shadowRoot?.querySelector('.rail-search input');
-      input?.focus();
-      input?.select?.();
+      const search = this.shadowRoot?.querySelector('nottario-search-input');
+      search?.focus();
+      search?.select();
       e.preventDefault();
       return;
     }
@@ -828,18 +773,16 @@ class NottarioDocsPage extends LitElement {
     const visible = this._visibleSummaries();
     return html`
       <div class="rail">
-        <div class="rail-search">
-          <input placeholder="Filter or search..."
-                 .value=${this.search}
-                 @input=${(e) => { this.search = e.target.value; this._cursorIdx = -1; }}
-                 @keydown=${(e) => { if (e.key === 'Enter') this.runSearch(); }}>
-          ${this.search ? html`
-            <button class="clear" title="Clear (Esc)" @click=${() => this._clearSearch()}>×</button>
-          ` : null}
-          <span class="hint">
+        <nottario-search-input class="rail-search"
+            placeholder="Filter or search..."
+            .value=${this.search}
+            @input=${(e) => { this.search = e.detail.value; this._cursorIdx = -1; }}
+            @clear=${() => this._clearSearch()}
+            @enter=${() => this.runSearch()}>
+          <span slot="hint">
             <kbd>/</kbd> focus  <kbd>↑↓</kbd> move  <kbd>Enter</kbd> open
           </span>
-        </div>
+        </nottario-search-input>
 
         ${this.hits !== null ? this.renderHits() : html`
           ${order.map(kind => {

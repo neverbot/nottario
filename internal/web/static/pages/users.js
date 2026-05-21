@@ -4,6 +4,7 @@ import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/avatar.js';
 import '/static/components/page-header.js';
+import '/static/components/search-input.js';
 
 class NottarioUsersPage extends LitElement {
   static properties = {
@@ -17,13 +18,7 @@ class NottarioUsersPage extends LitElement {
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
     .spacer { flex: 1; }
-    input.filter {
-      width: 240px;
-      padding: 6px 10px;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      font: inherit;
-    }
+    nottario-search-input { width: 240px; }
     .user-cell {
       display: flex;
       align-items: center;
@@ -75,9 +70,11 @@ class NottarioUsersPage extends LitElement {
       <nottario-page-header
         title="Users"
         .subtitle=${`${this.users.length} ${this.users.length === 1 ? 'user' : 'users'}`}>
-        <input slot="actions" class="filter" type="search" placeholder="Filter by name or login…"
-               .value=${this.filter}
-               @input=${(e) => this.filter = e.target.value}>
+        <nottario-search-input slot="actions"
+            placeholder="Filter by name or login…"
+            .value=${this.filter}
+            @input=${(e) => this.filter = e.detail.value}
+            @clear=${() => this.filter = ''}></nottario-search-input>
       </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${rows.length === 0
