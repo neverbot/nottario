@@ -8,6 +8,8 @@ import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/field.js';
 import '/static/components/page-header.js';
 import '/static/components/markdown.js';
+import '/static/components/avatar.js';
+import '/static/components/task-chip.js';
 import './gantt.js';
 
 class NottarioBoardPage extends LitElement {
@@ -166,41 +168,238 @@ class NottarioBoardPage extends LitElement {
       color: #59636e;
     }
     .prio { font-family: ui-monospace, SFMono-Regular, monospace; }
-    /* Detail panel wider than the shared default; everything else
-       inherits from dialogStyles in components/surfaces.js. */
-    .dialog .panel { width: 560px; }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
-    .detail h3 { margin: 0 0 8px 0; }
-    .detail .meta-grid {
-      display: grid;
-      grid-template-columns: max-content 1fr;
-      gap: 6px 16px;
-      margin-bottom: 12px;
+
+    /* ---- Task-detail dialog ---- */
+
+    /* Wider than dialogStyles default so the description, table-laden
+       markdown and threaded comments breathe. */
+    .dialog .panel.detail { width: 720px; padding: 0; }
+
+    /* Header strip: title row + meta row. Sits at the top of the
+       panel with its own padding so the rest of the body can use
+       the panel's regular rhythm. */
+    .detail .head {
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid #eaeef2;
     }
-    .detail .meta-grid > div:nth-child(odd) {
+    .detail .head .title-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .detail .head h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.3;
+      color: #1f2328;
+      flex: 1;
+      min-width: 0;
+    }
+    .detail .head .short-id {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: #8b949e;
+      font-size: 12px;
+      margin-right: 4px;
+      flex: 0 0 auto;
+      padding-top: 3px;
+    }
+    .detail .head .title-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
+    /* Hover-revealed icon button — same chrome as docs reader trash
+       and project-settings row delete. */
+    .detail .head .icon-btn {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #8b949e;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .detail .head .icon-btn svg { display: block; }
+    .detail .head .icon-btn:hover,
+    .detail .head .icon-btn:focus-visible {
+      color: #1f2328;
+      background: #f6f8fa;
+      border-color: #d0d7de;
+      outline: none;
+    }
+    .detail .head .icon-btn.danger:hover,
+    .detail .head .icon-btn.danger:focus-visible {
+      color: #cf222e;
+      background: #ffebe9;
+      border-color: rgba(207, 34, 46, 0.4);
+    }
+
+    /* Meta strip: one row of inline label+value pairs separated by
+       a thin dot. Wraps on narrow viewports but stays compact at
+       720px. */
+    .detail .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      margin-top: 12px;
+      font-size: 12px;
       color: #59636e;
-      font-size: 13px;
+      align-items: center;
     }
-    .state-buttons { display: flex; gap: 6px; }
-    .state-buttons button.active {
-      background: #0969da;
-      color: #fff;
-      border-color: #0969da;
+    .detail .meta .field-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
-    .commits, .comments { margin-top: 12px; }
-    .commits pre, .comments .item {
+    .detail .meta .lbl { color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .detail .meta .val { color: #1f2328; }
+    .detail .meta .val .muted { color: #8b949e; font-style: italic; font-weight: 400; }
+    .detail .meta .author-cell { display: inline-flex; align-items: center; gap: 6px; }
+
+    /* State control as compact segmented pill — three buttons share a
+       single rounded shell; the active one is the GitHub-green primary
+       (matches the kanban "done" reading), the others stay neutral. */
+    .detail .state-control {
+      display: inline-flex;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    .detail .state-control button {
+      padding: 4px 12px;
+      font: inherit;
+      font-size: 12px;
+      background: transparent;
+      border: none;
+      border-right: 1px solid #d0d7de;
+      cursor: pointer;
+      color: #59636e;
+    }
+    .detail .state-control button:last-child { border-right: none; }
+    .detail .state-control button:hover { background: #f6f8fa; color: #1f2328; }
+    .detail .state-control button.active {
+      background: #1f883d;
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .detail .state-control button.active:hover { background: #1a7f37; }
+
+    /* Compact priority number input. Width tuned to fit 3 digits + the
+       hidden-spinner chrome. */
+    .detail .meta input[type="number"] {
+      width: 56px;
+      padding: 2px 6px;
+      border: 1px solid #d0d7de;
+      border-radius: 4px;
+      font: inherit;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+    }
+    .detail .meta input[type="number"]::-webkit-inner-spin-button,
+    .detail .meta input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none; appearance: none; margin: 0;
+    }
+
+    /* Body sections — description, deps, commits, comments. Eyebrow
+       headings echo the docs rail / profile pattern. */
+    .detail .body { padding: 16px 20px 20px; }
+    .detail .body > section { margin-top: 18px; }
+    .detail .body > section:first-child { margin-top: 0; }
+    .detail .eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #8b949e;
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+
+    .detail .deps-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .detail .commits-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+    .detail .commits-list .commit {
+      padding: 4px 8px;
       background: #f6f8fa;
       border: 1px solid #d1d9e0;
-      border-radius: 6px;
-      padding: 8px 12px;
-      margin: 4px 0;
-      font-size: 12px;
-      white-space: pre-wrap;
+      border-radius: 4px;
+      color: #1f2328;
     }
-    .comments .item .author {
-      font-size: 11px;
+    .detail .commits-list .commit .sha { color: #0969da; }
+
+    /* Comments thread — each row has a small leading avatar column. */
+    .detail .comment {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      padding: 10px 0;
+      border-top: 1px solid #eaeef2;
+    }
+    .detail .comment:first-of-type { border-top: none; padding-top: 0; }
+    .detail .comment .ava { padding-top: 1px; }
+    .detail .comment .meta-line {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 12px;
       color: #59636e;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
+    }
+    .detail .comment .meta-line .name { color: #1f2328; font-weight: 600; }
+    .detail .comment .meta-line .when { color: #8b949e; }
+
+    .detail .add-comment {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #eaeef2;
+    }
+    .detail .add-comment textarea {
+      width: 100%;
+      min-height: 64px;
+      padding: 8px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+      resize: vertical;
+      background: #ffffff;
+    }
+    .detail .add-comment textarea:focus {
+      outline: 2px solid #0969da;
+      outline-offset: 0;
+      border-color: #0969da;
+    }
+    .detail .add-comment .row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .detail .empty {
+      font-size: 13px;
+      color: #8b949e;
+      font-style: italic;
     }
   `];
 
@@ -583,66 +782,170 @@ class NottarioBoardPage extends LitElement {
     `;
   }
 
+  // Look up a member by UserID. Members carry display name + avatar
+  // URL; comments and the task assignee link to one of them.
+  _memberByID(uid) {
+    if (!uid) return null;
+    return (this.members || []).find(m => m.UserID === uid) || null;
+  }
+
+  _taskByID(id) {
+    return (this.tasks || []).find(t => t.ID === id) || null;
+  }
+
+  _relTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60)    return 'just now';
+    if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
+    return d.toLocaleDateString();
+  }
+
   renderDetail() {
     const { task, deps, commits, comments } = this.selected;
     const role = task.TargetRoleID ? this.roleByID(task.TargetRoleID) : null;
+    const assignee = this._memberByID(task.AssigneeUserID);
+    const shortID = (task.ID || '').slice(0, 7);
     return html`
       <div class="dialog" @click=${(e) => e.target.classList.contains('dialog') && this.closeDetail()}>
         <div class="panel detail">
-          <h3>${task.Title}</h3>
-          <div class="meta-grid">
-            <div>Type</div><div><span class="badge ${task.Type}">${task.Type}</span></div>
-            <div>State</div>
-            <div class="state-buttons">
-              ${['todo', 'doing', 'done'].map(s => html`
-                <button class=${'btn ' + (task.State === s ? 'primary' : 'secondary')}
-                        @click=${() => this.setState(task.ID, s)}>${s}</button>
-              `)}
+          <header class="head">
+            <div class="title-row">
+              <span class="short-id">#${shortID}</span>
+              <span class="badge ${task.Type}">${task.Type}</span>
+              <h3>${task.Title}</h3>
+              <div class="title-actions">
+                <button class="icon-btn danger" title="Delete task" aria-label="Delete task"
+                        @click=${() => this.deleteTask(task.ID)}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M6 2.5h4M3 4.5h10M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2M6.8 7v4M9.2 7v4"
+                          stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" title="Close (Esc)" aria-label="Close"
+                        @click=${() => this.closeDetail()}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                    <path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor"
+                          stroke-width="1.6" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div>Priority</div>
-            <div><input type="number" value=${task.Priority} min="0" max="100"
-              style="width:80px"
-              @change=${(e) => this.setPriority(task.ID, e.target.value)}></div>
-            <div>Target role</div><div>${role ? role.Label : html`<span class="muted">none</span>`}</div>
-            ${deps.length ? html`
-              <div>Dependencies</div>
-              <div>${deps.map(id => html`<code style="font-size:11px">${id}</code> `)}</div>
-            ` : null}
-          </div>
-          ${task.DescriptionMD ? html`
-            <nottario-markdown
-              project-id=${this.projectId}
-              .source=${task.DescriptionMD}
-              style="margin-top:12px"></nottario-markdown>
-          ` : null}
 
-          <div class="commits">
-            <strong>Commits</strong>
-            ${commits.length === 0 ? html`<p class="muted">No commits linked.</p>` :
-              commits.map(c => html`<pre>${c.Repo}@${c.SHA}  ${c.Message}</pre>`)}
-          </div>
+            <div class="meta">
+              <div class="field-line">
+                <span class="lbl">State</span>
+                <div class="state-control">
+                  ${['todo', 'doing', 'done'].map(s => html`
+                    <button class=${task.State === s ? 'active' : ''}
+                            @click=${() => this.setState(task.ID, s)}>${s}</button>
+                  `)}
+                </div>
+              </div>
 
-          <div class="comments">
-            <strong>Comments</strong>
-            ${comments.length === 0 ? html`<p class="muted">No comments yet.</p>` :
-              comments.map(c => html`<div class="item">
-                <div class="author">${new Date(c.CreatedAt).toLocaleString()}</div>
+              <div class="field-line">
+                <span class="lbl">Priority</span>
+                <input type="number" .value=${String(task.Priority)} min="0" max="100"
+                       @change=${(e) => this.setPriority(task.ID, e.target.value)}>
+              </div>
+
+              <div class="field-line">
+                <span class="lbl">Role</span>
+                <span class="val">${role ? role.Label : html`<span class="muted">none</span>`}</span>
+              </div>
+
+              <div class="field-line">
+                <span class="lbl">Assignee</span>
+                <span class="val">
+                  ${assignee ? html`
+                    <span class="author-cell">
+                      <nottario-avatar size="20"
+                        src=${assignee.AvatarURL || ''}
+                        name=${assignee.DisplayName || assignee.GithubLogin || ''}></nottario-avatar>
+                      ${assignee.DisplayName || assignee.GithubLogin}
+                    </span>
+                  ` : html`<span class="muted">unassigned</span>`}
+                </span>
+              </div>
+            </div>
+          </header>
+
+          <div class="body">
+            ${task.DescriptionMD ? html`
+              <section>
                 <nottario-markdown
                   project-id=${this.projectId}
-                  .source=${c.BodyMD || ''}></nottario-markdown>
-              </div>`)}
-            <form @submit=${(e) => { e.preventDefault(); const t = e.target.body; this.addComment(task.ID, t.value); t.value = ''; }}>
-              <textarea name="body" rows="2" placeholder="Add a comment…" style="margin-top:8px"></textarea>
-              <div class="actions-row">
-                <button type="submit" class="btn secondary">Add comment</button>
-              </div>
-            </form>
-          </div>
+                  .source=${task.DescriptionMD}></nottario-markdown>
+              </section>
+            ` : null}
 
-          <div class="actions-row">
-            <button class="btn danger" @click=${() => this.deleteTask(task.ID)}>Delete</button>
-            <div class="spacer" style="flex:1"></div>
-            <button class="btn secondary" @click=${() => this.closeDetail()}>Close</button>
+            ${deps.length ? html`
+              <section>
+                <h4 class="eyebrow">Depends on</h4>
+                <div class="deps-list">
+                  ${deps.map(id => html`
+                    <nottario-task-chip
+                      project-id=${this.projectId}
+                      .task=${this._taskByID(id) || { ID: id, Title: id.slice(0, 8) + ' (not loaded)' }}>
+                    </nottario-task-chip>
+                  `)}
+                </div>
+              </section>
+            ` : null}
+
+            <section>
+              <h4 class="eyebrow">Commits</h4>
+              ${commits.length === 0
+                ? html`<p class="empty">No commits linked.</p>`
+                : html`
+                  <div class="commits-list">
+                    ${commits.map(c => html`
+                      <div class="commit">
+                        ${c.Repo}<span class="sha">@${(c.SHA || '').slice(0, 8)}</span>
+                        ${c.Message ? html` ${c.Message}` : null}
+                      </div>
+                    `)}
+                  </div>
+                `}
+            </section>
+
+            <section>
+              <h4 class="eyebrow">Comments</h4>
+              ${comments.length === 0
+                ? html`<p class="empty">No comments yet.</p>`
+                : comments.map(c => {
+                  const author = this._memberByID(c.AuthorUserID);
+                  return html`
+                    <div class="comment">
+                      <div class="ava">
+                        <nottario-avatar size="24"
+                          src=${author?.AvatarURL || ''}
+                          name=${author?.DisplayName || author?.GithubLogin || 'agent'}></nottario-avatar>
+                      </div>
+                      <div>
+                        <div class="meta-line">
+                          <span class="name">${author?.DisplayName || author?.GithubLogin || 'agent'}</span>
+                          <span class="when">${this._relTime(c.CreatedAt)}</span>
+                        </div>
+                        <nottario-markdown
+                          project-id=${this.projectId}
+                          .source=${c.BodyMD || ''}></nottario-markdown>
+                      </div>
+                    </div>
+                  `;
+                })}
+
+              <form class="add-comment"
+                    @submit=${(e) => { e.preventDefault(); const t = e.target.body; this.addComment(task.ID, t.value); t.value = ''; }}>
+                <textarea name="body" placeholder="Write a comment in markdown..."></textarea>
+                <div class="row">
+                  <button type="submit" class="btn primary">Comment</button>
+                </div>
+              </form>
+            </section>
           </div>
         </div>
       </div>
