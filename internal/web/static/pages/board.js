@@ -175,12 +175,20 @@ class NottarioBoardPage extends LitElement {
     /* Wider than dialogStyles default so the description, table-laden
        markdown and threaded comments breathe. */
     .dialog .panel.detail { width: 720px; padding: 0; }
+    /* box-sizing isn't inherited across shadow boundaries, and the
+       panel has its own padding contract. Force border-box on every
+       descendant so width: 100% on the comment textarea (and any
+       future form control) doesn't push past the panel edge. */
+    .panel.detail, .panel.detail * { box-sizing: border-box; }
 
-    /* Header strip: title row + meta row. Sits at the top of the
-       panel with its own padding so the rest of the body can use
-       the panel's regular rhythm. */
+    /* Header strip: title row first (title leads, no clutter to its
+       left), a smaller meta line under it, then the meta strip with
+       state / priority / role / assignee.
+
+       The leading short-id and type badge moved to that second line
+       so the eye lands on the title without competing chrome. */
     .detail .head {
-      padding: 18px 20px 12px;
+      padding: 20px 22px 14px;
       border-bottom: 1px solid #eaeef2;
     }
     .detail .head .title-row {
@@ -190,21 +198,28 @@ class NottarioBoardPage extends LitElement {
     }
     .detail .head h3 {
       margin: 0;
-      font-size: 18px;
+      font-size: 22px;
       font-weight: 600;
-      line-height: 1.3;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
       color: #1f2328;
       flex: 1;
       min-width: 0;
+    }
+    .detail .head .sub-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #59636e;
     }
     .detail .head .short-id {
       font-family: ui-monospace, SFMono-Regular, monospace;
       color: #8b949e;
       font-size: 12px;
-      margin-right: 4px;
-      flex: 0 0 auto;
-      padding-top: 3px;
     }
+    .detail .head .sub-line .dot { color: #d0d7de; }
     .detail .head .title-actions {
       display: flex;
       align-items: center;
@@ -814,8 +829,6 @@ class NottarioBoardPage extends LitElement {
         <div class="panel detail">
           <header class="head">
             <div class="title-row">
-              <span class="short-id">#${shortID}</span>
-              <span class="badge ${task.Type}">${task.Type}</span>
               <h3>${task.Title}</h3>
               <div class="title-actions">
                 <button class="icon-btn danger" title="Delete task" aria-label="Delete task"
@@ -833,6 +846,12 @@ class NottarioBoardPage extends LitElement {
                   </svg>
                 </button>
               </div>
+            </div>
+
+            <div class="sub-line">
+              <span class="badge ${task.Type}">${task.Type}</span>
+              <span class="dot">·</span>
+              <span class="short-id">#${shortID}</span>
             </div>
 
             <div class="meta">
