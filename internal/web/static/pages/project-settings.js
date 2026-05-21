@@ -2,6 +2,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles } from '/static/components/surfaces.js';
+import { fieldStyles } from '/static/components/fields.js';
 import '/static/components/page-header.js';
 
 class NottarioProjectSettings extends LitElement {
@@ -16,7 +17,7 @@ class NottarioProjectSettings extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, tableStyles, css`
+  static styles = [buttonStyles, tableStyles, fieldStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -52,29 +53,6 @@ class NottarioProjectSettings extends LitElement {
       border-radius: 4px;
     }
 
-    /* Hide the browser-native number spinner everywhere on this page.
-       It's a system-styled control that clashes with our chrome, and
-       GitHub-likes hide it by convention. The keyboard (↑/↓) and
-       typing still work. */
-    input[type="number"]::-webkit-inner-spin-button,
-    input[type="number"]::-webkit-outer-spin-button {
-      -webkit-appearance: none;
-      appearance: none;
-      margin: 0;
-    }
-    input[type="number"] { -moz-appearance: textfield; }
-    .helper {
-      color: #59636e;
-      font-size: 12px;
-      margin: 0;
-    }
-    .helper code {
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      background: #f6f8fa;
-      padding: 0 4px;
-      border-radius: 3px;
-      font-size: 11px;
-    }
 
     .color-dot {
       display: inline-block;
@@ -176,33 +154,6 @@ class NottarioProjectSettings extends LitElement {
       vertical-align: 2px;
     }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
-    .field { margin-bottom: 12px; }
-    .field label {
-      display: block;
-      margin-bottom: 4px;
-      font-weight: 500;
-      font-size: 13px;
-      color: #1f2328;
-    }
-    .field input,
-    .field textarea,
-    .field select {
-      width: 100%;
-      padding: 6px 10px;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      font: inherit;
-      background: #fff;
-      box-sizing: border-box;
-    }
-    .field input:focus,
-    .field textarea:focus,
-    .field select:focus {
-      outline: 2px solid #0969da;
-      outline-offset: 0;
-      border-color: #0969da;
-    }
-    .field textarea { resize: vertical; min-height: 60px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
     tr[draggable] { cursor: grab; }
     tr.dragging { opacity: 0.45; }
     tr.drag-over td:first-child { box-shadow: inset 2px 0 0 0 #1f6feb; }

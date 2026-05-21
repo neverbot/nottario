@@ -3,6 +3,7 @@ import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { dialogStyles } from '/static/components/surfaces.js';
+import { fieldStyles } from '/static/components/fields.js';
 import '/static/components/page-header.js';
 import './gantt.js';
 
@@ -23,7 +24,7 @@ class NottarioBoardPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, dialogStyles, css`
+  static styles = [buttonStyles, dialogStyles, fieldStyles, css`
     :host { display: block; }
     .spacer { flex: 1; }
     .columns {
@@ -177,9 +178,6 @@ class NottarioBoardPage extends LitElement {
     /* Detail panel wider than the shared default; everything else
        inherits from dialogStyles in components/surfaces.js. */
     .dialog .panel { width: 560px; }
-    .field { margin-bottom: 12px; }
-    .field label { display: block; margin-bottom: 4px; font-weight: 500; font-size: 13px; }
-    .actions-row { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
     .detail h3 { margin: 0 0 8px 0; }
     .detail .meta-grid {

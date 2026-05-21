@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import { fieldStyles } from '/static/components/fields.js';
 import '/static/components/page-header.js';
 
 class NottarioDocsPage extends LitElement {
@@ -20,7 +21,7 @@ class NottarioDocsPage extends LitElement {
     hits: { state: true },
   };
 
-  static styles = [buttonStyles, css`
+  static styles = [buttonStyles, fieldStyles, css`
     :host { display: block; }
     .layout {
       display: grid;
@@ -104,10 +105,12 @@ class NottarioDocsPage extends LitElement {
       font-size: 13px;
       line-height: 1.5;
     }
+    /* docs uses tighter spacing than fieldStyles default; override
+       margin-top + smaller label size only. */
     .field { margin-top: 8px; }
-    .field label { font-weight: 500; font-size: 12px; display: block; margin-bottom: 4px; }
+    .field label { font-size: 12px; }
     .empty { color: #59636e; padding: 40px; text-align: center; }
-    .actions-row { display: flex; gap: 8px; margin-top: 12px; }
+    .actions-row { margin-top: 12px; justify-content: flex-start; }
     .error { color: #cf222e; background: #ffebe9; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }
     .info  { color: #1f883d; background: #ddf4d1; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }
     .badge {

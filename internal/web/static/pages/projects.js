@@ -3,6 +3,7 @@ import { defaultPathFor, viewByKey } from '/static/views.js';
 import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, dialogStyles } from '/static/components/surfaces.js';
+import { fieldStyles } from '/static/components/fields.js';
 import '/static/components/page-header.js';
 
 class NottarioProjectsPage extends LitElement {
@@ -14,7 +15,7 @@ class NottarioProjectsPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, surfaceStyles, dialogStyles, css`
+  static styles = [buttonStyles, surfaceStyles, dialogStyles, fieldStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
     .grid {
@@ -193,19 +194,6 @@ class NottarioProjectsPage extends LitElement {
       color: #59636e;
     }
     .card .footer .spacer { flex: 1; }
-    .field { margin-bottom: 12px; }
-    .field label {
-      display: block;
-      margin-bottom: 4px;
-      font-weight: 500;
-      font-size: 13px;
-    }
-    .actions-row {
-      margin-top: 16px;
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-    }
     .error {
       color: #cf222e;
       font-size: 13px;

@@ -2,6 +2,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
+import { fieldStyles } from '/static/components/fields.js';
 import '/static/components/page-header.js';
 
 class NottarioTokensPage extends LitElement {
@@ -13,7 +14,7 @@ class NottarioTokensPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, tableStyles, dialogStyles, css`
+  static styles = [buttonStyles, tableStyles, dialogStyles, fieldStyles, css`
     :host { display: block; }
     .header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
     .header h2 { margin: 0; }
@@ -29,14 +30,6 @@ class NottarioTokensPage extends LitElement {
     /* Wider than the shared default; everything else inherits from
        dialogStyles in components/surfaces.js. */
     .dialog .panel { width: 540px; }
-    .field { margin-bottom: 12px; }
-    .field label { display: block; margin-bottom: 4px; font-weight: 500; font-size: 13px; }
-    .actions-row {
-      margin-top: 16px;
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-    }
     .secret-banner {
       background: #fff8c5;
       border: 1px solid #d4a72c;
