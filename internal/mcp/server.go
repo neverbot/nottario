@@ -22,11 +22,24 @@ type Deps struct {
 // The MCP server itself is built once and shared across requests; the
 // per-request Caller is propagated to tool handlers via the request
 // context.
+//
+// Stateless: true makes the SDK skip Mcp-Session-Id validation and
+// treat every request as a fresh session with default initialization
+// parameters. This matters because container rebuilds (very frequent
+// during development of Nottario itself) would otherwise invalidate
+// the client's session ID and force a manual /mcp reconnect. The
+// MCP tools are all stateless request/response (no per-session
+// active project, no server->client requests, no cross-request
+// streaming state — the Caller is re-resolved from the Bearer token
+// per request and project access is checked from the DB each time),
+// so we lose nothing the tools currently use. Server->client
+// notifications inside a single request's lifetime still work per
+// the SDK's documentation.
 func Handler(d Deps) http.Handler {
 	server := buildServer(d)
 	streamable := sdk.NewStreamableHTTPHandler(func(r *http.Request) *sdk.Server {
 		return server
-	}, nil)
+	}, &sdk.StreamableHTTPOptions{Stateless: true})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, ok := resolveCaller(r, d.Resolver)
