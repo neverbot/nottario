@@ -113,6 +113,16 @@ class NottarioSearchInput extends LitElement {
   }
 
   _onInput(e) {
+    // The native InputEvent IS composed: true (unlike most native
+    // events you'd expect to stop at the shadow boundary). If we let
+    // it bubble out, consumers listening for `input` on this host
+    // receive TWO events per keystroke: our CustomEvent (with
+    // detail.value) and the native InputEvent (with detail = 0,
+    // because UIEvent.detail is a number). Reading `e.detail.value`
+    // on the native one yields undefined and corrupts host state.
+    // Stop the native event here so only our CustomEvent reaches
+    // the host.
+    e.stopPropagation();
     this.value = e.target.value;
     this.dispatchEvent(new CustomEvent('input', {
       detail: { value: this.value },
