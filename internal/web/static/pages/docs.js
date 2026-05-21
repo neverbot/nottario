@@ -11,111 +11,414 @@ class NottarioDocsPage extends LitElement {
     projectId: { type: String },
     project: { state: true },
     summaries: { state: true },
-    selected: { state: true },        // currently open document (full body)
-    editing: { state: true },          // true if in edit mode
-    draft: { state: true },            // textarea content while editing
-    creating: { state: true },         // true if the user is creating a new doc
+    selected: { state: true },
+    editing: { state: true },
+    draft: { state: true },
+    creating: { state: true },
     newPath: { state: true },
     error: { state: true },
     info: { state: true },
-    search: { state: true },           // current search query
+    search: { state: true },
     hits: { state: true },
+    historyOpen: { state: true },
+    historyVersions: { state: true },
+    viewingVersion: { state: true },
   };
 
   static styles = [buttonStyles, fieldStyles, badgeStyles, css`
-    :host { display: block; }
+    :host { display: block; box-sizing: border-box; }
+    * { box-sizing: border-box; }
+
+    /* No outer cards. The page is a single split: a navigation rail
+       on the left, a reader on the right, separated by one hairline.
+       This is the GitHub Files pattern the rest of the app already
+       leans on. */
     .layout {
       display: grid;
-      grid-template-columns: 280px 1fr;
-      gap: 16px;
-      min-height: 70vh;
+      grid-template-columns: 260px 1fr;
+      gap: 0;
+      align-items: start;
+      border-top: 1px solid #d1d9e0;
+      min-height: calc(100vh - 200px);
     }
-    .sidebar {
-      background: #fff;
-      border: 1px solid #d1d9e0;
-      border-radius: 8px;
-      padding: 12px;
+    .rail {
+      border-right: 1px solid #d1d9e0;
+      padding: 12px 12px 24px 0;
+      max-height: calc(100vh - 200px);
       overflow: auto;
-      max-height: 80vh;
     }
-    .sidebar h3 {
-      font-size: 12px;
-      text-transform: uppercase;
-      color: #59636e;
-      margin: 8px 0 4px 0;
+    .reader-col {
+      padding: 12px 0 24px 24px;
+      min-width: 0;
     }
-    .sidebar .actions {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 8px;
+
+    /* Search input takes the full rail width, sits flush. The
+       clear button is an inline glyph so the input stays one row. */
+    .rail-search {
+      position: relative;
+      margin-bottom: 12px;
     }
-    .sidebar input.search {
+    .rail-search input {
       width: 100%;
-      margin-bottom: 8px;
+      padding: 6px 28px 6px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 13px;
+      background: #ffffff;
+    }
+    .rail-search input:focus {
+      outline: 2px solid #0969da;
+      outline-offset: 0;
+      border-color: #0969da;
+    }
+    .rail-search .clear {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: #59636e;
+      padding: 4px 6px;
+      line-height: 1;
+      font-size: 14px;
+      border-radius: 4px;
+    }
+    .rail-search .clear:hover { color: #1f2328; background: #f6f8fa; }
+    .rail-search .hint {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      color: #8b949e;
+      padding-left: 2px;
+    }
+    kbd {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 10px;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 3px;
+      padding: 1px 4px;
+      color: #59636e;
+    }
+
+    /* Group eyebrow matches the existing UPPERCASE muted style used
+       in profile / settings. No background, no border. */
+    .group { margin-bottom: 16px; }
+    .group-eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #8b949e;
+      font-weight: 600;
+      padding: 0 6px 4px;
     }
     .tree {
       list-style: none;
-      padding-left: 0;
+      padding: 0;
       margin: 0;
     }
+    /* GitHub-Files row pattern: weight + dark text + no background.
+       The active row goes bold and gets a darker text colour so the
+       eye finds it; no pill, no fill. Search-dimmed rows fade to
+       30% opacity but stay in place. */
     .tree li {
-      padding: 2px 4px;
+      padding: 4px 6px;
       cursor: pointer;
       border-radius: 4px;
       font-size: 13px;
+      color: #1f2328;
+      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: opacity 120ms ease-out;
     }
     .tree li:hover { background: #f6f8fa; }
-    .tree li.active { background: #ddf4ff; color: #0969da; }
-    .tree .kind {
-      font-size: 10px;
-      color: #59636e;
-      text-transform: uppercase;
-      margin-left: 4px;
+    .tree li.active {
+      font-weight: 600;
+      color: #0969da;
+      background: #f6f8fa;
     }
-    .reader {
-      background: #fff;
-      border: 1px solid #d1d9e0;
-      border-radius: 8px;
-      padding: 16px;
-      overflow: auto;
-      max-height: 80vh;
+    .tree li.dim { opacity: 0.3; }
+    .tree li.keyboard-cursor {
+      box-shadow: inset 2px 0 0 #0969da;
+      padding-left: 4px;
     }
-    .reader header {
+    .tree mark {
+      background: #fff8c5;
+      color: inherit;
+      padding: 0 1px;
+      border-radius: 2px;
+    }
+
+    .rail-footer {
+      margin-top: 12px;
+      padding: 8px 6px 0;
+      border-top: 1px solid #eaeef2;
+    }
+    .rail-footer .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    /* Reader chrome — title strip, then prose. The path lives as a
+       mono breadcrumb on its own line below the title; segments are
+       muted except the final filename. Actions cluster on the right
+       of the title strip. */
+    .reader-title {
       display: flex;
       align-items: baseline;
-      gap: 8px;
-      border-bottom: 1px solid #eaeef2;
-      padding-bottom: 12px;
-      margin-bottom: 12px;
+      gap: 10px;
+      flex-wrap: wrap;
     }
-    .reader header h2 { margin: 0; font-size: 18px; }
-    .reader header .meta { margin-left: auto; color: #59636e; font-size: 12px; }
-    .reader header .spacer { flex: 1; }
-    .reader pre {
+    .reader-title h2 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #1f2328;
+    }
+    .reader-title .spacer { flex: 1; }
+    .reader-title .actions { display: flex; align-items: center; gap: 4px; }
+    .reader-title .actions .btn { font-size: 12px; padding: 4px 10px; }
+
+    /* Delete demoted to a hover-revealed icon button, matching the
+       project-settings.js .row-actions .delete pattern. At rest a
+       small ghost X; on hover it picks up the danger colour. */
+    .actions .delete {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      font-size: 13px;
+      line-height: 1;
+      color: #8b949e;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .actions .delete:hover,
+    .actions .delete:focus-visible {
+      color: #cf222e;
+      border-color: rgba(207, 34, 46, 0.4);
+      background: #ffebe9;
+      outline: none;
+    }
+
+    .reader-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #59636e;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      flex-wrap: wrap;
+    }
+    .reader-meta .crumb-seg { color: #8b949e; }
+    .reader-meta .crumb-seg.last { color: #1f2328; font-weight: 600; }
+    .reader-meta .sep { color: #d0d7de; }
+    .reader-meta .version-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: inherit;
+      font: inherit;
+      padding: 1px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .reader-meta .version-btn:hover {
+      color: #1f2328;
+      background: #f6f8fa;
+      border-color: #d0d7de;
+    }
+    .reader-meta .version-btn.open {
+      color: #1f2328;
+      background: #ddf4ff;
+      border-color: #0969da;
+    }
+
+    /* Prose container. Neutral on white, mono for the current <pre>
+       reality, capped at a comfortable measure so paragraphs are
+       readable on a 27" monitor. When goldmark replaces <pre> with
+       rendered HTML, the same .prose container will host it without
+       any chrome change. */
+    .prose {
+      max-width: 76ch;
+      margin: 24px 0 0;
+      color: #1f2328;
+    }
+    .prose pre {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      border: none;
       white-space: pre-wrap;
       word-break: break-word;
-      background: #f6f8fa;
-      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+      font-size: 13px;
+      line-height: 1.65;
+      color: inherit;
+    }
+    .prose .description {
+      margin: 0 0 16px;
+      color: #59636e;
+      font-style: italic;
+      font-size: 14px;
+    }
+
+    /* Reading a historical version: thin amber strip at the top of
+       the reader signals read-only context, with a return-to-current
+       link. */
+    .version-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 6px 10px;
+      background: #fff8c5;
+      border: 1px solid rgba(212, 167, 44, 0.5);
       border-radius: 6px;
       font-size: 12px;
+      color: #7d4e00;
     }
-    .reader textarea {
+    .version-banner .spacer { flex: 1; }
+    .version-banner button {
+      background: transparent;
+      border: 1px solid rgba(125, 78, 0, 0.4);
+      color: inherit;
+      font: inherit;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .version-banner button:hover { background: #fff3a8; }
+
+    /* History popover anchored to the version button. Slim list:
+       each row shows version, relative time, author hint, and the
+       commit-style message. Newest first. Click a row → load that
+       version into the reader read-only. */
+    .history-pop {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      width: 360px;
+      max-height: 420px;
+      overflow: auto;
+      background: #ffffff;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+      z-index: 50;
+      padding: 6px;
+    }
+    .history-pop .empty { padding: 12px; color: #59636e; font-size: 13px; }
+    .history-pop ul { list-style: none; margin: 0; padding: 0; }
+    .history-pop li {
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 8px;
+      align-items: baseline;
+    }
+    .history-pop li:hover { background: #f6f8fa; }
+    .history-pop li.current { background: #ddf4ff; }
+    .history-pop .vn {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      color: #0969da;
+      font-weight: 600;
+    }
+    .history-pop .msg {
+      font-size: 13px;
+      color: #1f2328;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .history-pop .msg.empty-msg { color: #8b949e; font-style: italic; }
+    .history-pop .when {
+      font-size: 11px;
+      color: #8b949e;
+      white-space: nowrap;
+    }
+
+    .pop-anchor { position: relative; display: inline-block; }
+
+    /* Empty state teaches the interface instead of just naming the
+       gap. Three short examples (skill / context / note) tell the
+       reader what kinds of docs live here and what they're for. */
+    .empty-pane {
+      max-width: 52ch;
+      margin: 64px 0 0;
+      color: #1f2328;
+    }
+    .empty-pane h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .empty-pane p {
+      margin: 0 0 16px;
+      color: #59636e;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .empty-pane dl {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 6px 16px;
+      margin: 0 0 20px;
+      font-size: 13px;
+    }
+    .empty-pane dt { color: #1f2328; font-weight: 600; }
+    .empty-pane dd { margin: 0; color: #59636e; }
+    .empty-pane .cta { display: flex; gap: 8px; }
+
+    /* Create + edit panes share the prose width. The editor
+       textarea is mono, generously sized, transparent so it doesn't
+       read as "inside a code block". */
+    .editor-form {
+      max-width: 76ch;
+      margin: 20px 0 0;
+    }
+    .editor-form .field { margin-top: 12px; }
+    .editor-form .field label { font-size: 12px; }
+    .editor-form textarea {
       width: 100%;
       min-height: 50vh;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.6;
+      background: #ffffff;
     }
-    /* docs uses tighter spacing than fieldStyles default; override
-       margin-top + smaller label size only. */
-    .field { margin-top: 8px; }
-    .field label { font-size: 12px; }
-    .empty { color: #59636e; padding: 40px; text-align: center; }
-    .actions-row { margin-top: 12px; justify-content: flex-start; }
-    .error { color: #cf222e; background: #ffebe9; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }
-    .info  { color: #1f883d; background: #ddf4d1; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }
-    .group { margin-bottom: 8px; }
-    .group-title { font-size: 11px; color: #57606a; padding-left: 4px; }
+    .editor-form .actions-row {
+      margin-top: 16px;
+      justify-content: flex-end;
+      gap: 8px;
+      display: flex;
+    }
+
+    /* Status strip is tighter than the previous full-width alert
+       boxes — they used to push the layout down on every save. */
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .status.error { color: #cf222e; background: #ffebe9; border: 1px solid rgba(207, 34, 46, 0.4); }
+    .status.info  { color: #1a7f37; background: #dafbe1; border: 1px solid rgba(31, 136, 61, 0.4); }
   `];
 
   constructor() {
@@ -131,6 +434,12 @@ class NottarioDocsPage extends LitElement {
     this.info = '';
     this.search = '';
     this.hits = null;
+    this.historyOpen = false;
+    this.historyVersions = null;
+    this.viewingVersion = null;
+    this._cursorIdx = -1;
+    this._onKey = this._onKey.bind(this);
+    this._onDocClick = this._onDocClick.bind(this);
   }
 
   connectedCallback() {
@@ -139,12 +448,16 @@ class NottarioDocsPage extends LitElement {
     this._subscribe();
     this._hashHandler = () => this._applyHash();
     window.addEventListener('hashchange', this._hashHandler);
+    window.addEventListener('keydown', this._onKey);
+    document.addEventListener('click', this._onDocClick);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsub?.();
     window.removeEventListener('hashchange', this._hashHandler);
+    window.removeEventListener('keydown', this._onKey);
+    document.removeEventListener('click', this._onDocClick);
   }
 
   updated(c) {
@@ -171,11 +484,75 @@ class NottarioDocsPage extends LitElement {
       }
       if (!ev.type?.startsWith('doc.')) return;
       this.load();
-      // Refresh the open document if it was the one that changed.
       if (this.selected && ev.path === this.selected.Path) {
         this.open(this.selected.Path);
       }
     });
+  }
+
+  _onKey(e) {
+    // Don't hijack typing inside form controls. Slash-to-search and
+    // arrow nav only apply when focus is loose.
+    const tag = e.target?.tagName;
+    const isFormFocus = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+    if (e.key === 'Escape') {
+      if (this.historyOpen) { this.historyOpen = false; e.preventDefault(); return; }
+      if (this.viewingVersion) { this._returnToCurrent(); e.preventDefault(); return; }
+      if (this.editing) { this.editing = false; e.preventDefault(); return; }
+      if (this.creating) { this.cancelCreate(); e.preventDefault(); return; }
+      if (this.search) { this._clearSearch(); e.preventDefault(); return; }
+      return;
+    }
+
+    if (isFormFocus) return;
+
+    if (e.key === '/') {
+      const input = this.shadowRoot?.querySelector('.rail-search input');
+      input?.focus();
+      input?.select?.();
+      e.preventDefault();
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const visible = this._visibleSummaries();
+      if (!visible.length) return;
+      if (this._cursorIdx < 0) {
+        this._cursorIdx = e.key === 'ArrowDown' ? 0 : visible.length - 1;
+      } else {
+        this._cursorIdx += (e.key === 'ArrowDown' ? 1 : -1);
+        if (this._cursorIdx < 0) this._cursorIdx = visible.length - 1;
+        if (this._cursorIdx >= visible.length) this._cursorIdx = 0;
+      }
+      this.requestUpdate();
+      // bring the cursor row into view if needed
+      requestAnimationFrame(() => {
+        const row = this.shadowRoot?.querySelector('.tree li.keyboard-cursor');
+        row?.scrollIntoView({ block: 'nearest' });
+      });
+      e.preventDefault();
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      const visible = this._visibleSummaries();
+      if (this._cursorIdx >= 0 && visible[this._cursorIdx]) {
+        this.open(visible[this._cursorIdx].Path);
+        e.preventDefault();
+      }
+      return;
+    }
+  }
+
+  _onDocClick(e) {
+    if (!this.historyOpen) return;
+    // Close history when clicking anywhere outside it.
+    const path = e.composedPath?.() || [];
+    if (!path.some(n => n?.classList?.contains?.('history-pop') ||
+                        n?.classList?.contains?.('version-btn'))) {
+      this.historyOpen = false;
+    }
   }
 
   async load() {
@@ -197,6 +574,7 @@ class NottarioDocsPage extends LitElement {
     this.error = '';
     this.info = '';
     this.editing = false;
+    this.viewingVersion = null;
     try {
       const r = await fetch(
         `/api/docs/read?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(path)}`
@@ -249,7 +627,6 @@ class NottarioDocsPage extends LitElement {
   startEdit() {
     if (!this.selected) return;
     this.editing = true;
-    // Reconstruct frontmatter + body for editing.
     const fm = this.selected.Frontmatter || {};
     let draft = '';
     if (Object.keys(fm).length) {
@@ -289,7 +666,7 @@ class NottarioDocsPage extends LitElement {
       }
       if (!r.ok) throw new Error((await r.json()).error || 'failed');
       const doc = await r.json();
-      this.info = `Saved (version ${doc.CurrentVersion}).`;
+      this.info = `Saved (v${doc.CurrentVersion})`;
       this.editing = false;
       this.selected = doc;
       await this.load();
@@ -333,103 +710,210 @@ class NottarioDocsPage extends LitElement {
     }
   }
 
-  back() { window.nottarioNavigate('/'); }
+  _clearSearch() {
+    this.search = '';
+    this.hits = null;
+  }
+
+  // History popover: load once per open, keep result cached on the
+  // selected doc until the doc changes.
+  async toggleHistory() {
+    if (this.historyOpen) { this.historyOpen = false; return; }
+    if (!this.selected) return;
+    this.historyOpen = true;
+    if (this.historyVersions === null ||
+        this._historyPath !== this.selected.Path) {
+      try {
+        const r = await fetch(
+          `/api/docs/history?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(this.selected.Path)}`
+        );
+        if (!r.ok) throw new Error('history failed');
+        const j = await r.json();
+        this.historyVersions = j.versions || [];
+        this._historyPath = this.selected.Path;
+      } catch (e) {
+        this.error = e.message;
+        this.historyVersions = [];
+      }
+    }
+  }
+
+  async openVersion(v) {
+    this.historyOpen = false;
+    if (v === this.selected?.CurrentVersion) {
+      this.viewingVersion = null;
+      return;
+    }
+    try {
+      const r = await fetch(
+        `/api/docs/read-version?scope=project&project_id=${this.projectId}` +
+        `&path=${encodeURIComponent(this.selected.Path)}&version=${v}`
+      );
+      if (!r.ok) throw new Error('version read failed');
+      this.viewingVersion = await r.json();
+    } catch (e) { this.error = e.message; }
+  }
+
+  _returnToCurrent() {
+    this.viewingVersion = null;
+  }
 
   groupByKind() {
     const out = { skill: [], context: [], note: [] };
     for (const s of this.summaries || []) {
-      out[s.Kind]?.push(s) ?? out.context.push(s);
+      (out[s.Kind] ?? out.context).push(s);
     }
     return out;
   }
 
+  // For soft-filter search: the tree stays visible; non-matching
+  // rows fade out. _visibleSummaries returns the same items in the
+  // order they appear in the rail (skill → context → note) so the
+  // keyboard cursor follows the visual order.
+  _visibleSummaries() {
+    const groups = this.groupByKind();
+    return [...groups.skill, ...groups.context, ...groups.note];
+  }
+
+  _matchesSearch(s) {
+    if (!this.search.trim()) return true;
+    const q = this.search.trim().toLowerCase();
+    return (s.Title || '').toLowerCase().includes(q) ||
+           (s.Path  || '').toLowerCase().includes(q);
+  }
+
+  _renderTitleWithMark(title) {
+    const q = this.search.trim();
+    if (!q) return html`${title || ''}`;
+    const t = title || '';
+    const idx = t.toLowerCase().indexOf(q.toLowerCase());
+    if (idx < 0) return html`${t}`;
+    return html`${t.slice(0, idx)}<mark>${t.slice(idx, idx + q.length)}</mark>${t.slice(idx + q.length)}`;
+  }
+
   render() {
-    if (!this.project) return html`<p>Loading…</p>`;
+    if (!this.project) return html`<p class="status info" style="margin:24px">Loading...</p>`;
     return html`
       <nottario-page-header title="Docs"></nottario-page-header>
-      ${this.error ? html`<div class="error">${this.error}</div>` : null}
-      ${this.info ? html`<div class="info">${this.info}</div>` : null}
+      ${this.error ? html`<div class="status error">${this.error}</div>` : null}
+      ${this.info ? html`<div class="status info">${this.info}</div>` : null}
       <div class="layout">
-        ${this.renderSidebar()}
-        ${this.renderReader()}
+        ${this.renderRail()}
+        ${this.renderReaderCol()}
       </div>
     `;
   }
 
-  renderSidebar() {
-    if (this.summaries === null) return html`<div class="sidebar">Loading…</div>`;
+  renderRail() {
+    if (this.summaries === null) return html`<div class="rail">Loading...</div>`;
     const groups = this.groupByKind();
+    const order = ['skill', 'context', 'note'];
+    const visible = this._visibleSummaries();
     return html`
-      <div class="sidebar">
-        <div class="actions">
-          <button class="btn primary" style="flex:1" @click=${() => this.startCreate()}>+ New doc</button>
+      <div class="rail">
+        <div class="rail-search">
+          <input placeholder="Filter or search..."
+                 .value=${this.search}
+                 @input=${(e) => { this.search = e.target.value; this._cursorIdx = -1; }}
+                 @keydown=${(e) => { if (e.key === 'Enter') this.runSearch(); }}>
+          ${this.search ? html`
+            <button class="clear" title="Clear (Esc)" @click=${() => this._clearSearch()}>×</button>
+          ` : null}
+          <span class="hint">
+            <kbd>/</kbd> focus  <kbd>↑↓</kbd> move  <kbd>Enter</kbd> open
+          </span>
         </div>
-        <input class="search" placeholder="Search…" .value=${this.search}
-          @input=${(e) => { this.search = e.target.value; }}
-          @keydown=${(e) => { if (e.key === 'Enter') this.runSearch(); }}>
+
         ${this.hits !== null ? this.renderHits() : html`
-          ${['skill', 'context', 'note'].map(kind => {
+          ${order.map(kind => {
             const items = groups[kind];
             if (!items || !items.length) return null;
             return html`
               <div class="group">
-                <div class="group-title">${kind.toUpperCase()}</div>
+                <div class="group-eyebrow">${kind}</div>
                 <ul class="tree">
-                  ${items.map(s => html`
-                    <li class=${this.selected?.Path === s.Path ? 'active' : ''}
-                        @click=${() => this.open(s.Path)}>
-                      ${s.Title || s.Path}
-                    </li>
-                  `)}
+                  ${items.map(s => {
+                    const match = this._matchesSearch(s);
+                    const cursorIdx = visible.indexOf(s);
+                    const isCursor = cursorIdx === this._cursorIdx;
+                    const cls = [
+                      this.selected?.Path === s.Path ? 'active' : '',
+                      !match ? 'dim' : '',
+                      isCursor ? 'keyboard-cursor' : '',
+                    ].filter(Boolean).join(' ');
+                    return html`
+                      <li class=${cls} @click=${() => this.open(s.Path)} title=${s.Path}>
+                        ${this._renderTitleWithMark(s.Title || s.Path)}
+                      </li>
+                    `;
+                  })}
                 </ul>
               </div>
             `;
           })}
-          ${!this.summaries.length ? html`<p class="muted">No documents yet.</p>` : null}
+          ${!this.summaries.length ? html`
+            <p style="color:#59636e;font-size:13px;padding:0 6px">
+              No documents yet. Use <strong>New document</strong> below to create one.
+            </p>
+          ` : null}
         `}
+
+        <div class="rail-footer">
+          <button class="btn secondary" @click=${() => this.startCreate()}>+ New document</button>
+        </div>
       </div>
     `;
   }
 
   renderHits() {
-    if (!this.hits.length) return html`<p class="muted">No matches.</p>`;
+    if (!this.hits.length) return html`
+      <p style="color:#59636e;font-size:13px;padding:0 6px">
+        No matches in the project documents.
+      </p>
+    `;
     return html`
-      <ul class="tree">
-        ${this.hits.map(h => html`
-          <li @click=${() => this.open(h.Path)}>
-            ${h.Title || h.Path}
-            <span class="kind">${h.Kind}</span>
-          </li>
-        `)}
-      </ul>
-      <button class="btn ghost" style="margin-top:8px" @click=${() => { this.hits = null; this.search = ''; }}>Clear search</button>
+      <div class="group">
+        <div class="group-eyebrow">Search results</div>
+        <ul class="tree">
+          ${this.hits.map(h => html`
+            <li class=${this.selected?.Path === h.Path ? 'active' : ''}
+                @click=${() => this.open(h.Path)}
+                title=${h.Path}>
+              ${this._renderTitleWithMark(h.Title || h.Path)}
+            </li>
+          `)}
+        </ul>
+      </div>
     `;
   }
 
-  renderReader() {
+  renderReaderCol() {
     if (this.creating) return this.renderCreateForm();
-    if (!this.selected) return html`<div class="reader empty">Pick a document on the left, or create a new one.</div>`;
+    if (!this.selected) return this.renderEmpty();
     if (this.editing) return this.renderEditor();
     return this.renderReadView();
   }
 
-  renderCreateForm() {
+  renderEmpty() {
     return html`
-      <div class="reader">
-        <header>
-          <h2>New document</h2>
-          <div class="spacer"></div>
-          <button class="btn secondary" @click=${() => this.cancelCreate()}>Cancel</button>
-          <button class="btn primary" @click=${() => this.saveNew()}>Create</button>
-        </header>
-        <div class="field">
-          <label>Path (e.g. <code>projects/${this.projectId}/context/glossary.md</code>)</label>
-          <input .value=${this.newPath} @input=${(e) => { this.newPath = e.target.value; }}
-            placeholder="projects/${this.projectId}/context/your-doc.md">
-        </div>
-        <div class="field">
-          <label>Markdown (with optional frontmatter)</label>
-          <textarea .value=${this.draft} @input=${(e) => { this.draft = e.target.value; }}></textarea>
+      <div class="reader-col">
+        <div class="empty-pane">
+          <h3>No document selected.</h3>
+          <p>
+            Pick a document from the rail to read it, or start a new one.
+            This project's documents live in three kinds:
+          </p>
+          <dl>
+            <dt>Skill</dt>
+            <dd>Operating instructions for agents using the MCP server.</dd>
+            <dt>Context</dt>
+            <dd>Shared notes that survive across conversations (design, glossary, decisions).</dd>
+            <dt>Note</dt>
+            <dd>Free-form scratch pads.</dd>
+          </dl>
+          <div class="cta">
+            <button class="btn primary" @click=${() => this.startCreate()}>+ New document</button>
+          </div>
         </div>
       </div>
     `;
@@ -437,33 +921,149 @@ class NottarioDocsPage extends LitElement {
 
   renderReadView() {
     const s = this.selected;
+    const viewing = this.viewingVersion;
+    // breadcrumb segments from the path. The last segment (the
+    // filename) is rendered bold + dark; everything before is muted.
+    const segs = (s.Path || '').split('/');
+    const last = segs.pop();
     return html`
-      <div class="reader">
-        <header>
-          <h2>${s.Title || s.Path}</h2>
+      <div class="reader-col">
+        <div class="reader-title">
+          <h2>${s.Title || last}</h2>
           <span class=${`badge ${s.Kind}`}>${s.Kind}</span>
           <div class="spacer"></div>
-          <span class="meta">v${s.CurrentVersion}</span>
-          <button class="btn secondary" @click=${() => this.startEdit()}>Edit</button>
-          <button class="btn danger" @click=${() => this.del()}>Delete</button>
-        </header>
-        ${s.Description ? html`<p class="muted">${s.Description}</p>` : null}
-        <div style="font-size:11px;color:#59636e;margin-bottom:8px">${s.Path}</div>
-        <pre>${s.ContentMD || ''}</pre>
+          <div class="actions">
+            ${viewing ? null : html`
+              <button class="btn ghost" @click=${() => this.startEdit()}>Edit</button>
+            `}
+            <div class="pop-anchor">
+              <button class=${`btn ghost version-btn ${this.historyOpen ? 'open' : ''}`}
+                      @click=${() => this.toggleHistory()}>
+                History
+              </button>
+              ${this.historyOpen ? this.renderHistoryPop() : null}
+            </div>
+            ${viewing ? null : html`
+              <button class="delete" title="Delete" aria-label="Delete document" @click=${() => this.del()}>✕</button>
+            `}
+          </div>
+        </div>
+        <div class="reader-meta">
+          ${segs.map((p, i) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
+          <span class="crumb-seg last">${last}</span>
+          <span class="sep">·</span>
+          <button class=${`version-btn ${this.historyOpen ? 'open' : ''}`}
+                  @click=${() => this.toggleHistory()}>v${s.CurrentVersion}</button>
+        </div>
+
+        ${viewing ? html`
+          <div class="version-banner">
+            <span>Viewing version <strong>v${viewing.Version}</strong> read-only.
+              ${viewing.Message ? html`Message: "${viewing.Message}"` : null}</span>
+            <span class="spacer"></span>
+            <button @click=${() => this._returnToCurrent()}>Back to current (v${s.CurrentVersion})</button>
+          </div>
+        ` : null}
+
+        <div class="prose">
+          ${(viewing ? viewing.Description : s.Description)
+            ? html`<p class="description">${viewing ? viewing.Description : s.Description}</p>`
+            : null}
+          <pre>${(viewing ? viewing.ContentMD : s.ContentMD) || ''}</pre>
+        </div>
+      </div>
+    `;
+  }
+
+  renderHistoryPop() {
+    if (this.historyVersions === null) {
+      return html`<div class="history-pop"><div class="empty">Loading...</div></div>`;
+    }
+    if (!this.historyVersions.length) {
+      return html`<div class="history-pop"><div class="empty">No history yet.</div></div>`;
+    }
+    const current = this.selected.CurrentVersion;
+    return html`
+      <div class="history-pop">
+        <ul>
+          ${this.historyVersions.map(v => html`
+            <li class=${v.Version === current ? 'current' : ''}
+                @click=${() => this.openVersion(v.Version)}>
+              <span class="vn">v${v.Version}</span>
+              <span class=${v.Message ? 'msg' : 'msg empty-msg'}>${v.Message || 'no message'}</span>
+              <span class="when">${this._relTime(v.CreatedAt)}</span>
+            </li>
+          `)}
+        </ul>
+      </div>
+    `;
+  }
+
+  _relTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
+    return d.toLocaleDateString();
+  }
+
+  renderCreateForm() {
+    return html`
+      <div class="reader-col">
+        <div class="reader-title">
+          <h2>New document</h2>
+          <div class="spacer"></div>
+          <div class="actions">
+            <button class="btn ghost" @click=${() => this.cancelCreate()}>Cancel</button>
+            <button class="btn primary" @click=${() => this.saveNew()}>Create</button>
+          </div>
+        </div>
+        <div class="editor-form">
+          <div class="field">
+            <label>Path
+              <span style="font-weight:400;color:#59636e">
+                e.g. <code>projects/${this.projectId}/context/glossary.md</code>
+              </span>
+            </label>
+            <input .value=${this.newPath} @input=${(e) => { this.newPath = e.target.value; }}
+                   placeholder="projects/${this.projectId}/context/your-doc.md">
+          </div>
+          <div class="field">
+            <label>Markdown (with optional frontmatter)</label>
+            <textarea .value=${this.draft} @input=${(e) => { this.draft = e.target.value; }}></textarea>
+          </div>
+        </div>
       </div>
     `;
   }
 
   renderEditor() {
+    const s = this.selected;
+    const segs = (s.Path || '').split('/');
+    const last = segs.pop();
     return html`
-      <div class="reader">
-        <header>
-          <h2>${this.selected.Path}</h2>
+      <div class="reader-col">
+        <div class="reader-title">
+          <h2>${s.Title || last}</h2>
+          <span class="badge ${s.Kind}">${s.Kind}</span>
           <div class="spacer"></div>
-          <button class="btn secondary" @click=${() => { this.editing = false; }}>Cancel</button>
-          <button class="btn primary" @click=${() => this.saveEdit()}>Save</button>
-        </header>
-        <textarea .value=${this.draft} @input=${(e) => { this.draft = e.target.value; }}></textarea>
+          <div class="actions">
+            <button class="btn ghost" @click=${() => { this.editing = false; }}>Cancel</button>
+            <button class="btn primary" @click=${() => this.saveEdit()}>Save changes</button>
+          </div>
+        </div>
+        <div class="reader-meta">
+          ${segs.map((p) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
+          <span class="crumb-seg last">${last}</span>
+          <span class="sep">·</span>
+          <span>editing v${s.CurrentVersion}</span>
+        </div>
+        <div class="editor-form">
+          <textarea .value=${this.draft} @input=${(e) => { this.draft = e.target.value; }}></textarea>
+        </div>
       </div>
     `;
   }

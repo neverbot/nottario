@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -284,6 +285,54 @@ func SearchDocsHandler(d DocsDeps) http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"hits": hits})
+	})
+}
+
+// ReadDocVersionHandler returns one historical version of a document.
+// Used by the docs UI history popover to load a previous version
+// read-only without rolling back the live document.
+func ReadDocVersionHandler(d DocsDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		q := r.URL.Query()
+		path := q.Get("path")
+		if strings.TrimSpace(path) == "" {
+			writeError(w, http.StatusBadRequest, "path is required")
+			return
+		}
+		v, err := strconv.Atoi(q.Get("version"))
+		if err != nil || v < 1 {
+			writeError(w, http.StatusBadRequest, "version must be a positive integer")
+			return
+		}
+		scope, pid, err := d.resolveScope(r.Context(), c, q.Get("scope"), q.Get("project_id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		doc, err := docs.Read(r.Context(), d.Pool, scope, pid, path)
+		if errors.Is(err, docs.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "document not found")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		ver, err := docs.ReadVersion(r.Context(), d.Pool, doc.ID, v)
+		if errors.Is(err, docs.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "version not found")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, ver)
 	})
 }
 
