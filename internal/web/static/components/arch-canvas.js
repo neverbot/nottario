@@ -8,9 +8,8 @@ import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
 // container around its children. The user never loses the parent when
 // they explore deeper.
 //
-// This is the FOUNDATION (child A of feature f9a7a488) — Layers 1+2
-// only: containment pack + top-level lane. No edge routing, no
-// interactions, no focus mode. Each lands in a sibling child task.
+// Children A+B of feature f9a7a488 (containment layout + edge routing).
+// Interactions and focus mode land in child C; detail panel in D.
 //
 // Layout contract:
 //   - Leaf node = 160×72 (rounded 8px, hairline #d1d9e0 border, white).
@@ -18,26 +17,29 @@ import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
 //     around a square-ish grid of its children.
 //   - Top-level lane = roots laid out left→right, `system` first,
 //     `external` last, rest in stored order.
-//   - Grid columns = ceil(sqrt(children.length)) so containers stay
-//     roughly square.
-//
-// All dimensions match the design tokens locked in task 5236da63.
+//   - Edges = orthogonal Manhattan routing with 4px rounded corners,
+//     1.5px hairline #59636e (blue when endpoint selected), label on
+//     a white pill on the longest segment, 6px triangle arrowhead.
+//   - Z-order: edges paint BEFORE nodes so node boxes always sit on
+//     top of any line that would otherwise cross them.
+
 class NottarioArchCanvas extends LitElement {
   static properties = {
     nodes:    { type: Array },
-    edges:    { type: Array }, // unused in this iteration; placeholder
+    edges:    { type: Array },
     expanded: { type: Object }, // Set<string> of node ids that are expanded
     selected: { type: String },
   };
 
-  // Layout constants. Centralised so child B (edge routing) and child
-  // C (interactions) can read them without re-deriving.
+  // Layout constants. Centralised so child C (interactions) can read
+  // them without re-deriving.
   static LEAF_W      = 160;
   static LEAF_H      = 72;
   static LABEL_STRIP = 28;
   static PAD         = 24;
   static GAP         = 16;
-  static CANVAS_PAD  = 24; // outer margin around the whole layout
+  static CANVAS_PAD  = 24;
+  static CORNER_R    = 4;
 
   static styles = css`
     :host { display: block; box-sizing: border-box; }
@@ -51,7 +53,6 @@ class NottarioArchCanvas extends LitElement {
       background: #ffffff;
     }
 
-    /* Node rectangles: container vs leaf differ only by fill. */
     .node rect.box {
       stroke: #d1d9e0;
       stroke-width: 1;
@@ -65,7 +66,6 @@ class NottarioArchCanvas extends LitElement {
       stroke-width: 2;
     }
 
-    /* Kind chip — coloured dot + label, top-left of every node. */
     .kind-chip circle { stroke: none; }
     .kind-chip text {
       font: 600 10.5px/1 ui-monospace, SFMono-Regular, monospace;
@@ -73,16 +73,10 @@ class NottarioArchCanvas extends LitElement {
       text-transform: uppercase;
       fill: #59636e;
     }
-
-    /* Caret on containers (top-right). Always pointing down for now;
-       interactions in child C will swap the glyph + handle clicks. */
     .caret {
       font: 600 11px/1 ui-monospace, SFMono-Regular, monospace;
       fill: #8b949e;
     }
-
-    /* Name + slug. Containers show them in their label strip; leaves
-       show them centered. */
     .name {
       font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       fill: #1f2328;
@@ -92,7 +86,25 @@ class NottarioArchCanvas extends LitElement {
       fill: #8b949e;
     }
 
-    /* Empty state */
+    /* Edges */
+    .edge {
+      fill: none;
+      stroke: #59636e;
+      stroke-width: 1.5;
+    }
+    .edge.selected { stroke: #0969da; stroke-width: 2; }
+    .edge-label rect {
+      fill: #ffffff;
+      stroke: #d1d9e0;
+      stroke-width: 1;
+      rx: 4;
+      ry: 4;
+    }
+    .edge-label text {
+      font: 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      fill: #1f2328;
+    }
+
     .empty-text {
       font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       fill: #8b949e;
@@ -108,10 +120,8 @@ class NottarioArchCanvas extends LitElement {
     this.selected = '';
   }
 
-  // ----- Layout -----
+  // ----- Tree construction -----
 
-  // Build a tree from the flat nodes array. Every node gets a children
-  // array (possibly empty). Roots are the nodes without parent_id.
   _buildTree() {
     const byID = new Map();
     for (const n of this.nodes || []) {
@@ -126,8 +136,6 @@ class NottarioArchCanvas extends LitElement {
         roots.push(wrapper);
       }
     }
-    // Top-level lane order: `system` kind first, `external` last,
-    // rest in their stored Position then Name.
     const rank = (k) => {
       if (k === 'system') return 0;
       if (k === 'external') return 2;
@@ -147,13 +155,11 @@ class NottarioArchCanvas extends LitElement {
         return (a.node.Name || '').localeCompare(b.node.Name || '');
       });
     }
-    return roots;
+    return { roots, byID };
   }
 
-  // Layer 1: containment pack. Recursive bottom-up sizing.
-  // Sets w/h on every wrapper. Containers are laid out as a
-  // ceil(sqrt(children.length))-column grid; total size is the grid
-  // bounding box + interior padding + the 28px top label strip.
+  // ----- Layout -----
+
   _packSize(w) {
     if (!w.children.length) {
       w.w = NottarioArchCanvas.LEAF_W;
@@ -162,12 +168,9 @@ class NottarioArchCanvas extends LitElement {
       return;
     }
     w._isContainer = true;
-    // Size children first.
     for (const child of w.children) this._packSize(child);
     const cols = Math.max(1, Math.ceil(Math.sqrt(w.children.length)));
     const rows = Math.ceil(w.children.length / cols);
-    // Row heights and column widths: take the max of the cells assigned
-    // to that row/col in row-major order.
     const colW = new Array(cols).fill(0);
     const rowH = new Array(rows).fill(0);
     w.children.forEach((c, i) => {
@@ -185,8 +188,6 @@ class NottarioArchCanvas extends LitElement {
     w._grid = { cols, rows, colW, rowH };
   }
 
-  // Layer 1b: place children within their parent (recursive). The
-  // root caller positions roots in the top-level lane.
   _placeChildren(w) {
     if (!w._isContainer) return;
     const { cols, rows, colW, rowH } = w._grid;
@@ -194,8 +195,6 @@ class NottarioArchCanvas extends LitElement {
     const pad = NottarioArchCanvas.PAD;
     const startX = w.x + pad;
     const startY = w.y + NottarioArchCanvas.LABEL_STRIP + pad;
-    // Pre-compute column x offsets and row y offsets from cumulative
-    // colW/rowH so children align in their cells.
     const colX = new Array(cols).fill(0);
     for (let i = 1; i < cols; i++) colX[i] = colX[i - 1] + colW[i - 1] + gap;
     const rowY = new Array(rows).fill(0);
@@ -203,20 +202,30 @@ class NottarioArchCanvas extends LitElement {
     w.children.forEach((c, i) => {
       const r = Math.floor(i / cols);
       const cc = i % cols;
-      // Center the child inside its (colW, rowH) cell, top-aligned to
-      // the row baseline so unequal-size children still feel orderly.
       c.x = startX + colX[cc] + (colW[cc] - c.w) / 2;
       c.y = startY + rowY[r];
       this._placeChildren(c);
     });
   }
 
-  // Layer 2: top-level lane. Roots are laid out left→right with GAP
-  // between them. Total canvas size is the bounding box + CANVAS_PAD
-  // on each side.
+  // Walk the laid-out tree and produce a flat array of nodes with
+  // absolute coordinates. Used to render edges as a separate flat
+  // layer BENEATH the nodes, and to look up endpoints when routing.
+  _flatten(roots) {
+    const out = [];
+    const walk = (w) => {
+      out.push(w);
+      for (const c of w.children) walk(c);
+    };
+    for (const r of roots) walk(r);
+    return out;
+  }
+
   _layout() {
-    const roots = this._buildTree();
-    if (!roots.length) return { roots: [], width: 600, height: 480 };
+    const { roots, byID } = this._buildTree();
+    if (!roots.length) {
+      return { roots: [], flat: [], byID, width: 600, height: 480 };
+    }
     for (const r of roots) this._packSize(r);
     const gap = NottarioArchCanvas.GAP;
     const pad = NottarioArchCanvas.CANVAS_PAD;
@@ -231,14 +240,149 @@ class NottarioArchCanvas extends LitElement {
     }
     return {
       roots,
+      flat: this._flatten(roots),
+      byID,
       width:  cursorX - gap + pad,
       height: maxH + pad * 2,
     };
   }
 
+  // ----- Edge routing -----
+
+  // Decide which side of each box the edge exits/enters from, based
+  // on the relative position of the two boxes. Returns absolute
+  // (x, y) anchor points + a direction vector for the first segment.
+  _anchors(src, tgt) {
+    const sCx = src.x + src.w / 2;
+    const sCy = src.y + src.h / 2;
+    const tCx = tgt.x + tgt.w / 2;
+    const tCy = tgt.y + tgt.h / 2;
+    const dx = tCx - sCx;
+    const dy = tCy - sCy;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      // Mostly horizontal: exit/enter on left/right faces.
+      if (dx > 0) {
+        return [
+          { x: src.x + src.w, y: sCy, dir: 'h' },
+          { x: tgt.x,         y: tCy, dir: 'h' },
+        ];
+      }
+      return [
+        { x: src.x,           y: sCy, dir: 'h' },
+        { x: tgt.x + tgt.w,   y: tCy, dir: 'h' },
+      ];
+    }
+    // Mostly vertical: exit/enter on top/bottom faces.
+    if (dy > 0) {
+      return [
+        { x: sCx, y: src.y + src.h, dir: 'v' },
+        { x: tCx, y: tgt.y,         dir: 'v' },
+      ];
+    }
+    return [
+      { x: sCx, y: src.y,           dir: 'v' },
+      { x: tCx, y: tgt.y + tgt.h,   dir: 'v' },
+    ];
+  }
+
+  // Build an L-shape Manhattan path from src-anchor to tgt-anchor.
+  // For horizontal anchors: go halfway in X, vertical bend, into tgt.
+  // For vertical anchors: same idea rotated.
+  _waypoints(s, t) {
+    if (s.dir === 'h' && t.dir === 'h') {
+      const midX = (s.x + t.x) / 2;
+      return [
+        { x: s.x, y: s.y },
+        { x: midX, y: s.y },
+        { x: midX, y: t.y },
+        { x: t.x, y: t.y },
+      ];
+    }
+    if (s.dir === 'v' && t.dir === 'v') {
+      const midY = (s.y + t.y) / 2;
+      return [
+        { x: s.x, y: s.y },
+        { x: s.x, y: midY },
+        { x: t.x, y: midY },
+        { x: t.x, y: t.y },
+      ];
+    }
+    // Mixed direction: simple L through the corner.
+    if (s.dir === 'h') {
+      return [
+        { x: s.x, y: s.y },
+        { x: t.x, y: s.y },
+        { x: t.x, y: t.y },
+      ];
+    }
+    return [
+      { x: s.x, y: s.y },
+      { x: s.x, y: t.y },
+      { x: t.x, y: t.y },
+    ];
+  }
+
+  // Convert waypoints into an SVG `d` path with rounded corners.
+  _pathD(points) {
+    if (points.length < 2) return '';
+    const r = NottarioArchCanvas.CORNER_R;
+    let d = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length - 1; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const next = points[i + 1];
+      const inDx = Math.sign(curr.x - prev.x);
+      const inDy = Math.sign(curr.y - prev.y);
+      const outDx = Math.sign(next.x - curr.x);
+      const outDy = Math.sign(next.y - curr.y);
+      // Shorter of (r, half of incoming/outgoing segment) so two close
+      // bends don't overlap.
+      const inLen = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+      const outLen = Math.hypot(next.x - curr.x, next.y - curr.y);
+      const cr = Math.min(r, inLen / 2, outLen / 2);
+      const beforeX = curr.x - inDx * cr;
+      const beforeY = curr.y - inDy * cr;
+      const afterX  = curr.x + outDx * cr;
+      const afterY  = curr.y + outDy * cr;
+      d += ` L ${beforeX} ${beforeY}`;
+      d += ` Q ${curr.x} ${curr.y} ${afterX} ${afterY}`;
+    }
+    const last = points[points.length - 1];
+    d += ` L ${last.x} ${last.y}`;
+    return d;
+  }
+
+  _routeEdge(edge, byID) {
+    const src = byID.get(edge.FromNodeID);
+    const tgt = byID.get(edge.ToNodeID);
+    if (!src || !tgt) return null;
+    if (typeof src.x !== 'number' || typeof tgt.x !== 'number') return null;
+    const [sA, tA] = this._anchors(src, tgt);
+    const waypoints = this._waypoints(sA, tA);
+    return { d: this._pathD(waypoints), waypoints, edge };
+  }
+
+  // Place the edge label on the longest segment. Prefer horizontal
+  // segments because the label reads horizontally — vertical segments
+  // are tolerated only if all horizontal candidates are shorter than
+  // the label fits.
+  _labelPosition(waypoints, labelWidth) {
+    let best = null;
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const a = waypoints[i];
+      const b = waypoints[i + 1];
+      const isHoriz = a.y === b.y;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const score = (isHoriz ? 1 : 0.4) * len; // bias horizontal
+      if (!best || score > best.score) {
+        best = { score, len, isHoriz, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+      }
+    }
+    return best;
+  }
+
   // ----- Render -----
 
-  // Recursively render a node + (if container) its children.
   _renderNode(w) {
     const n = w.node;
     const cls = [
@@ -246,15 +390,9 @@ class NottarioArchCanvas extends LitElement {
       w._isContainer ? 'container' : 'leaf',
       this.selected === n.ID ? 'selected' : '',
     ].filter(Boolean).join(' ');
-
-    // Kind chip dot colour comes from the project-defined kind palette
-    // (n.KindColor would be the eventual field; today we fall back to
-    // a muted default per kind name).
     const dot = kindDotColor(n.Kind);
     const kindLabel = (n.Kind || '').toLowerCase();
 
-    // Container content: label strip with kind chip + name + slug + caret.
-    // Leaf content: same elements but centered vertically inside the box.
     if (w._isContainer) {
       const labelY = NottarioArchCanvas.LABEL_STRIP;
       return svg`
@@ -262,24 +400,19 @@ class NottarioArchCanvas extends LitElement {
           <rect class="box" x="0" y="0" width=${w.w} height=${w.h}></rect>
           <line x1="0" y1=${labelY} x2=${w.w} y2=${labelY}
                 stroke="#eaeef2" stroke-width="1"></line>
-          <!-- Kind chip top-left -->
           <g class="kind-chip" transform="translate(10,10)">
             <circle cx="3" cy="6" r="3" fill=${dot}></circle>
             <text x="10" y="9">${kindLabel}</text>
           </g>
-          <!-- Caret top-right (static for now; child C wires the click) -->
           <text class="caret" x=${w.w - 12} y="14" text-anchor="end">▾</text>
-          <!-- Name + slug centered in the strip -->
           <text class="name" x=${w.w / 2} y="18" text-anchor="middle">${n.Name}</text>
           ${n.Slug ? svg`
             <text class="slug" x=${w.w / 2} y="46"
                   text-anchor="middle">${n.Slug}</text>
           ` : null}
-          ${w.children.map(c => this._renderNode(c))}
         </g>
       `;
     }
-    // Leaf
     return svg`
       <g class=${cls} transform=${`translate(${w.x},${w.y})`}>
         <rect class="box" x="0" y="0" width=${w.w} height=${w.h}></rect>
@@ -296,6 +429,59 @@ class NottarioArchCanvas extends LitElement {
     `;
   }
 
+  _renderEdge(routed) {
+    if (!routed) return null;
+    const e = routed.edge;
+    const isSelected = this.selected === e.FromNodeID || this.selected === e.ToNodeID;
+    const cls = 'edge' + (isSelected ? ' selected' : '');
+    const lastWP = routed.waypoints[routed.waypoints.length - 1];
+    const prevWP = routed.waypoints[routed.waypoints.length - 2];
+    // Arrowhead: a small triangle pointing along the last segment's direction.
+    const dx = Math.sign(lastWP.x - prevWP.x);
+    const dy = Math.sign(lastWP.y - prevWP.y);
+    const aSize = 7;
+    let arrow = '';
+    if (dx !== 0) {
+      // Horizontal entry
+      const baseX = lastWP.x - dx * aSize;
+      const yTop  = lastWP.y - aSize / 2;
+      const yBot  = lastWP.y + aSize / 2;
+      arrow = `M ${baseX} ${yTop} L ${lastWP.x} ${lastWP.y} L ${baseX} ${yBot} Z`;
+    } else {
+      const baseY = lastWP.y - dy * aSize;
+      const xLeft = lastWP.x - aSize / 2;
+      const xRight = lastWP.x + aSize / 2;
+      arrow = `M ${xLeft} ${baseY} L ${lastWP.x} ${lastWP.y} L ${xRight} ${baseY} Z`;
+    }
+    const stroke = isSelected ? '#0969da' : '#59636e';
+    return svg`
+      <g>
+        <path class=${cls} d=${routed.d}></path>
+        <path class=${cls} d=${arrow} fill=${stroke} stroke="none"></path>
+      </g>
+    `;
+  }
+
+  _renderEdgeLabel(routed) {
+    if (!routed || !routed.edge.Label) return null;
+    const label = routed.edge.Label;
+    // Rough text width estimate (no font metrics in SVG land):
+    // 11px sans, ~6.5px per character for mixed casing.
+    const textWidth = Math.max(24, label.length * 6.5);
+    const pillW = textWidth + 10;
+    const pillH = 18;
+    const pos = this._labelPosition(routed.waypoints, pillW);
+    if (!pos) return null;
+    const x = pos.mx - pillW / 2;
+    const y = pos.my - pillH / 2;
+    return svg`
+      <g class="edge-label">
+        <rect x=${x} y=${y} width=${pillW} height=${pillH}></rect>
+        <text x=${pos.mx} y=${pos.my + 4} text-anchor="middle">${label}</text>
+      </g>
+    `;
+  }
+
   render() {
     const layout = this._layout();
     if (!layout.roots.length) {
@@ -307,20 +493,32 @@ class NottarioArchCanvas extends LitElement {
         </svg>
       `;
     }
+    // Resolve edges to (source, target) wrappers from the layout.
+    const wByID = new Map(layout.flat.map(w => [w.node.ID, w]));
+    const routedEdges = (this.edges || [])
+      .map(e => this._routeEdge(e, wByID))
+      .filter(Boolean);
+
+    // Z-order:
+    //   1. Container shells (so containers form the visual context).
+    //   2. Edges (paint above container interiors).
+    //   3. Leaves (so edges never visually cross a leaf node).
+    //   4. Labels on top so the pill is always readable.
+    const containers = layout.flat.filter(w => w._isContainer);
+    const leaves     = layout.flat.filter(w => !w._isContainer);
     return html`
       <svg viewBox=${`0 0 ${layout.width} ${layout.height}`}
            xmlns="http://www.w3.org/2000/svg"
            preserveAspectRatio="xMidYMid meet">
-        ${layout.roots.map(r => this._renderNode(r))}
+        ${containers.map(w => this._renderNode(w))}
+        ${routedEdges.map(r => this._renderEdge(r))}
+        ${leaves.map(w => this._renderNode(w))}
+        ${routedEdges.map(r => this._renderEdgeLabel(r))}
       </svg>
     `;
   }
 }
 
-// Default colours per common kind. Projects can override via their
-// own per-kind palette once that lands (the eventual `node.KindColor`
-// field). These swatches are deliberately muted, OKLCH-tinted neutrals
-// paired with the GitHub-blue accent — never loud saturated colours.
 function kindDotColor(kind) {
   switch ((kind || '').toLowerCase()) {
     case 'system':   return '#0969da';
