@@ -391,6 +391,10 @@ func DeleteTaskHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := tasks.Delete(r.Context(), d.Pool, tid); err != nil {
+			if errors.Is(err, tasks.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "task not found")
+				return
+			}
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
