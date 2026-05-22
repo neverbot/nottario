@@ -901,13 +901,22 @@ class NottarioGantt extends LitElement {
             <text class="priority-label" x=${b.x + 4} y=${headerH - 4}>${this._priorityLabel(b.priority)}</text>
           `)}
 
-          <!-- Band rows (empty bands collapse to height 0 and skip render). -->
+          <!-- Band rows (empty bands collapse to height 0 and skip render).
+               The alternation counter is independent of the displayBands
+               index so that hidden bands (height 0) don't break the
+               stripe pattern of the bands that DO render. Features has
+               its own class and is excluded from the count. -->
+          ${(() => { this._visibleBandIdx = 0; return null; })()}
           ${displayBands.map((b, bi) => {
             if (bandHeights[bi] === 0) return null;
             const isFeatures = b.role.ID === '__features__';
-            const cls = isFeatures
-              ? 'band-bg features'
-              : `band-bg ${bi % 2 ? 'alt' : ''}`;
+            let cls;
+            if (isFeatures) {
+              cls = 'band-bg features';
+            } else {
+              cls = `band-bg ${this._visibleBandIdx % 2 ? 'alt' : ''}`;
+              this._visibleBandIdx++;
+            }
             return svg`
               <rect class=${cls}
                     x="0" y=${bandTops[bi]}
