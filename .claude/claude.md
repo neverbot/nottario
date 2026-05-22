@@ -43,9 +43,12 @@ artefacts written to disk must be in English regardless.
 - **Frontend:** vanilla CSS + Lit (~5KB, ES modules, no build step).
   No React/Vue/Svelte/Angular. Charts hand-rolled (style cue:
   `internal/design/chart.js` in owl).
-- **Documented exception:** the architectural graph uses **dagre**
-  as layout engine and renders to SVG. It is the only visualisation
-  library allowed.
+- **No JS visualisation libraries.** Every chart in the app is
+  hand-rolled SVG: Gantt (`pages/gantt.js`) and the architecture
+  diagram (`components/arch-canvas.js`). The dagre exception that
+  used to live here was retired in the arch redesign (feature
+  `f9a7a488`) once the hand-rolled containment canvas reached
+  feature parity.
 - **Database:** Postgres always. SQLite is off the table.
   The backend is fully on **sqlc**; all queries live in
   `internal/db/queries/*.sql` and the generated Go is committed at

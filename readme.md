@@ -228,7 +228,6 @@ Backend (Go):
 Frontend (vanilla, no build step):
 
 - [Lit](https://lit.dev) — web-components framework.
-- [dagre](https://github.com/dagrejs/dagre) — graph layout for the architecture view.
 
 Infrastructure:
 
