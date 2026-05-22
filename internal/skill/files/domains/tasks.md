@@ -174,6 +174,17 @@ The only correct way to move a task between states. It manages
 - `doing` → fills `actual_start` (only if currently null).
 - `done` → fills `actual_end` and preserves any earlier `actual_start`.
 
+#### Always link commits before closing
+
+Before `set_state done`, call `nottario.tasks.link_commit { repo,
+sha }` once per commit the task produced. This is non-negotiable
+whenever the work yielded code: the Commits panel in the UI, the
+"what shipped here" queries and any traceability audit all depend on
+the structured link, not on prose in a comment. The bar is: a future
+reader of the closed task can jump straight to the diff without
+grepping git. Tasks that are pure documentation or bug-recovery in
+the DB legitimately have no commit; everything else does.
+
 #### Preconditions are enforced
 
 Closing a task (`state: "done"`) is **rejected** when the task has at
