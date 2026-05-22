@@ -3,6 +3,8 @@ import dagre from '/static/vendor/dagre/dagre.js';
 import { subscribe } from '/static/realtime.js';
 import '/static/components/markdown.js';
 import '/static/components/arch-canvas.js';
+import '/static/components/task-chip.js';
+import '/static/components/search-input.js';
 
 // <nottario-arch-graph> renders the architecture diagram as boxes
 // with arrows. Navigation is by drill-down: the view shows the
@@ -28,7 +30,182 @@ class NottarioArchGraph extends LitElement {
   };
 
   static styles = css`
-    :host { display: block; }
+    :host { display: block; box-sizing: border-box; }
+    * { box-sizing: border-box; }
+
+    /* ---- Next view (feature f9a7a488) ---- */
+    .next-root { display: flex; flex-direction: column; gap: 12px; }
+    .next-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .next-toolbar .spacer { flex: 1; }
+    .next-toolbar a.legacy-link {
+      color: #59636e;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .next-toolbar a.legacy-link:hover { color: #1f2328; }
+    .next-btn {
+      padding: 4px 12px;
+      font: inherit;
+      font-size: 12px;
+      background: #ffffff;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      cursor: pointer;
+      color: #1f2328;
+    }
+    .next-btn:hover { background: #f6f8fa; border-color: #afb8c1; }
+
+    .next-split {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 0;
+      border: 1px solid #d1d9e0;
+      border-radius: 8px;
+      overflow: hidden;
+      min-height: 70vh;
+      background: #ffffff;
+    }
+    .next-canvas {
+      display: block;
+      border-right: 1px solid #d1d9e0;
+      min-height: 70vh;
+    }
+
+    .next-panel {
+      padding: 18px 20px 24px;
+      overflow: auto;
+      max-height: 70vh;
+      font-size: 13px;
+      color: #1f2328;
+    }
+    .next-panel .next-empty {
+      color: #8b949e;
+      font-style: italic;
+      margin: 12px 0 0;
+    }
+    .next-head {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+    .next-head h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: #1f2328;
+    }
+    .next-kind-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font: 600 10.5px/1 ui-monospace, SFMono-Regular, monospace;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #59636e;
+    }
+    .next-kind-chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .next-crumb {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      color: #8b949e;
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+    }
+    .next-crumb a { color: #59636e; cursor: pointer; }
+    .next-crumb a:hover { color: #0969da; }
+    .next-crumb .sep { color: #d0d7de; }
+
+    .next-meta-row {
+      margin-top: 10px;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .next-meta-row .lbl {
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .next-meta-row code {
+      font-size: 12px;
+      color: #1f2328;
+      background: #f6f8fa;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .next-section { margin-top: 18px; }
+    .next-section .eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #8b949e;
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+    .next-section .empty {
+      font-size: 13px;
+      color: #8b949e;
+      font-style: italic;
+      margin: 0;
+    }
+
+    .next-edges {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .next-edge-chip {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 6px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #f6f8fa;
+      cursor: pointer;
+      font-size: 12px;
+      color: #1f2328;
+      text-decoration: none;
+    }
+    .next-edge-chip:hover {
+      border-color: #0969da;
+      background: #ddf4ff;
+    }
+    .next-edge-chip .lbl { font-weight: 500; }
+    .next-edge-chip .from, .next-edge-chip .to {
+      color: #59636e;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .next-tasks {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    /* ---- Legacy view (dagre) styles below ---- */
     .header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .breadcrumb { display: flex; gap: 4px; align-items: center; font-size: 13px; }
     .breadcrumb a {
@@ -630,28 +807,12 @@ class NottarioArchGraph extends LitElement {
   render() {
     if (this.allNodes === null) return html`<p>Loading…</p>`;
     // Opt-in preview of the redesigned hand-rolled canvas (feature
-    // f9a7a488, child A). Visit /arch/diagram?next to see the new
-    // containment layout side-by-side with the legacy dagre view.
+    // f9a7a488). Visit /arch/diagram?next to see the new layout +
+    // toolbar + right-rail detail panel.
     // Drops cleanly when child E retires the legacy view entirely.
     if (typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).get('next') !== null) {
-      const nodesArr = this.allNodes ? Object.values(this.allNodes) : [];
-      return html`
-        <div class="header">
-          <div class="breadcrumb">
-            <a @click=${() => { window.location.search = ''; }}>← Back to legacy view</a>
-          </div>
-          <div style="flex:1"></div>
-        </div>
-        <nottario-arch-canvas
-          .nodes=${nodesArr}
-          .edges=${this.allEdges || []}
-          .selected=${this.selectedSlug && this.allNodes[this.selectedSlug]
-                       ? this.allNodes[this.selectedSlug].ID : ''}
-          style="display:block;border:1px solid #d1d9e0;border-radius:8px;background:#ffffff">
-        </nottario-arch-canvas>
-        <div class="hint">preview: new hand-rolled canvas (feature f9a7a488 child A)</div>
-      `;
+      return this._renderNext();
     }
     const crumbs = this.breadcrumb();
     const vb = this.viewBox;
@@ -689,6 +850,214 @@ class NottarioArchGraph extends LitElement {
         ${this.renderPanel()}
         <div class="hint">scroll to zoom · drag background to pan · click box to inspect · click ▾ box to drill in</div>
       </div>
+    `;
+  }
+
+  // ----- "Next" view (feature f9a7a488 children A-D) -----
+
+  // Read-only convenience getters that walk the loaded nodes.
+  _nodesArr() {
+    return this.allNodes ? Object.values(this.allNodes) : [];
+  }
+  _nodeByID(id) {
+    if (!this.allNodes) return null;
+    return Object.values(this.allNodes).find(n => n.ID === id) || null;
+  }
+  _selectedID() {
+    if (!this.selectedSlug || !this.allNodes) return '';
+    const n = this.allNodes[this.selectedSlug];
+    return n ? n.ID : '';
+  }
+
+  // Compute the path from root to the selected node so the detail
+  // panel can render the slug breadcrumb (system / backend / auth).
+  _ancestorChain(id) {
+    if (!id) return [];
+    const chain = [];
+    let cur = this._nodeByID(id);
+    let guard = 0;
+    while (cur && guard++ < 32) {
+      chain.unshift(cur);
+      if (!cur.ParentID) break;
+      cur = this._nodeByID(cur.ParentID);
+    }
+    return chain;
+  }
+
+  _onCanvasSelect(e) {
+    const id = e.detail.id;
+    const n = this._nodeByID(id);
+    if (!n) { this.selectedSlug = null; return; }
+    this.selectedSlug = n.Slug;
+    this.loadDetail(n.Slug);
+  }
+  _onCanvasExpandChanged(e) {
+    this._nextExpanded = new Set(e.detail.expanded);
+    this._writeNextHash();
+  }
+  _onCanvasFocusChanged(e) {
+    this._nextFocus = e.detail.id || '';
+    this._writeNextHash();
+  }
+
+  _writeNextHash() {
+    if (typeof window === 'undefined') return;
+    const parts = [];
+    if (this._nextExpanded && this._nextExpanded.size) {
+      parts.push('expand=' + [...this._nextExpanded].join(','));
+    }
+    if (this._nextFocus) parts.push('focus=' + this._nextFocus);
+    const hash = parts.join('&');
+    history.replaceState(null, '', '#' + hash + window.location.search);
+  }
+
+  _renderNext() {
+    if (!this._nextInited) {
+      this._nextInited = true;
+      // Initial expanded/focus from URL hash.
+      const h = new URLSearchParams((window.location.hash || '#').slice(1));
+      const exp = h.get('expand');
+      this._nextExpanded = new Set(exp ? exp.split(',').filter(Boolean) : []);
+      this._nextFocus = h.get('focus') || '';
+      this._nextQuery = '';
+    }
+    const nodesArr = this._nodesArr();
+    const selectedID = this._selectedID();
+    const sel = selectedID ? this._nodeByID(selectedID) : null;
+    const inEdges = sel ? (this.allEdges || []).filter(e => e.ToNodeID === sel.ID) : [];
+    const outEdges = sel ? (this.allEdges || []).filter(e => e.FromNodeID === sel.ID) : [];
+    const ancestors = sel ? this._ancestorChain(sel.ID) : [];
+
+    return html`
+      <div class="next-root">
+        <div class="next-toolbar">
+          <a class="legacy-link" @click=${() => { window.location.search = ''; }}>← Legacy view</a>
+          <div class="spacer"></div>
+          <nottario-search-input
+            placeholder="Filter nodes…"
+            .value=${this._nextQuery}
+            @input=${(e) => { this._nextQuery = e.detail.value; this.requestUpdate(); }}
+            @clear=${() => { this._nextQuery = ''; this.requestUpdate(); }}
+            style="width:240px"></nottario-search-input>
+          <button class="next-btn" @click=${() => this._archCanvas()?.fit()}>Fit</button>
+        </div>
+
+        <div class="next-split">
+          <nottario-arch-canvas
+              class="next-canvas"
+              .nodes=${nodesArr}
+              .edges=${this.allEdges || []}
+              .expanded=${this._nextExpanded}
+              .focus=${this._nextFocus}
+              .selected=${selectedID}
+              .query=${this._nextQuery}
+              @select=${(e) => this._onCanvasSelect(e)}
+              @expand-changed=${(e) => this._onCanvasExpandChanged(e)}
+              @focus-changed=${(e) => this._onCanvasFocusChanged(e)}>
+          </nottario-arch-canvas>
+
+          ${this._renderNextPanel(sel, ancestors, inEdges, outEdges)}
+        </div>
+      </div>
+    `;
+  }
+
+  _archCanvas() {
+    return this.shadowRoot?.querySelector('nottario-arch-canvas');
+  }
+
+  _renderNextPanel(sel, ancestors, inEdges, outEdges) {
+    if (!sel) {
+      return html`
+        <aside class="next-panel">
+          <p class="next-empty">Select a node to see its detail.</p>
+        </aside>
+      `;
+    }
+    const detail = this.selectedDetail;
+    const kindColor = (() => {
+      switch ((sel.Kind || '').toLowerCase()) {
+        case 'system':   return '#0969da';
+        case 'service':  return '#1f883d';
+        case 'module':   return '#8250df';
+        case 'external': return '#bc4c00';
+        case 'data':     return '#9a6700';
+        case 'queue':    return '#cf222e';
+        default:         return '#59636e';
+      }
+    })();
+    return html`
+      <aside class="next-panel">
+        <header class="next-head">
+          <div class="next-kind-chip">
+            <span class="dot" style=${`background:${kindColor}`}></span>
+            <span class="lbl">${(sel.Kind || '').toLowerCase()}</span>
+          </div>
+          <h2>${sel.Name}</h2>
+        </header>
+        <div class="next-crumb">
+          ${ancestors.map((a, i) => html`
+            ${i > 0 ? html`<span class="sep">/</span>` : null}
+            <a @click=${() => this._onCanvasSelect({ detail: { id: a.ID } })}>${a.Slug}</a>
+          `)}
+        </div>
+        ${sel.LinkedRepo ? html`
+          <div class="next-meta-row">
+            <span class="lbl">repo</span>
+            <code>${sel.LinkedRepo}${sel.LinkedPath ? '/' + sel.LinkedPath : ''}</code>
+          </div>
+        ` : null}
+        ${sel.DescriptionMD ? html`
+          <section class="next-section">
+            <nottario-markdown
+              project-id=${this.projectId}
+              .source=${sel.DescriptionMD}></nottario-markdown>
+          </section>
+        ` : null}
+
+        <section class="next-section">
+          <h4 class="eyebrow">Incoming edges</h4>
+          ${inEdges.length === 0
+            ? html`<p class="empty">No incoming edges.</p>`
+            : html`<div class="next-edges">
+                ${inEdges.map(e => html`
+                  <a class="next-edge-chip"
+                     @click=${() => this._onCanvasSelect({ detail: { id: e.FromNodeID } })}>
+                    <span class="lbl">${e.Label || e.Kind || 'connects'}</span>
+                    <span class="from">← ${this._nodeByID(e.FromNodeID)?.Name || '?'}</span>
+                  </a>
+                `)}
+              </div>`}
+        </section>
+
+        <section class="next-section">
+          <h4 class="eyebrow">Outgoing edges</h4>
+          ${outEdges.length === 0
+            ? html`<p class="empty">No outgoing edges.</p>`
+            : html`<div class="next-edges">
+                ${outEdges.map(e => html`
+                  <a class="next-edge-chip"
+                     @click=${() => this._onCanvasSelect({ detail: { id: e.ToNodeID } })}>
+                    <span class="lbl">${e.Label || e.Kind || 'connects'}</span>
+                    <span class="to">→ ${this._nodeByID(e.ToNodeID)?.Name || '?'}</span>
+                  </a>
+                `)}
+              </div>`}
+        </section>
+
+        ${detail?.LinkedTasks?.length ? html`
+          <section class="next-section">
+            <h4 class="eyebrow">Linked tasks</h4>
+            <div class="next-tasks">
+              ${detail.LinkedTasks.map(t => html`
+                <nottario-task-chip
+                  project-id=${this.projectId}
+                  .task=${t}></nottario-task-chip>
+              `)}
+            </div>
+          </section>
+        ` : null}
+      </aside>
     `;
   }
 }
