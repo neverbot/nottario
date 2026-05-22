@@ -110,13 +110,16 @@ class NottarioArchCanvas extends LitElement {
     .caret {
       font: 600 11px/1 ui-monospace, SFMono-Regular, monospace;
       fill: #8b949e;
-      cursor: pointer;
+      pointer-events: none;
     }
-    .caret-hit {
+    /* Hit overlays — transparent fill, sit ON TOP of the strip content
+       so clicks anywhere in the label strip toggle expand. */
+    .caret-hit, .strip-hit {
       fill: transparent;
       cursor: pointer;
     }
-    .caret-hit:hover + text.caret { fill: #1f2328; }
+    .strip-hit:hover ~ text.caret,
+    .caret-hit:hover  ~ text.caret { fill: #1f2328; }
     .name {
       font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       fill: #1f2328;
@@ -713,14 +716,17 @@ class NottarioArchCanvas extends LitElement {
             <circle cx="3" cy="6" r="3" fill=${dot}></circle>
             <text x="10" y="9">${kindLabel}</text>
           </g>
-          <rect class="caret-hit" x=${w.w - 24} y="0" width="24" height="28"
-                @click=${(e) => this._onCaretClick(e, w)}></rect>
-          <text class="caret" x=${w.w - 12} y="18" text-anchor="end">${caret}</text>
           <text class="name" x=${w.w / 2} y="18" text-anchor="middle">${n.Name}</text>
           ${n.Slug ? svg`
             <text class="slug" x=${w.w / 2} y="46"
                   text-anchor="middle">${n.Slug}</text>
           ` : null}
+          <!-- Caret glyph (visual hint only; pointer-events: none). -->
+          <text class="caret" x=${w.w - 16} y="18" text-anchor="middle">${caret}</text>
+          <!-- Whole header strip catches clicks for expand/collapse.
+               Rendered LAST so it sits on top of the strip content. -->
+          <rect class="strip-hit" x="0" y="0" width=${w.w} height=${NottarioArchCanvas.LABEL_STRIP}
+                @click=${(e) => this._onCaretClick(e, w)}></rect>
         </g>
       `;
     }
@@ -740,9 +746,9 @@ class NottarioArchCanvas extends LitElement {
           <text x="10" y="9">${kindLabel}</text>
         </g>
         ${w._isContainer ? svg`
-          <rect class="caret-hit" x=${w.w - 24} y="0" width="24" height="28"
+          <text class="caret" x=${w.w - 16} y="18" text-anchor="middle">${caret}</text>
+          <rect class="caret-hit" x=${w.w - 32} y="0" width="32" height="28"
                 @click=${(e) => this._onCaretClick(e, w)}></rect>
-          <text class="caret" x=${w.w - 12} y="18" text-anchor="end">${caret}</text>
         ` : null}
         <text class="name" x=${w.w / 2} y=${w.h / 2 - 2} text-anchor="middle">${n.Name}</text>
         ${hint ? svg`
