@@ -39,8 +39,12 @@ type Querier interface {
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
 	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
+	// Resolves an architecture node chip by slug.
+	GetArchChipBySlug(ctx context.Context, arg GetArchChipBySlugParams) (GetArchChipBySlugRow, error)
 	GetArchNodeBySlug(ctx context.Context, arg GetArchNodeBySlugParams) (GetArchNodeBySlugRow, error)
 	GetArchNodeIDBySlug(ctx context.Context, arg GetArchNodeIDBySlugParams) (uuid.UUID, error)
+	// Resolves a doc chip by its logical path within a project.
+	GetDocChipByPath(ctx context.Context, arg GetDocChipByPathParams) (GetDocChipByPathRow, error)
 	GetDocumentByPath(ctx context.Context, arg GetDocumentByPathParams) (GetDocumentByPathRow, error)
 	GetDocumentForDelete(ctx context.Context, arg GetDocumentForDeleteParams) (GetDocumentForDeleteRow, error)
 	GetDocumentVersion(ctx context.Context, arg GetDocumentVersionParams) (DocumentVersion, error)
@@ -48,7 +52,19 @@ type Querier interface {
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
 	GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (GetProjectByIDOrSlugRow, error)
+	// Reads the body and frontmatter of a single skill-override document
+	// keyed by its full path (e.g. 'global/skills/domains/tasks.md').
+	// Returns ErrNoRows when there is no override for that path.
+	GetSkillOverride(ctx context.Context, path string) (GetSkillOverrideRow, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
+	// Queries used by the markdown renderer to resolve cross-domain chip
+	// references ([[task:N]], [[doc:path]], [[arch:slug]]) into the
+	// target's current title for inline display.
+	// Resolves a task chip by the 8-char (or longer) UUID prefix the user
+	// typed. We match prefix with LIKE on the text form of the UUID. The
+	// query is scoped to a single project to keep the result deterministic
+	// when the same prefix matches across projects.
+	GetTaskChipByShortID(ctx context.Context, arg GetTaskChipByShortIDParams) (GetTaskChipByShortIDRow, error)
 	GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error)
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
@@ -93,6 +109,11 @@ type Querier interface {
 	ListProjectRoles(ctx context.Context, projectID uuid.UUID) ([]ListProjectRolesRow, error)
 	ListProjectsAdmin(ctx context.Context) ([]ListProjectsAdminRow, error)
 	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]ListProjectsForUserRow, error)
+	// Lists every global-scope skill document path. The skill bundle
+	// consults this list to union embedded files with user-provided
+	// overrides; returned paths still include the 'global/skills/' prefix
+	// and the caller trims it.
+	ListSkillOverridePaths(ctx context.Context, pathPrefix string) ([]string, error)
 	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]TaskComment, error)
 	ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommitsRow, error)
 	// Optional filters: state, type, assignee, target_role, parent_task.

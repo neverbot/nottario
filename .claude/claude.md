@@ -128,6 +128,17 @@ artefacts written to disk must be in English regardless.
   `set_state doing`. Otherwise the task sits doing with no owner.
 - **Use the MCP for task CRUD/state transitions**, not direct SQL.
   SQL is for read-only inspection or bug-recovery only.
+- **Link commits before closing a task.** Whenever the work landed
+  produced one or more commits, call
+  `nottario.tasks.link_commit { repo, sha }` for each commit BEFORE
+  `set_state done` (or right after, but never skip it). The closing
+  comment can reference the commits inline for human readers, but the
+  structured link is what powers the UI's Commits panel, the
+  "what shipped in this task" queries and any future traceability
+  audit. The bar is: a future agent reading a closed task should be
+  able to jump straight to the diff without grep. Bug-recovery /
+  documentation-only tasks legitimately have no commit; everything
+  else does.
 - **Atomic pickup:** call `nottario.tasks.claim_next` (no filter or
   with role/assignee) or `nottario.tasks.claim` (specific id). The
   legacy three-call pattern (`next` + `update` + `set_state`) is
