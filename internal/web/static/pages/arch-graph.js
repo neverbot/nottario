@@ -2,6 +2,7 @@ import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
 import dagre from '/static/vendor/dagre/dagre.js';
 import { subscribe } from '/static/realtime.js';
 import '/static/components/markdown.js';
+import '/static/components/arch-canvas.js';
 
 // <nottario-arch-graph> renders the architecture diagram as boxes
 // with arrows. Navigation is by drill-down: the view shows the
@@ -628,6 +629,30 @@ class NottarioArchGraph extends LitElement {
 
   render() {
     if (this.allNodes === null) return html`<p>Loading…</p>`;
+    // Opt-in preview of the redesigned hand-rolled canvas (feature
+    // f9a7a488, child A). Visit /arch/diagram?next to see the new
+    // containment layout side-by-side with the legacy dagre view.
+    // Drops cleanly when child E retires the legacy view entirely.
+    if (typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('next') !== null) {
+      const nodesArr = this.allNodes ? Object.values(this.allNodes) : [];
+      return html`
+        <div class="header">
+          <div class="breadcrumb">
+            <a @click=${() => { window.location.search = ''; }}>← Back to legacy view</a>
+          </div>
+          <div style="flex:1"></div>
+        </div>
+        <nottario-arch-canvas
+          .nodes=${nodesArr}
+          .edges=${this.allEdges || []}
+          .selected=${this.selectedSlug && this.allNodes[this.selectedSlug]
+                       ? this.allNodes[this.selectedSlug].ID : ''}
+          style="display:block;border:1px solid #d1d9e0;border-radius:8px;background:#ffffff">
+        </nottario-arch-canvas>
+        <div class="hint">preview: new hand-rolled canvas (feature f9a7a488 child A)</div>
+      `;
+    }
     const crumbs = this.breadcrumb();
     const vb = this.viewBox;
     const vbStr = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;
