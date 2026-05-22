@@ -486,19 +486,297 @@ class NottarioArchCanvas extends LitElement {
     const waypoints = this._waypoints(sA, tA);
     return { d: this._pathD(waypoints), waypoints, edge };
   }
-  _labelPosition(waypoints) {
+
+  // ----- A* obstacle-avoiding router (layout v2) -----
+
+  // Build a coarse 8px grid over the laid-out canvas where each leaf
+  // and each collapsed container is a blocked cell (with a 4px buffer).
+  // Expanded containers DON'T block — only their label strip (top
+  // 28px) does, so edges can route through the inner padding of a
+  // container as long as they don't cross a real child.
+  static GRID_CELL  = 8;
+  static GRID_BUF   = 4;
+
+  _buildObstacles(layout) {
+    const cell = NottarioArchCanvas.GRID_CELL;
+    const buf  = NottarioArchCanvas.GRID_BUF;
+    const W = Math.ceil((layout.width  + cell * 4) / cell);
+    const H = Math.ceil((layout.height + cell * 4) / cell);
+    const grid = new Uint8Array(W * H);
+    for (const w of layout.flat) {
+      // Containers when expanded only block their label strip; their
+      // interior is "passable" so edges can use the inner padding.
+      let topH = w.h;
+      if (w._isContainer && w._expanded) topH = NottarioArchCanvas.LABEL_STRIP;
+      const x0 = Math.max(0, Math.floor((w.x - buf) / cell));
+      const y0 = Math.max(0, Math.floor((w.y - buf) / cell));
+      const x1 = Math.min(W, Math.ceil((w.x + w.w + buf) / cell));
+      const y1 = Math.min(H, Math.ceil((w.y + topH + buf) / cell));
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) grid[y * W + x] = 1;
+      }
+    }
+    return { grid, W, H, cell };
+  }
+
+  // Pick the grid cell adjacent to a node's chosen exit face, just
+  // outside the obstacle so A* starts on a free cell. Returns null
+  // if no free cell can be found.
+  _anchorCell(node, side, obs) {
+    const { cell, grid, W, H } = obs;
+    const cx = node.x + node.w / 2;
+    const cy = node.y + node.h / 2;
+    let ax, ay;
+    switch (side) {
+      case 'right':  ax = node.x + node.w + cell;      ay = cy; break;
+      case 'left':   ax = node.x - cell;               ay = cy; break;
+      case 'bottom': ax = cx; ay = node.y + node.h + cell;     break;
+      case 'top':    ax = cx; ay = node.y - cell;              break;
+      default:       ax = cx; ay = cy;
+    }
+    let gx = Math.round(ax / cell);
+    let gy = Math.round(ay / cell);
+    if (gx < 0 || gx >= W || gy < 0 || gy >= H) return null;
+    // If we landed on an obstacle (close clearance vs another node),
+    // shuffle outward in the exit direction up to 4 cells.
+    for (let i = 0; i < 4 && grid[gy * W + gx]; i++) {
+      switch (side) {
+        case 'right':  gx++; break;
+        case 'left':   gx--; break;
+        case 'bottom': gy++; break;
+        case 'top':    gy--; break;
+      }
+      if (gx < 0 || gx >= W || gy < 0 || gy >= H) return null;
+    }
+    if (grid[gy * W + gx]) return null;
+    return { x: gx, y: gy, side };
+  }
+
+  // 4-connected A* over the obstacle grid with a small direction-change
+  // penalty so paths prefer long straight runs. Cells `start` and
+  // `goal` are guaranteed free by the caller (`_anchorCell`).
+  _astar(obs, start, goal) {
+    const { grid, W, H } = obs;
+    const idx = (x, y) => y * W + x;
+    const heur = (x, y) => Math.abs(goal.x - x) + Math.abs(goal.y - y);
+    // Open set as a Map keyed by "x,y"; we linear-scan for the best
+    // f. Grid is small (<= ~12k cells); this is fine in practice.
+    const open = new Map();
+    const closed = new Set();
+    const skey = `${start.x},${start.y}`;
+    open.set(skey, { x: start.x, y: start.y, g: 0, h: heur(start.x, start.y), parent: null, dir: null });
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    while (open.size > 0) {
+      let best = null, bestKey = '';
+      for (const [k, v] of open) {
+        if (!best || (v.g + v.h) < (best.g + best.h)) { best = v; bestKey = k; }
+      }
+      if (best.x === goal.x && best.y === goal.y) {
+        const path = [];
+        let cur = best;
+        while (cur) { path.push([cur.x, cur.y]); cur = cur.parent; }
+        return path.reverse();
+      }
+      open.delete(bestKey);
+      closed.add(bestKey);
+      for (const [dx, dy] of dirs) {
+        const nx = best.x + dx, ny = best.y + dy;
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+        const k = `${nx},${ny}`;
+        if (closed.has(k)) continue;
+        // Goal cell is always allowed even if "blocked" (it's the
+        // node's own face); same for start. All other obstacle
+        // cells are off-limits.
+        if (grid[idx(nx, ny)] && !(nx === goal.x && ny === goal.y)) continue;
+        const turn = best.dir && (best.dir[0] !== dx || best.dir[1] !== dy);
+        const g = best.g + 1 + (turn ? 2 : 0);
+        const existing = open.get(k);
+        if (existing && existing.g <= g) continue;
+        open.set(k, { x: nx, y: ny, g, h: heur(nx, ny), parent: best, dir: [dx, dy] });
+      }
+    }
+    return null;
+  }
+
+  // Drop collinear waypoints between two segments so the simplified
+  // path keeps only the corner cells.
+  _simplifyOrtho(points) {
+    if (points.length < 3) return points;
+    // Pass 1 — drop exact duplicates (consecutive points at the same
+    // coords introduce zero-length corner curves in the rendered path).
+    const dedup = [points[0]];
+    for (let i = 1; i < points.length; i++) {
+      const a = dedup[dedup.length - 1];
+      const b = points[i];
+      if (a.x === b.x && a.y === b.y) continue;
+      dedup.push(b);
+    }
+    if (dedup.length < 3) return dedup;
+    // Pass 2 — drop collinear interior points so each path bend
+    // appears exactly once.
+    const out = [dedup[0]];
+    for (let i = 1; i < dedup.length - 1; i++) {
+      const a = out[out.length - 1];
+      const b = dedup[i];
+      const c = dedup[i + 1];
+      const colinear =
+        (a.x === b.x && b.x === c.x) ||
+        (a.y === b.y && b.y === c.y);
+      if (!colinear) out.push(b);
+    }
+    out.push(dedup[dedup.length - 1]);
+    return out;
+  }
+
+  // Decide the source and target exit faces based on relative position
+  // (same logic as `_anchors`) and return them as side identifiers.
+  _chooseSides(src, tgt) {
+    const sCx = src.x + src.w / 2;
+    const sCy = src.y + src.h / 2;
+    const tCx = tgt.x + tgt.w / 2;
+    const tCy = tgt.y + tgt.h / 2;
+    const dx = tCx - sCx;
+    const dy = tCy - sCy;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      return dx > 0 ? ['right', 'left'] : ['left', 'right'];
+    }
+    return dy > 0 ? ['bottom', 'top'] : ['top', 'bottom'];
+  }
+
+  // Convert a precise face anchor (pixel coords) to the exact pixel
+  // start/end the rendered path should use. We snap A*'s grid path
+  // back to the canvas-resolution coordinates while preserving the
+  // anchor's center-of-face origin so the arrow lands cleanly.
+  _faceAnchorPx(node, side) {
+    const cx = node.x + node.w / 2;
+    const cy = node.y + node.h / 2;
+    switch (side) {
+      case 'right':  return { x: node.x + node.w,  y: cy };
+      case 'left':   return { x: node.x,           y: cy };
+      case 'bottom': return { x: cx,               y: node.y + node.h };
+      case 'top':    return { x: cx,               y: node.y };
+      default:       return { x: cx, y: cy };
+    }
+  }
+
+  // Top-level edge router. Tries A* first; falls back to the v1
+  // L-router when A* fails (no path or anchor cell blocked).
+  _routeEdgeBest(edge, byID, obs) {
+    const src = byID.get(edge.FromNodeID);
+    const tgt = byID.get(edge.ToNodeID);
+    if (!src || !tgt) return null;
+    if (typeof src.x !== 'number' || typeof tgt.x !== 'number') return null;
+    const [sSide, tSide] = this._chooseSides(src, tgt);
+    const sCell = this._anchorCell(src, sSide, obs);
+    const tCell = this._anchorCell(tgt, tSide, obs);
+    if (!sCell || !tCell) return this._routeEdge(edge, byID);
+    const cells = this._astar(obs, sCell, tCell);
+    if (!cells || cells.length < 2) return this._routeEdge(edge, byID);
+    const cell = obs.cell;
+    // Convert grid cells to pixel waypoints (center of each cell).
+    // Replace the first and last waypoints with the EXACT face anchor
+    // pixel positions so the path visually touches the node edge.
+    const pxPath = cells.map(([x, y]) => ({ x: x * cell, y: y * cell }));
+    const sAnchor = this._faceAnchorPx(src, sSide);
+    const tAnchor = this._faceAnchorPx(tgt, tSide);
+    // Align first segment to the source face by snapping its leading
+    // coordinate; same for the trailing segment.
+    pxPath[0] = sAnchor;
+    pxPath[pxPath.length - 1] = tAnchor;
+    // After snapping the endpoints, the second and second-to-last
+    // points may need their x or y aligned with the new endpoints
+    // so the rendered path stays orthogonal.
+    if (pxPath.length >= 2) {
+      if (sSide === 'left' || sSide === 'right') pxPath[1].y = sAnchor.y;
+      else                                       pxPath[1].x = sAnchor.x;
+      const li = pxPath.length - 2;
+      if (tSide === 'left' || tSide === 'right') pxPath[li].y = tAnchor.y;
+      else                                       pxPath[li].x = tAnchor.x;
+    }
+    const waypoints = this._simplifyOrtho(pxPath);
+    return { d: this._pathD(waypoints), waypoints, edge };
+  }
+  // Pick a position for the label pill that does NOT overlap any
+  // laid-out node. Three passes, each more permissive than the last:
+  //   1. Dense sampling along every segment, looking for free space.
+  //   2. If no candidate is free, sample perpendicular offsets up to
+  //      24px above/below the longest segment so the label sits
+  //      adjacent to the path in clear space.
+  //   3. As a last resort, place at the longest segment midpoint.
+  _labelPosition(waypoints, pillW, pillH, obs) {
+    if (waypoints.length < 2) return null;
     let best = null;
+    const consider = (mx, my, isHoriz, score) => {
+      if (obs && this._pillIntersectsObstacle(mx, my, pillW, pillH, obs)) return;
+      if (!best || score > best.score) {
+        best = { score, isHoriz, mx, my };
+      }
+    };
+    // Pass 1 — dense along each segment.
     for (let i = 0; i < waypoints.length - 1; i++) {
       const a = waypoints[i];
       const b = waypoints[i + 1];
       const isHoriz = a.y === b.y;
       const len = Math.hypot(b.x - a.x, b.y - a.y);
-      const score = (isHoriz ? 1 : 0.4) * len;
-      if (!best || score > best.score) {
-        best = { score, len, isHoriz, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+      if (len < 8) continue;
+      const baseScore = (isHoriz ? 1 : 0.4) * len;
+      // Step every ~10 px along the segment.
+      const steps = Math.max(3, Math.floor(len / 10));
+      for (let k = 1; k < steps; k++) {
+        const t = k / steps;
+        const mx = a.x + (b.x - a.x) * t;
+        const my = a.y + (b.y - a.y) * t;
+        consider(mx, my, isHoriz, baseScore - Math.abs(t - 0.5) * 0.2 * len);
       }
     }
-    return best;
+    if (best) return best;
+    // Pass 2 — perpendicular offsets above/below the longest segment.
+    let longest = null;
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const a = waypoints[i];
+      const b = waypoints[i + 1];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (!longest || len > longest.len) {
+        longest = {
+          len,
+          isHoriz: a.y === b.y,
+          mx: (a.x + b.x) / 2,
+          my: (a.y + b.y) / 2,
+        };
+      }
+    }
+    if (longest) {
+      const offsets = [12, -12, 18, -18, 24, -24];
+      for (const off of offsets) {
+        const mx = longest.isHoriz ? longest.mx : longest.mx + off;
+        const my = longest.isHoriz ? longest.my + off : longest.my;
+        if (!this._pillIntersectsObstacle(mx, my, pillW, pillH, obs)) {
+          return { score: 0, isHoriz: longest.isHoriz, mx, my };
+        }
+      }
+      return { score: -1, ...longest };
+    }
+    return null;
+  }
+
+  // True when the label pill of size (pillW × pillH) centred at
+  // (mx, my) overlaps any obstacle cell in the grid.
+  _pillIntersectsObstacle(mx, my, pillW, pillH, obs) {
+    const { grid, W, H, cell } = obs;
+    // Use a slight inset so the pill can graze an obstacle's clearance
+    // buffer without being rejected; only a real overlap into the
+    // obstacle cells counts.
+    const inset = 2;
+    const x0 = Math.floor((mx - pillW / 2 + inset) / cell);
+    const x1 = Math.ceil ((mx + pillW / 2 - inset) / cell);
+    const y0 = Math.floor((my - pillH / 2 + inset) / cell);
+    const y1 = Math.ceil ((my + pillH / 2 - inset) / cell);
+    for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) {
+      for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) {
+        if (grid[y * W + x]) return true;
+      }
+    }
+    return false;
   }
 
   // ----- Interaction helpers -----
@@ -795,13 +1073,13 @@ class NottarioArchCanvas extends LitElement {
     `;
   }
 
-  _renderEdgeLabel(routed, dim) {
+  _renderEdgeLabel(routed, dim, obs) {
     if (!routed || !routed.edge.Label) return null;
     const label = routed.edge.Label;
     const textWidth = Math.max(24, label.length * 6.5);
     const pillW = textWidth + 10;
     const pillH = 18;
-    const pos = this._labelPosition(routed.waypoints);
+    const pos = this._labelPosition(routed.waypoints, pillW, pillH, obs);
     if (!pos) return null;
     const x = pos.mx - pillW / 2;
     const y = pos.my - pillH / 2;
@@ -826,8 +1104,12 @@ class NottarioArchCanvas extends LitElement {
     }
     const vb = this._viewBox || { x: 0, y: 0, w: layout.width, h: layout.height };
     const wByID = new Map(layout.flat.map(w => [w.node.ID, w]));
+    // Build the obstacle grid once per render, then route each edge
+    // via A*. Falls back to the L-router on per-edge failures (anchor
+    // blocked, no path found, etc).
+    const obstacles = this._buildObstacles(layout);
     const routedEdges = (this.edges || [])
-      .map(e => this._routeEdge(e, wByID))
+      .map(e => this._routeEdgeBest(e, wByID, obstacles))
       .filter(Boolean);
 
     // Highlighted set: hover > query > focus subtree. null = everything full.
@@ -856,7 +1138,8 @@ class NottarioArchCanvas extends LitElement {
           this._hover && (r.edge.FromNodeID === this._hover || r.edge.ToNodeID === this._hover)))}
         ${leavesAndCollapsed.map(w => this._renderNode(w, isDim(w.node.ID)))}
         ${routedEdges.map(r => this._renderEdgeLabel(r,
-          hi !== null && !isHighlightedEdge(r.edge)))}
+          hi !== null && !isHighlightedEdge(r.edge),
+          obstacles))}
       </svg>
     `;
   }
