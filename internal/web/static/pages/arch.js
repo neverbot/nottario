@@ -3,6 +3,7 @@ import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import '/static/components/page-header.js';
 import '/static/components/segmented-control.js';
+import '/static/components/markdown.js';
 import './arch-graph.js';
 
 class NottarioArchPage extends LitElement {
@@ -311,7 +312,9 @@ class NottarioArchPage extends LitElement {
         ${node.DescriptionMD ? html`
           <div class="section">
             <h4>Description</h4>
-            <pre class="body">${node.DescriptionMD}</pre>
+            <nottario-markdown
+              project-id=${this.projectId}
+              .source=${node.DescriptionMD}></nottario-markdown>
           </div>
         ` : null}
         ${children && children.length ? html`

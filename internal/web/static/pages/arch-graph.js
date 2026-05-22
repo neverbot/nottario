@@ -1,6 +1,7 @@
 import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
 import dagre from '/static/vendor/dagre/dagre.js';
 import { subscribe } from '/static/realtime.js';
+import '/static/components/markdown.js';
 
 // <nottario-arch-graph> renders the architecture diagram as boxes
 // with arrows. Navigation is by drill-down: the view shows the
@@ -588,7 +589,14 @@ class NottarioArchGraph extends LitElement {
             <pre>${JSON.stringify(node.Metadata, null, 2)}</pre>
           </div>
         ` : null}
-        ${node.DescriptionMD ? html`<div class="section"><div class="label">description</div><pre>${node.DescriptionMD}</pre></div>` : null}
+        ${node.DescriptionMD ? html`
+          <div class="section">
+            <div class="label">description</div>
+            <nottario-markdown
+              project-id=${this.projectId}
+              .source=${node.DescriptionMD}></nottario-markdown>
+          </div>
+        ` : null}
         ${children && children.length ? html`
           <div class="section">
             <div class="label">children (${children.length})</div>
