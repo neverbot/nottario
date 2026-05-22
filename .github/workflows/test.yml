@@ -1,0 +1,52 @@
+name: test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# This workflow is the CI gate the test-battery task (776ea232) asks
+# for: every push and every PR runs the full `go test ./...` against a
+# fresh Postgres, so the integration suites (concurrency races, HTTP
+# integration, MCP streamable transport) execute on a clean DB the
+# same way they do locally.
+#
+# Postgres runs as a service container. The Go toolchain version
+# mirrors go.mod's `go` directive (kept in sync manually for now; if
+# this drifts the M10 release-engineering task picks it up).
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nottario
+          POSTGRES_PASSWORD: nottario
+          POSTGRES_DB: nottario
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://nottario:nottario@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: install dev tools (golangci-lint, sqlc)
+        run: make tools
+
+      - name: gate
+        # `make check` runs gofmt, go vet, golangci-lint (with our
+        # custom sqlcheck analyzer), sqlc diff, and `go test ./...`.
+        # The integration tests gate on TEST_DATABASE_URL above, so
+        # they fire here instead of being skipped.
+        run: make check
