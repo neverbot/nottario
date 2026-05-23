@@ -951,8 +951,12 @@ class NottarioArchCanvas extends LitElement {
         if (congestion) {
           const c = congestion[idx(nx, ny)];
           if (c) {
+            // Heavy same-axis penalty forces parallel routes to
+            // commit to a different track for the whole channel
+            // rather than partially-overlap with a 1-cell zig-zag
+            // (which is what a small penalty produces).
             const sameAxis = dx !== 0 ? (c & 1) : (c & 2);
-            g += sameAxis ? 8 : 3;
+            g += sameAxis ? 20 : 4;
           }
         }
         const existing = open.get(k);
@@ -1026,13 +1030,20 @@ class NottarioArchCanvas extends LitElement {
 
   // Decide the source and target exit faces based on relative position
   // (same logic as `_anchors`) and return them as side identifiers.
-  // Decide the exit/entry faces. If the bounding boxes overlap on
-  // the vertical axis (same "row"), prefer horizontal faces so the
-  // arrow enters/leaves sideways. If they overlap on the horizontal
-  // axis (same "column"), prefer vertical faces. Otherwise fall back
-  // to the dominant centre-to-centre axis. This matches the user's
-  // expectation that a left/right neighbour gets a left/right arrow,
-  // not one that loops over the top.
+  // Decide the exit/entry faces. Two cases:
+  //
+  //   1. Same Sugiyama row (vertical bounding-boxes overlap, but
+  //      horizontal don't) → sideways arrows. tCx > sCx ⇒ source
+  //      exits right, target enters left.
+  //
+  //   2. Anything else (different rows, no overlap at all, or one
+  //      contains the other) → top/bottom arrows. This is the
+  //      Sugiyama convention: cross-layer edges flow vertically
+  //      through the layer gap, never wrap around the side of the
+  //      target. The previous fallback (dominant centre-to-centre
+  //      axis) was picking horizontal sides for diagonally-placed
+  //      nodes, which forced A* into U-turns when the source's
+  //      right-stub overshot the target's left-stub (or vice-versa).
   _chooseSides(src, tgt) {
     const sCx = src.x + src.w / 2;
     const sCy = src.y + src.h / 2;
@@ -1045,15 +1056,7 @@ class NottarioArchCanvas extends LitElement {
     if (vOverlap && !hOverlap) {
       return tCx > sCx ? ['right', 'left'] : ['left', 'right'];
     }
-    if (hOverlap && !vOverlap) {
-      return tCy > sCy ? ['bottom', 'top'] : ['top', 'bottom'];
-    }
-    const dx = tCx - sCx;
-    const dy = tCy - sCy;
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      return dx > 0 ? ['right', 'left'] : ['left', 'right'];
-    }
-    return dy > 0 ? ['bottom', 'top'] : ['top', 'bottom'];
+    return tCy > sCy ? ['bottom', 'top'] : ['top', 'bottom'];
   }
 
   // Convert a precise face anchor (pixel coords) to the exact pixel
@@ -1138,28 +1141,24 @@ class NottarioArchCanvas extends LitElement {
     // Replace the first and last waypoints with the EXACT face anchor
     // pixel positions so the path visually touches the node edge.
     const pxPath = cells.map(([x, y]) => ({ x: x * cell, y: y * cell }));
-    // The first and last A* cells live STUB_CELLS out from the face
-    // — we replace them with the precise stub-anchor pixel coords so
-    // the rendered geometry is exact.
-    const sStub = this._stubAnchorPx(src, sSide, sFrac);
-    const tStub = this._stubAnchorPx(tgt, tSide, tFrac);
-    pxPath[0] = sStub;
-    pxPath[pxPath.length - 1] = tStub;
-    // Align the second/second-to-last points with the stub anchors
-    // so the first/last A* turn stays orthogonal.
-    if (pxPath.length >= 2) {
-      if (sSide === 'left' || sSide === 'right') pxPath[1].y = sStub.y;
-      else                                       pxPath[1].x = sStub.x;
-      const li = pxPath.length - 2;
-      if (tSide === 'left' || tSide === 'right') pxPath[li].y = tStub.y;
-      else                                       pxPath[li].x = tStub.x;
-    }
-    // Bookend with the actual face anchors. The face → stub segment
-    // is a guaranteed straight stub of STUB_CELLS×GRID_CELL px, so
-    // the first/last bend in the route can never happen closer to
-    // the node than that.
     const sAnchor = this._faceAnchorPx(src, sSide, sFrac);
     const tAnchor = this._faceAnchorPx(tgt, tSide, tFrac);
+    // Snap the first/last A* cells' FACE-PERPENDICULAR axis to match
+    // the face anchor. The cells are already STUB_CELLS×GRID_CELL
+    // away from the face along the face-normal axis, so after the
+    // snap, face → first-cell is a straight perpendicular segment.
+    // (Previous code also overrode pxPath[0]/[last] to a separate
+    // "stub" pixel — that interacted badly with the second-waypoint
+    // alignment when A*'s first step was perpendicular to the face,
+    // creating sub-cell duplicate points that survived simplify and
+    // distorted the geometry. Snapping in place avoids it.)
+    if (pxPath.length >= 1) {
+      if (sSide === 'left' || sSide === 'right') pxPath[0].y = sAnchor.y;
+      else                                        pxPath[0].x = sAnchor.x;
+      const li = pxPath.length - 1;
+      if (tSide === 'left' || tSide === 'right') pxPath[li].y = tAnchor.y;
+      else                                        pxPath[li].x = tAnchor.x;
+    }
     pxPath.unshift(sAnchor);
     pxPath.push(tAnchor);
     const waypoints = this._simplifyOrtho(pxPath);
