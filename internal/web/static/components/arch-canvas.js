@@ -367,10 +367,74 @@ class NottarioArchCanvas extends LitElement {
     return out;
   }
 
+  // Reorder each non-root container's children so children with
+  // external edges going east end up east in the grid, west-going go
+  // west, etc. The score is a signed integer:
+  //   - Positive → child's external edges point east (higher
+  //     top-level rank than the child's own).
+  //   - Negative → external edges point west.
+  // Top-level lane order is left untouched (it's already sorted by
+  // kind rank in `_buildTree`).
+  _orderChildrenByEdges(roots) {
+    // Per-node descendant set (including self).
+    const desc = new Map();
+    const buildDesc = (w) => {
+      const set = new Set([w.node.ID]);
+      for (const c of w.children) {
+        buildDesc(c);
+        for (const id of desc.get(c.node.ID)) set.add(id);
+      }
+      desc.set(w.node.ID, set);
+    };
+    for (const r of roots) buildDesc(r);
+
+    // Top-level rank per top-level node (the lane order). Then a
+    // node-id → top-level-id index so we can score any node.
+    const rootRankByID = new Map();
+    roots.forEach((r, i) => rootRankByID.set(r.node.ID, i));
+    const topAnc = new Map();
+    for (const r of roots) {
+      for (const id of desc.get(r.node.ID)) topAnc.set(id, r.node.ID);
+    }
+
+    // For each non-root container, sort its children by external-edge
+    // horizontal preference.
+    const order = (container) => {
+      if (!container.children.length) return;
+      const scores = new Map();
+      for (const child of container.children) {
+        const childSet = desc.get(child.node.ID);
+        let s = 0;
+        for (const e of this.edges || []) {
+          const fromIn = childSet.has(e.FromNodeID);
+          const toIn   = childSet.has(e.ToNodeID);
+          if (!fromIn && !toIn)  continue;
+          if (fromIn && toIn)    continue; // loop inside this child
+          const otherID = fromIn ? e.ToNodeID : e.FromNodeID;
+          const otherRank = rootRankByID.get(topAnc.get(otherID)) ?? 1;
+          const childRank = rootRankByID.get(topAnc.get(child.node.ID)) ?? 1;
+          s += (otherRank - childRank);
+        }
+        scores.set(child.node.ID, s);
+      }
+      container.children.sort((a, b) => {
+        const sa = scores.get(a.node.ID) ?? 0;
+        const sb = scores.get(b.node.ID) ?? 0;
+        if (sa !== sb) return sa - sb;
+        const rp = (a.node.Position ?? 0) - (b.node.Position ?? 0);
+        if (rp !== 0) return rp;
+        return (a.node.Name || '').localeCompare(b.node.Name || '');
+      });
+      for (const c of container.children) order(c);
+    };
+    for (const r of roots) order(r);
+  }
+
   _layout() {
     // Memoise — layout is purely a function of (nodes, edges, expanded).
     const key = JSON.stringify({
       nodes: (this.nodes || []).map(n => n.ID + '|' + n.ParentID),
+      edges: (this.edges || []).map(e => e.FromNodeID + '>' + e.ToNodeID),
       expanded: [...(this.expanded || [])].sort(),
     });
     if (this._cachedLayoutKey === key && this._cachedLayout) {
@@ -383,6 +447,11 @@ class NottarioArchCanvas extends LitElement {
       this._cachedLayoutKey = key;
       return layout;
     }
+    // Smart child ordering — sort each non-root container's children
+    // so external-edge directions correspond to their position in the
+    // grid. Runs before packing because the order changes which grid
+    // cell each child lands in.
+    this._orderChildrenByEdges(roots);
     for (const r of roots) this._packSize(r, 0);
     const gap = NottarioArchCanvas.GAP;
     const pad = NottarioArchCanvas.CANVAS_PAD;
@@ -519,11 +588,13 @@ class NottarioArchCanvas extends LitElement {
     return { grid, W, H, cell };
   }
 
-  // Pick the grid cell adjacent to a node's chosen exit face, just
-  // outside the obstacle so A* starts on a free cell. Returns null
-  // if no free cell can be found.
+  // Pick the grid cell adjacent to a node's chosen exit face. Returns
+  // the outer-face cell even when it lies in another node's buffer;
+  // A* exempts those buffer-only regions for the source and target
+  // (see `_isCellBlocked`), so the chosen cell can always serve as a
+  // valid anchor.
   _anchorCell(node, side, obs) {
-    const { cell, grid, W, H } = obs;
+    const { cell, W, H } = obs;
     const cx = node.x + node.w / 2;
     const cy = node.y + node.h / 2;
     let ax, ay;
@@ -534,33 +605,57 @@ class NottarioArchCanvas extends LitElement {
       case 'top':    ax = cx; ay = node.y - cell;              break;
       default:       ax = cx; ay = cy;
     }
-    let gx = Math.round(ax / cell);
-    let gy = Math.round(ay / cell);
+    const gx = Math.round(ax / cell);
+    const gy = Math.round(ay / cell);
     if (gx < 0 || gx >= W || gy < 0 || gy >= H) return null;
-    // If we landed on an obstacle (close clearance vs another node),
-    // shuffle outward in the exit direction up to 4 cells.
-    for (let i = 0; i < 4 && grid[gy * W + gx]; i++) {
-      switch (side) {
-        case 'right':  gx++; break;
-        case 'left':   gx--; break;
-        case 'bottom': gy++; break;
-        case 'top':    gy--; break;
-      }
-      if (gx < 0 || gx >= W || gy < 0 || gy >= H) return null;
-    }
-    if (grid[gy * W + gx]) return null;
     return { x: gx, y: gy, side };
   }
 
+  // True when the given cell is inside the BUFFER-ONLY halo of `node`
+  // (the 4px clearance around its real rect, but not inside the rect
+  // itself). Used by A* to exempt the source/target buffers so two
+  // adjacent siblings can still route into each other.
+  _inNodeBufferOnly(gx, gy, node, obs) {
+    const cell = obs.cell;
+    const px = gx * cell;
+    const py = gy * cell;
+    // The actual node rect (no buffer) — A* must always treat this
+    // as an obstacle, even for source/target. Containers when
+    // expanded only block their label strip.
+    const innerTopH = (node._isContainer && node._expanded)
+      ? NottarioArchCanvas.LABEL_STRIP : node.h;
+    const insideRect =
+      px + cell > node.x && px < node.x + node.w &&
+      py + cell > node.y && py < node.y + innerTopH;
+    if (insideRect) return false;
+    // The buffer-extended rect (the same area marked obstacle in the
+    // global grid).
+    const buf = NottarioArchCanvas.GRID_BUF;
+    const insideBuffer =
+      px + cell > node.x - buf && px < node.x + node.w + buf &&
+      py + cell > node.y - buf && py < node.y + innerTopH + buf;
+    return insideBuffer;
+  }
+
   // 4-connected A* over the obstacle grid with a small direction-change
-  // penalty so paths prefer long straight runs. Cells `start` and
-  // `goal` are guaranteed free by the caller (`_anchorCell`).
-  _astar(obs, start, goal) {
+  // penalty so paths prefer long straight runs. Source and target
+  // nodes' buffer-only halos are exempted so the path can start/end
+  // even when the anchor cell falls inside an adjacent neighbour's
+  // buffer (sibling pair case).
+  _astar(obs, start, goal, srcNode, tgtNode) {
     const { grid, W, H } = obs;
     const idx = (x, y) => y * W + x;
     const heur = (x, y) => Math.abs(goal.x - x) + Math.abs(goal.y - y);
-    // Open set as a Map keyed by "x,y"; we linear-scan for the best
-    // f. Grid is small (<= ~12k cells); this is fine in practice.
+    const isBlocked = (x, y) => {
+      if (x === goal.x && y === goal.y) return false;
+      if (x === start.x && y === start.y) return false;
+      if (!grid[idx(x, y)]) return false;
+      // Exempt buffer-only regions of source and target so the path
+      // can step outward through a neighbour's buffer if needed.
+      if (srcNode && this._inNodeBufferOnly(x, y, srcNode, obs)) return false;
+      if (tgtNode && this._inNodeBufferOnly(x, y, tgtNode, obs)) return false;
+      return true;
+    };
     const open = new Map();
     const closed = new Set();
     const skey = `${start.x},${start.y}`;
@@ -584,10 +679,7 @@ class NottarioArchCanvas extends LitElement {
         if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
         const k = `${nx},${ny}`;
         if (closed.has(k)) continue;
-        // Goal cell is always allowed even if "blocked" (it's the
-        // node's own face); same for start. All other obstacle
-        // cells are off-limits.
-        if (grid[idx(nx, ny)] && !(nx === goal.x && ny === goal.y)) continue;
+        if (isBlocked(nx, ny)) continue;
         const turn = best.dir && (best.dir[0] !== dx || best.dir[1] !== dy);
         const g = best.g + 1 + (turn ? 2 : 0);
         const existing = open.get(k);
@@ -670,7 +762,7 @@ class NottarioArchCanvas extends LitElement {
     const sCell = this._anchorCell(src, sSide, obs);
     const tCell = this._anchorCell(tgt, tSide, obs);
     if (!sCell || !tCell) return this._routeEdge(edge, byID);
-    const cells = this._astar(obs, sCell, tCell);
+    const cells = this._astar(obs, sCell, tCell, src, tgt);
     if (!cells || cells.length < 2) return this._routeEdge(edge, byID);
     const cell = obs.cell;
     // Convert grid cells to pixel waypoints (center of each cell).
@@ -697,12 +789,15 @@ class NottarioArchCanvas extends LitElement {
     return { d: this._pathD(waypoints), waypoints, edge };
   }
   // Pick a position for the label pill that does NOT overlap any
-  // laid-out node. Three passes, each more permissive than the last:
+  // laid-out node. Four progressively permissive passes:
   //   1. Dense sampling along every segment, looking for free space.
-  //   2. If no candidate is free, sample perpendicular offsets up to
-  //      24px above/below the longest segment so the label sits
-  //      adjacent to the path in clear space.
-  //   3. As a last resort, place at the longest segment midpoint.
+  //   2. Perpendicular offsets up to ±64px above/below the longest
+  //      segment (covers sibling-edge gap cases where the path
+  //      itself is inside a buffer halo).
+  //   3. 2D rectangular scan ±64 around the path midpoint, picking
+  //      the closest free position.
+  //   4. As a last resort, place at the longest segment midpoint
+  //      (worse than nothing, but at least the label exists).
   _labelPosition(waypoints, pillW, pillH, obs) {
     if (waypoints.length < 2) return null;
     let best = null;
@@ -720,7 +815,6 @@ class NottarioArchCanvas extends LitElement {
       const len = Math.hypot(b.x - a.x, b.y - a.y);
       if (len < 8) continue;
       const baseScore = (isHoriz ? 1 : 0.4) * len;
-      // Step every ~10 px along the segment.
       const steps = Math.max(3, Math.floor(len / 10));
       for (let k = 1; k < steps; k++) {
         const t = k / steps;
@@ -730,7 +824,8 @@ class NottarioArchCanvas extends LitElement {
       }
     }
     if (best) return best;
-    // Pass 2 — perpendicular offsets above/below the longest segment.
+
+    // Identify the longest segment for the next two fallback passes.
     let longest = null;
     for (let i = 0; i < waypoints.length - 1; i++) {
       const a = waypoints[i];
@@ -745,18 +840,39 @@ class NottarioArchCanvas extends LitElement {
         };
       }
     }
-    if (longest) {
-      const offsets = [12, -12, 18, -18, 24, -24];
-      for (const off of offsets) {
-        const mx = longest.isHoriz ? longest.mx : longest.mx + off;
-        const my = longest.isHoriz ? longest.my + off : longest.my;
-        if (!this._pillIntersectsObstacle(mx, my, pillW, pillH, obs)) {
-          return { score: 0, isHoriz: longest.isHoriz, mx, my };
+    if (!longest) return null;
+
+    // Pass 2 — perpendicular offsets, increasing distance.
+    for (const off of [12, -12, 18, -18, 24, -24, 36, -36, 48, -48, 64, -64]) {
+      const mx = longest.isHoriz ? longest.mx : longest.mx + off;
+      const my = longest.isHoriz ? longest.my + off : longest.my;
+      if (!this._pillIntersectsObstacle(mx, my, pillW, pillH, obs)) {
+        return { score: 0, isHoriz: longest.isHoriz, mx, my };
+      }
+    }
+
+    // Pass 3 — 2D rectangular scan ±64 around the midpoint. Prefer
+    // the closest-to-midpoint free position; ties broken by smaller
+    // perpendicular offset relative to the path direction.
+    const step = NottarioArchCanvas.GRID_CELL;
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (let dy = -64; dy <= 64; dy += step) {
+      for (let dx = -64; dx <= 64; dx += step) {
+        const mx = longest.mx + dx;
+        const my = longest.my + dy;
+        if (this._pillIntersectsObstacle(mx, my, pillW, pillH, obs)) continue;
+        const d = Math.hypot(dx, dy);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearest = { score: -0.5, isHoriz: longest.isHoriz, mx, my };
         }
       }
-      return { score: -1, ...longest };
     }
-    return null;
+    if (nearest) return nearest;
+
+    // Pass 4 — give up, return midpoint even though it overlaps.
+    return { score: -1, ...longest };
   }
 
   // True when the label pill of size (pillW × pillH) centred at
