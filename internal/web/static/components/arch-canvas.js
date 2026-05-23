@@ -43,6 +43,10 @@ class NottarioArchCanvas extends LitElement {
     selected: { type: String },
     focus:    { type: String },
     query:    { type: String },
+    // When set to an edge ID, highlight ONLY that edge (and its
+    // two endpoints) — drives the panel-hover-an-edge UX where the
+    // right rail wants the canvas to single-out one connection.
+    highlightEdge: { type: String, attribute: 'highlight-edge' },
 
     _viewBox: { state: true },
     _hover:   { state: true },
@@ -79,11 +83,11 @@ class NottarioArchCanvas extends LitElement {
       display: block;
       box-sizing: border-box;
       position: relative;
-      /* Clip the SVG content to the host's rounded corners. The parent
-         page sets the border + border-radius; without overflow:hidden
-         the SVG's white background pokes into the rounded corners and
-         covers them. inherit picks up whatever radius the parent set. */
-      border-radius: inherit;
+      /* Overflow:hidden so the SVG doesn't poke past the host
+         rectangle. border-radius is NOT set here — the parent page
+         is in charge of rounding the canvas's corners (per-corner,
+         e.g. only left in the split layout so the vertical
+         separator on the right stays 100% straight). */
       overflow: hidden;
     }
     * { box-sizing: border-box; }
@@ -196,6 +200,7 @@ class NottarioArchCanvas extends LitElement {
     this.selected = '';
     this.focus = '';
     this.query = '';
+    this.highlightEdge = '';
 
     this._viewBox = null;         // { x, y, w, h } — null until first layout
     this._hover = '';
@@ -1377,6 +1382,13 @@ class NottarioArchCanvas extends LitElement {
   // hover/search/focus state. Returns null when no highlighting is
   // active (everything full opacity).
   _highlightedSet(layout) {
+    // External edge-highlight has top priority: only the two
+    // endpoints of that one edge stay full-opacity, everything else
+    // dims (and only that edge gets the accent stroke).
+    if (this.highlightEdge) {
+      const ed = (this.edges || []).find(e => e.ID === this.highlightEdge);
+      if (ed) return new Set([ed.FromNodeID, ed.ToNodeID]);
+    }
     const q = (this.query || '').trim().toLowerCase();
     if (this._hover) {
       // Hover: hovered node + nodes connected by any edge.
@@ -1786,10 +1798,17 @@ class NottarioArchCanvas extends LitElement {
       .map((_, i) => routedById.get(i))
       .filter(Boolean);
 
-    // Highlighted set: hover > query > focus subtree. null = everything full.
+    // Highlighted set: external edge highlight > hover > query >
+    // focus subtree. null = everything full.
     const hi = this._highlightedSet(layout);
     const isDim = (id) => hi !== null && !hi.has(id);
-    const isHighlightedEdge = (e) => hi !== null && hi.has(e.FromNodeID) && hi.has(e.ToNodeID);
+    const isHighlightedEdge = (e) => {
+      if (this.highlightEdge) return e.ID === this.highlightEdge;
+      return hi !== null && hi.has(e.FromNodeID) && hi.has(e.ToNodeID);
+    };
+    const isAccentedEdge = (e) =>
+      (this._hover && (e.FromNodeID === this._hover || e.ToNodeID === this._hover)) ||
+      (this.highlightEdge && e.ID === this.highlightEdge);
 
     const containers = layout.flat.filter(w => w._isContainer && w._expanded);
     const leavesAndCollapsed = layout.flat.filter(w => !w._isContainer || !w._expanded);
@@ -1809,7 +1828,7 @@ class NottarioArchCanvas extends LitElement {
         ${containers.map(w => this._renderNode(w, isDim(w.node.ID)))}
         ${routedEdges.map(r => this._renderEdge(r,
           hi !== null && !isHighlightedEdge(r.edge),
-          this._hover && (r.edge.FromNodeID === this._hover || r.edge.ToNodeID === this._hover)))}
+          isAccentedEdge(r.edge)))}
         ${leavesAndCollapsed.map(w => this._renderNode(w, isDim(w.node.ID)))}
         ${routedEdges.map(r => this._renderEdgeLabel(r,
           hi !== null && !isHighlightedEdge(r.edge),

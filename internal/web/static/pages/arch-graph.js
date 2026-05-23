@@ -28,6 +28,7 @@ class NottarioArchGraph extends LitElement {
     _expanded: { state: true }, // Set<id>
     _focus:    { state: true }, // id
     _query:    { state: true }, // string
+    _hoveredEdgeID: { state: true }, // edge id, drives canvas highlight
   };
 
   static styles = css`
@@ -68,6 +69,10 @@ class NottarioArchGraph extends LitElement {
       display: block;
       border-right: 1px solid #d1d9e0;
       min-height: 70vh;
+      /* Round only the LEFT corners so the right-side separator
+         (border-right above) stays a perfectly vertical line. */
+      border-top-left-radius: 7px;
+      border-bottom-left-radius: 7px;
     }
 
     .panel {
@@ -209,6 +214,7 @@ class NottarioArchGraph extends LitElement {
     this._expanded = new Set();
     this._focus = '';
     this._query = '';
+    this._hoveredEdgeID = '';
   }
 
   // ----- Lifecycle -----
@@ -387,6 +393,7 @@ class NottarioArchGraph extends LitElement {
           .focus=${this._focus}
           .selected=${selID}
           .query=${this._query}
+          .highlightEdge=${this._hoveredEdgeID}
           @select=${(e) => this._onCanvasSelect(e)}
           @expand-changed=${(e) => this._onExpandChanged(e)}
           @focus-changed=${(e) => this._onFocusChanged(e)}>
@@ -446,7 +453,9 @@ class NottarioArchGraph extends LitElement {
             : html`<div class="edges">
                 ${inEdges.map(e => html`
                   <a class="edge-chip"
-                     @click=${() => this._onCanvasSelect({ detail: { id: e.FromNodeID } })}>
+                     @click=${() => this._onCanvasSelect({ detail: { id: e.FromNodeID } })}
+                     @mouseenter=${() => { this._hoveredEdgeID = e.ID; }}
+                     @mouseleave=${() => { this._hoveredEdgeID = ''; }}>
                     <span class="lbl">${e.Label || e.Kind || 'connects'}</span>
                     <span class="from">← ${this._nodeByID(e.FromNodeID)?.Name || '?'}</span>
                   </a>
@@ -461,7 +470,9 @@ class NottarioArchGraph extends LitElement {
             : html`<div class="edges">
                 ${outEdges.map(e => html`
                   <a class="edge-chip"
-                     @click=${() => this._onCanvasSelect({ detail: { id: e.ToNodeID } })}>
+                     @click=${() => this._onCanvasSelect({ detail: { id: e.ToNodeID } })}
+                     @mouseenter=${() => { this._hoveredEdgeID = e.ID; }}
+                     @mouseleave=${() => { this._hoveredEdgeID = ''; }}>
                     <span class="lbl">${e.Label || e.Kind || 'connects'}</span>
                     <span class="to">→ ${this._nodeByID(e.ToNodeID)?.Name || '?'}</span>
                   </a>
