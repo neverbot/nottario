@@ -299,7 +299,174 @@ class NottarioArchCanvas extends LitElement {
     return this.expanded?.has?.(w.node.ID) ?? false;
   }
 
-  _packSize(w, depth = 0) {
+  // ----- Sugiyama compound layout (v4) -----
+  //
+  // Each "level" (the synthetic root level and each expanded
+  // container's children) gets the classic Sugiyama framework:
+  //   1. Layer assignment via longest-path on sibling-resolved edges.
+  //   2. Crossing minimisation via barycentre heuristic.
+  //   3. Coordinate assignment within layers (left-to-right packed).
+  //   4. Recursive: containers size to fit their children's sub-layout.
+  //
+  // Layers go TOP-DOWN (source layer at top, sinks at bottom). For
+  // software architecture this matches the convention "callers above
+  // callees", e.g. Web UI above Backend, Backend above PostgreSQL.
+
+  // For each global edge, resolve both endpoints to their ancestor
+  // child of `parentID` (null means top-level: roots). Returns the
+  // list of (srcID, dstID) tuples at this level.
+  _nodeByID(id) {
+    if (!this._nodeIndex || this._nodeIndex.size !== (this.nodes || []).length) {
+      this._nodeIndex = new Map((this.nodes || []).map(n => [n.ID, n]));
+    }
+    return this._nodeIndex.get(id) || null;
+  }
+
+  _levelEdges(children, parentID) {
+    const childIDs = new Set(children.map(c => c.node.ID));
+    // Walk up the parent chain until we hit a node that IS one of
+    // the children at this level. If we exhaust the chain without
+    // finding one, the node isn't in any child's subtree at this
+    // level so the edge doesn't contribute here.
+    const ancestorAtLevel = (id) => {
+      let cur = this._nodeByID(id);
+      while (cur) {
+        if (childIDs.has(cur.ID)) return cur.ID;
+        if (!cur.ParentID) return null;
+        cur = this._nodeByID(cur.ParentID);
+      }
+      return null;
+    };
+    const seen = new Set();
+    const out = [];
+    for (const e of this.edges || []) {
+      const a = ancestorAtLevel(e.FromNodeID);
+      const b = ancestorAtLevel(e.ToNodeID);
+      if (!a || !b || a === b) continue;
+      const k = a + '>' + b;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push([a, b]);
+    }
+    return out;
+  }
+
+  // Longest-path layer assignment. Returns layers[][] (each layer is
+  // an ordered array of wrappers from `children`).
+  _assignLayers(children, edges) {
+    const childByID = new Map(children.map(c => [c.node.ID, c]));
+    const inDeg = new Map();
+    const adj   = new Map();
+    for (const c of children) {
+      inDeg.set(c.node.ID, 0);
+      adj.set(c.node.ID, []);
+    }
+    for (const [src, dst] of edges) {
+      if (!childByID.has(src) || !childByID.has(dst)) continue;
+      adj.get(src).push(dst);
+      inDeg.set(dst, inDeg.get(dst) + 1);
+    }
+    const layer = new Map();
+    for (const c of children) layer.set(c.node.ID, 0);
+    // Kahn-style topological walk, propagating longest path.
+    const remaining = new Map(inDeg);
+    const queue = children.filter(c => remaining.get(c.node.ID) === 0).map(c => c.node.ID);
+    while (queue.length) {
+      const id = queue.shift();
+      for (const next of adj.get(id)) {
+        layer.set(next, Math.max(layer.get(next), layer.get(id) + 1));
+        remaining.set(next, remaining.get(next) - 1);
+        if (remaining.get(next) === 0) queue.push(next);
+      }
+    }
+    // Group children into layers, preserving the children array's
+    // tie-break order (smart-child-ordering pre-pass + kind rank).
+    const maxL = Math.max(0, ...layer.values());
+    const layers = Array.from({ length: maxL + 1 }, () => []);
+    for (const c of children) layers[layer.get(c.node.ID)].push(c);
+    return layers;
+  }
+
+  // Barycentre crossing minimisation. 4 sweeps alternating direction.
+  _orderInLayers(layers, edges) {
+    if (layers.length <= 1) return;
+    const allIDs = new Set();
+    for (const layer of layers) for (const c of layer) allIDs.add(c.node.ID);
+    const adjOut = new Map();
+    const adjIn  = new Map();
+    for (const id of allIDs) { adjOut.set(id, []); adjIn.set(id, []); }
+    for (const [src, dst] of edges) {
+      if (!allIDs.has(src) || !allIDs.has(dst)) continue;
+      adjOut.get(src).push(dst);
+      adjIn.get(dst).push(src);
+    }
+    for (let iter = 0; iter < 4; iter++) {
+      // Down sweep: order each layer by avg of predecessor positions.
+      for (let i = 1; i < layers.length; i++) {
+        const prevPos = new Map();
+        layers[i - 1].forEach((c, idx) => prevPos.set(c.node.ID, idx));
+        const sc = (c) => {
+          const ins = adjIn.get(c.node.ID);
+          if (!ins.length) return 1e9; // stable end
+          let s = 0;
+          for (const p of ins) s += prevPos.get(p) ?? 0;
+          return s / ins.length;
+        };
+        layers[i].sort((a, b) => sc(a) - sc(b));
+      }
+      // Up sweep: order each layer by avg of successor positions.
+      for (let i = layers.length - 2; i >= 0; i--) {
+        const nextPos = new Map();
+        layers[i + 1].forEach((c, idx) => nextPos.set(c.node.ID, idx));
+        const sc = (c) => {
+          const outs = adjOut.get(c.node.ID);
+          if (!outs.length) return 1e9;
+          let s = 0;
+          for (const o of outs) s += nextPos.get(o) ?? 0;
+          return s / outs.length;
+        };
+        layers[i].sort((a, b) => sc(a) - sc(b));
+      }
+    }
+  }
+
+  // Pack a single level (layers) into a bounding box, returning
+  // per-cell relative coordinates and the totals. Layers stacked
+  // top-down; nodes within a layer left-to-right.
+  _packLevel(layers) {
+    const G = NottarioArchCanvas.GAP;
+    const gridX = [];
+    const gridY = [];
+    let curY = 0;
+    let maxW = 0;
+    for (let li = 0; li < layers.length; li++) {
+      const layer = layers[li];
+      let curX = 0;
+      const rowH = layer.length ? Math.max(...layer.map(c => c.h)) : 0;
+      const xs = [];
+      for (const c of layer) {
+        xs.push(curX);
+        curX += c.w + G;
+      }
+      const rowW = Math.max(0, curX - G);
+      if (rowW > maxW) maxW = rowW;
+      gridX.push(xs);
+      gridY.push(curY);
+      curY += rowH + G;
+    }
+    return {
+      gridX,
+      gridY,
+      totalW: maxW,
+      totalH: Math.max(0, curY - G),
+    };
+  }
+
+  // Recursive Sugiyama on a container wrapper. Computes children's
+  // sub-layout first (bottom-up sizing), then layouts THIS container's
+  // direct children in layers. Sets w.w / w.h to the container's full
+  // bbox and stores relative child positions in c._relX / c._relY.
+  _packSugiyama(w, depth = 0) {
     if (!w.children.length) {
       w.w = NottarioArchCanvas.LEAF_W;
       w.h = NottarioArchCanvas.LEAF_H;
@@ -310,49 +477,40 @@ class NottarioArchCanvas extends LitElement {
     w._isContainer = true;
     w._expanded = this._isExpanded(w, depth);
     if (!w._expanded) {
-      // Collapsed container renders as a leaf with a child-count hint.
       w.w = NottarioArchCanvas.LEAF_W;
       w.h = NottarioArchCanvas.LEAF_H;
       return;
     }
-    for (const child of w.children) this._packSize(child, depth + 1);
-    const cols = Math.max(1, Math.ceil(Math.sqrt(w.children.length)));
-    const rows = Math.ceil(w.children.length / cols);
-    const colW = new Array(cols).fill(0);
-    const rowH = new Array(rows).fill(0);
-    w.children.forEach((c, i) => {
-      const r = Math.floor(i / cols);
-      const cc = i % cols;
-      if (c.w > colW[cc]) colW[cc] = c.w;
-      if (c.h > rowH[r])  rowH[r]  = c.h;
-    });
-    const gap = NottarioArchCanvas.GAP;
+    // Recurse first so children have their w/h.
+    for (const child of w.children) this._packSugiyama(child, depth + 1);
+    const edges = this._levelEdges(w.children, w.node.ID);
+    const layers = this._assignLayers(w.children, edges);
+    this._orderInLayers(layers, edges);
+    const placed = this._packLevel(layers);
+    for (let li = 0; li < layers.length; li++) {
+      for (let i = 0; i < layers[li].length; i++) {
+        const c = layers[li][i];
+        c._relX = placed.gridX[li][i];
+        c._relY = placed.gridY[li];
+      }
+    }
     const pad = NottarioArchCanvas.PAD;
-    const interiorW = colW.reduce((s, x) => s + x, 0) + gap * (cols - 1);
-    const interiorH = rowH.reduce((s, x) => s + x, 0) + gap * (rows - 1);
-    w.w = interiorW + pad * 2;
-    w.h = interiorH + pad * 2 + NottarioArchCanvas.LABEL_STRIP;
-    w._grid = { cols, rows, colW, rowH };
+    w.w = placed.totalW + pad * 2;
+    w.h = placed.totalH + pad * 2 + NottarioArchCanvas.LABEL_STRIP;
   }
 
+  // Place children at their absolute positions based on relative
+  // offsets and parent's absolute (x, y). Recursive.
   _placeChildren(w) {
     if (!w._isContainer || !w._expanded) return;
-    const { cols, rows, colW, rowH } = w._grid;
-    const gap = NottarioArchCanvas.GAP;
     const pad = NottarioArchCanvas.PAD;
     const startX = w.x + pad;
     const startY = w.y + NottarioArchCanvas.LABEL_STRIP + pad;
-    const colX = new Array(cols).fill(0);
-    for (let i = 1; i < cols; i++) colX[i] = colX[i - 1] + colW[i - 1] + gap;
-    const rowY = new Array(rows).fill(0);
-    for (let i = 1; i < rows; i++) rowY[i] = rowY[i - 1] + rowH[i - 1] + gap;
-    w.children.forEach((c, i) => {
-      const r = Math.floor(i / cols);
-      const cc = i % cols;
-      c.x = startX + colX[cc] + (colW[cc] - c.w) / 2;
-      c.y = startY + rowY[r];
+    for (const c of w.children) {
+      c.x = startX + (c._relX ?? 0);
+      c.y = startY + (c._relY ?? 0);
       this._placeChildren(c);
-    });
+    }
   }
 
   _flatten(roots) {
@@ -447,29 +605,32 @@ class NottarioArchCanvas extends LitElement {
       this._cachedLayoutKey = key;
       return layout;
     }
-    // Smart child ordering — sort each non-root container's children
-    // so external-edge directions correspond to their position in the
-    // grid. Runs before packing because the order changes which grid
-    // cell each child lands in.
+    // Smart child ordering — kind-rank tie-break so the Sugiyama
+    // crossing-min has a sensible starting permutation.
     this._orderChildrenByEdges(roots);
-    for (const r of roots) this._packSize(r, 0);
-    const gap = NottarioArchCanvas.GAP;
+    // Size each root (and recursively size descendants) via Sugiyama.
+    for (const r of roots) this._packSugiyama(r, 0);
+    // Top-level lane: also Sugiyama. Roots stacked top-down by the
+    // longest-path layer of cross-root edges.
+    const rootEdges = this._levelEdges(roots, null);
+    const rootLayers = this._assignLayers(roots, rootEdges);
+    this._orderInLayers(rootLayers, rootEdges);
+    const rootPlace = this._packLevel(rootLayers);
     const pad = NottarioArchCanvas.CANVAS_PAD;
-    let cursorX = pad;
-    let maxH = 0;
-    for (const r of roots) {
-      r.x = cursorX;
-      r.y = pad;
-      cursorX += r.w + gap;
-      if (r.h > maxH) maxH = r.h;
-      this._placeChildren(r);
+    for (let li = 0; li < rootLayers.length; li++) {
+      for (let i = 0; i < rootLayers[li].length; i++) {
+        const r = rootLayers[li][i];
+        r.x = pad + rootPlace.gridX[li][i];
+        r.y = pad + rootPlace.gridY[li];
+        this._placeChildren(r);
+      }
     }
     const layout = {
       roots,
       flat: this._flatten(roots),
       byID,
-      width:  cursorX - gap + pad,
-      height: maxH + pad * 2,
+      width:  rootPlace.totalW + pad * 2,
+      height: rootPlace.totalH + pad * 2,
     };
     this._cachedLayout = layout;
     this._cachedLayoutKey = key;
