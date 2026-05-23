@@ -814,22 +814,24 @@ class NottarioArchCanvas extends LitElement {
     return { grid, W, H, cell };
   }
 
-  // Pick the grid cell adjacent to a node's chosen exit face. Returns
-  // the outer-face cell even when it lies in another node's buffer;
-  // A* exempts those buffer-only regions for the source and target
-  // (see `_isCellBlocked`), so the chosen cell can always serve as a
-  // valid anchor.
-  _anchorCell(node, side, obs) {
+  // Pick the grid cell adjacent to a node's chosen exit face. `frac`
+  // ∈ (0,1) picks the position along the face: 0.5 = centre, smaller
+  // values closer to the top/left, larger values closer to the
+  // bottom/right. Used by the edge-spread pass so two edges sharing
+  // a face don't overlap. Returns the outer-face cell even when it
+  // lies in another node's buffer; A* exempts those buffer-only
+  // regions for the source and target.
+  _anchorCell(node, side, obs, frac = 0.5) {
     const { cell, W, H } = obs;
-    const cx = node.x + node.w / 2;
-    const cy = node.y + node.h / 2;
+    const fx = node.x + node.w * frac;
+    const fy = node.y + node.h * frac;
     let ax, ay;
     switch (side) {
-      case 'right':  ax = node.x + node.w + cell;      ay = cy; break;
-      case 'left':   ax = node.x - cell;               ay = cy; break;
-      case 'bottom': ax = cx; ay = node.y + node.h + cell;     break;
-      case 'top':    ax = cx; ay = node.y - cell;              break;
-      default:       ax = cx; ay = cy;
+      case 'right':  ax = node.x + node.w + cell;      ay = fy; break;
+      case 'left':   ax = node.x - cell;               ay = fy; break;
+      case 'bottom': ax = fx; ay = node.y + node.h + cell;     break;
+      case 'top':    ax = fx; ay = node.y - cell;              break;
+      default:       ax = node.x + node.w / 2; ay = node.y + node.h / 2;
     }
     const gx = Math.round(ax / cell);
     const gy = Math.round(ay / cell);
@@ -965,28 +967,73 @@ class NottarioArchCanvas extends LitElement {
   // start/end the rendered path should use. We snap A*'s grid path
   // back to the canvas-resolution coordinates while preserving the
   // anchor's center-of-face origin so the arrow lands cleanly.
-  _faceAnchorPx(node, side) {
-    const cx = node.x + node.w / 2;
-    const cy = node.y + node.h / 2;
+  _faceAnchorPx(node, side, frac = 0.5) {
+    const fx = node.x + node.w * frac;
+    const fy = node.y + node.h * frac;
     switch (side) {
-      case 'right':  return { x: node.x + node.w,  y: cy };
-      case 'left':   return { x: node.x,           y: cy };
-      case 'bottom': return { x: cx,               y: node.y + node.h };
-      case 'top':    return { x: cx,               y: node.y };
-      default:       return { x: cx, y: cy };
+      case 'right':  return { x: node.x + node.w,  y: fy };
+      case 'left':   return { x: node.x,           y: fy };
+      case 'bottom': return { x: fx,               y: node.y + node.h };
+      case 'top':    return { x: fx,               y: node.y };
+      default:       return { x: node.x + node.w / 2, y: node.y + node.h / 2 };
     }
+  }
+
+  // Plan per-edge anchor fractions so that two edges sharing a face
+  // on the same node don't stack on top of each other. For each
+  // (node, side) bucket the edges, sort them by the OTHER endpoint's
+  // perpendicular coordinate (so crossings minimise), and distribute
+  // them along the face at fractions 1/(N+1), 2/(N+1), …
+  _planAnchors(edges, byID) {
+    const planned = edges.map((edge) => {
+      const src = byID.get(edge.FromNodeID);
+      const tgt = byID.get(edge.ToNodeID);
+      if (!src || !tgt) return null;
+      if (typeof src.x !== 'number' || typeof tgt.x !== 'number') return null;
+      const [sSide, tSide] = this._chooseSides(src, tgt);
+      return { edge, src, tgt, sSide, tSide, sFrac: 0.5, tFrac: 0.5 };
+    });
+    const buckets = new Map(); // key → array of { entry, end:'s'|'t' }
+    const push = (key, entry, end) => {
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push({ entry, end });
+    };
+    for (const p of planned) {
+      if (!p) continue;
+      push(`${p.src.node.ID}|${p.sSide}`, p, 's');
+      push(`${p.tgt.node.ID}|${p.tSide}`, p, 't');
+    }
+    for (const [key, list] of buckets) {
+      // Sort by the other endpoint's perpendicular coord so the
+      // ordering along the face matches the ordering of destinations.
+      const side = key.split('|')[1];
+      const perpOf = (item) => {
+        const other = item.end === 's' ? item.entry.tgt : item.entry.src;
+        // Horizontal faces (top/bottom) → distribute along x.
+        if (side === 'top' || side === 'bottom') {
+          return other.x + other.w / 2;
+        }
+        // Vertical faces (left/right) → distribute along y.
+        return other.y + other.h / 2;
+      };
+      list.sort((a, b) => perpOf(a) - perpOf(b));
+      const n = list.length;
+      list.forEach((item, i) => {
+        const frac = (i + 1) / (n + 1);
+        if (item.end === 's') item.entry.sFrac = frac;
+        else                  item.entry.tFrac = frac;
+      });
+    }
+    return planned;
   }
 
   // Top-level edge router. Tries A* first; falls back to the v1
   // L-router when A* fails (no path or anchor cell blocked).
-  _routeEdgeBest(edge, byID, obs) {
-    const src = byID.get(edge.FromNodeID);
-    const tgt = byID.get(edge.ToNodeID);
-    if (!src || !tgt) return null;
-    if (typeof src.x !== 'number' || typeof tgt.x !== 'number') return null;
-    const [sSide, tSide] = this._chooseSides(src, tgt);
-    const sCell = this._anchorCell(src, sSide, obs);
-    const tCell = this._anchorCell(tgt, tSide, obs);
+  _routeEdgeBest(plan, byID, obs) {
+    if (!plan) return null;
+    const { edge, src, tgt, sSide, tSide, sFrac, tFrac } = plan;
+    const sCell = this._anchorCell(src, sSide, obs, sFrac);
+    const tCell = this._anchorCell(tgt, tSide, obs, tFrac);
     if (!sCell || !tCell) return this._routeEdge(edge, byID);
     const cells = this._astar(obs, sCell, tCell, src, tgt);
     if (!cells || cells.length < 2) return this._routeEdge(edge, byID);
@@ -995,8 +1042,8 @@ class NottarioArchCanvas extends LitElement {
     // Replace the first and last waypoints with the EXACT face anchor
     // pixel positions so the path visually touches the node edge.
     const pxPath = cells.map(([x, y]) => ({ x: x * cell, y: y * cell }));
-    const sAnchor = this._faceAnchorPx(src, sSide);
-    const tAnchor = this._faceAnchorPx(tgt, tSide);
+    const sAnchor = this._faceAnchorPx(src, sSide, sFrac);
+    const tAnchor = this._faceAnchorPx(tgt, tSide, tFrac);
     // Align first segment to the source face by snapping its leading
     // coordinate; same for the trailing segment.
     pxPath[0] = sAnchor;
@@ -1293,24 +1340,43 @@ class NottarioArchCanvas extends LitElement {
     this._dragOrigin = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
   }
-  // Zoom: ctrl/cmd + wheel (or pinch on trackpad which the browser
-  // delivers as a ctrl-wheel event). Anchor at cursor.
+  // Wheel: ctrl/cmd + wheel zooms (anchor at cursor). Without a
+  // modifier, the wheel pans the viewBox in both axes at a 1:1
+  // CSS-pixel ratio so trackpad two-finger scroll feels like
+  // grabbing the canvas. Browsers normalise DOM_DELTA_LINE /
+  // DOM_DELTA_PAGE so we scale those back to px.
   _onSvgWheel(e) {
-    if (!(e.ctrlKey || e.metaKey)) return;
-    e.preventDefault();
     const svgEl = e.currentTarget;
     const rect = svgEl.getBoundingClientRect();
-    const cx = (e.clientX - rect.left) / rect.width;
-    const cy = (e.clientY - rect.top) / rect.height;
-    const factor = e.deltaY < 0 ? 0.88 : 1.12;
-    const newW = this._viewBox.w * factor;
-    const newH = this._viewBox.h * factor;
-    // Keep the cursor anchored: x' = x + (oldW - newW) * cx
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const cx = (e.clientX - rect.left) / rect.width;
+      const cy = (e.clientY - rect.top) / rect.height;
+      const factor = e.deltaY < 0 ? 0.88 : 1.12;
+      const newW = this._viewBox.w * factor;
+      const newH = this._viewBox.h * factor;
+      this._viewBox = {
+        x: this._viewBox.x + (this._viewBox.w - newW) * cx,
+        y: this._viewBox.y + (this._viewBox.h - newH) * cy,
+        w: newW,
+        h: newH,
+      };
+      this.requestUpdate();
+      return;
+    }
+    // Pan. Convert delta to viewBox units so movement matches the
+    // user's gesture regardless of current zoom.
+    e.preventDefault();
+    const lineH = 16; // approximate px per wheel "line"
+    const k = e.deltaMode === 1 ? lineH
+            : e.deltaMode === 2 ? rect.height
+            : 1;
+    const scaleX = this._viewBox.w / rect.width;
+    const scaleY = this._viewBox.h / rect.height;
     this._viewBox = {
-      x: this._viewBox.x + (this._viewBox.w - newW) * cx,
-      y: this._viewBox.y + (this._viewBox.h - newH) * cy,
-      w: newW,
-      h: newH,
+      ...this._viewBox,
+      x: this._viewBox.x + e.deltaX * k * scaleX,
+      y: this._viewBox.y + e.deltaY * k * scaleY,
     };
     this.requestUpdate();
   }
@@ -1461,8 +1527,9 @@ class NottarioArchCanvas extends LitElement {
     // via A*. Falls back to the L-router on per-edge failures (anchor
     // blocked, no path found, etc).
     const obstacles = this._buildObstacles(layout);
-    const routedEdges = (this.edges || [])
-      .map(e => this._routeEdgeBest(e, wByID, obstacles))
+    const anchorPlan = this._planAnchors(this.edges || [], wByID);
+    const routedEdges = anchorPlan
+      .map(p => this._routeEdgeBest(p, wByID, obstacles))
       .filter(Boolean);
 
     // Highlighted set: hover > query > focus subtree. null = everything full.
