@@ -1227,21 +1227,37 @@ class NottarioArchCanvas extends LitElement {
     const pxPath = cells.map(([x, y]) => ({ x: x * cell, y: y * cell }));
     const sAnchor = this._faceAnchorPx(src, sSide, sFrac);
     const tAnchor = this._faceAnchorPx(tgt, tSide, tFrac);
-    // Snap the first/last A* cells' FACE-PERPENDICULAR axis to match
-    // the face anchor. The cells are already STUB_CELLS×GRID_CELL
-    // away from the face along the face-normal axis, so after the
-    // snap, face → first-cell is a straight perpendicular segment.
-    // (Previous code also overrode pxPath[0]/[last] to a separate
-    // "stub" pixel — that interacted badly with the second-waypoint
-    // alignment when A*'s first step was perpendicular to the face,
-    // creating sub-cell duplicate points that survived simplify and
-    // distorted the geometry. Snapping in place avoids it.)
+    // Snap the FULL initial straight run (and the full trailing run)
+    // to the face anchor's perpendicular coord. The face anchor is
+    // computed from frac × node.w (sub-pixel exact), but A* operates
+    // on an 8-px grid so sCell/tCell are rounded. When A* moves in
+    // the face-direction axis for several cells, every cell in that
+    // run shares the same (rounded) perpendicular coord — we want
+    // ALL of them aligned to the exact face-anchor perpendicular so
+    // the rendered stub-plus-run is one perfectly straight segment.
+    // The previous code only snapped pxPath[0]/[last], which left
+    // pxPath[1..] at the rounded grid x and produced a sub-cell
+    // diagonal kink between the snapped first cell and A*'s second.
     if (pxPath.length >= 1) {
-      if (sSide === 'left' || sSide === 'right') pxPath[0].y = sAnchor.y;
-      else                                        pxPath[0].x = sAnchor.x;
+      const isHorizS = (sSide === 'left' || sSide === 'right');
+      const origS = isHorizS ? pxPath[0].y : pxPath[0].x;
+      const wantS = isHorizS ? sAnchor.y : sAnchor.x;
+      for (let i = 0; i < pxPath.length; i++) {
+        const wp = pxPath[i];
+        const cur = isHorizS ? wp.y : wp.x;
+        if (Math.abs(cur - origS) >= cell / 2) break;
+        if (isHorizS) wp.y = wantS; else wp.x = wantS;
+      }
+      const isHorizT = (tSide === 'left' || tSide === 'right');
       const li = pxPath.length - 1;
-      if (tSide === 'left' || tSide === 'right') pxPath[li].y = tAnchor.y;
-      else                                        pxPath[li].x = tAnchor.x;
+      const origT = isHorizT ? pxPath[li].y : pxPath[li].x;
+      const wantT = isHorizT ? tAnchor.y : tAnchor.x;
+      for (let i = li; i >= 0; i--) {
+        const wp = pxPath[i];
+        const cur = isHorizT ? wp.y : wp.x;
+        if (Math.abs(cur - origT) >= cell / 2) break;
+        if (isHorizT) wp.y = wantT; else wp.x = wantT;
+      }
     }
     pxPath.unshift(sAnchor);
     pxPath.push(tAnchor);
