@@ -1006,6 +1006,17 @@ class NottarioArchCanvas extends LitElement {
 
   _onNodeClick(e, w) {
     e.stopPropagation();
+    // Collapsed containers: any click on the box also toggles
+    // expand (the entire box IS the header at this state — there's
+    // no separate body to select without expanding). For expanded
+    // containers, the label strip handles toggling and body clicks
+    // fall through here to just select. For leaves, just select.
+    if (w._isContainer && !w._expanded) {
+      const ex = new Set(this.expanded || []);
+      ex.add(w.node.ID);
+      this.expanded = ex;
+      this._emitExpandChanged();
+    }
     this._emitSelect(w.node.ID);
   }
   _onNodeDblClick(e, w) {
