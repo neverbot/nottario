@@ -54,7 +54,12 @@ class NottarioArchCanvas extends LitElement {
   static LEAF_H      = 72;
   static LABEL_STRIP = 28;
   static PAD         = 24;
-  static GAP         = 16;
+  // Horizontal gap between sibling boxes in the same Sugiyama layer.
+  // Needs to be wide enough for an arrow + an arrowhead + a label
+  // pill to fit between two boxes when an edge enters/leaves
+  // sideways. 32px ≈ 16px clear stroke + 8px arrowhead overhang
+  // + 8px breathing room.
+  static GAP         = 32;
   // Vertical gap between Sugiyama layers. Larger than the within-
   // layer GAP so edges and their pill labels have real breathing
   // room. 48px ≈ 18px label + ~30px for the arrow + arrowhead.
@@ -997,11 +1002,28 @@ class NottarioArchCanvas extends LitElement {
 
   // Decide the source and target exit faces based on relative position
   // (same logic as `_anchors`) and return them as side identifiers.
+  // Decide the exit/entry faces. If the bounding boxes overlap on
+  // the vertical axis (same "row"), prefer horizontal faces so the
+  // arrow enters/leaves sideways. If they overlap on the horizontal
+  // axis (same "column"), prefer vertical faces. Otherwise fall back
+  // to the dominant centre-to-centre axis. This matches the user's
+  // expectation that a left/right neighbour gets a left/right arrow,
+  // not one that loops over the top.
   _chooseSides(src, tgt) {
     const sCx = src.x + src.w / 2;
     const sCy = src.y + src.h / 2;
     const tCx = tgt.x + tgt.w / 2;
     const tCy = tgt.y + tgt.h / 2;
+    const vOverlap = Math.min(src.y + src.h, tgt.y + tgt.h)
+                   > Math.max(src.y, tgt.y);
+    const hOverlap = Math.min(src.x + src.w, tgt.x + tgt.w)
+                   > Math.max(src.x, tgt.x);
+    if (vOverlap && !hOverlap) {
+      return tCx > sCx ? ['right', 'left'] : ['left', 'right'];
+    }
+    if (hOverlap && !vOverlap) {
+      return tCy > sCy ? ['bottom', 'top'] : ['top', 'bottom'];
+    }
     const dx = tCx - sCx;
     const dy = tCy - sCy;
     if (Math.abs(dx) >= Math.abs(dy)) {
@@ -1528,6 +1550,18 @@ class NottarioArchCanvas extends LitElement {
     const dx = Math.sign(lastWP.x - prevWP.x);
     const dy = Math.sign(lastWP.y - prevWP.y);
     const aSize = 7;
+    // The line should end at the BASE of the arrowhead, not at its
+    // tip — otherwise the path and the triangle overlap and the line
+    // pokes through the arrow. Build a shortened copy of the
+    // waypoints whose final point is pulled back by aSize, then run
+    // it through _pathD so corner-rounding still works.
+    const shortened = routed.waypoints.slice();
+    const li = shortened.length - 1;
+    shortened[li] = {
+      x: lastWP.x - dx * aSize,
+      y: lastWP.y - dy * aSize,
+    };
+    const dPath = this._pathD(shortened);
     let arrow = '';
     if (dx !== 0) {
       const baseX = lastWP.x - dx * aSize;
@@ -1543,7 +1577,7 @@ class NottarioArchCanvas extends LitElement {
     const stroke = (isSelected || highlight) ? '#0969da' : '#59636e';
     return svg`
       <g>
-        <path class=${cls} d=${routed.d}></path>
+        <path class=${cls} d=${dPath}></path>
         <path class=${cls} d=${arrow} fill=${stroke} stroke="none"></path>
       </g>
     `;
