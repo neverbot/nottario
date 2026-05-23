@@ -1129,31 +1129,54 @@ class NottarioArchCanvas extends LitElement {
   }
 
   // Channel-routing pass for cross-layer edges (vertical sides on
-  // both ends). Groups plans by the (sourceBottomY, targetTopY)
-  // pair; each group's edges share a horizontal "channel" between
-  // the two layers. Within a group, edges are sorted by target x
-  // and assigned a unique track y so their horizontal segments
-  // never coincide. Returns a Map<planIndex, routed> for plans
-  // that were routed here. The caller falls back to A* for the
-  // rest (same-row sibling edges).
-  _routeTracked(plans) {
+  // both ends). Two filters:
+  //
+  //   - eligible: source/target must use vertical faces (bottom→top
+  //     or top→bottom).
+  //   - clearChannel: no OTHER laid-out node may sit fully inside
+  //     the y-range between source's exit face and target's entry
+  //     face. This is what catches cross-multi-layer edges (e.g.
+  //     a layer-0 node going to a layer-2 node, whose channel
+  //     contains layer-1 nodes). Those edges fall through to A*
+  //     so the route can go AROUND the intermediate boxes instead
+  //     of straight through them.
+  //
+  // Within each (srcY, tgtY) bucket, edges are sorted by midpoint x
+  // (avg of source-anchor and target-anchor) and assigned a unique
+  // track y. The midpoint sort packs adjacent-in-x edges into
+  // adjacent tracks, which reduces visual crossings vs. sorting by
+  // target x alone (which clusters opposite-direction edges into
+  // neighbouring tracks and forces crossings).
+  _routeTracked(plans, layoutFlat) {
     const result = new Map();
     const groups = new Map();
     const eligible = (p) =>
       (p.sSide === 'bottom' && p.tSide === 'top') ||
       (p.sSide === 'top' && p.tSide === 'bottom');
+    const clearChannel = (p, srcY, tgtY) => {
+      const top = Math.min(srcY, tgtY);
+      const bot = Math.max(srcY, tgtY);
+      for (const w of layoutFlat) {
+        if (w === p.src || w === p.tgt) continue;
+        // An expanded container's interior is passable.
+        if (w._isContainer && w._expanded) continue;
+        if (w.y > top && w.y + w.h < bot) return false;
+      }
+      return true;
+    };
     plans.forEach((p, i) => {
       if (!p || !eligible(p)) return;
       const srcA = this._faceAnchorPx(p.src, p.sSide, p.sFrac);
       const tgtA = this._faceAnchorPx(p.tgt, p.tSide, p.tFrac);
+      if (!clearChannel(p, srcA.y, tgtA.y)) return;
       const key = `${srcA.y}|${tgtA.y}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push({ idx: i, plan: p, srcA, tgtA });
     });
     for (const [key, group] of groups) {
-      // Sort by target x so adjacent tracks land on adjacent
-      // target columns — minimises crossings within the channel.
-      group.sort((a, b) => a.tgtA.x - b.tgtA.x);
+      group.sort((a, b) =>
+        (a.srcA.x + a.tgtA.x) - (b.srcA.x + b.tgtA.x)
+      );
       const [srcY, tgtY] = key.split('|').map(Number);
       const dy = tgtY - srcY;
       const n = group.length;
@@ -1709,7 +1732,7 @@ class NottarioArchCanvas extends LitElement {
     // don't cross. This is the classic Sugiyama-step-5 channel
     // routing — far more predictable than relying on A*'s
     // congestion penalty.
-    const tracked = this._routeTracked(anchorPlan);
+    const tracked = this._routeTracked(anchorPlan, layout.flat);
     // Everything else (same-row sibling edges) still uses A* with
     // a congestion grid.
     const congestion = new Uint8Array(obstacles.W * obstacles.H);
