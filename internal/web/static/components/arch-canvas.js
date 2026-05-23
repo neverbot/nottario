@@ -1120,7 +1120,15 @@ class NottarioArchCanvas extends LitElement {
       list.sort((a, b) => perpOf(a) - perpOf(b));
       const n = list.length;
       list.forEach((item, i) => {
-        const frac = (i + 1) / (n + 1);
+        let frac = (i + 1) / (n + 1);
+        // Jitter the exact-centre frac slightly. A source with an odd
+        // count places its middle anchor at frac=0.5 (= node centre).
+        // A single-incoming target's anchor is also frac=0.5. When two
+        // such nodes happen to be vertically center-aligned (the
+        // common Sugiyama symmetry), their vertical segments coincide
+        // in x and overlap visually. 5%-of-face nudge is invisible
+        // but breaks the alignment.
+        if (n > 1 && Math.abs(frac - 0.5) < 1e-6) frac = 0.55;
         if (item.end === 's') item.entry.sFrac = frac;
         else                  item.entry.tFrac = frac;
       });
@@ -1746,7 +1754,16 @@ class NottarioArchCanvas extends LitElement {
       });
     const routedById = new Map(tracked);
     for (const { p, i } of remaining) {
-      const r = this._routeEdgeBest(p, wByID, obstacles, congestion);
+      // No congestion for A* fallback edges: they're the few
+      // multi-layer ones (the channel between source and target
+      // contains other nodes' rows, so the track router skipped
+      // them). With congestion ON, the second such edge from the
+      // same source had to step laterally to escape the first's
+      // 1-cell halo, producing a zig-zag right after the source
+      // stub. Without congestion, each finds its own clean shortest
+      // path around the obstacles; their sources are already at
+      // different sFracs so they naturally diverge.
+      const r = this._routeEdgeBest(p, wByID, obstacles, null);
       if (r) routedById.set(i, r);
     }
     const routedEdges = anchorPlan
