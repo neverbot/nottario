@@ -826,22 +826,46 @@ class NottarioArchCanvas extends LitElement {
   // a face don't overlap. Returns the outer-face cell even when it
   // lies in another node's buffer; A* exempts those buffer-only
   // regions for the source and target.
-  _anchorCell(node, side, obs, frac = 0.5) {
+  // Number of cells the A* anchor sits OUT from the face. Larger
+  // values give a longer guaranteed straight stub before the first
+  // corner, so the arrowhead doesn't look like it merges with the
+  // bend. 3 cells = 24px at GRID_CELL=8.
+  static STUB_CELLS  = 3;
+
+  _anchorCell(node, side, obs, frac = 0.5, offsetCells = NottarioArchCanvas.STUB_CELLS) {
     const { cell, W, H } = obs;
     const fx = node.x + node.w * frac;
     const fy = node.y + node.h * frac;
+    const off = cell * offsetCells;
     let ax, ay;
     switch (side) {
-      case 'right':  ax = node.x + node.w + cell;      ay = fy; break;
-      case 'left':   ax = node.x - cell;               ay = fy; break;
-      case 'bottom': ax = fx; ay = node.y + node.h + cell;     break;
-      case 'top':    ax = fx; ay = node.y - cell;              break;
+      case 'right':  ax = node.x + node.w + off;       ay = fy; break;
+      case 'left':   ax = node.x - off;                ay = fy; break;
+      case 'bottom': ax = fx; ay = node.y + node.h + off;      break;
+      case 'top':    ax = fx; ay = node.y - off;               break;
       default:       ax = node.x + node.w / 2; ay = node.y + node.h / 2;
     }
     const gx = Math.round(ax / cell);
     const gy = Math.round(ay / cell);
     if (gx < 0 || gx >= W || gy < 0 || gy >= H) return null;
     return { x: gx, y: gy, side };
+  }
+
+  // Pixel coords of the stub anchor — the point STUB_CELLS cells
+  // outside the face, on the same row/column as the face anchor.
+  // The rendered path goes (face) → straight to stub → A* route
+  // → stub → (face). The straight segments at each end guarantee
+  // the corner happens well away from the arrowhead.
+  _stubAnchorPx(node, side, frac = 0.5, stubLen = NottarioArchCanvas.GRID_CELL * NottarioArchCanvas.STUB_CELLS) {
+    const fx = node.x + node.w * frac;
+    const fy = node.y + node.h * frac;
+    switch (side) {
+      case 'right':  return { x: node.x + node.w + stubLen, y: fy };
+      case 'left':   return { x: node.x - stubLen,           y: fy };
+      case 'bottom': return { x: fx, y: node.y + node.h + stubLen };
+      case 'top':    return { x: fx, y: node.y - stubLen };
+      default:       return { x: node.x + node.w / 2, y: node.y + node.h / 2 };
+    }
   }
 
   // True when the given cell is inside the BUFFER-ONLY halo of `node`
@@ -1114,22 +1138,30 @@ class NottarioArchCanvas extends LitElement {
     // Replace the first and last waypoints with the EXACT face anchor
     // pixel positions so the path visually touches the node edge.
     const pxPath = cells.map(([x, y]) => ({ x: x * cell, y: y * cell }));
+    // The first and last A* cells live STUB_CELLS out from the face
+    // — we replace them with the precise stub-anchor pixel coords so
+    // the rendered geometry is exact.
+    const sStub = this._stubAnchorPx(src, sSide, sFrac);
+    const tStub = this._stubAnchorPx(tgt, tSide, tFrac);
+    pxPath[0] = sStub;
+    pxPath[pxPath.length - 1] = tStub;
+    // Align the second/second-to-last points with the stub anchors
+    // so the first/last A* turn stays orthogonal.
+    if (pxPath.length >= 2) {
+      if (sSide === 'left' || sSide === 'right') pxPath[1].y = sStub.y;
+      else                                       pxPath[1].x = sStub.x;
+      const li = pxPath.length - 2;
+      if (tSide === 'left' || tSide === 'right') pxPath[li].y = tStub.y;
+      else                                       pxPath[li].x = tStub.x;
+    }
+    // Bookend with the actual face anchors. The face → stub segment
+    // is a guaranteed straight stub of STUB_CELLS×GRID_CELL px, so
+    // the first/last bend in the route can never happen closer to
+    // the node than that.
     const sAnchor = this._faceAnchorPx(src, sSide, sFrac);
     const tAnchor = this._faceAnchorPx(tgt, tSide, tFrac);
-    // Align first segment to the source face by snapping its leading
-    // coordinate; same for the trailing segment.
-    pxPath[0] = sAnchor;
-    pxPath[pxPath.length - 1] = tAnchor;
-    // After snapping the endpoints, the second and second-to-last
-    // points may need their x or y aligned with the new endpoints
-    // so the rendered path stays orthogonal.
-    if (pxPath.length >= 2) {
-      if (sSide === 'left' || sSide === 'right') pxPath[1].y = sAnchor.y;
-      else                                       pxPath[1].x = sAnchor.x;
-      const li = pxPath.length - 2;
-      if (tSide === 'left' || tSide === 'right') pxPath[li].y = tAnchor.y;
-      else                                       pxPath[li].x = tAnchor.x;
-    }
+    pxPath.unshift(sAnchor);
+    pxPath.push(tAnchor);
     const waypoints = this._simplifyOrtho(pxPath);
     return { d: this._pathD(waypoints), waypoints, edge };
   }
