@@ -60,10 +60,15 @@ class NottarioArchCanvas extends LitElement {
   // sideways. 32px ≈ 16px clear stroke + 8px arrowhead overhang
   // + 8px breathing room.
   static GAP         = 32;
-  // Vertical gap between Sugiyama layers. Larger than the within-
-  // layer GAP so edges and their pill labels have real breathing
-  // room. 48px ≈ 18px label + ~30px for the arrow + arrowhead.
-  static LAYER_GAP   = 48;
+  // Vertical gap between Sugiyama layers. Needs to be at least
+  // 2 × stub + N × cell where N is the maximum number of edges
+  // crossing this gap (each edge needs its own horizontal track
+  // when paths overlap). 96 = 48 (stubs) + 48 (six 8-px tracks).
+  // TODO: this is still ad-hoc; the right fix is per-channel
+  // track allocation so each crossing edge gets a guaranteed
+  // unique y inside the gap instead of relying on A*'s
+  // congestion penalty.
+  static LAYER_GAP   = 96;
   static CANVAS_PAD  = 24;
   static CORNER_R    = 4;
   static FOCUS_MS    = 220;
@@ -1123,6 +1128,54 @@ class NottarioArchCanvas extends LitElement {
     return planned;
   }
 
+  // Channel-routing pass for cross-layer edges (vertical sides on
+  // both ends). Groups plans by the (sourceBottomY, targetTopY)
+  // pair; each group's edges share a horizontal "channel" between
+  // the two layers. Within a group, edges are sorted by target x
+  // and assigned a unique track y so their horizontal segments
+  // never coincide. Returns a Map<planIndex, routed> for plans
+  // that were routed here. The caller falls back to A* for the
+  // rest (same-row sibling edges).
+  _routeTracked(plans) {
+    const result = new Map();
+    const groups = new Map();
+    const eligible = (p) =>
+      (p.sSide === 'bottom' && p.tSide === 'top') ||
+      (p.sSide === 'top' && p.tSide === 'bottom');
+    plans.forEach((p, i) => {
+      if (!p || !eligible(p)) return;
+      const srcA = this._faceAnchorPx(p.src, p.sSide, p.sFrac);
+      const tgtA = this._faceAnchorPx(p.tgt, p.tSide, p.tFrac);
+      const key = `${srcA.y}|${tgtA.y}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ idx: i, plan: p, srcA, tgtA });
+    });
+    for (const [key, group] of groups) {
+      // Sort by target x so adjacent tracks land on adjacent
+      // target columns — minimises crossings within the channel.
+      group.sort((a, b) => a.tgtA.x - b.tgtA.x);
+      const [srcY, tgtY] = key.split('|').map(Number);
+      const dy = tgtY - srcY;
+      const n = group.length;
+      group.forEach((entry, i) => {
+        const t = (i + 1) / (n + 1);
+        const trackY = srcY + dy * t;
+        const waypoints = [
+          entry.srcA,
+          { x: entry.srcA.x, y: trackY },
+          { x: entry.tgtA.x, y: trackY },
+          entry.tgtA,
+        ];
+        result.set(entry.idx, {
+          d: this._pathD(waypoints),
+          waypoints,
+          edge: entry.plan.edge,
+        });
+      });
+    }
+    return result;
+  }
+
   // Top-level edge router. Tries A* first; falls back to the v1
   // L-router when A* fails (no path or anchor cell blocked). When
   // a congestion map is provided, it is consulted (and updated) so
@@ -1650,21 +1703,26 @@ class NottarioArchCanvas extends LitElement {
     // blocked, no path found, etc).
     const obstacles = this._buildObstacles(layout);
     const anchorPlan = this._planAnchors(this.edges || [], wByID);
-    // Sequential routing with a shared congestion grid. Edges are
-    // routed shortest-first so tightly-constrained edges claim the
-    // direct corridor; longer edges are pushed onto parallel tracks
-    // by the congestion penalty inside A*.
+    // Track allocation for cross-layer edges (source-bottom →
+    // target-top, or top → bottom). Each such edge gets its own
+    // unique y inside the layer gap, sorted by target x so paths
+    // don't cross. This is the classic Sugiyama-step-5 channel
+    // routing — far more predictable than relying on A*'s
+    // congestion penalty.
+    const tracked = this._routeTracked(anchorPlan);
+    // Everything else (same-row sibling edges) still uses A* with
+    // a congestion grid.
     const congestion = new Uint8Array(obstacles.W * obstacles.H);
-    const order = anchorPlan
+    const remaining = anchorPlan
       .map((p, i) => ({ p, i }))
-      .filter(o => o.p)
+      .filter(o => o.p && !tracked.has(o.i))
       .sort((a, b) => {
         const da = Math.hypot(a.p.tgt.x - a.p.src.x, a.p.tgt.y - a.p.src.y);
         const db = Math.hypot(b.p.tgt.x - b.p.src.x, b.p.tgt.y - b.p.src.y);
         return da - db;
       });
-    const routedById = new Map();
-    for (const { p, i } of order) {
+    const routedById = new Map(tracked);
+    for (const { p, i } of remaining) {
       const r = this._routeEdgeBest(p, wByID, obstacles, congestion);
       if (r) routedById.set(i, r);
     }
