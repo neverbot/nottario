@@ -55,6 +55,10 @@ class NottarioArchCanvas extends LitElement {
   static LABEL_STRIP = 28;
   static PAD         = 24;
   static GAP         = 16;
+  // Vertical gap between Sugiyama layers. Larger than the within-
+  // layer GAP so edges and their pill labels have real breathing
+  // room. 48px ≈ 18px label + ~30px for the arrow + arrowhead.
+  static LAYER_GAP   = 48;
   static CANVAS_PAD  = 24;
   static CORNER_R    = 4;
   static FOCUS_MS    = 220;
@@ -434,7 +438,8 @@ class NottarioArchCanvas extends LitElement {
   // per-cell relative coordinates and the totals. Layers stacked
   // top-down; nodes within a layer left-to-right.
   _packLevel(layers) {
-    const G = NottarioArchCanvas.GAP;
+    const G  = NottarioArchCanvas.GAP;
+    const LG = NottarioArchCanvas.LAYER_GAP;
     const gridX = [];
     const gridY = [];
     let curY = 0;
@@ -452,13 +457,15 @@ class NottarioArchCanvas extends LitElement {
       if (rowW > maxW) maxW = rowW;
       gridX.push(xs);
       gridY.push(curY);
-      curY += rowH + G;
+      // Use the bigger vertical gap between layers so edges + label
+      // pills fit; siblings within a layer still use G.
+      curY += rowH + LG;
     }
     return {
       gridX,
       gridY,
       totalW: maxW,
-      totalH: Math.max(0, curY - G),
+      totalH: Math.max(0, curY - LG),
     };
   }
 
@@ -598,6 +605,15 @@ class NottarioArchCanvas extends LitElement {
     if (this._cachedLayoutKey === key && this._cachedLayout) {
       return this._cachedLayout;
     }
+    // Snapshot positions BEFORE recomputing so we can animate to the
+    // new positions when state changes (expand/collapse). On the very
+    // first layout there's no prior snapshot, so no animation fires.
+    const prevPositions = new Map();
+    if (this._cachedLayout) {
+      for (const w of this._cachedLayout.flat) {
+        prevPositions.set(w.node.ID, { x: w.x, y: w.y, w: w.w, h: w.h });
+      }
+    }
     const { roots, byID } = this._buildTree();
     if (!roots.length) {
       const layout = { roots: [], flat: [], byID, width: 600, height: 480 };
@@ -634,7 +650,56 @@ class NottarioArchCanvas extends LitElement {
     };
     this._cachedLayout = layout;
     this._cachedLayoutKey = key;
+    // Kick reflow animation if we had a prior layout. The animation
+    // mutates the wrappers in-place each frame so subsequent renders
+    // (from requestUpdate) see the interpolated positions.
+    if (prevPositions.size && !this._reducedMotion) {
+      this._kickReflowAnimation(prevPositions, layout);
+    }
     return layout;
+  }
+
+  // Animate every wrapper's x/y/w/h from its previous position to
+  // its newly computed target over 400ms ease-out-quart. Cancels any
+  // in-flight animation; chains feel smooth because the prev snapshot
+  // is whatever positions the wrappers held at the moment of the
+  // state change (mid-animation included).
+  _kickReflowAnimation(prevPositions, layout) {
+    if (this._reflowRaf != null) cancelAnimationFrame(this._reflowRaf);
+    // Capture target positions so we can lerp.
+    const targets = new Map();
+    for (const w of layout.flat) {
+      targets.set(w.node.ID, { x: w.x, y: w.y, w: w.w, h: w.h });
+    }
+    // Snap wrappers to prev positions so the first render of this
+    // state shows the OLD layout, then animate forward.
+    for (const w of layout.flat) {
+      const p = prevPositions.get(w.node.ID);
+      if (p) { w.x = p.x; w.y = p.y; w.w = p.w; w.h = p.h; }
+      // Nodes that didn't exist in prev (newly visible due to expand)
+      // start at their target position so they don't fly in from 0,0.
+    }
+    const start = performance.now();
+    const dur = 400;
+    const ease = (t) => 1 - Math.pow(1 - t, 4);
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / dur);
+      const e = ease(t);
+      for (const w of layout.flat) {
+        const p = prevPositions.get(w.node.ID);
+        const tg = targets.get(w.node.ID);
+        if (!tg) continue;
+        if (!p) { w.x = tg.x; w.y = tg.y; w.w = tg.w; w.h = tg.h; continue; }
+        w.x = p.x + (tg.x - p.x) * e;
+        w.y = p.y + (tg.y - p.y) * e;
+        w.w = p.w + (tg.w - p.w) * e;
+        w.h = p.h + (tg.h - p.h) * e;
+      }
+      this.requestUpdate();
+      if (t < 1) this._reflowRaf = requestAnimationFrame(tick);
+      else        this._reflowRaf = null;
+    };
+    this._reflowRaf = requestAnimationFrame(tick);
   }
 
   // ----- Edge routing (from child B) -----
