@@ -870,7 +870,14 @@ class NottarioArchCanvas extends LitElement {
   // nodes' buffer-only halos are exempted so the path can start/end
   // even when the anchor cell falls inside an adjacent neighbour's
   // buffer (sibling pair case).
-  _astar(obs, start, goal, srcNode, tgtNode) {
+  //
+  // `congestion` is an optional Uint8Array (one byte per cell, 0 =
+  // free, >0 = previously used by another routed edge). It adds a
+  // soft cost so subsequent edges prefer fresh corridors — the
+  // standard orthogonal-connector-routing approach (Wybrow et al.,
+  // Graph Drawing 2009) used by ELK and similar libraries to keep
+  // parallel edges from bundling onto a single track.
+  _astar(obs, start, goal, srcNode, tgtNode, congestion = null) {
     const { grid, W, H } = obs;
     const idx = (x, y) => y * W + x;
     const heur = (x, y) => Math.abs(goal.x - x) + Math.abs(goal.y - y);
@@ -878,8 +885,6 @@ class NottarioArchCanvas extends LitElement {
       if (x === goal.x && y === goal.y) return false;
       if (x === start.x && y === start.y) return false;
       if (!grid[idx(x, y)]) return false;
-      // Exempt buffer-only regions of source and target so the path
-      // can step outward through a neighbour's buffer if needed.
       if (srcNode && this._inNodeBufferOnly(x, y, srcNode, obs)) return false;
       if (tgtNode && this._inNodeBufferOnly(x, y, tgtNode, obs)) return false;
       return true;
@@ -909,13 +914,55 @@ class NottarioArchCanvas extends LitElement {
         if (closed.has(k)) continue;
         if (isBlocked(nx, ny)) continue;
         const turn = best.dir && (best.dir[0] !== dx || best.dir[1] !== dy);
-        const g = best.g + 1 + (turn ? 2 : 0);
+        let g = best.g + 1 + (turn ? 2 : 0);
+        // Congestion penalty. A cell already used by another routed
+        // edge adds cost; if the new step matches the direction of
+        // the existing segment (same axis), the penalty is harsher
+        // so parallel routes get pushed onto a different track.
+        if (congestion) {
+          const c = congestion[idx(nx, ny)];
+          if (c) {
+            const sameAxis = dx !== 0 ? (c & 1) : (c & 2);
+            g += sameAxis ? 8 : 3;
+          }
+        }
         const existing = open.get(k);
         if (existing && existing.g <= g) continue;
         open.set(k, { x: nx, y: ny, g, h: heur(nx, ny), parent: best, dir: [dx, dy] });
       }
     }
     return null;
+  }
+
+  // Mark every cell traversed by `cells` in the congestion map. Bit
+  // 0 = a horizontal segment passed through; bit 1 = a vertical one.
+  // Adjacent cells perpendicular to each segment also get a light
+  // mark so the next edge is pushed at least one track away.
+  _markCongestion(cells, obs, congestion) {
+    if (!cells || cells.length < 2) return;
+    const { W, H } = obs;
+    const idx = (x, y) => y * W + x;
+    for (let i = 0; i < cells.length - 1; i++) {
+      const [ax, ay] = cells[i];
+      const [bx, by] = cells[i + 1];
+      const horiz = ay === by;
+      const bit = horiz ? 1 : 2;
+      const sx = Math.min(ax, bx), ex = Math.max(ax, bx);
+      const sy = Math.min(ay, by), ey = Math.max(ay, by);
+      for (let y = sy; y <= ey; y++) {
+        for (let x = sx; x <= ex; x++) {
+          congestion[idx(x, y)] |= bit;
+          // Soft 1-cell halo on the perpendicular axis.
+          if (horiz) {
+            if (y - 1 >= 0) congestion[idx(x, y - 1)] |= bit;
+            if (y + 1 < H)  congestion[idx(x, y + 1)] |= bit;
+          } else {
+            if (x - 1 >= 0) congestion[idx(x - 1, y)] |= bit;
+            if (x + 1 < W)  congestion[idx(x + 1, y)] |= bit;
+          }
+        }
+      }
+    }
   }
 
   // Drop collinear waypoints between two segments so the simplified
@@ -1028,14 +1075,17 @@ class NottarioArchCanvas extends LitElement {
   }
 
   // Top-level edge router. Tries A* first; falls back to the v1
-  // L-router when A* fails (no path or anchor cell blocked).
-  _routeEdgeBest(plan, byID, obs) {
+  // L-router when A* fails (no path or anchor cell blocked). When
+  // a congestion map is provided, it is consulted (and updated) so
+  // edges routed later don't reuse the same corridors.
+  _routeEdgeBest(plan, byID, obs, congestion = null) {
     if (!plan) return null;
     const { edge, src, tgt, sSide, tSide, sFrac, tFrac } = plan;
     const sCell = this._anchorCell(src, sSide, obs, sFrac);
     const tCell = this._anchorCell(tgt, tSide, obs, tFrac);
     if (!sCell || !tCell) return this._routeEdge(edge, byID);
-    const cells = this._astar(obs, sCell, tCell, src, tgt);
+    const cells = this._astar(obs, sCell, tCell, src, tgt, congestion);
+    if (cells && congestion) this._markCongestion(cells, obs, congestion);
     if (!cells || cells.length < 2) return this._routeEdge(edge, byID);
     const cell = obs.cell;
     // Convert grid cells to pixel waypoints (center of each cell).
@@ -1323,10 +1373,15 @@ class NottarioArchCanvas extends LitElement {
     if (!this._dragging || !this._dragOrigin) return;
     const svgEl = e.currentTarget;
     const rect = svgEl.getBoundingClientRect();
-    const scaleX = this._viewBox.w / rect.width;
-    const scaleY = this._viewBox.h / rect.height;
-    const dx = (e.clientX - this._dragOrigin.x) * scaleX;
-    const dy = (e.clientY - this._dragOrigin.y) * scaleY;
+    // SVG uses preserveAspectRatio="xMidYMid meet": the content is
+    // scaled by the SAME factor on both axes (the larger of the two
+    // viewBox/rect ratios). Using separate scaleX/scaleY here would
+    // make the axis with the slack feel faster than the other —
+    // exactly the bug the user reported. One scale, both axes.
+    const scale = Math.max(this._viewBox.w / rect.width,
+                           this._viewBox.h / rect.height);
+    const dx = (e.clientX - this._dragOrigin.x) * scale;
+    const dy = (e.clientY - this._dragOrigin.y) * scale;
     this._viewBox = {
       ...this._dragOrigin.vb,
       x: this._dragOrigin.vb.x - dx,
@@ -1371,12 +1426,14 @@ class NottarioArchCanvas extends LitElement {
     const k = e.deltaMode === 1 ? lineH
             : e.deltaMode === 2 ? rect.height
             : 1;
-    const scaleX = this._viewBox.w / rect.width;
-    const scaleY = this._viewBox.h / rect.height;
+    // Same unified scale as drag (see _onSvgPointerMove). With
+    // preserveAspectRatio="meet", both axes share one factor.
+    const scale = Math.max(this._viewBox.w / rect.width,
+                           this._viewBox.h / rect.height);
     this._viewBox = {
       ...this._viewBox,
-      x: this._viewBox.x + e.deltaX * k * scaleX,
-      y: this._viewBox.y + e.deltaY * k * scaleY,
+      x: this._viewBox.x + e.deltaX * k * scale,
+      y: this._viewBox.y + e.deltaY * k * scale,
     };
     this.requestUpdate();
   }
@@ -1528,8 +1585,26 @@ class NottarioArchCanvas extends LitElement {
     // blocked, no path found, etc).
     const obstacles = this._buildObstacles(layout);
     const anchorPlan = this._planAnchors(this.edges || [], wByID);
+    // Sequential routing with a shared congestion grid. Edges are
+    // routed shortest-first so tightly-constrained edges claim the
+    // direct corridor; longer edges are pushed onto parallel tracks
+    // by the congestion penalty inside A*.
+    const congestion = new Uint8Array(obstacles.W * obstacles.H);
+    const order = anchorPlan
+      .map((p, i) => ({ p, i }))
+      .filter(o => o.p)
+      .sort((a, b) => {
+        const da = Math.hypot(a.p.tgt.x - a.p.src.x, a.p.tgt.y - a.p.src.y);
+        const db = Math.hypot(b.p.tgt.x - b.p.src.x, b.p.tgt.y - b.p.src.y);
+        return da - db;
+      });
+    const routedById = new Map();
+    for (const { p, i } of order) {
+      const r = this._routeEdgeBest(p, wByID, obstacles, congestion);
+      if (r) routedById.set(i, r);
+    }
     const routedEdges = anchorPlan
-      .map(p => this._routeEdgeBest(p, wByID, obstacles))
+      .map((_, i) => routedById.get(i))
       .filter(Boolean);
 
     // Highlighted set: hover > query > focus subtree. null = everything full.
