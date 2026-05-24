@@ -1522,6 +1522,39 @@ class NottarioArchCanvas extends LitElement {
   _onNodeEnter(w) { this._hover = w.node.ID; }
   _onNodeLeave()  { this._hover = ''; }
 
+  // Keyboard activation on a focused node. Enter / Space select;
+  // Right / Down on a collapsed container expand it; Left / Up on
+  // an expanded container collapse it.
+  _onNodeKey(e, w) {
+    switch (e.key) {
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        this._emitSelect(w.node.ID);
+        return;
+      case 'ArrowRight':
+      case 'ArrowDown':
+        if (w._isContainer && !w._expanded) {
+          e.preventDefault();
+          const ex = new Set(this.expanded || []);
+          ex.add(w.node.ID);
+          this.expanded = ex;
+          this._emitExpandChanged();
+        }
+        return;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        if (w._isContainer && w._expanded) {
+          e.preventDefault();
+          const ex = new Set(this.expanded || []);
+          ex.delete(w.node.ID);
+          this.expanded = ex;
+          this._emitExpandChanged();
+        }
+        return;
+    }
+  }
+
   // Pan: pointerdown on the SVG background. Pointermove translates
   // the viewBox by an inverted delta (so dragging right scrolls the
   // content right relative to the user).
@@ -1624,8 +1657,12 @@ class NottarioArchCanvas extends LitElement {
     if (showAsContainer) {
       return svg`
         <g class=${cls} transform=${`translate(${w.x},${w.y})`}
+           role="button"
+           tabindex=${this.selected === n.ID ? '0' : '-1'}
+           aria-label=${`${kindLabel || 'node'} ${n.Name}`}
            @click=${(e) => this._onNodeClick(e, w)}
            @dblclick=${(e) => this._onNodeDblClick(e, w)}
+           @keydown=${(e) => this._onNodeKey(e, w)}
            @mouseenter=${() => this._onNodeEnter(w)}
            @mouseleave=${() => this._onNodeLeave()}>
           <rect class="box" x="0" y="0" width=${w.w} height=${w.h} rx="8" ry="8"></rect>
@@ -1820,6 +1857,9 @@ class NottarioArchCanvas extends LitElement {
            class=${dragCls}
            xmlns="http://www.w3.org/2000/svg"
            preserveAspectRatio="xMidYMid meet"
+           role="application"
+           aria-label="Architecture diagram"
+           tabindex="0"
            @pointerdown=${(e) => this._onSvgPointerDown(e)}
            @pointermove=${(e) => this._onSvgPointerMove(e)}
            @pointerup=${(e) => this._onSvgPointerUp(e)}

@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { LitElement, html, css, nothing } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import '/static/components/page-header.js';
@@ -71,6 +71,10 @@ class NottarioArchPage extends LitElement {
     /* Tree */
     .tree { list-style: none; padding-left: 0; margin: 0; }
     .tree ul { list-style: none; padding-left: 14px; margin: 0; }
+    [role="treeitem"] { outline: none; }
+    [role="treeitem"]:focus-visible > .node {
+      box-shadow: 0 0 0 2px var(--color-focus-ring, #0969da);
+    }
     .node {
       display: flex;
       align-items: center;
@@ -99,6 +103,16 @@ class NottarioArchPage extends LitElement {
       user-select: none;
       font-family: ui-monospace, monospace;
       font-size: 11px;
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+    .toggle:focus-visible {
+      outline: 2px solid var(--color-focus-ring, #0969da);
+      outline-offset: 1px;
+      border-radius: 3px;
     }
     .kind-dot {
       display: inline-block;
@@ -398,6 +412,99 @@ class NottarioArchPage extends LitElement {
   kindByKey(key) { return this.kinds.find(k => k.Key === key); }
   hasChildren(slug) { return (this.childrenBySlug[slug] || []).length > 0; }
 
+  // Flat list of visible rows in tree order, used for keyboard nav.
+  _visibleRows(nodes = this.rootNodes || [], depth = 1, out = []) {
+    for (const n of nodes) {
+      out.push({ node: n, depth });
+      if (this.expanded[n.Slug]) {
+        const kids = this.childrenBySlug[n.Slug] || [];
+        if (kids.length) this._visibleRows(kids, depth + 1, out);
+      }
+    }
+    return out;
+  }
+
+  _focusRow(slug) {
+    if (!slug) return;
+    requestAnimationFrame(() => {
+      const el = this.shadowRoot?.querySelector(`[data-slug="${CSS.escape(slug)}"]`);
+      if (el && el.getAttribute('role') === 'treeitem') {
+        el.focus();
+      } else {
+        // The row is hidden — find the closest visible ancestor instead.
+        const ancestors = this._ancestorSlugs(slug);
+        for (const a of ancestors) {
+          const ael = this.shadowRoot?.querySelector(`[data-slug="${CSS.escape(a)}"]`);
+          if (ael?.getAttribute('role') === 'treeitem') { ael.focus(); break; }
+        }
+      }
+    });
+  }
+
+  // Single keydown handler on the whole tree. Implements WAI-ARIA
+  // tree navigation: arrows, Home/End, Enter/Space, type-ahead.
+  _onTreeKey(e) {
+    const target = e.composedPath().find(el => el?.getAttribute?.('role') === 'treeitem');
+    if (!target) return;
+    const slug = target.dataset.slug;
+    const rows = this._visibleRows();
+    const idx = rows.findIndex(r => r.node.Slug === slug);
+    if (idx < 0) return;
+    const cur = rows[idx];
+
+    const moveTo = (newIdx) => {
+      if (newIdx < 0 || newIdx >= rows.length) return;
+      e.preventDefault();
+      this._focusRow(rows[newIdx].node.Slug);
+    };
+
+    switch (e.key) {
+      case 'ArrowDown': moveTo(idx + 1); return;
+      case 'ArrowUp':   moveTo(idx - 1); return;
+      case 'Home':      moveTo(0); return;
+      case 'End':       moveTo(rows.length - 1); return;
+      case 'Enter':
+      case ' ':         e.preventDefault(); this.select(slug); return;
+      case 'ArrowRight':
+        if (!this.hasChildren(slug)) return;
+        if (!this.expanded[slug]) {
+          e.preventDefault();
+          this.expanded = { ...this.expanded, [slug]: true };
+        } else {
+          // Move to first child.
+          moveTo(idx + 1);
+        }
+        return;
+      case 'ArrowLeft':
+        if (this.expanded[slug] && this.hasChildren(slug)) {
+          e.preventDefault();
+          this.expanded = { ...this.expanded, [slug]: false };
+          return;
+        }
+        // Else move to parent. Walk rows backwards looking for a
+        // shallower depth.
+        for (let i = idx - 1; i >= 0; i--) {
+          if (rows[i].depth < cur.depth) { moveTo(i); return; }
+        }
+        return;
+      default:
+        // Type-ahead: single printable character → first visible row
+        // whose name starts with it (case-insensitive), starting
+        // after the current row.
+        if (e.key.length === 1 && /\S/.test(e.key)) {
+          const ch = e.key.toLowerCase();
+          for (let step = 1; step <= rows.length; step++) {
+            const cand = rows[(idx + step) % rows.length];
+            if ((cand.node.Name || '').toLowerCase().startsWith(ch)) {
+              e.preventDefault();
+              this._focusRow(cand.node.Slug);
+              return;
+            }
+          }
+        }
+    }
+  }
+
   // Walk parents from a node up to a root, returning the slug chain
   // (excluding the node itself).
   _ancestorSlugs(slug) {
@@ -496,30 +603,47 @@ class NottarioArchPage extends LitElement {
     });
   }
 
-  renderNode(n) {
+  // Single row of the tree. The <li> itself is the focus target
+  // (role="treeitem"), so screen readers see depth, expansion, and
+  // selection state on one element.
+  renderNode(n, depth = 1) {
     const children = this.childrenBySlug[n.Slug] || [];
     const isLeaf = children.length === 0;
     const open = !isLeaf && !!this.expanded[n.Slug];
     const kind = this.kindByKey(n.Kind);
     const isDim = !this._isHighlighted(n);
+    const isSelected = this.selectedSlug === n.Slug;
+    // Roving tabindex: only the currently-selected row sits in the
+    // tab order. The first root takes that slot when nothing is
+    // selected, so keyboard users can always Tab into the tree.
+    const isFocusTarget = isSelected
+      || (!this.selectedSlug && depth === 1 && this.rootNodes?.[0]?.Slug === n.Slug);
     const cls = [
       'node',
       isLeaf ? 'leaf' : '',
-      this.selectedSlug === n.Slug ? 'active' : '',
+      isSelected ? 'active' : '',
       isDim ? 'dim' : '',
     ].filter(Boolean).join(' ');
     return html`
-      <li>
-        <div class=${cls} data-slug=${n.Slug}>
-          ${isLeaf ? null : html`<span class="toggle"
+      <li role="treeitem"
+          data-slug=${n.Slug}
+          aria-level=${depth}
+          aria-selected=${isSelected ? 'true' : 'false'}
+          aria-expanded=${isLeaf ? nothing : (open ? 'true' : 'false')}
+          tabindex=${isFocusTarget ? '0' : '-1'}>
+        <div class=${cls}>
+          ${isLeaf ? null : html`<button class="toggle"
+                  type="button"
+                  tabindex="-1"
+                  aria-label=${open ? `Collapse ${n.Name}` : `Expand ${n.Name}`}
                   @click=${(e) => { e.stopPropagation(); this.toggle(n.Slug); }}
-            >${open ? '▾' : '▸'}</span>`}
-          <span class="kind-dot" style=${`background: ${kind?.Color || '#999'}`} title=${kind?.Label || n.Kind}></span>
+            >${open ? '▾' : '▸'}</button>`}
+          <span class="kind-dot" style=${`background: ${kind?.Color || '#999'}`} title=${kind?.Label || n.Kind} aria-hidden="true"></span>
           <span class="name" @click=${() => this.select(n.Slug)}>${n.Name}</span>
           <span class="kind-label">${n.Kind}</span>
         </div>
         ${open ? html`
-          <ul>${children.map(c => this.renderNode(c))}</ul>
+          <ul role="group">${children.map(c => this.renderNode(c, depth + 1))}</ul>
         ` : null}
       </li>
     `;
@@ -543,7 +667,8 @@ class NottarioArchPage extends LitElement {
         ${this.rootNodes.length === 0 ? html`
           <p class="empty-pane">No architecture defined yet. Ask an agent to start with <code>nottario.arch.upsert_node</code>.</p>
         ` : html`
-          <ul class="tree">
+          <ul class="tree" role="tree" aria-label="Architecture tree"
+              @keydown=${(e) => this._onTreeKey(e)}>
             ${this.rootNodes.map(n => this.renderNode(n))}
           </ul>
         `}
