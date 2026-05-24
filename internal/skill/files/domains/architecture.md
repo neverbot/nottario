@@ -32,6 +32,25 @@ Do **not** touch it on every commit. The diagram is a coarse-grained
 view; it goes stale gracefully, and noise from over-detailing makes
 it less useful.
 
+### After substantial work — close the architecture loop
+
+Whenever you finish a task that added/removed/substantially modified
+a software component, or changed how components relate to each
+other, run a closing pass:
+
+1. `nottario.arch.list_nodes { root_only: true }` — eyeball the
+   top-level set. Is something missing that exists in the code now?
+   Something present that you just deleted?
+2. For each container that touched the new work, `arch.get_node` and
+   confirm its children and incident edges still describe reality.
+3. Apply the deltas via `upsert_node` / `upsert_edge` / `remove_*`.
+
+This is one of the three closing-the-loop checks in `skill.md` §4 —
+the other two are "is there already a task for this delivery?" and
+"did the human mention side-work I should file?". Skipping the arch
+pass is how the diagram becomes a lie that the next agent has to
+re-derive from the code.
+
 ## Entities
 
 ### Node
@@ -250,6 +269,5 @@ exists, contains something deprecated), fix it.
   (tree-sitter scan). Planned for v2.
 - Validate that declared edges match real calls in the codebase.
   Also v2.
-- Render the diagram graphically — the M4 web UI is a tree explorer.
-  M5 will add the dagre-based graph viewer.
-- Edit the diagram from the web UI. Humans read; agents write.
+- Edit the diagram from the web UI. Humans read (tree view + hand-
+  rolled SVG graph view, both read-only). Agents write.

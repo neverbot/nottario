@@ -5,144 +5,176 @@ description: Use when working on a software project tracked in Nottario. Establi
 
 # Nottario skill
 
-This skill teaches you to use the Nottario MCP server. Nottario coordinates
-developers and their agents around three domains: tasks, shared markdown
-context, and an architecture diagram. This skill currently covers the
-**tasks** domain; documents and architecture arrive in later milestones.
+Nottario coordinates developers and their agents around three domains:
+**tasks**, shared **markdown context**, and an **architecture** diagram.
+This file is the entry point. The full reference for each domain lives
+under `domains/`; call `nottario.skill.read` to pull the one you need.
 
-## Identifying yourself
+## 1. Identify yourself
 
-Always start by calling `nottario.whoami` to confirm:
+Always start with `nottario.whoami`. It tells you the **user** you act
+on behalf of (`user_id`, `github_login`), whether you are an **admin**,
+and the **token_id** authenticating you. On failure the token is
+missing or revoked — stop and ask the human for a fresh one (web UI →
+**Tokens → New token**).
 
-- which **user** you are acting on behalf of (`user_id`, `github_login`);
-- whether you are an **admin**;
-- the **token_id** that authenticates you.
+Deep dive: `references/identity.md`.
 
-If `whoami` fails, the configured API token is missing or revoked — stop
-and ask the human to provide a fresh one from the Nottario web UI under
-**Tokens → New token**.
+## 2. Locate the project
 
-## Locating the active project
+Nottario does **not** keep an "active project" server-side. Every tool
+call that touches one needs `project_id` as an explicit argument.
 
-Nottario does **not** keep a "currently active project" on the server side.
-**Every tool call that needs a project requires `project_id` as an
-explicit argument.** Resolve it once at the start of your session:
+Resolve it once at the start of a session: `nottario.projects.list` →
+pick the project whose `slug`/`name` matches the human's intent →
+cache the `id` in your working memory → pass it on every call.
 
-1. Call `nottario.projects.list` to see what is available.
-2. Pick the project whose `slug` or `name` matches what the human asked
-   you to work on (or ask the human if unsure).
-3. Cache the `id` in your working memory for the rest of the session and
-   pass it on every subsequent call.
+If you need the role catalogue (to assign to "any backend"), call
+`nottario.projects.list_roles` once and cache.
 
-If you need the role catalogue (to assign a task to "any backend"), call
-`nottario.projects.list_roles` once and cache the result.
+## 3. Work a task end-to-end
 
-## Working a task end-to-end
+The loop when the human says "carry on" or "do the next thing":
 
-The expected flow when the human says "carry on" or "do the next thing":
-
-1. **Atomic claim.** Call `nottario.tasks.claim_next` with the
-   project_id (and optionally `assignee_user_id = your user_id` from
-   `whoami`, or a `role_id`). It picks the highest-priority eligible
-   `todo` task AND marks it `assignee = you`, `state = doing` in a
-   single SQL — safe to run from multiple agents in parallel without
-   colliding on the same task. Returns `{task: null}` if nothing is
-   eligible.
-2. **Do the work in the human's repo locally.** Nottario does not store
-   code; you work in the existing checkout as you always would.
-3. **Commit and link.** When you commit, call
-   `nottario.tasks.link_commit` with `repo="owner/repo"` and the SHA so
-   that future readers can trace the work.
-4. **Note non-obvious things.** Use `nottario.tasks.add_comment` for
-   anything a future reader (human or agent) would benefit from: tricky
-   trade-offs, follow-up ideas, why you chose A over B.
-5. **Close.** `nottario.tasks.set_state` with `state="done"`. This
-   records `actual_end`. The server rejects the close if the task
-   still has unresolved preconditions.
-6. **Loop.** Call `nottario.tasks.claim_next` again.
+1. **Atomic claim.** `nottario.tasks.claim_next { project_id }`
+   (optionally `assignee_user_id` = your user_id, or `role_id`). It
+   picks the highest-priority eligible `todo` task AND sets
+   `assignee = you`, `state = doing` in a single SQL transaction
+   (`SELECT … FOR UPDATE SKIP LOCKED`). Safe to run from many agents
+   in parallel. Returns `{task: null}` when nothing is eligible.
+2. **Do the work** in the local repo. Nottario does not store code.
+3. **Link commits.** `nottario.tasks.link_commit { repo, sha }` for
+   every commit the task produced. Non-negotiable when the task
+   yielded code — see `domains/tasks.md` for why.
+4. **Note non-obvious things.** `nottario.tasks.add_comment` for
+   trade-offs, follow-up ideas, why A over B. Future readers benefit.
+5. **Close.** `nottario.tasks.set_state { state: "done" }`. The
+   server rejects this if a dependency is still open and returns a
+   `preconditions` array — work those first.
+6. **Close the loop** (see below), then go back to step 1.
 
 When the human narrows the pickup ("the next task about topic X" or
-"work on this id"), discover candidates via `nottario.tasks.list` and
-then take one atomically with `nottario.tasks.claim {task_id}` — see
-`domains/tasks.md` for the canonical loops, including how to read the
-409-shaped conflict if you lose the race or the task isn't eligible.
+"work on this id"), discover candidates with `nottario.tasks.list` and
+take one atomically with `nottario.tasks.claim { task_id }`. Read the
+409 conflict shape if you lose the race.
 
-`nottario.tasks.next` is now a **preview-only** tool: it returns what
-`claim_next` would pick, without mutating anything. Do not use it as
-the first step of pickup — always go through `claim_next` / `claim`.
+`nottario.tasks.next` is a **preview only** — no side effects.
+Useful to inspect what `claim_next` would pick. Never the first step
+of pickup.
+
+Deep dive: `domains/tasks.md`.
+
+## 4. Close the loop after substantial work
+
+Every time you finish a meaningful change — whether you took it via
+`claim_next` or just did it because the human asked directly — run
+these three checks before moving on:
+
+1. **Is there already a task for this work?** Search the backlog
+   (`nottario.tasks.list` or `nottario.search`) for whatever you just
+   delivered. If a matching task is open and your commits cover its
+   acceptance, link the commits and `set_state done`. Do not leave
+   a duplicate row sitting in `todo`; do not file a new task that
+   describes the same delivery.
+2. **Did the work add, remove or substantially modify any software
+   component, or change how components relate?** If yes, walk the
+   architecture with `nottario.arch.list_nodes` and
+   `nottario.arch.get_node`, then `upsert_node` / `upsert_edge` /
+   `remove_*` to match the new reality. The diagram is the team's
+   shared mental model — let it lag and the next agent reads a lie.
+3. **Did the human mention side-work along the way?** A "we should
+   also…", a half-formed bug repro, a future-page idea. File it as
+   a task NOW with verbatim context, before you forget. See "Filing
+   work as you discover it" below.
 
 ## Filing work as you discover it
 
 While working, you will spot things the human cares about but did not
-ask for: bugs, follow-ups, missing features. **File them as tasks**
-rather than dropping them in your reply:
+ask for: bugs, follow-ups, missing features, side-comments dropped
+into chat. **File them as tasks** rather than dropping them in your
+reply:
 
-```
+```text
 nottario.tasks.create {
-  project_id: "...",
+  project_id,
   title: "Fix null deref in auth callback on duplicate state",
   type: "bug",
-  priority: 70,           // pick something sensible
+  priority_key: "high",
   target_role_id: "..."   // optional: route to a role rather than a person
 }
 ```
 
 Pick `type`:
 
-- `task` for ordinary work,
-- `bug` for defects you found,
-- `chore` for cleanup,
-- `spike` for time-boxed investigations,
-- `feature` for a *parent* task whose children are the actual work.
+- `task` — ordinary work,
+- `bug` — defects you found,
+- `chore` — cleanup,
+- `spike` — time-boxed investigation,
+- `feature` — *parent* whose children are the real work.
 
-For multi-role features (design → backend → frontend → qa), create a
-`feature` parent and child tasks linked to it via `parent_task_id`, then
-declare the order with `nottario.tasks.add_dependency`.
+**Multi-role work → one task per role.** Create a `type=feature`
+parent and one child task per affected role (design / backend /
+frontend / qa), linked with `add_dependency` in execution order. The
+parent rolls up to `done` automatically when all children are done.
+
+Capture in the description:
+
+- Verbatim what the human said (the repro, the design hunch).
+  Future-you will not remember the phrasing.
+- The current state-of-the-code that triggered it (a file path, a
+  screenshot reference, the URL of the broken view).
+- The proposed direction if you have one — mark "tentative" rather
+  than omit.
+- Role split when the work crosses multiple roles.
+
+The bar: "if I had to leave the session right now, could someone else
+pick this up?" If no, add more context.
+
+Deep dive on the patterns: `domains/tasks.md` ("I found a bug while
+doing my task", "The user just mentioned a different task / bug /
+feature", "Block this until X is done").
 
 ## Rules of thumb
 
-- **Always identify and re-confirm the project.** Do not assume the
-  project from earlier in the conversation; pass `project_id`
-  explicitly every time.
-- **Do not invent ids.** Always look them up via `list` / `get`.
-- **Do not change tasks that belong to other people without being asked.**
-  If you have to, leave a comment explaining why.
-- **Prefer small, frequent updates over silent batching.** Set state to
-  `doing` as soon as you start; mark `done` as soon as you finish.
-- **If you are unsure whether to file a comment or not, file it.** A
-  short comment is cheap; missing context is expensive later.
-- **Never call `nottario.tasks.set_state` with `done` if the task is
-  not actually finished.** Use a comment to explain mid-way state.
+- **Re-confirm the project on every call.** Pass `project_id`
+  explicitly; do not infer from conversation memory.
+- **Never invent ids.** Always look them up via `list` / `get`.
+- **Don't touch tasks belonging to other people without being asked.**
+  If you must, leave a comment explaining why.
+- **Prefer small, frequent updates over silent batching.** Set
+  `state = doing` when you start, `state = done` when you finish.
+- **If you are unsure whether to file a comment or not, file it.**
+  Short comments are cheap; missing context is expensive.
+- **Never `set_state done` if the task is not actually finished.** Use
+  a comment to record mid-way state instead.
 
-## When in doubt
+## Deeper guides
 
-Call `nottario.skill.read` with the path of a deeper guide — for
-example:
+Call `nottario.skill.read` with the path:
 
-- `references/identity.md` — token and identity details.
-- `domains/tasks.md` — the full task API surface and edge cases.
+- `references/identity.md` — token and identity mechanics.
+- `domains/tasks.md` — full task API surface, edge cases, pagination,
+  claim conflict shape, "carry on" / "block this" / "found a bug"
+  patterns.
 - `domains/docs.md` — the shared-markdown domain: skills, context,
-  notes; frontmatter; optimistic concurrency.
+  notes, frontmatter, optimistic concurrency, local↔Nottario sync.
 - `domains/architecture.md` — the textual architecture diagram:
-  nodes, edges, kinds, when to touch it and when to leave it alone.
+  nodes, edges, kinds, when to touch it, when to leave it alone.
 
-The skill is bundled with the binary; what you read here is what
-shipped. Each Nottario instance can **override or extend** any file
-without rebuilding the binary: an admin (or an agent with admin
-permissions) creates a document with `scope=global`, `kind=skill`
-and `path=global/skills/<file>`. The next call to
-`nottario.skill.read` resolves to the override; otherwise the
-embedded copy is served. `nottario.skill.list` includes both,
-tagging each entry with `origin: "embedded" | "global"`.
+## Overrides and snapshots
 
-Use this to:
+The skill is bundled with the binary; this is what shipped. Each
+instance can **override or extend** any file without rebuilding: an
+admin (or an agent with admin permissions) writes a document with
+`scope=global`, `kind=skill`, `path=global/skills/<file>`. The next
+call to `nottario.skill.read` resolves to the override; otherwise the
+embedded copy is served. `nottario.skill.list` includes both, tagging
+each entry with `origin: "embedded" | "global"`.
 
-- **Override** a shipped file (e.g. tighten the rules in
-  `domains/tasks.md` for your team).
-- **Add** files that the bundle doesn't include
-  (`by-language/go.md`, `by-role/security.md`,
-  `recipes/deploying-to-our-k8s.md`).
+Use this to tighten a shipped file for your team, or to add bundle-
+absent files (`by-language/go.md`, `by-role/security.md`,
+`recipes/deploying-to-our-k8s.md`).
 
-A full snapshot of the current bundle (overrides applied) is
-available as a zip at `GET /skill.zip` — useful to mirror the skill
-into `~/.claude/skills/nottario/` on a machine, or for backups.
+A snapshot of the current bundle (overrides applied) is available as a
+zip at `GET /skill.zip` — useful to mirror the skill into
+`~/.claude/skills/nottario/` or back up.

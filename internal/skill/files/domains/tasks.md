@@ -174,6 +174,19 @@ The only correct way to move a task between states. It manages
 - `doing` → fills `actual_start` (only if currently null).
 - `done` → fills `actual_end` and preserves any earlier `actual_start`.
 
+#### Closing-the-loop checklist
+
+After every `set_state done`, run the three checks from `skill.md` §4:
+
+1. Is there another open task that describes the same delivery?
+   Close it too instead of letting a duplicate row sit in `todo`.
+2. Did the work add/remove/modify components or their relations?
+   Update `nottario.arch.*` so the diagram matches reality
+   (`domains/architecture.md` §"When to touch the architecture").
+3. Did the human mention side-work? File it with
+   `nottario.tasks.create` BEFORE moving on (see §"The user just
+   mentioned a different task / bug / feature" below).
+
 #### Always link commits before closing
 
 Before `set_state done`, call `nottario.tasks.link_commit { repo,
@@ -303,60 +316,40 @@ already in doing assigned to X", "preconditions still pending: …").
 
 The historical `tasks.next` + `tasks.update {assignee}` + `set_state
 doing` sequence is **racy**: between any two calls another agent can
-slip in and claim the same task. `tasks.next` still exists but is now
-a PREVIEW with no side effects — useful to inspect what `claim_next`
-would pick, never to actually take a task.
+slip in and claim the same task. Use `claim_next` / `claim` instead;
+`tasks.next` is a preview, never a pickup.
 
-If a task you want is already claimed by another user, the right
-moves are: leave a comment with `nottario.tasks.add_comment`, or
-escalate to the human. Do not silently re-assign.
+If a task you want is already claimed by another user: leave a
+`nottario.tasks.add_comment` or escalate to the human. Do not
+silently re-assign.
 
 ### "I found a bug while doing my task"
 
 Create it; do **not** silently fix it without filing:
 
-```
+```text
 nottario.tasks.create {
-  project_id, title, type: "bug", priority: 70,
+  project_id, title, type: "bug", priority_key: "high",
   description: "context, repro, suspected fix",
 }
 ```
 
-Then continue with your current task.
+Then continue with your current task. The general rule (verbatim
+quote, file path, proposed direction, role split) lives in `skill.md`
+§"Filing work as you discover it".
 
 ### "The user just mentioned a different task / bug / feature"
 
-Same rule, broader scope: whenever the human (or any teammate) drops
-a side-comment about work that is **not** what you're currently
-executing — a "we should also…", a half-formed feature idea, a
-visual bug they noticed, a recommendation about a future page — the
-FIRST action is `nottario.tasks.create`. Only after the row exists
-do you decide whether to keep going with your current task or pivot
-to the new one.
+Same rule, broader scope: any side-comment from the human about work
+that is NOT what you're currently executing → FIRST action is
+`nottario.tasks.create`, only THEN decide whether to pivot or keep
+going. If the item lives only in conversation, multi-agent and
+multi-session work lose the single source of truth.
 
-The reasoning is identical for humans and for other agents reading
-the backlog later: if the item only lives in conversation, it's
-invisible. Multi-agent and multi-session work depend on the backlog
-being the single source of truth. Doing the work without filing it
-silently destroys that property.
-
-What to capture in the description:
-- Verbatim what the user said (the bug repro, the design hunch).
-  Future-you will not remember the phrasing.
-- The current state-of-the-code that triggered it (a file path,
-  a screenshot reference, the URL of the broken view).
-- The proposed direction if you have one — even if uncertain. Mark
-  it "tentative" rather than omit it.
-- The role split when the work obviously crosses backend / frontend
-  / design / qa. Either file as a `type=feature` parent with role
-  children, or as one task with a clear role-split note in the body.
-
-When to pivot vs. keep going: cheap context-switch (≤5 min of work
-to make the side comment visibly better, no architectural decision
-required) → pivot, file, fix, return. Otherwise: file with enough
-context that someone else can pick it up, and resume your current
-task. The bar is "if I had to leave the session right now, would
-someone else be able to pick this up?" — if no, add more context.
+When to pivot vs. keep going: cheap context-switch (≤5 min, no
+architectural decision required) → pivot, file, fix, return.
+Otherwise: file with enough context that someone else can pick it
+up, and resume your current task.
 
 ### "Block this until X is done"
 
