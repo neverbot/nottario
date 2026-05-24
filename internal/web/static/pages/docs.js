@@ -709,6 +709,37 @@ class NottarioDocsPage extends LitElement {
     this.viewingVersion = null;
   }
 
+  async restoreVersion() {
+    if (!this.viewingVersion || !this.selected) return;
+    const v = this.viewingVersion.Version;
+    const current = this.selected.CurrentVersion;
+    if (!confirm(`Restore v${v} as a new version on top of v${current}?`)) return;
+    try {
+      const r = await fetch('/api/docs/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'project',
+          project_id: this.projectId,
+          path: this.selected.Path,
+          content_md: this.viewingVersion.ContentMD || '',
+          expected_version: current,
+          message: `Restored from v${v}`,
+        }),
+      });
+      if (r.status === 409) {
+        throw new Error('Document changed while you were viewing history. Refresh and retry.');
+      }
+      if (!r.ok) throw new Error((await r.json()).error || 'failed');
+      const doc = await r.json();
+      this.viewingVersion = null;
+      this.selected = doc;
+      this.historyVersions = null;
+      this.info = `Restored v${v} (now v${doc.CurrentVersion})`;
+      await this.load();
+    } catch (e) { this.error = e.message; }
+  }
+
   groupByKind() {
     const out = { skill: [], context: [], note: [] };
     for (const s of this.summaries || []) {
@@ -915,6 +946,7 @@ class NottarioDocsPage extends LitElement {
             <span>Viewing version <strong>v${viewing.Version}</strong> read-only.
               ${viewing.Message ? html`Message: "${viewing.Message}"` : null}</span>
             <span class="spacer"></span>
+            <button @click=${() => this.restoreVersion()}>Restore this version</button>
             <button @click=${() => this._returnToCurrent()}>Back to current (v${s.CurrentVersion})</button>
           </div>
         ` : null}
