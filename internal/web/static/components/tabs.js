@@ -65,13 +65,35 @@ class NottarioTabs extends LitElement {
     }));
   }
 
+  _onKey(e) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft'
+        && e.key !== 'Home' && e.key !== 'End') return;
+    const opts = this.options || [];
+    if (opts.length < 2) return;
+    const idx = opts.findIndex(o => o.id === this.value);
+    let next = idx;
+    if (e.key === 'ArrowRight') next = (idx + 1) % opts.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + opts.length) % opts.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = opts.length - 1;
+    if (next !== idx) {
+      e.preventDefault();
+      this._pick(opts[next].id);
+      requestAnimationFrame(() => {
+        const buttons = this.shadowRoot?.querySelectorAll('[role="tab"]');
+        buttons?.[next]?.focus();
+      });
+    }
+  }
+
   render() {
     return html`
-      <div class="tabs" role="tablist">
+      <div class="tabs" role="tablist" @keydown=${(e) => this._onKey(e)}>
         ${(this.options || []).map(o => html`
           <button class=${o.id === this.value ? 'active' : ''}
                   role="tab"
                   aria-selected=${o.id === this.value ? 'true' : 'false'}
+                  tabindex=${o.id === this.value ? '0' : '-1'}
                   @click=${() => this._pick(o.id)}>${o.label}</button>
         `)}
       </div>

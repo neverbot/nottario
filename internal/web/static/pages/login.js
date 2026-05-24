@@ -39,7 +39,7 @@ class NottarioLogin extends LitElement {
       <div class="card">
         <h1>Welcome to Nottario</h1>
         <p>Sign in with your GitHub account to continue.</p>
-        <a class="gh" href="/auth/github/start">
+        <a class="gh" href="/auth/github/start" aria-label="Sign in with GitHub">
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
               0-.19-.01-.82-.01-1.49-2 .37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13

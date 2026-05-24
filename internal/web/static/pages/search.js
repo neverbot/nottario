@@ -112,6 +112,26 @@ class NottarioSearchBox extends LitElement {
     this._timer = null;
   }
 
+  connectedCallback() {
+    super.connectedCallback();
+    // Global `/` shortcut focuses this search input. Skips while
+    // the user is already typing into a text field.
+    this._slashHandler = (e) => {
+      if (e.key !== '/') return;
+      const t = e.target;
+      const tag = t?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || t?.isContentEditable) return;
+      e.preventDefault();
+      this.shadowRoot?.querySelector('input')?.focus();
+    };
+    window.addEventListener('keydown', this._slashHandler);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._slashHandler) window.removeEventListener('keydown', this._slashHandler);
+  }
+
   onInput(e) {
     this.query = e.target.value;
     this.open = true;
@@ -165,7 +185,9 @@ class NottarioSearchBox extends LitElement {
       ? 'Search this project…'
       : 'Open a project to search';
     return html`
-      <input type="text"
+      <input type="search"
+             role="searchbox"
+             aria-label=${placeholder}
              placeholder=${placeholder}
              .value=${this.query}
              ?disabled=${!this.projectId}
