@@ -694,8 +694,21 @@ class NottarioBoardPage extends LitElement {
 
   renderCard(t) {
     const role = t.TargetRoleID ? this.roleByID(t.TargetRoleID) : null;
+    const a11yLabel = `${t.Title}, ${t.Type}, ${t.State}` +
+      (role ? `, role ${role.Label}` : '') +
+      `, priority ${this._priorityLabel(t.Priority)}`;
     return html`
-      <div class="card" @click=${() => this.open(t)}>
+      <div class="card"
+           role="button"
+           tabindex="0"
+           aria-label=${a11yLabel}
+           @click=${() => this.open(t)}
+           @keydown=${(e) => {
+             if (e.key === 'Enter' || e.key === ' ') {
+               e.preventDefault();
+               this.open(t);
+             }
+           }}>
         <div class="title">${t.Title}</div>
         <div class="meta">
           <span class="badge ${t.Type}">${t.Type}</span>
@@ -739,12 +752,14 @@ class NottarioBoardPage extends LitElement {
                 ? (s === 'doing' ? 'col empty doing' : 'col empty')
                 : 'col';
               return html`
-                <div class=${cls}>
+                <section class=${cls}
+                         role="region"
+                         aria-label=${`${s} (${items.length})`}>
                   <h3>${s} <span class="count">${items.length}</span></h3>
                   ${isEmpty
                     ? this._renderEmptyBody(s)
                     : items.map(t => this.renderCard(t))}
-                </div>
+                </section>
               `;
             })}
           </div>
@@ -756,9 +771,14 @@ class NottarioBoardPage extends LitElement {
 
   renderCreate() {
     return html`
-      <div class="dialog" @click=${(e) => e.target.classList.contains('dialog') && (this.showCreate = false)}>
+      <div class="dialog"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="new-task-title"
+           @click=${(e) => e.target.classList.contains('dialog') && (this.showCreate = false)}
+           @keydown=${(e) => { if (e.key === 'Escape') this.showCreate = false; }}>
         <div class="panel">
-          <h3>New task</h3>
+          <h3 id="new-task-title">New task</h3>
           <form @submit=${(e) => this.createTask(e)}>
             <nottario-field label="Title">
               <input name="title" required autofocus>
@@ -827,11 +847,16 @@ class NottarioBoardPage extends LitElement {
     const assignee = this._memberByID(task.AssigneeUserID);
     const shortID = (task.ID || '').slice(0, 7);
     return html`
-      <div class="dialog" @click=${(e) => e.target.classList.contains('dialog') && this.closeDetail()}>
+      <div class="dialog"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="task-dialog-title"
+           @click=${(e) => e.target.classList.contains('dialog') && this.closeDetail()}
+           @keydown=${(e) => { if (e.key === 'Escape') this.closeDetail(); }}>
         <div class="panel detail">
           <header class="head">
             <div class="title-row">
-              <h3>${task.Title}</h3>
+              <h3 id="task-dialog-title">${task.Title}</h3>
               <div class="title-actions">
                 <button class="icon-btn danger" title="Delete task" aria-label="Delete task"
                         @click=${() => this.deleteTask(task.ID)}>

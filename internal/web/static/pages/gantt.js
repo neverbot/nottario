@@ -880,7 +880,9 @@ class NottarioGantt extends LitElement {
     return html`
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       <div class="stage">
-        <svg width=${width} height=${totalHeight}>
+        <svg width=${width} height=${totalHeight}
+             role="img"
+             aria-label=${`Gantt chart with ${(this.tasks||[]).length} tasks`}>
           <defs>
             <marker id="dep-arrowhead" viewBox="0 0 10 10" refX="0" refY="5"
                     markerWidth="8" markerHeight="8" orient="auto-start-reverse">
