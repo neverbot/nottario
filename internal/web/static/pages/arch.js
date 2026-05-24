@@ -4,6 +4,8 @@ import { buttonStyles } from '/static/components/buttons.js';
 import '/static/components/page-header.js';
 import '/static/components/segmented-control.js';
 import '/static/components/markdown.js';
+import '/static/components/search-input.js';
+import '/static/components/task-chip.js';
 import './arch-graph.js';
 
 class NottarioArchPage extends LitElement {
@@ -15,13 +17,17 @@ class NottarioArchPage extends LitElement {
     project: { state: true },
     kinds: { state: true },
     rootNodes: { state: true },
-    // parentSlug ("" for roots) → ChildNode[]. Built once at load
-    // from the full node list, so the renderer knows at render-time
-    // whether a node is a leaf (no toggle) or a container.
+    // slug → node (every node, flat, for parent/ancestor walks).
+    nodeBySlug: { state: true },
+    // parentSlug → ChildNode[]. Built once at load.
     childrenBySlug: { state: true },
     selectedSlug: { state: true },
     selectedDetail: { state: true },
     expanded: { state: true },
+    // taskId → task. Lazy-filled when the reader needs to resolve
+    // Linked items.
+    taskCache: { state: true },
+    filter: { state: true },
     error: { state: true },
   };
 
@@ -29,6 +35,10 @@ class NottarioArchPage extends LitElement {
     :host { display: block; }
     .header h2 { margin: 0; }
     .header .muted { color: #59636e; }
+
+    /* Two-column desktop. Single-column mobile (<720px): only one
+       of sidebar/reader visible at a time, switched by the
+       selection state. */
     .layout {
       display: grid;
       grid-template-columns: 340px 1fr;
@@ -43,91 +53,224 @@ class NottarioArchPage extends LitElement {
       overflow: auto;
       max-height: 80vh;
     }
+    .sidebar-head {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    .sidebar-head strong { font-size: 14px; }
+    .sidebar-head .muted {
+      color: #59636e;
+      margin-left: auto;
+      font-size: 11px;
+    }
+    .filter-row { margin-bottom: 8px; }
+    .filter-row nottario-search-input { width: 100%; }
+
+    /* Tree */
     .tree { list-style: none; padding-left: 0; margin: 0; }
     .tree ul { list-style: none; padding-left: 14px; margin: 0; }
     .node {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 4px;
-      border-radius: 4px;
+      gap: 6px;
+      padding: 4px 6px;
+      border-radius: 6px;
       cursor: pointer;
-      font-size: 13px;
+      line-height: 1.4;
+      transition: background 100ms ease-out;
     }
-    /* Leaves get a visual indent equal to (toggle 14px + gap 4px)
+    /* Leaves get a visual indent equal to (toggle 14px + gap 6px)
        so their names line up with siblings that DO have a toggle. */
-    .node.leaf { padding-left: 22px; }
+    .node.leaf { padding-left: 26px; }
     .node:hover { background: #f6f8fa; }
-    .node.active { background: #ddf4ff; color: #0969da; }
+    .node.active {
+      background: #ddf4ff;
+      color: #0969da;
+    }
+    .node.active .name { font-weight: 600; }
+    .node.dim { opacity: 0.35; }
+
     .toggle {
       flex: 0 0 14px;
       text-align: center;
       color: #59636e;
       user-select: none;
       font-family: ui-monospace, monospace;
+      font-size: 11px;
     }
     .kind-dot {
       display: inline-block;
+      flex: 0 0 8px;
       width: 8px;
       height: 8px;
       border-radius: 50%;
       background: #999;
     }
-    .kind-label {
-      font-size: 10px;
-      color: #59636e;
-      text-transform: uppercase;
-      margin-left: 4px;
+    .name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1f2328;
     }
+    .node.active .name { color: #0969da; }
+    .kind-label {
+      font-size: 10.5px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-left: 2px;
+    }
+
+    /* Reader */
+    .reader {
+      display: flex;
+      flex-direction: column;
+    }
+    .reader.empty {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #59636e;
+      padding: 32px;
+      gap: 4px;
+    }
+    .reader.empty h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      color: #1f2328;
+    }
+    .reader.empty p { margin: 0; max-width: 36ch; line-height: 1.5; }
+
+    .reader-back {
+      display: none;
+      margin: -4px 0 8px;
+      background: transparent;
+      border: 0;
+      color: #0969da;
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 6px;
+      font: inherit;
+      align-self: flex-start;
+    }
+    .reader-back:hover { background: #f6f8fa; }
+
     .reader header {
       display: flex;
       align-items: baseline;
       gap: 8px;
+      flex-wrap: wrap;
       border-bottom: 1px solid #eaeef2;
       padding-bottom: 8px;
       margin-bottom: 12px;
     }
-    .reader header h3 { margin: 0; font-size: 18px; }
+    .reader header h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
     .reader .meta { color: #59636e; font-size: 12px; }
+    .kind-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #eaeef2;
+      color: #1f2328;
+      letter-spacing: 0.02em;
+    }
     .reader .meta-grid {
       display: grid;
       grid-template-columns: max-content 1fr;
-      gap: 4px 16px;
+      gap: 6px 16px;
       font-size: 13px;
       margin-bottom: 12px;
     }
     .reader .meta-grid > div:nth-child(odd) {
       color: #59636e;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
     .reader .section { margin-top: 16px; }
     .reader .section h4 {
-      margin: 0 0 6px 0;
-      font-size: 12px;
+      margin: 0 0 8px 0;
+      font-size: 11px;
+      font-weight: 600;
       text-transform: uppercase;
+      letter-spacing: 0.04em;
       color: #59636e;
     }
     .reader .edge-line {
-      padding: 4px 8px;
-      border-radius: 4px;
+      padding: 6px 8px;
+      border-radius: 6px;
       font-size: 13px;
-      font-family: ui-monospace, monospace;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
     }
+    .reader .edge-line + .edge-line { margin-top: 2px; }
     .reader .edge-line:hover { background: #f6f8fa; cursor: pointer; }
-    .arrow { color: #59636e; margin: 0 4px; }
-    .kind-pill {
-      display: inline-block;
-      padding: 0 6px;
-      border-radius: 2em;
-      font-size: 11px;
-      background: #eaeef2;
-      color: #1f2328;
-      margin-left: 4px;
-    }
-    .empty {
-      padding: 40px;
-      text-align: center;
+    .reader .edge-line .kind {
+      font-family: ui-monospace, monospace;
+      font-size: 11.5px;
       color: #59636e;
     }
+    .reader .edge-line .label {
+      color: #59636e;
+      font-size: 12px;
+    }
+    .reader .edge-line .endpoint {
+      color: #0969da;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .reader .edge-line .endpoint:hover { text-decoration: underline; }
+    .arrow { color: #8b949e; }
+
+    .linked-items {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .doc-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: #f6f8fa;
+      border: 1px solid #d1d9e0;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      color: #1f2328;
+      text-decoration: none;
+      width: max-content;
+      max-width: 100%;
+    }
+    .doc-link:hover { background: #eaeef2; }
+    .doc-link::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #6e7781;
+    }
+
+    .empty-pane {
+      color: #8b949e;
+      font-size: 13px;
+      font-style: italic;
+      margin: 0;
+    }
+
     .error {
       color: #cf222e;
       background: #ffebe9;
@@ -136,6 +279,18 @@ class NottarioArchPage extends LitElement {
       margin-bottom: 8px;
     }
     code { font-size: 12px; }
+
+    /* Mobile: single column. The sidebar and reader collapse to the
+       same cell; selection state drives which one is shown. */
+    @media (max-width: 720px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .layout[data-mode="reader"] .sidebar { display: none; }
+      .layout[data-mode="list"]   .reader  { display: none; }
+      .reader-back { display: inline-flex; }
+      .sidebar, .reader { max-height: none; }
+    }
   `];
 
   constructor() {
@@ -144,11 +299,17 @@ class NottarioArchPage extends LitElement {
     this.project = null;
     this.kinds = [];
     this.rootNodes = null;
+    this.nodeBySlug = {};
+    this.childrenBySlug = {};
     this.selectedSlug = null;
     this.selectedDetail = null;
     this.expanded = {};
-    this.childrenBySlug = {};
+    this.taskCache = {};
+    this.filter = '';
     this.error = '';
+    this._reduced = (typeof window !== 'undefined' && window.matchMedia)
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false;
   }
 
   connectedCallback() {
@@ -170,6 +331,11 @@ class NottarioArchPage extends LitElement {
       this.load().then(() => this._applyHash());
       this._subscribe();
     }
+    // Whenever the selected slug or root data changes, scroll the
+    // selected row into view in the sidebar.
+    if (c.has('selectedSlug') || c.has('rootNodes')) {
+      this._scrollSelectedIntoView();
+    }
   }
 
   _applyHash() {
@@ -185,7 +351,6 @@ class NottarioArchPage extends LitElement {
       if (ev.type !== 'realtime.reconnected' && !ev.type?.startsWith('arch.')) return;
       this.load();
       if (this.selectedSlug) {
-        // refresh the open node detail
         fetch(`/api/projects/${this.projectId}/arch/nodes/${encodeURIComponent(this.selectedSlug)}`)
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (d) this.selectedDetail = d; });
@@ -205,30 +370,26 @@ class NottarioArchPage extends LitElement {
       this.project = await pr.json();
       this.kinds = (await kr.json()).kinds || [];
       const all = (await nr.json()).nodes || [];
-      // Build a slug → name lookup so we can resolve ParentID to
-      // ParentSlug, then group children by parent slug. The API
-      // exposes ParentID (uuid) on nodes but not ParentSlug; using
-      // slugs everywhere on the frontend keeps the tree URL-friendly.
       const byId = new Map(all.map(n => [n.ID, n]));
+      const bySlug = {};
       const children = {};
       const roots = [];
       for (const n of all) {
+        bySlug[n.Slug] = n;
         if (n.ParentID) {
           const parent = byId.get(n.ParentID);
           if (parent) {
-            const k = parent.Slug;
-            (children[k] = children[k] || []).push(n);
+            (children[parent.Slug] = children[parent.Slug] || []).push(n);
             continue;
           }
         }
         roots.push(n);
       }
-      // Stable-sort each bucket by Position then Name so the tree
-      // matches the diagram's left-to-right ordering.
       const sortFn = (a, b) =>
         (a.Position - b.Position) || (a.Name || '').localeCompare(b.Name || '');
       roots.sort(sortFn);
       for (const k of Object.keys(children)) children[k].sort(sortFn);
+      this.nodeBySlug = bySlug;
       this.rootNodes = roots;
       this.childrenBySlug = children;
     } catch (e) { this.error = e.message; }
@@ -237,11 +398,20 @@ class NottarioArchPage extends LitElement {
   kindByKey(key) { return this.kinds.find(k => k.Key === key); }
   hasChildren(slug) { return (this.childrenBySlug[slug] || []).length > 0; }
 
-  back() { window.nottarioNavigate('/'); }
+  // Walk parents from a node up to a root, returning the slug chain
+  // (excluding the node itself).
+  _ancestorSlugs(slug) {
+    const out = [];
+    let cur = this.nodeBySlug[slug];
+    while (cur && cur.ParentID) {
+      const parent = Object.values(this.nodeBySlug).find(n => n.ID === cur.ParentID);
+      if (!parent) break;
+      out.push(parent.Slug);
+      cur = parent;
+    }
+    return out;
+  }
 
-  // Toggling is now purely local — children are already in memory.
-  // No-op for leaves so an accidental click on the row doesn't flip
-  // an invisible state.
   toggle(slug) {
     if (!this.hasChildren(slug)) return;
     this.expanded = { ...this.expanded, [slug]: !this.expanded[slug] };
@@ -249,11 +419,81 @@ class NottarioArchPage extends LitElement {
 
   async select(slug) {
     this.selectedSlug = slug;
+    // Auto-expand the ancestor chain so the selected row is
+    // actually visible in the tree.
+    const ancestors = this._ancestorSlugs(slug);
+    if (ancestors.length) {
+      const next = { ...this.expanded };
+      for (const a of ancestors) next[a] = true;
+      this.expanded = next;
+    }
     try {
       const r = await fetch(`/api/projects/${this.projectId}/arch/nodes/${encodeURIComponent(slug)}`);
       if (!r.ok) throw new Error('node not found');
       this.selectedDetail = await r.json();
+      // Pre-fetch any task-linked items so the reader can render
+      // chips with titles instead of bare UUIDs.
+      const taskIds = ((this.selectedDetail?.links || [])
+        .filter(l => l.LinkType === 'task')
+        .map(l => l.TargetID))
+        .filter(id => !this.taskCache[id]);
+      if (taskIds.length) {
+        const fetched = await Promise.all(taskIds.map(async (id) => {
+          const tr = await fetch(`/api/projects/${this.projectId}/tasks/${id}`);
+          return tr.ok ? [id, await tr.json()] : null;
+        }));
+        const next = { ...this.taskCache };
+        for (const e of fetched) if (e) next[e[0]] = e[1];
+        this.taskCache = next;
+      }
     } catch (e) { this.error = e.message; }
+  }
+
+  _backToList() {
+    this.selectedSlug = null;
+    this.selectedDetail = null;
+  }
+
+  _onFilterInput(e) {
+    this.filter = (e.detail?.value || '').trim().toLowerCase();
+    // Auto-expand ancestors of every match so they're visible.
+    if (!this.filter) return;
+    const next = { ...this.expanded };
+    for (const slug of Object.keys(this.nodeBySlug)) {
+      if (this._matchesFilter(this.nodeBySlug[slug])) {
+        for (const a of this._ancestorSlugs(slug)) next[a] = true;
+      }
+    }
+    this.expanded = next;
+  }
+
+  _matchesFilter(n) {
+    if (!this.filter) return true;
+    return (n.Name || '').toLowerCase().includes(this.filter)
+        || (n.Slug || '').toLowerCase().includes(this.filter);
+  }
+
+  // A node is "visible" (full opacity) if it matches or if any of
+  // its descendants match. Otherwise it's dim.
+  _isHighlighted(n) {
+    if (!this.filter) return true;
+    if (this._matchesFilter(n)) return true;
+    for (const c of (this.childrenBySlug[n.Slug] || [])) {
+      if (this._isHighlighted(c)) return true;
+    }
+    return false;
+  }
+
+  _scrollSelectedIntoView() {
+    if (!this.selectedSlug) return;
+    requestAnimationFrame(() => {
+      const row = this.shadowRoot?.querySelector(`[data-slug="${CSS.escape(this.selectedSlug)}"]`);
+      if (!row) return;
+      row.scrollIntoView({
+        block: 'nearest',
+        behavior: this._reduced ? 'auto' : 'smooth',
+      });
+    });
   }
 
   renderNode(n) {
@@ -261,19 +501,21 @@ class NottarioArchPage extends LitElement {
     const isLeaf = children.length === 0;
     const open = !isLeaf && !!this.expanded[n.Slug];
     const kind = this.kindByKey(n.Kind);
+    const isDim = !this._isHighlighted(n);
     const cls = [
       'node',
       isLeaf ? 'leaf' : '',
       this.selectedSlug === n.Slug ? 'active' : '',
+      isDim ? 'dim' : '',
     ].filter(Boolean).join(' ');
     return html`
       <li>
-        <div class=${cls}>
+        <div class=${cls} data-slug=${n.Slug}>
           ${isLeaf ? null : html`<span class="toggle"
                   @click=${(e) => { e.stopPropagation(); this.toggle(n.Slug); }}
             >${open ? '▾' : '▸'}</span>`}
           <span class="kind-dot" style=${`background: ${kind?.Color || '#999'}`} title=${kind?.Label || n.Kind}></span>
-          <span @click=${() => this.select(n.Slug)}>${n.Name}</span>
+          <span class="name" @click=${() => this.select(n.Slug)}>${n.Name}</span>
           <span class="kind-label">${n.Kind}</span>
         </div>
         ${open ? html`
@@ -287,12 +529,19 @@ class NottarioArchPage extends LitElement {
     if (this.rootNodes === null) return html`<div class="sidebar">Loading…</div>`;
     return html`
       <div class="sidebar">
-        <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <div class="sidebar-head">
           <strong>Architecture</strong>
-          <span class="muted" style="margin-left:auto;font-size:11px">read only</span>
+          <span class="muted">read only</span>
+        </div>
+        <div class="filter-row">
+          <nottario-search-input
+            placeholder="Filter…"
+            .value=${this.filter}
+            @input=${(e) => this._onFilterInput(e)}>
+          </nottario-search-input>
         </div>
         ${this.rootNodes.length === 0 ? html`
-          <p class="muted">No architecture defined yet. Ask an agent to start with <code>nottario.arch.upsert_node</code>.</p>
+          <p class="empty-pane">No architecture defined yet. Ask an agent to start with <code>nottario.arch.upsert_node</code>.</p>
         ` : html`
           <ul class="tree">
             ${this.rootNodes.map(n => this.renderNode(n))}
@@ -304,14 +553,21 @@ class NottarioArchPage extends LitElement {
 
   renderReader() {
     if (!this.selectedDetail) {
-      return html`<div class="reader empty">Select a node on the left.</div>`;
+      return html`
+        <div class="reader empty">
+          <h3>Pick a node</h3>
+          <p>Select anything on the left to see its description, edges and the tasks or docs it links to.</p>
+        </div>`;
     }
     const { node, children, edges, links } = this.selectedDetail;
     const kind = this.kindByKey(node.Kind);
     const incoming = edges.filter(e => e.ToSlug === node.Slug);
     const outgoing = edges.filter(e => e.FromSlug === node.Slug);
+    const taskLinks = (links || []).filter(l => l.LinkType === 'task');
+    const docLinks  = (links || []).filter(l => l.LinkType === 'doc');
     return html`
       <div class="reader">
+        <button class="reader-back" @click=${() => this._backToList()}>← Back to list</button>
         <header>
           <h3>${node.Name}</h3>
           <span class="kind-pill" style=${`background: ${kind?.Color || '#eaeef2'}1a; color: ${kind?.Color || '#1f2328'}`}>${kind?.Label || node.Kind}</span>
@@ -340,7 +596,8 @@ class NottarioArchPage extends LitElement {
             ${children.map(c => html`
               <div class="edge-line" @click=${() => this.select(c.Slug)}>
                 <span class="kind-dot" style=${`background: ${this.kindByKey(c.Kind)?.Color || '#999'}`}></span>
-                ${c.Name} <span class="kind-label">${c.Kind}</span>
+                <span class="endpoint">${c.Name}</span>
+                <span class="kind-label">${c.Kind}</span>
               </div>
             `)}
           </div>
@@ -350,10 +607,10 @@ class NottarioArchPage extends LitElement {
             <h4>Outgoing edges (${outgoing.length})</h4>
             ${outgoing.map(e => html`
               <div class="edge-line">
-                <strong>${e.Kind}</strong>
+                <span class="kind">${e.Kind}</span>
                 <span class="arrow">→</span>
-                <span @click=${() => this.select(e.ToSlug)} style="color:#0969da;cursor:pointer">${e.ToName}</span>
-                ${e.Label ? html` <span class="muted">— ${e.Label}</span>` : null}
+                <span class="endpoint" @click=${() => this.select(e.ToSlug)}>${e.ToName}</span>
+                ${e.Label ? html`<span class="label">${e.Label}</span>` : null}
               </div>
             `)}
           </div>
@@ -363,22 +620,37 @@ class NottarioArchPage extends LitElement {
             <h4>Incoming edges (${incoming.length})</h4>
             ${incoming.map(e => html`
               <div class="edge-line">
-                <span @click=${() => this.select(e.FromSlug)} style="color:#0969da;cursor:pointer">${e.FromName}</span>
+                <span class="endpoint" @click=${() => this.select(e.FromSlug)}>${e.FromName}</span>
                 <span class="arrow">→</span>
-                <strong>${e.Kind}</strong>
-                ${e.Label ? html` <span class="muted">— ${e.Label}</span>` : null}
+                <span class="kind">${e.Kind}</span>
+                ${e.Label ? html`<span class="label">${e.Label}</span>` : null}
               </div>
             `)}
           </div>
         ` : null}
-        ${links && links.length ? html`
+        ${(taskLinks.length || docLinks.length) ? html`
           <div class="section">
-            <h4>Linked items (${links.length})</h4>
-            ${links.map(l => html`
-              <div class="edge-line">
-                <strong>${l.LinkType}</strong>: <code>${l.TargetID}</code>
-              </div>
-            `)}
+            <h4>Linked items (${taskLinks.length + docLinks.length})</h4>
+            <div class="linked-items">
+              ${taskLinks.map(l => {
+                const t = this.taskCache[l.TargetID];
+                return t ? html`
+                  <nottario-task-chip
+                    project-id=${this.projectId}
+                    .task=${t}></nottario-task-chip>
+                ` : html`
+                  <div class="edge-line"><span class="kind">task</span><code>${l.TargetID}</code></div>
+                `;
+              })}
+              ${docLinks.map(l => html`
+                <a class="doc-link"
+                   href=${`/projects/${this.projectId}/docs/${l.TargetID}`}
+                   @click=${(e) => {
+                     e.preventDefault();
+                     window.nottarioNavigate(`/projects/${this.projectId}/docs/${l.TargetID}`);
+                   }}>${l.TargetID}</a>
+              `)}
+            </div>
           </div>
         ` : null}
       </div>
@@ -387,6 +659,7 @@ class NottarioArchPage extends LitElement {
 
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
+    const mobileMode = this.selectedSlug ? 'reader' : 'list';
     return html`
       <nottario-page-header title="Architecture">
         <nottario-segmented-control slot="switcher"
@@ -402,7 +675,7 @@ class NottarioArchPage extends LitElement {
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${this.view === 'diagram'
         ? html`<nottario-arch-graph .projectId=${this.projectId}></nottario-arch-graph>`
-        : html`<div class="layout">${this.renderSidebar()}${this.renderReader()}</div>`}
+        : html`<div class="layout" data-mode=${mobileMode}>${this.renderSidebar()}${this.renderReader()}</div>`}
     `;
   }
 }
