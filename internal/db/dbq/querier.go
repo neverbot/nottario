@@ -79,7 +79,7 @@ type Querier interface {
 	InsertProject(ctx context.Context, arg InsertProjectParams) (InsertProjectRow, error)
 	InsertProjectRepo(ctx context.Context, arg InsertProjectRepoParams) error
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
-	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) error
+	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) (uuid.UUID, error)
 	InsertSession(ctx context.Context, arg InsertSessionParams) (InsertSessionRow, error)
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (TaskComment, error)

@@ -27,6 +27,7 @@ UPDATE roles SET position = $2 WHERE id = $1;
 -- name: DeleteProjectRole :exec
 DELETE FROM roles WHERE id = $1;
 
--- name: InsertSeedRole :exec
+-- name: InsertSeedRole :one
 INSERT INTO roles (project_id, key, label, color, position)
-VALUES ($1, $2, $3, $4, $5);
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id;

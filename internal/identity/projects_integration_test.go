@@ -58,4 +58,12 @@ func TestCreateProject_SeedsRolesAndPriorities(t *testing.T) {
 	if medium < 0 || medium > 100 {
 		t.Fatalf("medium priority out of range: %d", medium)
 	}
+
+	creatorRoles, err := identity.UserRoleIDs(ctx, pool, u.ID, p.ID)
+	if err != nil {
+		t.Fatalf("UserRoleIDs: %v", err)
+	}
+	if len(creatorRoles) != len(identity.DefaultRoleCatalogue) {
+		t.Fatalf("expected creator auto-joined with %d roles, got %d", len(identity.DefaultRoleCatalogue), len(creatorRoles))
+	}
 }

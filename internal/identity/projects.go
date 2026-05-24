@@ -50,14 +50,22 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 	p := projectFromInsertRow(row)
 
 	for i, r := range DefaultRoleCatalogue {
-		if err := q.InsertSeedRole(ctx, dbq.InsertSeedRoleParams{
+		roleID, err := q.InsertSeedRole(ctx, dbq.InsertSeedRoleParams{
 			ProjectID: p.ID,
 			Key:       r.Key,
 			Label:     r.Label,
 			Color:     pgtype.Text{String: r.Color, Valid: r.Color != ""},
 			Position:  int32(i),
-		}); err != nil {
+		})
+		if err != nil {
 			return nil, fmt.Errorf("seed role %s: %w", r.Key, err)
+		}
+		if err := q.InsertMembership(ctx, dbq.InsertMembershipParams{
+			UserID:    createdByUserID,
+			ProjectID: p.ID,
+			RoleID:    roleID,
+		}); err != nil {
+			return nil, fmt.Errorf("auto-join role %s: %w", r.Key, err)
 		}
 	}
 	if err := seedDefaultPriorities(ctx, tx, p.ID); err != nil {

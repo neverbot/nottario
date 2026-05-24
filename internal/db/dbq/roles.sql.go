@@ -67,9 +67,10 @@ func (q *Queries) InsertProjectRole(ctx context.Context, arg InsertProjectRolePa
 	return i, err
 }
 
-const insertSeedRole = `-- name: InsertSeedRole :exec
+const insertSeedRole = `-- name: InsertSeedRole :one
 INSERT INTO roles (project_id, key, label, color, position)
 VALUES ($1, $2, $3, $4, $5)
+RETURNING id
 `
 
 type InsertSeedRoleParams struct {
@@ -80,15 +81,17 @@ type InsertSeedRoleParams struct {
 	Position  int32
 }
 
-func (q *Queries) InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) error {
-	_, err := q.db.Exec(ctx, insertSeedRole,
+func (q *Queries) InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertSeedRole,
 		arg.ProjectID,
 		arg.Key,
 		arg.Label,
 		arg.Color,
 		arg.Position,
 	)
-	return err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listProjectRoleIDs = `-- name: ListProjectRoleIDs :many
