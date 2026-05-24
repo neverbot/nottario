@@ -746,8 +746,8 @@ class NottarioDocsPage extends LitElement {
     if (!this.project) return html`<p class="status info" style="margin:24px">Loading...</p>`;
     return html`
       <nottario-page-header title="Docs"></nottario-page-header>
-      ${this.error ? html`<div class="status error">${this.error}</div>` : null}
-      ${this.info ? html`<div class="status info">${this.info}</div>` : null}
+      ${this.error ? html`<div class="status error" role="alert">${this.error}</div>` : null}
+      ${this.info ? html`<div class="status info" role="status">${this.info}</div>` : null}
       <div class="layout">
         ${this.renderRail()}
         ${this.renderReaderCol()}
@@ -988,7 +988,9 @@ class NottarioDocsPage extends LitElement {
           </div>
           <div class="field">
             <label>Markdown (with optional frontmatter)</label>
-            <textarea .value=${this.draft} @input=${(e) => { this.draft = e.target.value; }}></textarea>
+            <textarea aria-label="Markdown content"
+                      .value=${this.draft}
+                      @input=${(e) => { this.draft = e.target.value; }}></textarea>
           </div>
         </div>
       </div>
