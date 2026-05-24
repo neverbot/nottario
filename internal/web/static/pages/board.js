@@ -243,12 +243,14 @@ class NottarioBoardPage extends LitElement {
       font: inherit;
     }
     .detail .head .icon-btn svg { display: block; }
-    .detail .head .icon-btn:hover,
-    .detail .head .icon-btn:focus-visible {
+    .detail .head .icon-btn:hover {
       color: #1f2328;
       background: #f6f8fa;
       border-color: #d0d7de;
-      outline: none;
+    }
+    .detail .head .icon-btn:focus-visible {
+      outline: 2px solid #0969da;
+      outline-offset: 1px;
     }
     .detail .head .icon-btn.danger:hover,
     .detail .head .icon-btn.danger:focus-visible {

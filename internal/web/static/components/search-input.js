@@ -155,7 +155,8 @@ class NottarioSearchInput extends LitElement {
     return html`
       <div class="wrap">
         <input
-          type="text"
+          type="search"
+          aria-label=${this.placeholder || 'Search'}
           placeholder=${this.placeholder}
           .value=${this.value}
           ?autofocus=${this.autofocus}

@@ -215,11 +215,7 @@ class NottarioTopbar extends LitElement {
       cursor: pointer;
       font: inherit;
     }
-    .menu .item:hover,
-    .menu .item:focus-visible {
-      background: #f3f4f6;
-      outline: none;
-    }
+    .menu .item:hover { background: #f3f4f6; }
     .menu .item.danger { color: #cf222e; }
     .menu .item.danger:hover,
     .menu .item.danger:focus-visible { background: #ffebe9; }
@@ -359,15 +355,21 @@ class NottarioTopbar extends LitElement {
     const proj = this.activeProjectId();
     const projectItems = proj ? this._projectNavItems(proj) : null;
     return html`
+      <header role="banner">
       <div class="bar">
-        <a class="brand" href="/" @click=${this._go('/')}>
+        <a class="brand" href="/" @click=${this._go('/')}
+           aria-label="Nottario home">
           <span class="brand-mark"></span>
           <span class="brand-name">Nottario</span>
         </a>
-        <nav class="primary">
-          <a href="/" class=${this._isActive('/') ? 'active' : ''}
+        <nav class="primary" aria-label="Primary navigation">
+          <a href="/"
+             class=${this._isActive('/') ? 'active' : ''}
+             aria-current=${this._isActive('/') ? 'page' : 'false'}
              @click=${this._go('/')}>Projects</a>
-          <a href="/users" class=${this._isActive('/users') ? 'active' : ''}
+          <a href="/users"
+             class=${this._isActive('/users') ? 'active' : ''}
+             aria-current=${this._isActive('/users') ? 'page' : 'false'}
              @click=${this._go('/users')}>Users</a>
         </nav>
         <div class="spacer"></div>
@@ -404,20 +406,23 @@ class NottarioTopbar extends LitElement {
           </div>
         </div>
       </div>
-      ${projectItems ? html`
-        <div class="project-row">
-          <div class="inner">
-            ${this._projectName
-              ? html`<span class="pname">${this._projectName}</span>`
-              : null}
-            <nav class="project" aria-label="Project navigation">
-              ${projectItems.map(it => html`
-                <a href=${it.href} class=${it.active ? 'active' : ''}
-                   @click=${this._go(it.href)}>${it.label}</a>
-              `)}
-            </nav>
-          </div>
-        </div>` : null}
+        ${projectItems ? html`
+          <div class="project-row">
+            <div class="inner">
+              ${this._projectName
+                ? html`<span class="pname">${this._projectName}</span>`
+                : null}
+              <nav class="project" aria-label="Project navigation">
+                ${projectItems.map(it => html`
+                  <a href=${it.href}
+                     class=${it.active ? 'active' : ''}
+                     aria-current=${it.active ? 'page' : 'false'}
+                     @click=${this._go(it.href)}>${it.label}</a>
+                `)}
+              </nav>
+            </div>
+          </div>` : null}
+      </header>
     `;
   }
 }

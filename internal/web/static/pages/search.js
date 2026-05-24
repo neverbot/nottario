@@ -37,8 +37,9 @@ class NottarioSearchBox extends LitElement {
       font-family: inherit;
     }
     input::placeholder { color: rgba(255,255,255,0.6); }
-    input:focus {
-      outline: none;
+    input:focus-visible {
+      outline: 2px solid #0969da;
+      outline-offset: 1px;
       background: #fff;
       color: #1f2328;
       border-color: #0969da;

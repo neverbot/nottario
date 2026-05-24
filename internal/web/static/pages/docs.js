@@ -168,12 +168,14 @@ class NottarioDocsPage extends LitElement {
       font: inherit;
     }
     .actions .delete svg { display: block; }
-    .actions .delete:hover,
-    .actions .delete:focus-visible {
+    .actions .delete:hover {
       color: #cf222e;
       border-color: rgba(207, 34, 46, 0.4);
       background: #ffebe9;
-      outline: none;
+    }
+    .actions .delete:focus-visible {
+      outline: 2px solid #cf222e;
+      outline-offset: 1px;
     }
 
     .reader-meta {

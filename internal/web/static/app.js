@@ -30,6 +30,25 @@ class NottarioShell extends LitElement {
       margin: 0 auto;
       padding: 24px;
     }
+    main:focus { outline: none; }
+    /* Skip-link styles also live in the global stylesheet so they
+       work even when the shadow root isn't yet upgraded. Duplicating
+       the rule here keeps shadow-DOM users covered. */
+    .skip-link {
+      position: absolute;
+      top: 0;
+      left: 0;
+      padding: 8px 12px;
+      background: #fff;
+      color: #0969da;
+      border: 1px solid #d1d9e0;
+      border-radius: 6px;
+      font-weight: 600;
+      text-decoration: none;
+      transform: translateY(-200%);
+      z-index: 1000;
+    }
+    .skip-link:focus { transform: translateY(8px); }
     .loading {
       padding: 48px;
       text-align: center;
@@ -187,8 +206,14 @@ class NottarioShell extends LitElement {
 
   render() {
     return html`
+      <a class="skip-link" href="#main-content"
+         @click=${(e) => {
+           e.preventDefault();
+           const m = this.shadowRoot?.getElementById('main-content');
+           m?.focus();
+         }}>Skip to main content</a>
       ${this.renderTopbar()}
-      <main>${this.renderBody()}</main>
+      <main id="main-content" tabindex="-1">${this.renderBody()}</main>
     `;
   }
 }
