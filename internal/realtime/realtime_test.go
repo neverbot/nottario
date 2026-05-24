@@ -22,6 +22,7 @@ import (
 
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/realtime"
+	"github.com/neverbot/nottario/internal/tasks"
 	"github.com/neverbot/nottario/internal/testutil"
 )
 
@@ -205,6 +206,63 @@ func TestHub_RunDeliversPgNotify(t *testing.T) {
 		t.Fatalf("other-project subscriber leaked event: %+v", ev)
 	case <-time.After(150 * time.Millisecond):
 		// expected
+	}
+}
+
+func TestHub_TaskClaimedEventReachesSubscribers(t *testing.T) {
+	hub := realtime.New(silentLogger())
+	_, pool, stop := runHubInBackground(t, hub)
+	defer stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	u, _, err := identity.UpsertFromGithub(ctx, pool, 4242, "claimer", "Claimer", "")
+	if err != nil {
+		t.Fatalf("user: %v", err)
+	}
+	p, err := identity.CreateProject(ctx, pool, "ClaimRT", "", "", "", u.ID, nil)
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	roles, _ := identity.ListRoles(ctx, pool, p.ID)
+	roleID := roles[0].ID
+
+	by := tasks.Authorship{UserID: &u.ID}
+	tk, err := tasks.Create(ctx, pool, tasks.CreateParams{
+		ProjectID: p.ID, Type: tasks.TypeTask, Title: "Pickme", TargetRoleID: &roleID,
+	}, by)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	ch, cancelSub := hub.Subscribe(p.ID)
+	defer cancelSub()
+
+	if _, err := tasks.Claim(ctx, pool, tk.ID, u.ID); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+
+	deadline := time.After(3 * time.Second)
+	gotClaimed := false
+	for !gotClaimed {
+		select {
+		case ev := <-ch:
+			if ev.Type == "task.claimed" {
+				if ev.TaskID == nil || *ev.TaskID != tk.ID {
+					t.Errorf("task.claimed task_id mismatch: %+v", ev)
+				}
+				if ev.AssigneeUserID == nil || *ev.AssigneeUserID != u.ID {
+					t.Errorf("task.claimed assignee mismatch: %+v", ev)
+				}
+				if ev.ClaimedAt == nil {
+					t.Errorf("task.claimed missing claimed_at: %+v", ev)
+				}
+				gotClaimed = true
+			}
+		case <-deadline:
+			t.Fatal("timeout waiting for task.claimed event")
+		}
 	}
 }
 

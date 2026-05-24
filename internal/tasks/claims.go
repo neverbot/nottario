@@ -2,8 +2,10 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -11,6 +13,25 @@ import (
 
 	"github.com/neverbot/nottario/internal/db/dbq"
 )
+
+// publishClaimed emits a `task.claimed` notification on the realtime
+// channel. Best-effort: a failure here is logged via the returned
+// error but does not roll back the claim itself.
+func publishClaimed(ctx context.Context, pool *pgxpool.Pool, projectID, taskID, userID uuid.UUID, at time.Time) {
+	payload := map[string]any{
+		"type":             "task.claimed",
+		"op":               "UPDATE",
+		"project_id":       projectID,
+		"task_id":          taskID,
+		"assignee_user_id": userID,
+		"claimed_at":       at.UTC().Format(time.RFC3339Nano),
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	_, _ = pool.Exec(ctx, "SELECT pg_notify('nottario_events', $1)", string(b))
+}
 
 // ClaimConflictError is returned by Claim (the by-id variant) when the
 // task is not eligible to be picked up by the caller. Callers use the
@@ -56,6 +77,7 @@ func ClaimNext(ctx context.Context, pool *pgxpool.Pool, f NextFilter, callerUser
 	if err != nil {
 		return nil, err
 	}
+	publishClaimed(ctx, pool, row.ProjectID, row.ID, callerUserID, time.Now())
 	return &Task{
 		ID:               row.ID,
 		ProjectID:        row.ProjectID,
@@ -160,6 +182,7 @@ func Claim(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, callerUserID u
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	publishClaimed(ctx, pool, row.ProjectID, id, callerUserID, time.Now())
 	return Get(ctx, pool, id)
 }
 
