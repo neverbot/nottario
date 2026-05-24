@@ -43,3 +43,15 @@ SELECT project_id FROM tasks WHERE id = $1;
 
 -- name: AcquireDepLock :exec
 SELECT pg_advisory_xact_lock(sqlc.arg('namespace')::int, hashtext(sqlc.arg('project_id')::text));
+
+-- name: ListDoneDependentsInconsistencies :many
+SELECT t.id AS task_id,
+       ARRAY_AGG(d.id ORDER BY d.id)::uuid[] AS done_dependent_ids
+FROM tasks t
+JOIN task_dependencies td ON td.depends_on_id = t.id
+JOIN tasks d ON d.id = td.task_id
+WHERE t.project_id = $1
+  AND t.state <> 'done'
+  AND d.state = 'done'
+GROUP BY t.id
+ORDER BY t.id;

@@ -139,6 +139,7 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("POST /api/projects/{id}/tasks", CreateTaskHandler(tasks))
 	mux.Handle("GET /api/projects/{id}/tasks/next", NextTaskHandler(tasks))
 	mux.Handle("GET /api/projects/{id}/tasks/dependencies", ListDependenciesHandler(tasks))
+	mux.Handle("GET /api/projects/{id}/tasks/inconsistencies", ListInconsistenciesHandler(tasks))
 	mux.Handle("GET /api/projects/{id}/tasks/{task_id}", GetTaskHandler(tasks))
 	mux.Handle("PATCH /api/projects/{id}/tasks/{task_id}", UpdateTaskHandler(tasks))
 	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}", DeleteTaskHandler(tasks))

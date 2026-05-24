@@ -93,6 +93,44 @@ func (q *Queries) ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.U
 	return items, nil
 }
 
+const listDoneDependentsInconsistencies = `-- name: ListDoneDependentsInconsistencies :many
+SELECT t.id AS task_id,
+       ARRAY_AGG(d.id ORDER BY d.id)::uuid[] AS done_dependent_ids
+FROM tasks t
+JOIN task_dependencies td ON td.depends_on_id = t.id
+JOIN tasks d ON d.id = td.task_id
+WHERE t.project_id = $1
+  AND t.state <> 'done'
+  AND d.state = 'done'
+GROUP BY t.id
+ORDER BY t.id
+`
+
+type ListDoneDependentsInconsistenciesRow struct {
+	TaskID           uuid.UUID
+	DoneDependentIds []uuid.UUID
+}
+
+func (q *Queries) ListDoneDependentsInconsistencies(ctx context.Context, projectID uuid.UUID) ([]ListDoneDependentsInconsistenciesRow, error) {
+	rows, err := q.db.Query(ctx, listDoneDependentsInconsistencies, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDoneDependentsInconsistenciesRow{}
+	for rows.Next() {
+		var i ListDoneDependentsInconsistenciesRow
+		if err := rows.Scan(&i.TaskID, &i.DoneDependentIds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectDependencies = `-- name: ListProjectDependencies :many
 SELECT d.task_id, d.depends_on_id
 FROM task_dependencies d

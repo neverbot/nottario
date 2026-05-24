@@ -483,6 +483,26 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		return jsonResult(cm)
 	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.tasks.inconsistencies",
+		Description: "Lists tasks whose state is inconsistent with the rest of the project graph. Each entry has `task_id`, a stable `reason` key and a `details` payload. Initial reason: `dependent_already_done` — a non-done task that has at least one dependent already marked done.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in struct {
+		ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
+	}) (*sdk.CallToolResult, any, error) {
+		pid, err := uuid.Parse(in.ProjectID)
+		if err != nil {
+			return toolError("project_id must be a uuid")
+		}
+		if err := requireProjectAccess(ctx, d, pid); err != nil {
+			return toolError(err.Error())
+		}
+		items, err := tasks.ListInconsistencies(ctx, d.Pool, pid)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(map[string]any{"inconsistencies": items})
+	})
 }
 
 // requireProjectAccess returns an error when the caller cannot see the project.

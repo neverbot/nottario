@@ -100,6 +100,7 @@ type Querier interface {
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
 	ListDocumentVersions(ctx context.Context, documentID uuid.UUID) ([]ListDocumentVersionsRow, error)
 	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]ListDocumentsRow, error)
+	ListDoneDependentsInconsistencies(ctx context.Context, projectID uuid.UUID) ([]ListDoneDependentsInconsistenciesRow, error)
 	ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error)
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)

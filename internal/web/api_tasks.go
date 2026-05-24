@@ -92,6 +92,33 @@ func ListDependenciesHandler(d TaskDeps) http.Handler {
 	})
 }
 
+// ListInconsistenciesHandler returns the project's inconsistent tasks
+// with a `reason` key per entry.
+func ListInconsistenciesHandler(d TaskDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		pid, err := projectIDFromPath(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		items, err := tasks.ListInconsistencies(r.Context(), d.Pool, pid)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"inconsistencies": items})
+	})
+}
+
 // ListTasksHandler returns the project's tasks.
 func ListTasksHandler(d TaskDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
