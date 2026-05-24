@@ -29,6 +29,7 @@ class NottarioGantt extends LitElement {
     error: { state: true },
     now: { state: true },
     foldedFeatures: { state: true },
+    _hover: { state: true },
   };
 
   static styles = css`
@@ -148,6 +149,74 @@ class NottarioGantt extends LitElement {
       border-radius: 6px;
       margin-bottom: 8px;
     }
+
+    /* Hover popup. Replaces the native browser <title> tooltip on
+       Gantt bars with something that matches the rest of the app
+       (neutral palette, system sans, thin border). The .stage is
+       position:relative so this card layers above the SVG; we
+       compute the (left, top) when the hover fires and let CSS
+       handle the rendering. */
+    .hover-card {
+      position: absolute;
+      z-index: 5;
+      pointer-events: none;
+      background: #fff;
+      color: #1f2328;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(31, 35, 40, 0.12);
+      padding: 8px 10px;
+      min-width: 220px;
+      max-width: 320px;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .hover-card .title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1f2328;
+      margin-bottom: 4px;
+    }
+    .hover-card .row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .hover-card .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      line-height: 1.3;
+      font-weight: 500;
+      background: #eaeef2;
+      color: #1f2328;
+    }
+    .hover-card .chip.state-todo  { background: #eaeef2; color: #59636e; }
+    .hover-card .chip.state-doing { background: #ddf4ff; color: #0969da; }
+    .hover-card .chip.state-done  { background: #dafbe1; color: #1a7f37; }
+    .hover-card .chip.type-bug    { background: #ffebe9; color: #cf222e; }
+    .hover-card .chip.role        { color: #fff; }
+    .hover-card .assignee {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      color: #59636e;
+    }
+    .hover-card .assignee img {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .hover-card .meta {
+      color: #59636e;
+      margin-top: 4px;
+    }
     .empty {
       padding: 40px;
       text-align: center;
@@ -165,6 +234,13 @@ class NottarioGantt extends LitElement {
     this.now = new Date();
     this.foldedFeatures = new Set();      // feature IDs currently collapsed
     this._knownFeatureIDs = new Set();    // features we've ever seen
+    // Hover-popup state. null when nothing is hovered/focused.
+    // Carries the source task plus the anchor pixel coords relative
+    // to the stage's content (so we can flip when overflowing).
+    this._hover = null;
+    this._reducedMotion = (typeof window !== 'undefined' && window.matchMedia)
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false;
   }
 
   // Update the folded set when fresh tasks arrive: new feature IDs
@@ -879,7 +955,8 @@ class NottarioGantt extends LitElement {
 
     return html`
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
-      <div class="stage">
+      <div class="stage" @keydown=${(e) => this._onStageKey(e)}>
+        ${this._renderHoverCard()}
         <svg width=${width} height=${totalHeight}
              role="img"
              aria-label=${`Gantt chart with ${(this.tasks||[]).length} tasks`}>
@@ -979,10 +1056,12 @@ class NottarioGantt extends LitElement {
                       stroke=${color}
                       stroke-dasharray="6 3"
                       style="cursor:pointer"
-                      @click=${(e) => { e.stopPropagation(); this._toggleFold(t.ID); }}>
-                  <title>${t.Title}
-${childCount} task${childCount === 1 ? '' : 's'} across ${this._featureRoles(t.ID)}
-click to expand</title>
+                      @click=${(e) => { e.stopPropagation(); this._toggleFold(t.ID); }}
+                      @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
+                      @mouseleave=${() => this._onBarLeave()}
+                      @focus=${(e) => this._onBarHover(e, t, p.from, y)}
+                      @blur=${() => this._onBarLeave()}
+                      tabindex="0">
                 </rect>
                 <text class="task-label" x=${labelX} y=${y + taskHeight / 2 + 4}
                       style="pointer-events:none">
@@ -1007,9 +1086,12 @@ click to expand</title>
                     rx="6" ry="6"
                     fill=${t.State === 'done' ? '#d1d9e0' : (t.State === 'doing' ? color : 'transparent')}
                     stroke=${color}
-                    @click=${(e) => { e.stopPropagation(); this._emitSelect(t); }}>
-                <title>${t.Title}
-${t.State} · ${this._priorityLabel(t.Priority)}${t.TargetRoleID ? ` · ${this._roleLabel(t.TargetRoleID)}` : ''}${user ? `\nassigned to ${user.DisplayName}` : ''}</title>
+                    @click=${(e) => { e.stopPropagation(); this._emitSelect(t); }}
+                    @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
+                    @mouseleave=${() => this._onBarLeave()}
+                    @focus=${(e) => this._onBarHover(e, t, p.from, y)}
+                    @blur=${() => this._onBarLeave()}
+                    tabindex="0">
               </rect>
               ${user && user.AvatarURL ? svg`
                 <g transform=${`translate(${avatarX}, ${avatarY})`} style="pointer-events:none">
@@ -1129,6 +1211,102 @@ ${t.State} · ${this._priorityLabel(t.Priority)}${t.TargetRoleID ? ` · ${this._
   _truncate(s, n) {
     if (!s) return '';
     return s.length > n ? s.slice(0, Math.max(0, n - 1)) + '…' : s;
+  }
+
+  // _onBarHover stashes the task + its on-canvas anchor coords so
+  // the popup template can render. The anchor is the bar's
+  // top-left in SVG coords; we convert to DOM-relative-to-stage
+  // pixels at render time (the stage scrolls horizontally, so we
+  // also account for current scrollLeft / scrollTop).
+  _onBarHover(_e, task, barX, barY) {
+    this._hover = { task, barX, barY };
+  }
+  _onBarLeave() {
+    this._hover = null;
+  }
+  _onStageKey(e) {
+    if (e.key === 'Escape' && this._hover) {
+      this._hover = null;
+      // Move focus off the bar so it doesn't immediately re-trigger
+      // via the focus handler.
+      this.shadowRoot?.querySelector('.task-rect:focus')?.blur?.();
+    }
+  }
+
+  // Render the popup for the currently-hovered task. Position is
+  // computed against the bar's SVG coords; the stage's scrollLeft
+  // and a small offset keep the card visually anchored.
+  _renderHoverCard() {
+    if (!this._hover) return null;
+    const { task: t, barX, barY } = this._hover;
+    const stage = this.shadowRoot?.querySelector('.stage');
+    const stageW = stage?.clientWidth || 800;
+    const scrollLeft = stage?.scrollLeft || 0;
+    // The card is `position: absolute` inside `.stage` (which is
+    // `position: relative` + `overflow: auto`), so its coordinates
+    // are in the scrolled SVG content space, not the viewport. We
+    // do NOT subtract scrollLeft. Default anchor: 8px to the right
+    // of the bar's start, just above it.
+    const cardW = 320;
+    let left = barX + 8;
+    const top = Math.max(8, barY - 8);
+    // Flip to the left side of the bar if the card would extend
+    // past the visible viewport's right edge.
+    const viewportRight = scrollLeft + stageW;
+    if (left + cardW > viewportRight) {
+      left = Math.max(scrollLeft + 8, barX - cardW - 8);
+    }
+
+    const role = t.TargetRoleID ? this.roles.find(r => r.ID === t.TargetRoleID) : null;
+    const user = t.AssigneeUserID
+      ? this.members.find(m => m.UserID === t.AssigneeUserID)
+      : null;
+
+    // Collapsed feature → short summary card.
+    if (t.Type === 'feature' && this.foldedFeatures.has(t.ID)) {
+      const childCount = (this.tasks || []).filter(x => x.ParentTaskID === t.ID).length;
+      const rolesText = this._featureRoles(t.ID);
+      return html`
+        <div class="hover-card" role="tooltip"
+             style=${`left:${left}px; top:${top}px`}>
+          <div class="title">${t.Title}</div>
+          <div class="meta">${childCount} task${childCount === 1 ? '' : 's'} · ${rolesText}</div>
+          <div class="meta">Click to expand</div>
+        </div>
+      `;
+    }
+
+    // Regular task card.
+    const dateStr = (iso) => iso ? new Date(iso).toLocaleDateString() : '';
+    const start = t.ActualStart || t.PlannedStart;
+    const end   = t.ActualEnd   || t.PlannedEnd;
+    return html`
+      <div class="hover-card" role="tooltip"
+           style=${`left:${left}px; top:${top}px`}>
+        <div class="title">${t.Title}</div>
+        <div class="row">
+          <span class=${`chip state-${t.State}`}>${t.State}</span>
+          ${t.Type === 'bug'
+            ? html`<span class="chip type-bug">bug</span>`
+            : t.Type !== 'task'
+              ? html`<span class="chip">${t.Type}</span>`
+              : null}
+          <span class="chip">${this._priorityLabel(t.Priority)}</span>
+          ${role ? html`
+            <span class="chip role" style=${`background:${role.Color || '#59636e'}`}>${role.Label}</span>
+          ` : null}
+        </div>
+        ${start || end ? html`
+          <div class="meta">${dateStr(start)}${start && end ? ' → ' : ''}${dateStr(end)}</div>
+        ` : null}
+        ${user ? html`
+          <div class="assignee">
+            ${user.AvatarURL ? html`<img src=${user.AvatarURL} alt="">` : null}
+            <span>${user.DisplayName || user.GithubLogin}</span>
+          </div>
+        ` : null}
+      </div>
+    `;
   }
 }
 
