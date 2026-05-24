@@ -15,10 +15,13 @@ class NottarioArchPage extends LitElement {
     project: { state: true },
     kinds: { state: true },
     rootNodes: { state: true },
+    // parentSlug ("" for roots) → ChildNode[]. Built once at load
+    // from the full node list, so the renderer knows at render-time
+    // whether a node is a leaf (no toggle) or a container.
+    childrenBySlug: { state: true },
     selectedSlug: { state: true },
     selectedDetail: { state: true },
     expanded: { state: true },
-    childrenCache: { state: true },
     error: { state: true },
   };
 
@@ -51,16 +54,18 @@ class NottarioArchPage extends LitElement {
       cursor: pointer;
       font-size: 13px;
     }
+    /* Leaves get a visual indent equal to (toggle 14px + gap 4px)
+       so their names line up with siblings that DO have a toggle. */
+    .node.leaf { padding-left: 22px; }
     .node:hover { background: #f6f8fa; }
     .node.active { background: #ddf4ff; color: #0969da; }
     .toggle {
-      width: 14px;
+      flex: 0 0 14px;
       text-align: center;
       color: #59636e;
       user-select: none;
       font-family: ui-monospace, monospace;
     }
-    .toggle.empty { visibility: hidden; }
     .kind-dot {
       display: inline-block;
       width: 8px;
@@ -100,14 +105,6 @@ class NottarioArchPage extends LitElement {
       font-size: 12px;
       text-transform: uppercase;
       color: #59636e;
-    }
-    .reader pre.body {
-      white-space: pre-wrap;
-      background: #f6f8fa;
-      border-radius: 6px;
-      padding: 12px;
-      font-size: 13px;
-      margin: 0;
     }
     .reader .edge-line {
       padding: 4px 8px;
@@ -150,7 +147,7 @@ class NottarioArchPage extends LitElement {
     this.selectedSlug = null;
     this.selectedDetail = null;
     this.expanded = {};
-    this.childrenCache = {};
+    this.childrenBySlug = {};
     this.error = '';
   }
 
@@ -202,35 +199,52 @@ class NottarioArchPage extends LitElement {
       const [pr, kr, nr] = await Promise.all([
         fetch(`/api/projects/${this.projectId}`),
         fetch(`/api/projects/${this.projectId}/arch/kinds`),
-        fetch(`/api/projects/${this.projectId}/arch/nodes?root_only=true`),
+        fetch(`/api/projects/${this.projectId}/arch/nodes`),
       ]);
       if (!pr.ok) throw new Error('project not found');
       this.project = await pr.json();
       this.kinds = (await kr.json()).kinds || [];
-      this.rootNodes = (await nr.json()).nodes || [];
+      const all = (await nr.json()).nodes || [];
+      // Build a slug → name lookup so we can resolve ParentID to
+      // ParentSlug, then group children by parent slug. The API
+      // exposes ParentID (uuid) on nodes but not ParentSlug; using
+      // slugs everywhere on the frontend keeps the tree URL-friendly.
+      const byId = new Map(all.map(n => [n.ID, n]));
+      const children = {};
+      const roots = [];
+      for (const n of all) {
+        if (n.ParentID) {
+          const parent = byId.get(n.ParentID);
+          if (parent) {
+            const k = parent.Slug;
+            (children[k] = children[k] || []).push(n);
+            continue;
+          }
+        }
+        roots.push(n);
+      }
+      // Stable-sort each bucket by Position then Name so the tree
+      // matches the diagram's left-to-right ordering.
+      const sortFn = (a, b) =>
+        (a.Position - b.Position) || (a.Name || '').localeCompare(b.Name || '');
+      roots.sort(sortFn);
+      for (const k of Object.keys(children)) children[k].sort(sortFn);
+      this.rootNodes = roots;
+      this.childrenBySlug = children;
     } catch (e) { this.error = e.message; }
   }
 
   kindByKey(key) { return this.kinds.find(k => k.Key === key); }
+  hasChildren(slug) { return (this.childrenBySlug[slug] || []).length > 0; }
 
   back() { window.nottarioNavigate('/'); }
 
-  async toggle(slug) {
-    const isOpen = !!this.expanded[slug];
-    if (isOpen) {
-      this.expanded = { ...this.expanded, [slug]: false };
-      return;
-    }
-    if (!this.childrenCache[slug]) {
-      const r = await fetch(
-        `/api/projects/${this.projectId}/arch/nodes?parent_slug=${encodeURIComponent(slug)}`
-      );
-      if (r.ok) {
-        const j = await r.json();
-        this.childrenCache = { ...this.childrenCache, [slug]: j.nodes || [] };
-      }
-    }
-    this.expanded = { ...this.expanded, [slug]: true };
+  // Toggling is now purely local — children are already in memory.
+  // No-op for leaves so an accidental click on the row doesn't flip
+  // an invisible state.
+  toggle(slug) {
+    if (!this.hasChildren(slug)) return;
+    this.expanded = { ...this.expanded, [slug]: !this.expanded[slug] };
   }
 
   async select(slug) {
@@ -243,24 +257,27 @@ class NottarioArchPage extends LitElement {
   }
 
   renderNode(n) {
-    const open = !!this.expanded[n.Slug];
-    const children = this.childrenCache[n.Slug];
+    const children = this.childrenBySlug[n.Slug] || [];
+    const isLeaf = children.length === 0;
+    const open = !isLeaf && !!this.expanded[n.Slug];
     const kind = this.kindByKey(n.Kind);
+    const cls = [
+      'node',
+      isLeaf ? 'leaf' : '',
+      this.selectedSlug === n.Slug ? 'active' : '',
+    ].filter(Boolean).join(' ');
     return html`
       <li>
-        <div class=${`node ${this.selectedSlug === n.Slug ? 'active' : ''}`}>
-          <span class="toggle" @click=${(e) => { e.stopPropagation(); this.toggle(n.Slug); }}>
-            ${open ? '▾' : '▸'}
-          </span>
+        <div class=${cls}>
+          ${isLeaf ? null : html`<span class="toggle"
+                  @click=${(e) => { e.stopPropagation(); this.toggle(n.Slug); }}
+            >${open ? '▾' : '▸'}</span>`}
           <span class="kind-dot" style=${`background: ${kind?.Color || '#999'}`} title=${kind?.Label || n.Kind}></span>
           <span @click=${() => this.select(n.Slug)}>${n.Name}</span>
           <span class="kind-label">${n.Kind}</span>
         </div>
-        ${open && children && children.length ? html`
+        ${open ? html`
           <ul>${children.map(c => this.renderNode(c))}</ul>
-        ` : null}
-        ${open && children && !children.length ? html`
-          <ul><li class="muted" style="padding-left:20px;font-size:12px">no children</li></ul>
         ` : null}
       </li>
     `;
