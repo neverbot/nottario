@@ -46,7 +46,28 @@ WHERE c.project_id = t.project_id AND c.position = 1;
 ALTER TABLE tasks ALTER COLUMN cycle_id SET NOT NULL;
 CREATE INDEX tasks_cycle_id_idx ON tasks(cycle_id);
 
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION tasks_enforce_cycle_cascade() RETURNS trigger AS $$
+BEGIN
+    IF NEW.parent_task_id IS NOT NULL THEN
+        SELECT cycle_id INTO NEW.cycle_id
+        FROM tasks WHERE id = NEW.parent_task_id;
+        IF NEW.cycle_id IS NULL THEN
+            RAISE EXCEPTION 'parent task % has no cycle_id', NEW.parent_task_id;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+-- +goose StatementEnd
+
+CREATE TRIGGER tasks_cycle_cascade
+    BEFORE INSERT OR UPDATE OF parent_task_id, cycle_id ON tasks
+    FOR EACH ROW EXECUTE FUNCTION tasks_enforce_cycle_cascade();
+
 -- +goose Down
+DROP TRIGGER IF EXISTS tasks_cycle_cascade ON tasks;
+DROP FUNCTION IF EXISTS tasks_enforce_cycle_cascade();
 DROP INDEX IF EXISTS tasks_cycle_id_idx;
 ALTER TABLE tasks DROP COLUMN IF EXISTS cycle_id;
 ALTER TABLE projects DROP COLUMN IF EXISTS owner_user_id;
