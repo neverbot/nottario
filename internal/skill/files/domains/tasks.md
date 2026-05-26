@@ -56,6 +56,17 @@ Filter parameters (all optional except `project_id`):
 - `include_children: true` — by default only top-level tasks
   (parent_task_id IS NULL) are returned; set this to flatten feature
   subtrees.
+- `cycle_id` (optional) — when **omitted**, all read tools
+  (`tasks.list`, `tasks.next`, `tasks.claim_next`) default to the
+  project's **active cycle**. Pass a specific `cycle_id` to inspect a
+  closed cycle. Pass `"all"` for the no-filter behaviour (every
+  cycle). To see what shipped in sprint-2 specifically:
+
+  ```
+  nottario.tasks.list { project_id, cycle_id: <sprint-2 id>, state: 'done' }
+  ```
+
+  See `domains/cycles.md` for the full cycles surface.
 
 Ordering: `priority DESC, created_at ASC`.
 
@@ -133,6 +144,12 @@ feature with subtasks:
 The parent transitions to `done` automatically when all its children
 are `done`.
 
+`tasks.create` does **not** accept a `cycle_id` argument — every new
+task lands in the project's active cycle. To create a task in a
+different cycle, create it first, then move it with `tasks.update`
+(and reparent the whole feature if the target is a leaf under a
+feature parent — see the cascade note under `tasks.update`).
+
 #### One task per role
 
 When a unit of work spans multiple roles (e.g. backend migration +
@@ -164,6 +181,11 @@ Mutates the fields you pass. Notable nuances:
   `priority_key` (resolved against project buckets) rather than a raw
   number.
 - Use this for description edits and renames; do not delete-and-recreate.
+- **Reparenting cascades `cycle_id`**: setting `parent_task_id` on a
+  leaf task forces the task's `cycle_id` to match the new parent's
+  cycle (DB trigger; any `cycle_id` you pass alongside is overridden).
+  To move a leaf to a different cycle, either detach it from its
+  feature parent first, or move the whole feature subtree instead.
 
 ### `nottario.tasks.set_state`
 
