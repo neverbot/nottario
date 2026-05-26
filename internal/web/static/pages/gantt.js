@@ -227,6 +227,13 @@ class NottarioGantt extends LitElement {
       color: #59636e;
       margin-top: 4px;
     }
+    /* Faint footer line ("Double-click to open / expand") so the
+       interaction hint reads as guidance, not as data. */
+    .hover-card .meta.hint {
+      color: #8b949e;
+      font-size: 11px;
+      margin-top: 6px;
+    }
     .empty {
       padding: 40px;
       text-align: center;
@@ -1530,8 +1537,8 @@ class NottarioGantt extends LitElement {
         ` : null}
         ${isFolded ? html`
           <div class="meta">${childCount} task${childCount === 1 ? '' : 's'} · ${this._featureRoles(t.ID)}</div>
-          <div class="meta">Double-click to expand</div>
         ` : null}
+        <div class="meta hint">${isFolded ? 'Double-click to expand' : 'Double-click to open'}</div>
       </div>
     `;
   }
