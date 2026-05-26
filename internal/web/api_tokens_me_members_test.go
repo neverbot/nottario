@@ -218,18 +218,17 @@ func TestApiTokens_Unauthenticated(t *testing.T) {
 
 // ---- /api/projects/{id}/members ----
 
-func TestApiMembers_ListStartsEmpty(t *testing.T) {
+func TestApiMembers_ListSeedsCreatorWithDefaultRoles(t *testing.T) {
 	f := setupWebFixture(t)
-	// Note: CreateProject does NOT automatically add the creator as
-	// a member. They have access via instance-admin until someone
-	// explicitly adds them. This test documents that contract; if a
-	// future change auto-adds, flip the assertion.
+	// CreateProject auto-joins the creator with every default role
+	// (b18ba5f). The Members list reflects that: one row per
+	// (creator, default-role) tuple, four rows total.
 	var out struct {
 		Members []map[string]any `json:"members"`
 	}
 	doJSON(t, "GET", f.ts.URL+"/api/projects/"+f.projectID+"/members", f.authOwner, nil, &out)
-	if len(out.Members) != 0 {
-		t.Errorf("expected 0 members on a fresh project, got %d", len(out.Members))
+	if len(out.Members) != 4 {
+		t.Errorf("expected 4 default-role memberships for the creator, got %d", len(out.Members))
 	}
 }
 
