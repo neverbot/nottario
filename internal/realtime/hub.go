@@ -28,6 +28,7 @@ type Event struct {
 	Op             string     `json:"op,omitempty"`
 	ProjectID      *uuid.UUID `json:"project_id,omitempty"`
 	TaskID         *uuid.UUID `json:"task_id,omitempty"`
+	CycleID        *uuid.UUID `json:"cycle_id,omitempty"`
 	AssigneeUserID *uuid.UUID `json:"assignee_user_id,omitempty"`
 	ClaimedAt      *time.Time `json:"claimed_at,omitempty"`
 	Scope          string     `json:"scope,omitempty"`

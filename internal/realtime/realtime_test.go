@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/realtime"
 	"github.com/neverbot/nottario/internal/tasks"
@@ -262,6 +263,48 @@ func TestHub_TaskClaimedEventReachesSubscribers(t *testing.T) {
 			}
 		case <-deadline:
 			t.Fatal("timeout waiting for task.claimed event")
+		}
+	}
+}
+
+func TestHub_CycleClosedEventReachesSubscribers(t *testing.T) {
+	hub := realtime.New(silentLogger())
+	_, pool, stop := runHubInBackground(t, hub)
+	defer stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	u, _, err := identity.UpsertFromGithub(ctx, pool, 5500, "cyclesub", "CycSub", "")
+	if err != nil {
+		t.Fatalf("user: %v", err)
+	}
+	p, err := identity.CreateProject(ctx, pool, "EvtProj", "", "", "", u.ID, nil)
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	ch, cancelSub := hub.Subscribe(p.ID)
+	defer cancelSub()
+
+	if _, err := cycles.EndCycle(ctx, pool, cycles.EndCycleParams{ProjectID: p.ID},
+		cycles.Authorship{UserID: &u.ID}); err != nil {
+		t.Fatalf("EndCycle: %v", err)
+	}
+
+	deadline := time.After(3 * time.Second)
+	seenClosed, seenCreated := false, false
+	for !(seenClosed && seenCreated) {
+		select {
+		case ev := <-ch:
+			if ev.Type == "cycle.closed" {
+				seenClosed = true
+			}
+			if ev.Type == "cycle.created" {
+				seenCreated = true
+			}
+		case <-deadline:
+			t.Fatalf("timeout waiting for cycle events (closed=%v, created=%v)", seenClosed, seenCreated)
 		}
 	}
 }

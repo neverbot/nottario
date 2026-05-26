@@ -2,6 +2,7 @@ package cycles
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -11,6 +12,22 @@ import (
 
 	"github.com/neverbot/nottario/internal/db/dbq"
 )
+
+// publishCycleEvent emits a cycle.* notification on the realtime
+// channel. Best-effort: any failure is silently ignored so realtime
+// hiccups never affect the EndCycle outcome.
+func publishCycleEvent(ctx context.Context, pool *pgxpool.Pool, kind string, projectID, cycleID uuid.UUID) {
+	payload := map[string]any{
+		"type":       kind,
+		"project_id": projectID,
+		"cycle_id":   cycleID,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	_, _ = pool.Exec(ctx, "SELECT pg_notify('nottario_events', $1)", string(b))
+}
 
 // EndCycleParams carries the inputs to EndCycle.
 type EndCycleParams struct {
@@ -114,5 +131,9 @@ func EndCycle(ctx context.Context, pool *pgxpool.Pool, p EndCycleParams, by Auth
 	if err != nil {
 		return nil, fmt.Errorf("reread closed: %w", err)
 	}
+
+	publishCycleEvent(ctx, pool, "cycle.closed", closing.ProjectID, closing.ID)
+	publishCycleEvent(ctx, pool, "cycle.created", next.ProjectID, next.ID)
+
 	return &EndCycleResult{Closed: *updatedClosing, Next: next}, nil
 }
