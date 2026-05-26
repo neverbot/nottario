@@ -21,6 +21,10 @@ import { subscribe } from '/static/realtime.js';
 class NottarioGantt extends LitElement {
   static properties = {
     projectId: { type: String, attribute: 'project-id' },
+    // Optional cycle filter. When null/empty, the API defaults to the
+    // project's active cycle. Owned by the parent page (board.js); we
+    // just forward it to the tasks endpoint.
+    cycleId: { type: String, attribute: 'cycle-id' },
     tasks: { state: true },
     roles: { state: true },
     deps: { state: true },
@@ -414,6 +418,10 @@ class NottarioGantt extends LitElement {
       this._subscribe();
       this._initialCenterDone = false; // re-centre when project changes
     }
+    if (c && c.has && c.has('cycleId') && !c.has('projectId')) {
+      // Switching cycle within the same project: just re-fetch tasks.
+      this.load();
+    }
     // Once the SVG is in the DOM and has its first computed layout,
     // scroll the stage so the "now" line sits in the middle. We only
     // do this once per project so we don't fight the user's scroll.
@@ -582,7 +590,9 @@ class NottarioGantt extends LitElement {
       // Tasks and dependencies are what the gantt draws; reload on
       // any related event. 'realtime.reconnected' catches events that
       // happened while EventSource was reconnecting.
-      if (ev.type === 'realtime.reconnected' || ev.type?.startsWith('task.')) this.load();
+      if (ev.type === 'realtime.reconnected'
+          || ev.type?.startsWith('task.')
+          || ev.type?.startsWith('cycle.')) this.load();
     });
   }
 
@@ -633,8 +643,9 @@ class NottarioGantt extends LitElement {
   async load() {
     if (!this.projectId) return;
     try {
+      const cycleParam = this.cycleId ? `&cycle_id=${encodeURIComponent(this.cycleId)}` : '';
       const [tr, rr, dr, mr, qr] = await Promise.all([
-        fetch(`/api/projects/${this.projectId}/tasks?include_children=true`),
+        fetch(`/api/projects/${this.projectId}/tasks?include_children=true${cycleParam}`),
         fetch(`/api/projects/${this.projectId}/roles`),
         fetch(`/api/projects/${this.projectId}/tasks/dependencies`),
         fetch(`/api/projects/${this.projectId}/members`),

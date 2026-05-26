@@ -29,11 +29,93 @@ class NottarioBoardPage extends LitElement {
     error: { state: true },
     _draggingID: { state: true },
     _dragOverState: { state: true },
+    // Cycles: the list of cycles for this project, the currently-
+    // viewed cycle id (null = follow active), the dropdown open
+    // state, and the end-sprint dialog open state.
+    cycles: { state: true },
+    cycleId: { state: true },
+    _cycleDropdownOpen: { state: true },
+    _endSprintOpen: { state: true },
   };
 
   static styles = [buttonStyles, dialogStyles, formStyles, badgeStyles, css`
     :host { display: block; }
     .spacer { flex: 1; }
+
+    /* ---- Cycle switcher (header cluster) ---- */
+    .cycle-switcher {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: #59636e;
+    }
+    .cycle-switcher .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      color: #1f2328;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .cycle-switcher .pill:hover { border-color: #afb8c1; }
+    .cycle-switcher .pill .caret { color: #59636e; font-size: 10px; }
+    .cycle-switcher .pill .muted { color: #8b949e; font-weight: 400; }
+    .cycle-dropdown {
+      position: absolute;
+      top: 32px;
+      left: 0;
+      z-index: 30;
+      margin: 0;
+      padding: 4px 0;
+      list-style: none;
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+      min-width: 220px;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .cycle-dropdown li {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #1f2328;
+    }
+    .cycle-dropdown li:hover { background: #f3f4f6; }
+    .cycle-dropdown li.current { font-weight: 600; background: #ddf4ff; }
+    .cycle-dropdown li .muted { color: #8b949e; font-size: 11px; }
+    .cycle-counts {
+      color: #59636e;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .cycle-counts .sep { color: #d0d7de; margin: 0 6px; }
+
+    /* ---- End-sprint dialog ---- */
+    .end-sprint-dialog .panel { width: 480px; }
+    .end-sprint-dialog ul {
+      margin: 8px 0 16px;
+      padding-left: 20px;
+      font-size: 13px;
+      color: #1f2328;
+      line-height: 1.6;
+    }
+    .end-sprint-dialog ul li { margin-bottom: 2px; }
+
     .columns {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -471,6 +553,10 @@ class NottarioBoardPage extends LitElement {
     this.error = '';
     this._draggingID = null;
     this._dragOverState = null;
+    this.cycles = [];
+    this.cycleId = null;
+    this._cycleDropdownOpen = false;
+    this._endSprintOpen = false;
     new EscController(this, (e) => this._onEsc(e));
   }
 
@@ -512,6 +598,8 @@ class NottarioBoardPage extends LitElement {
     // Topmost first: the task detail panel sits over the create form
     // when both happen to be open. Stop propagation after closing so
     // an outer listener (topbar dropdown, etc.) doesn't also react.
+    if (this._cycleDropdownOpen) { this._cycleDropdownOpen = false; e.stopPropagation(); return; }
+    if (this._endSprintOpen) { this._endSprintOpen = false; e.stopPropagation(); return; }
     if (this.selected)   { this.closeDetail();       e.stopPropagation(); return; }
     if (this.showCreate) { this.showCreate = false;  e.stopPropagation(); return; }
   }
@@ -539,9 +627,18 @@ class NottarioBoardPage extends LitElement {
 
   _applyHash() {
     const h = new URLSearchParams(window.location.hash.slice(1));
+    // Cycle deep-link (#cycle=<uuid>). When the hash changes (back/
+    // forward, manual edit, switcher click) we reload the tasks for
+    // the selected cycle.
+    const cid = h.get('cycle') || null;
+    if (cid !== this.cycleId) {
+      this.cycleId = cid;
+      // Don't await — keep the UI snappy; subsequent updates re-render.
+      this.load();
+    }
     const taskId = h.get('task');
     if (!taskId) return;
-    const t = this.tasks.find(x => x.ID === taskId);
+    const t = (this.tasks || []).find(x => x.ID === taskId);
     if (t) this.open(t);
   }
 
@@ -556,19 +653,28 @@ class NottarioBoardPage extends LitElement {
         this.load();
         if (this.selected) this.loadDetail(this.selected.task.ID);
       }
+      // Cycle lifecycle: a new cycle opened or the active one closed.
+      // Refresh the cycle list AND tasks (the active cycle's id just
+      // changed; if we were following the active cycle we'll naturally
+      // land on the new one).
+      if (ev.type === 'cycle.created' || ev.type === 'cycle.closed') {
+        this.load();
+      }
     });
   }
 
   async load() {
     if (!this.projectId) return;
     try {
-      const [pr, tr, rr, mr, qr, dr] = await Promise.all([
+      const cycleParam = this.cycleId ? `&cycle_id=${encodeURIComponent(this.cycleId)}` : '';
+      const [pr, tr, rr, mr, qr, dr, cr] = await Promise.all([
         fetch(`/api/projects/${this.projectId}`),
-        fetch(`/api/projects/${this.projectId}/tasks?include_children=true`),
+        fetch(`/api/projects/${this.projectId}/tasks?include_children=true${cycleParam}`),
         fetch(`/api/projects/${this.projectId}/roles`),
         fetch(`/api/projects/${this.projectId}/members`),
         fetch(`/api/projects/${this.projectId}/priorities`),
         fetch(`/api/projects/${this.projectId}/tasks/dependencies`),
+        fetch(`/api/projects/${this.projectId}/cycles`),
       ]);
       if (!pr.ok) throw new Error('project not found');
       this.project = await pr.json();
@@ -577,6 +683,7 @@ class NottarioBoardPage extends LitElement {
       this.members = (await mr.json()).members || [];
       this.priorities = (await qr.json()).priorities || [];
       this.deps = (await dr.json()).dependencies || [];
+      this.cycles = cr.ok ? ((await cr.json()).cycles || []) : [];
       // Auto-reset the manual expand toggle on every load: if no tasks
       // are doing, the column hides again with its pill. Once the user
       // clicks the pill the Up-next card is exposed for as long as the
@@ -812,13 +919,200 @@ class NottarioBoardPage extends LitElement {
     `;
   }
 
+  // ---- Cycle helpers ------------------------------------------------
+
+  // The cycle currently being viewed: explicit selection takes priority;
+  // otherwise we follow whichever cycle is active (closed_at = null).
+  _currentCycle() {
+    const list = this.cycles || [];
+    if (this.cycleId) return list.find(c => c.ID === this.cycleId) || null;
+    return list.find(c => !c.ClosedAt) || null;
+  }
+
+  _toggleCycleDropdown() {
+    this._cycleDropdownOpen = !this._cycleDropdownOpen;
+  }
+
+  _selectCycle(id) {
+    this._cycleDropdownOpen = false;
+    // Follow the active cycle when picking it (clean URL); otherwise
+    // record the explicit selection in the hash so a refresh preserves
+    // the view.
+    const active = (this.cycles || []).find(c => !c.ClosedAt);
+    if (active && active.ID === id) {
+      // Use replaceState so we don't pollute history with hash flips.
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      this.cycleId = null;
+    } else {
+      window.location.hash = `cycle=${id}`;
+      this.cycleId = id;
+    }
+    this.load();
+  }
+
+  // Compact status string for the current cycle: "3 doing · 5 todo · 2 done".
+  // Counts run against this.tasks (already filtered to the viewed cycle
+  // server-side).
+  _cycleCountsString() {
+    const tasks = this.tasks || [];
+    const done = tasks.filter(t => t.State === 'done').length;
+    const doing = tasks.filter(t => t.State === 'doing').length;
+    const todo = tasks.filter(t => t.State === 'todo').length;
+    const total = tasks.length;
+    return `${done}/${total} done · ${doing} doing · ${todo} todo`;
+  }
+
+  // Can the current caller end the viewed sprint? Owner or instance
+  // admin. The button is also hidden when the viewed cycle is closed.
+  _canEndSprint() {
+    if (!this.me || !this.project) return false;
+    if (this.me.is_admin) return true;
+    return this.project.OwnerUserID === this.me.id;
+  }
+
+  renderCycleSwitcher() {
+    const current = this._currentCycle();
+    if (!current) return null;
+    const list = (this.cycles || []);
+    return html`
+      <div slot="actions" class="cycle-switcher">
+        <button class="pill"
+                aria-haspopup="listbox"
+                aria-expanded=${this._cycleDropdownOpen ? 'true' : 'false'}
+                @click=${() => this._toggleCycleDropdown()}>
+          ${current.Name}
+          ${!current.ClosedAt ? html`<span class="muted">(active)</span>` : html`<span class="muted">(closed)</span>`}
+          <span class="caret">▾</span>
+        </button>
+        ${this._cycleDropdownOpen ? html`
+          <ul class="cycle-dropdown" role="listbox">
+            ${list.map(c => html`
+              <li role="option"
+                  aria-selected=${c.ID === current.ID ? 'true' : 'false'}
+                  class=${c.ID === current.ID ? 'current' : ''}
+                  @click=${() => this._selectCycle(c.ID)}>
+                <span>${c.Name}</span>
+                ${c.ClosedAt
+                  ? html`<span class="muted">closed ${this._relTime(c.ClosedAt)}</span>`
+                  : html`<span class="muted">active</span>`}
+              </li>
+            `)}
+          </ul>` : null}
+        <span class="cycle-counts">${this._cycleCountsString()}</span>
+      </div>
+    `;
+  }
+
+  // ---- End-sprint dialog -------------------------------------------
+
+  // Snapshot used by the dialog copy. Mirrors the server-side rules in
+  // internal/cycles/end_cycle.go so the user previews what the close
+  // will actually do.
+  _computeEndCounts() {
+    const tasks = this.tasks || [];
+    const features = tasks.filter(t => t.Type === 'feature' && t.State !== 'done');
+    const partialFeatureIDs = new Set(features.map(f => f.ID));
+    let partialFeatureDoneChildren = 0;
+    for (const t of tasks) {
+      if (t.ParentTaskID && partialFeatureIDs.has(t.ParentTaskID) && t.State === 'done') {
+        partialFeatureDoneChildren++;
+      }
+    }
+    return {
+      doing: tasks.filter(t => t.State === 'doing').length,
+      // Top-level todo only — children of a partial feature move with
+      // their parent and shouldn't be double-counted.
+      todo:  tasks.filter(t => t.State === 'todo' && !t.ParentTaskID).length,
+      partialFeatures: features.length,
+      partialFeatureDoneChildren,
+      standaloneDone: tasks.filter(t => t.State === 'done' && !t.ParentTaskID).length,
+    };
+  }
+
+  // "sprint-3" → "sprint-4"; falls back to "<name>-next" when there is
+  // no trailing number to increment.
+  _defaultNextName() {
+    const current = this._currentCycle();
+    if (!current) return '';
+    const m = current.Name.match(/^(.*?)(\d+)$/);
+    if (m) return m[1] + (parseInt(m[2], 10) + 1);
+    return `${current.Name}-next`;
+  }
+
+  _openEndSprint() { this._endSprintOpen = true; }
+
+  async _confirmEndSprint() {
+    const dialog = this.shadowRoot.querySelector('.end-sprint-dialog');
+    if (!dialog) return;
+    const nextName = dialog.querySelector('[name=next_name]').value.trim();
+    try {
+      const r = await fetch(`/api/projects/${this.projectId}/cycles/end`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ next_name: nextName }),
+      });
+      if (!r.ok) {
+        this.error = (await r.json().catch(() => ({}))).error || 'failed';
+        return;
+      }
+      this._endSprintOpen = false;
+      // Follow the new active cycle. Clear any cycle hash so the URL
+      // doesn't lock us to the just-closed cycle.
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      this.cycleId = null;
+      await this.load();
+    } catch (e) {
+      this.error = e.message;
+    }
+  }
+
+  renderEndSprintDialog() {
+    if (!this._endSprintOpen) return null;
+    const current = this._currentCycle();
+    if (!current) return null;
+    const counts = this._computeEndCounts();
+    const defaultName = this._defaultNextName();
+    return html`
+      <div class="dialog end-sprint-dialog"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="end-sprint-title"
+           @click=${(e) => e.target.classList.contains('dialog') && (this._endSprintOpen = false)}
+           @keydown=${(e) => { if (e.key === 'Escape') this._endSprintOpen = false; }}>
+        <div class="panel">
+          <h3 id="end-sprint-title">End ${current.Name}</h3>
+          <nottario-field label="Next sprint name">
+            <input name="next_name" .value=${defaultName}>
+          </nottario-field>
+          <p>This will:</p>
+          <ul>
+            <li>Close <strong>${current.Name}</strong> (irreversible).</li>
+            <li>Move ${counts.doing} doing + ${counts.todo} todo tasks forward.</li>
+            <li>Re-stamp ${counts.partialFeatures} partial features
+              (incl. ${counts.partialFeatureDoneChildren} done children).</li>
+            <li>Leave ${counts.standaloneDone} standalone done tasks in ${current.Name}.</li>
+          </ul>
+          <div class="actions-row">
+            <button class="btn secondary"
+                    @click=${() => this._endSprintOpen = false}>Cancel</button>
+            <button class="btn danger"
+                    @click=${() => this._confirmEndSprint()}>End ${current.Name}</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
     const doingCount = this.byState('doing').length;
     const hideDoing = this.view === 'kanban' && doingCount === 0 && !this.expandDoing;
+    const current = this._currentCycle();
+    const viewingActive = current && !current.ClosedAt;
     return html`
       <nottario-page-header
         .title=${this.view === 'gantt' ? 'Gantt' : 'Board'}>
+        ${this.renderCycleSwitcher()}
         ${hideDoing
           ? html`<button slot="actions" class="btn ghost" title="Show the doing column"
                          @click=${() => this.expandDoing = true}>· 0 doing</button>`
@@ -828,6 +1122,11 @@ class NottarioBoardPage extends LitElement {
                          title="Scroll the Gantt back to the now line"
                          @click=${() => this.renderRoot.querySelector('nottario-gantt')?.scrollToNow()}>↻ Now</button>`
           : null}
+        ${viewingActive && this._canEndSprint()
+          ? html`<button slot="actions" class="btn danger"
+                         title="Close this cycle and open the next"
+                         @click=${() => this._openEndSprint()}>End ${current.Name}</button>`
+          : null}
         <button slot="actions" class="btn primary"
                 @click=${() => this.showCreate = true}>New task</button>
       </nottario-page-header>
@@ -835,6 +1134,7 @@ class NottarioBoardPage extends LitElement {
       ${this.view === 'gantt'
         ? html`<nottario-gantt
                   .projectId=${this.projectId}
+                  .cycleId=${this.cycleId || ''}
                   @task-selected=${(e) => this.open(e.detail.task)}></nottario-gantt>`
         : html`
           <div class=${hideDoing ? 'columns two' : 'columns'}>
@@ -865,6 +1165,7 @@ class NottarioBoardPage extends LitElement {
         `}
       ${this.showCreate ? this.renderCreate() : null}
       ${this.selected ? this.renderDetail() : null}
+      ${this.renderEndSprintDialog()}
     `;
   }
 
