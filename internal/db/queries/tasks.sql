@@ -3,7 +3,7 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
        created_by_user_id, created_by_token_id,
-       created_at, updated_at
+       created_at, updated_at, cycle_id
 FROM tasks
 WHERE id = $1;
 
@@ -18,7 +18,7 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
        created_by_user_id, created_by_token_id,
-       created_at, updated_at
+       created_at, updated_at, cycle_id
 FROM tasks
 WHERE project_id = $1
   AND (sqlc.narg('state')::text IS NULL OR state = sqlc.narg('state')::text)
@@ -44,7 +44,7 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
        created_by_user_id, created_by_token_id,
-       created_at, updated_at
+       created_at, updated_at, cycle_id
 FROM tasks
 WHERE project_id = $1
   AND (sqlc.narg('state')::text IS NULL OR state = sqlc.narg('state')::text)
@@ -96,7 +96,7 @@ RETURNING id, project_id, parent_task_id, type, title, description_md,
           state, priority, assignee_user_id, target_role_id,
           actual_start, actual_end,
           created_by_user_id, created_by_token_id,
-          created_at, updated_at;
+          created_at, updated_at, cycle_id;
 
 -- name: NextEligibleTask :one
 -- Preview: returns the next pickable task without claiming it. Same
@@ -273,5 +273,5 @@ RETURNING id, project_id, parent_task_id, type, title, description_md,
           state, priority, assignee_user_id, target_role_id,
           actual_start, actual_end,
           created_by_user_id, created_by_token_id,
-          created_at, updated_at;
+          created_at, updated_at, cycle_id;
 

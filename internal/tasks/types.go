@@ -48,6 +48,7 @@ type Task struct {
 	CreatedByTokenID *uuid.UUID
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	CycleID          uuid.UUID
 }
 
 // Dependency is the directed relation "task depends on another task".

@@ -190,7 +190,7 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
        created_by_user_id, created_by_token_id,
-       created_at, updated_at
+       created_at, updated_at, cycle_id
 FROM tasks
 WHERE id = $1
 `
@@ -212,6 +212,7 @@ type GetTaskRow struct {
 	CreatedByTokenID *uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CycleID          uuid.UUID
 }
 
 func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error) {
@@ -234,6 +235,7 @@ func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
 		&i.CreatedByTokenID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CycleID,
 	)
 	return i, err
 }
@@ -302,7 +304,7 @@ RETURNING id, project_id, parent_task_id, type, title, description_md,
           state, priority, assignee_user_id, target_role_id,
           actual_start, actual_end,
           created_by_user_id, created_by_token_id,
-          created_at, updated_at
+          created_at, updated_at, cycle_id
 `
 
 type InsertTaskParams struct {
@@ -336,6 +338,7 @@ type InsertTaskRow struct {
 	CreatedByTokenID *uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CycleID          uuid.UUID
 }
 
 func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error) {
@@ -370,6 +373,7 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertT
 		&i.CreatedByTokenID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CycleID,
 	)
 	return i, err
 }
@@ -379,7 +383,7 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
        created_by_user_id, created_by_token_id,
-       created_at, updated_at
+       created_at, updated_at, cycle_id
 FROM tasks
 WHERE project_id = $1
   AND ($2::text IS NULL OR state = $2::text)
@@ -425,6 +429,7 @@ type ListTasksRow struct {
 	CreatedByTokenID *uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CycleID          uuid.UUID
 }
 
 // Optional filters: state, type, assignee, target_role, parent_task.
@@ -465,6 +470,7 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTas
 			&i.CreatedByTokenID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CycleID,
 		); err != nil {
 			return nil, err
 		}
@@ -481,7 +487,7 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
        created_by_user_id, created_by_token_id,
-       created_at, updated_at
+       created_at, updated_at, cycle_id
 FROM tasks
 WHERE project_id = $1
   AND ($2::text IS NULL OR state = $2::text)
@@ -540,6 +546,7 @@ type ListTasksPaginatedRow struct {
 	CreatedByTokenID *uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CycleID          uuid.UUID
 }
 
 // Same filters as ListTasks plus keyset cursor on (priority DESC,
@@ -585,6 +592,7 @@ func (q *Queries) ListTasksPaginated(ctx context.Context, arg ListTasksPaginated
 			&i.CreatedByTokenID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CycleID,
 		); err != nil {
 			return nil, err
 		}
@@ -827,7 +835,7 @@ RETURNING id, project_id, parent_task_id, type, title, description_md,
           state, priority, assignee_user_id, target_role_id,
           actual_start, actual_end,
           created_by_user_id, created_by_token_id,
-          created_at, updated_at
+          created_at, updated_at, cycle_id
 `
 
 type UpdateTaskFieldsParams struct {
@@ -859,6 +867,7 @@ type UpdateTaskFieldsRow struct {
 	CreatedByTokenID *uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CycleID          uuid.UUID
 }
 
 // Optional fields: title, description, type, priority, assignee_user_id,
@@ -895,6 +904,7 @@ func (q *Queries) UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsPara
 		&i.CreatedByTokenID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CycleID,
 	)
 	return i, err
 }

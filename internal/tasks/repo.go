@@ -102,6 +102,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 		CreatedByTokenID: row.CreatedByTokenID,
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
+		CycleID:          row.CycleID,
 	}, nil
 }
 
@@ -134,6 +135,7 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Task, error) {
 		CreatedByTokenID: row.CreatedByTokenID,
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
+		CycleID:          row.CycleID,
 	}, nil
 }
 
@@ -156,6 +158,7 @@ type ListFilter struct {
 	AssigneeUserID  *uuid.UUID
 	TargetRoleID    *uuid.UUID
 	ParentTaskID    *uuid.UUID
+	CycleID         *uuid.UUID
 	IncludeChildren bool // when false (default), only top-level tasks (parent IS NULL) are returned
 }
 
@@ -218,6 +221,7 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Task, error)
 		AssigneeUserID:  f.AssigneeUserID,
 		TargetRoleID:    f.TargetRoleID,
 		ParentTaskID:    f.ParentTaskID,
+		CycleID:         f.CycleID,
 		IncludeChildren: f.IncludeChildren,
 	})
 	if err != nil {
@@ -254,6 +258,7 @@ func taskFromListRow(r dbq.ListTasksRow) Task {
 		CreatedByTokenID: r.CreatedByTokenID,
 		CreatedAt:        r.CreatedAt.Time,
 		UpdatedAt:        r.UpdatedAt.Time,
+		CycleID:          r.CycleID,
 	}
 }
 
@@ -278,6 +283,7 @@ func ListPaginated(ctx context.Context, pool *pgxpool.Pool, f ListFilter, limit 
 		AssigneeUserID:  f.AssigneeUserID,
 		TargetRoleID:    f.TargetRoleID,
 		ParentTaskID:    f.ParentTaskID,
+		CycleID:         f.CycleID,
 		IncludeChildren: f.IncludeChildren,
 		PageLimit:       int32(limit + 1),
 	}
@@ -311,6 +317,7 @@ func ListPaginated(ctx context.Context, pool *pgxpool.Pool, f ListFilter, limit 
 			CreatedByTokenID: r.CreatedByTokenID,
 			CreatedAt:        r.CreatedAt.Time,
 			UpdatedAt:        r.UpdatedAt.Time,
+			CycleID:          r.CycleID,
 		})
 	}
 	page := Page{}
@@ -387,6 +394,7 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParam
 		CreatedByTokenID: row.CreatedByTokenID,
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
+		CycleID:          row.CycleID,
 	}, nil
 }
 

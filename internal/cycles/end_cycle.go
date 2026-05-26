@@ -63,6 +63,20 @@ func EndCycle(ctx context.Context, pool *pgxpool.Pool, p EndCycleParams, by Auth
 	if err != nil {
 		return nil, fmt.Errorf("next position: %w", err)
 	}
+
+	// Close the current cycle first so the partial unique index
+	// `cycles_one_active_per_project` (project_id WHERE closed_at IS
+	// NULL) is satisfied when we insert the next one. Both happen in
+	// the same transaction so external observers never see "no active
+	// cycle".
+	if err := q.CloseCycle(ctx, dbq.CloseCycleParams{
+		ID:              closing.ID,
+		ClosedByUserID:  by.UserID,
+		ClosedByTokenID: by.TokenID,
+	}); err != nil {
+		return nil, fmt.Errorf("close: %w", err)
+	}
+
 	nextRow, err := q.InsertCycle(ctx, dbq.InsertCycleParams{
 		ProjectID: p.ProjectID,
 		Name:      name,
@@ -89,14 +103,6 @@ func EndCycle(ctx context.Context, pool *pgxpool.Pool, p EndCycleParams, by Auth
 		ToCycle:   next.ID,
 	}); err != nil {
 		return nil, fmt.Errorf("move standalone non-done: %w", err)
-	}
-
-	if err := q.CloseCycle(ctx, dbq.CloseCycleParams{
-		ID:              closing.ID,
-		ClosedByUserID:  by.UserID,
-		ClosedByTokenID: by.TokenID,
-	}); err != nil {
-		return nil, fmt.Errorf("close: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
