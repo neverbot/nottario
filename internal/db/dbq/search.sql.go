@@ -12,7 +12,18 @@ import (
 )
 
 const unifiedSearch = `-- name: UnifiedSearch :many
-WITH q AS (SELECT plainto_tsquery('simple', $2::text) AS tsq)
+WITH q AS (
+    -- Union the same three dictionaries the search_vector columns
+    -- use (see migrations/00013_search_multilang.sql) so a query for
+    -- "task" matches stored "tasks" via the english stemmer, "tarea"
+    -- matches "tareas" via the spanish stemmer, and verbatim words /
+    -- slugs / non-Latin terms still match via the simple config.
+    SELECT (
+        plainto_tsquery('simple',  $2::text) ||
+        plainto_tsquery('english', $2::text) ||
+        plainto_tsquery('spanish', $2::text)
+    ) AS tsq
+)
 (
     SELECT 'task'::text AS kind,
            project_id::text AS project_id,

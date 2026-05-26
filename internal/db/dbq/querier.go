@@ -145,6 +145,8 @@ type Querier interface {
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
 	RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) (int64, error)
 	RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error)
+	// Multi-config tsquery: simple || english || spanish, matching the
+	// documents.search_vector definition in migrations/00013.
 	SearchDocuments(ctx context.Context, arg SearchDocumentsParams) ([]SearchDocumentsRow, error)
 	SeedDefaultPriority(ctx context.Context, arg SeedDefaultPriorityParams) error
 	SetRolePosition(ctx context.Context, arg SetRolePositionParams) error

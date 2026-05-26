@@ -427,23 +427,30 @@ func (q *Queries) ReadDocument(ctx context.Context, arg ReadDocumentParams) (Rea
 }
 
 const searchDocuments = `-- name: SearchDocuments :many
+WITH q AS (
+    SELECT (
+        plainto_tsquery('simple',  $4::text) ||
+        plainto_tsquery('english', $4::text) ||
+        plainto_tsquery('spanish', $4::text)
+    ) AS tsq
+)
 SELECT id, scope, project_id, path, kind, title, description, current_version,
        updated_by_user_id, updated_by_token_id, updated_at,
-       ts_rank(search_vector, plainto_tsquery('simple', $1::text))::real AS rank
+       ts_rank(search_vector, (SELECT tsq FROM q))::real AS rank
 FROM documents
-WHERE scope = $2::text
-  AND project_id IS NOT DISTINCT FROM $3::uuid
+WHERE scope = $1::text
+  AND project_id IS NOT DISTINCT FROM $2::uuid
   AND deleted_at IS NULL
-  AND search_vector @@ plainto_tsquery('simple', $1::text)
-  AND ($4::text IS NULL OR kind = $4::text)
+  AND search_vector @@ (SELECT tsq FROM q)
+  AND ($3::text IS NULL OR kind = $3::text)
 ORDER BY rank DESC, path
 `
 
 type SearchDocumentsParams struct {
-	Query     string
 	Scope     string
 	ProjectID *uuid.UUID
 	Kind      pgtype.Text
+	Query     string
 }
 
 type SearchDocumentsRow struct {
@@ -461,12 +468,14 @@ type SearchDocumentsRow struct {
 	Rank             float32
 }
 
+// Multi-config tsquery: simple || english || spanish, matching the
+// documents.search_vector definition in migrations/00013.
 func (q *Queries) SearchDocuments(ctx context.Context, arg SearchDocumentsParams) ([]SearchDocumentsRow, error) {
 	rows, err := q.db.Query(ctx, searchDocuments,
-		arg.Query,
 		arg.Scope,
 		arg.ProjectID,
 		arg.Kind,
+		arg.Query,
 	)
 	if err != nil {
 		return nil, err
