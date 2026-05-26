@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/tasks"
 )
@@ -21,6 +22,7 @@ type tasksListInput struct {
 	AssigneeUserID  string `json:"assignee_user_id,omitempty" jsonschema:"optional uuid of a user to filter assigned tasks"`
 	TargetRoleID    string `json:"target_role_id,omitempty" jsonschema:"optional uuid of a role to filter target_role"`
 	ParentTaskID    string `json:"parent_task_id,omitempty" jsonschema:"if set, list children of this feature task"`
+	CycleID         string `json:"cycle_id,omitempty" jsonschema:"optional uuid of a cycle to scope the list. When omitted, defaults to the project's active cycle. Pass 'all' to disable the filter and list across every cycle."`
 	IncludeChildren bool   `json:"include_children,omitempty" jsonschema:"if true, include tasks that have a parent_task_id (default false: top-level only)"`
 	Limit           int    `json:"limit,omitempty" jsonschema:"page size (1..500). When omitted, uses the project's configured mcp_page_size (default 50)."`
 	Cursor          string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous call's next_cursor. Empty/omitted returns the first page."`
@@ -33,6 +35,7 @@ type taskRefInput struct {
 
 type tasksNextInput struct {
 	ProjectID      string `json:"project_id" jsonschema:"uuid of the project"`
+	CycleID        string `json:"cycle_id,omitempty" jsonschema:"optional uuid of a cycle to scope the lookup. When omitted, defaults to the project's active cycle. Pass 'all' to consider tasks across every cycle."`
 	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"optional: restrict to tasks assigned to this user"`
 	RoleID         string `json:"role_id,omitempty" jsonschema:"optional: restrict to tasks targeting this role"`
 }
@@ -99,7 +102,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
-		f := tasks.ListFilter{ProjectID: pid, IncludeChildren: in.IncludeChildren}
+		cycleID, err := resolveCycleFilter(ctx, d, pid, in.CycleID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		f := tasks.ListFilter{ProjectID: pid, IncludeChildren: in.IncludeChildren, CycleID: cycleID}
 		if in.State != "" {
 			f.State = tasks.State(in.State)
 		}
@@ -180,7 +187,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
-		f := tasks.NextFilter{ProjectID: pid}
+		cycleID, err := resolveCycleFilter(ctx, d, pid, in.CycleID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		f := tasks.NextFilter{ProjectID: pid, CycleID: cycleID}
 		if id := optUUID(in.AssigneeUserID); id != nil {
 			f.AssigneeUserID = id
 			roles, _ := identity.UserRoleIDs(ctx, d.Pool, *id, pid)
@@ -246,7 +257,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
-		f := tasks.NextFilter{ProjectID: pid}
+		cycleID, err := resolveCycleFilter(ctx, d, pid, in.CycleID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		f := tasks.NextFilter{ProjectID: pid, CycleID: cycleID}
 		if id := optUUID(in.AssigneeUserID); id != nil {
 			f.AssigneeUserID = id
 			roles, _ := identity.UserRoleIDs(ctx, d.Pool, *id, pid)
@@ -545,6 +560,31 @@ func optUUID(s string) *uuid.UUID {
 		return nil
 	}
 	return &id
+}
+
+// resolveCycleFilter turns the MCP-level cycle_id input into the
+// *uuid.UUID the repo layer expects. Rules:
+//   - empty/omitted: default to the project's active cycle (returns
+//     ErrNoActiveCycle on invariant violations).
+//   - "all": no filter (nil), every cycle considered.
+//   - any other string: parsed as a uuid.
+func resolveCycleFilter(ctx context.Context, d Deps, projectID uuid.UUID, in string) (*uuid.UUID, error) {
+	if in == "all" {
+		return nil, nil
+	}
+	if in == "" {
+		active, err := cycles.ActiveCycle(ctx, d.Pool, projectID)
+		if err != nil {
+			return nil, err
+		}
+		id := active.ID
+		return &id, nil
+	}
+	id, err := uuid.Parse(in)
+	if err != nil {
+		return nil, errors.New("cycle_id must be a uuid or 'all'")
+	}
+	return &id, nil
 }
 
 func authorshipFor(c identity.Caller) tasks.Authorship {

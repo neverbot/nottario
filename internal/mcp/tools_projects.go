@@ -125,10 +125,52 @@ func registerProjects(server *sdk.Server, d Deps) {
 		roles, _ := identity.ListRoles(ctx, d.Pool, pid)
 		return jsonResult(map[string]any{"roles": roles})
 	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.projects.set_owner",
+		Description: "Admin-only. Reassigns the project's owner_user_id. The new owner inherits the owner-gated capabilities (close cycle, change settings, mutate memberships).",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in SetOwnerInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !c.IsAdmin {
+			return toolError("admin only")
+		}
+		if in.ProjectID == "" {
+			return toolError("project_id is required")
+		}
+		pid, perr := uuid.Parse(in.ProjectID)
+		if perr != nil {
+			p, err := identity.GetProject(ctx, d.Pool, in.ProjectID)
+			if err != nil {
+				return toolError("project not found: " + err.Error())
+			}
+			pid = p.ID
+		}
+		newOwnerID, err := uuid.Parse(in.NewOwnerID)
+		if err != nil {
+			return toolError("new_owner_id must be a uuid")
+		}
+		if err := identity.SetProjectOwner(ctx, d.Pool, pid, newOwnerID); err != nil {
+			return toolError(err.Error())
+		}
+		p, err := identity.GetProject(ctx, d.Pool, pid.String())
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(p)
+	})
 }
 
 // ReorderRolesInput is the input for nottario.projects.reorder_roles.
 type ReorderRolesInput struct {
 	ProjectID string   `json:"project_id" jsonschema:"uuid or slug of the project"`
 	RoleIDs   []string `json:"role_ids" jsonschema:"role uuids in the desired top-to-bottom order"`
+}
+
+// SetOwnerInput is the input for nottario.projects.set_owner.
+type SetOwnerInput struct {
+	ProjectID  string `json:"project_id" jsonschema:"uuid or slug of the project"`
+	NewOwnerID string `json:"new_owner_id" jsonschema:"uuid of the user to become the new project owner"`
 }

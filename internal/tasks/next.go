@@ -14,6 +14,7 @@ import (
 // NextFilter narrows what counts as the "next" task.
 type NextFilter struct {
 	ProjectID      uuid.UUID
+	CycleID        *uuid.UUID  // when set, restrict to this cycle; nil means all cycles
 	AssigneeUserID *uuid.UUID  // when set, only tasks assigned to this user or to roles they hold
 	RoleID         *uuid.UUID  // when set, only tasks targeting this role or with no role
 	UserRoleIDs    []uuid.UUID // when set together with AssigneeUserID, expands eligibility
@@ -31,6 +32,7 @@ func Next(ctx context.Context, pool *pgxpool.Pool, f NextFilter) (*Task, error) 
 	}
 	row, err := dbq.New(pool).NextEligibleTask(ctx, dbq.NextEligibleTaskParams{
 		ProjectID:      f.ProjectID,
+		CycleID:        f.CycleID,
 		AssigneeUserID: f.AssigneeUserID,
 		UserRoleIds:    nonNilUUIDs(f.UserRoleIDs),
 		RoleID:         f.RoleID,

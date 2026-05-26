@@ -66,6 +66,7 @@ func ClaimNext(ctx context.Context, pool *pgxpool.Pool, f NextFilter, callerUser
 	}
 	row, err := dbq.New(pool).ClaimNextEligibleTask(ctx, dbq.ClaimNextEligibleTaskParams{
 		ProjectID:      f.ProjectID,
+		CycleID:        f.CycleID,
 		CallerUserID:   callerUserID,
 		AssigneeUserID: f.AssigneeUserID,
 		UserRoleIds:    nonNilUUIDs(f.UserRoleIDs),
