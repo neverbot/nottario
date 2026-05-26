@@ -27,6 +27,8 @@ class NottarioBoardPage extends LitElement {
     selected: { state: true },
     expandDoing: { state: true },
     error: { state: true },
+    _draggingID: { state: true },
+    _dragOverState: { state: true },
   };
 
   static styles = [buttonStyles, dialogStyles, formStyles, badgeStyles, css`
@@ -159,6 +161,17 @@ class NottarioBoardPage extends LitElement {
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
     }
     .card:hover { border-color: #afb8c1; }
+    /* DnD: the card the user is dragging fades; the column it's
+       being dragged over picks up a subtle accent ring to confirm
+       it will receive the drop. */
+    .card[draggable="true"] { cursor: grab; }
+    .card[draggable="true"]:active { cursor: grabbing; }
+    .card.dragging { opacity: 0.4; }
+    .col.drag-over {
+      outline: 2px solid #0969da;
+      outline-offset: -2px;
+      background: #ddf4ff;
+    }
     .card .title { font-weight: 500; margin-bottom: 4px; }
     .card .meta {
       display: flex;
@@ -431,7 +444,43 @@ class NottarioBoardPage extends LitElement {
     this.selected = null;
     this.expandDoing = false;
     this.error = '';
+    this._draggingID = null;
+    this._dragOverState = null;
     new EscController(this, (e) => this._onEsc(e));
+  }
+
+  // ---- Drag and drop between columns ----------------------------
+  _onCardDragStart(e, t) {
+    this._draggingID = t.ID;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', t.ID);
+  }
+  _onCardDragEnd() {
+    this._draggingID = null;
+    this._dragOverState = null;
+  }
+  _onColDragOver(e, state) {
+    if (!this._draggingID) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (this._dragOverState !== state) this._dragOverState = state;
+  }
+  _onColDragLeave(e, state) {
+    // dragleave also fires when entering child elements; only clear
+    // when the pointer truly left the section.
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      if (this._dragOverState === state) this._dragOverState = null;
+    }
+  }
+  async _onColDrop(e, state) {
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/plain');
+    this._draggingID = null;
+    this._dragOverState = null;
+    if (!id) return;
+    const task = this.tasks.find(x => x.ID === id);
+    if (!task || task.State === state) return;
+    await this.setState(id, state);
   }
 
   _onEsc(e) {
@@ -697,12 +746,16 @@ class NottarioBoardPage extends LitElement {
     const a11yLabel = `${t.Title}, ${t.Type}, ${t.State}` +
       (role ? `, role ${role.Label}` : '') +
       `, priority ${this._priorityLabel(t.Priority)}`;
+    const dragging = this._draggingID === t.ID;
     return html`
-      <div class="card"
+      <div class=${`card${dragging ? ' dragging' : ''}`}
            role="button"
            tabindex="0"
+           draggable="true"
            aria-label=${a11yLabel}
            @click=${() => this.open(t)}
+           @dragstart=${(e) => this._onCardDragStart(e, t)}
+           @dragend=${() => this._onCardDragEnd()}
            @keydown=${(e) => {
              if (e.key === 'Enter' || e.key === ' ') {
                e.preventDefault();
@@ -748,13 +801,19 @@ class NottarioBoardPage extends LitElement {
             ${(hideDoing ? ['todo', 'done'] : ['todo', 'doing', 'done']).map(s => {
               const items = this.byState(s);
               const isEmpty = items.length === 0;
-              const cls = isEmpty
+              const dragOver = this._dragOverState === s && this._draggingID;
+              const draggingFromThis = this._draggingID && this.tasks.find(x => x.ID === this._draggingID)?.State === s;
+              const baseCls = isEmpty
                 ? (s === 'doing' ? 'col empty doing' : 'col empty')
                 : 'col';
+              const cls = `${baseCls}${dragOver && !draggingFromThis ? ' drag-over' : ''}`;
               return html`
                 <section class=${cls}
                          role="region"
-                         aria-label=${`${s} (${items.length})`}>
+                         aria-label=${`${s} (${items.length})`}
+                         @dragover=${(e) => this._onColDragOver(e, s)}
+                         @dragleave=${(e) => this._onColDragLeave(e, s)}
+                         @drop=${(e) => this._onColDrop(e, s)}>
                   <h3>${s} <span class="count">${items.length}</span></h3>
                   ${isEmpty
                     ? this._renderEmptyBody(s)
