@@ -59,6 +59,20 @@ class NottarioField extends LitElement {
       background: #ffffff;
       box-sizing: border-box;
     }
+    /* Native chevron is platform-variable (macOS Chrome draws it in a
+       wide internal band, leaving a generous gap to the visible right
+       edge). Apaga el chevron nativo y pinta uno uniforme con un SVG
+       de fondo anclado a 8px del borde derecho; el padding-right
+       reserva el hueco. Tamaño y color coordinados con el texto
+       muted (#59636e). */
+    ::slotted(select) {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%2359636e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      padding-right: 28px;
+    }
     ::slotted(input:focus),
     ::slotted(textarea:focus),
     ::slotted(select:focus) {

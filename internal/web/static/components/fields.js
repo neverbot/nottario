@@ -39,6 +39,18 @@ export const fieldStyles = css`
     background: #ffffff;
     box-sizing: border-box;
   }
+  /* Same chevron normalisation as the slotted variant in
+     components/field.js: kill the native arrow and paint a uniform
+     SVG anchored 8px from the right edge. Keep both rule blocks in
+     sync if either is touched. */
+  .field select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%2359636e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+  }
   .field input:focus,
   .field textarea:focus,
   .field select:focus {
