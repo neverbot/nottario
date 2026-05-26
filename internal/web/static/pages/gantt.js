@@ -987,6 +987,38 @@ class NottarioGantt extends LitElement {
     // Build an index for dependency arrows.
     const posByTaskID = new Map(positions.map(p => [p.task.ID, p]));
 
+    // When a dep endpoint is a feature that the user expanded, the
+    // feature itself has no position (it disappears in favour of its
+    // children). Redirect such endpoints to an extremal descendant
+    // so the arrow still has somewhere to land. The source side
+    // (precondition) snaps to the LAST visible descendant (max
+    // `.to`); the target side (dependent) snaps to the FIRST visible
+    // descendant (min `.from`).
+    const gatherDescendantPositions = (id) => {
+      const out = [];
+      const visit = (nid) => {
+        const direct = posByTaskID.get(nid);
+        if (direct) { out.push(direct); return; }
+        for (const cid of (childrenByParent.get(nid) || [])) visit(cid);
+      };
+      for (const cid of (childrenByParent.get(id) || [])) visit(cid);
+      return out;
+    };
+    const resolveSourceEndpoint = (id) => {
+      const direct = posByTaskID.get(id);
+      if (direct) return direct;
+      const candidates = gatherDescendantPositions(id);
+      if (!candidates.length) return null;
+      return candidates.reduce((best, p) => (p.to > best.to ? p : best), candidates[0]);
+    };
+    const resolveTargetEndpoint = (id) => {
+      const direct = posByTaskID.get(id);
+      if (direct) return direct;
+      const candidates = gatherDescendantPositions(id);
+      if (!candidates.length) return null;
+      return candidates.reduce((best, p) => (p.from < best.from ? p : best), candidates[0]);
+    };
+
     // Find tasks whose state is not 'done' but at least one task that
     // depends on them is already 'done'. That's a logical
     // inconsistency: the dependent completed before its precondition.
@@ -1123,7 +1155,7 @@ class NottarioGantt extends LitElement {
                cross. -->
           ${this.deps.map(d => {
             if (isPromotedEdge(d)) return null;
-            return this._renderArrowPath(d, posByTaskID, taskCenterY, taskHeight, hasSelection);
+            return this._renderArrowPath(d, resolveSourceEndpoint, resolveTargetEndpoint, taskCenterY, taskHeight, hasSelection);
           })}
 
           <!-- Tasks placed in their lane -->
@@ -1219,7 +1251,7 @@ class NottarioGantt extends LitElement {
                task rects so they sit on top of every box they cross. -->
           ${this.deps.map(d => {
             if (!isPromotedEdge(d)) return null;
-            return this._renderArrowPath(d, posByTaskID, taskCenterY, taskHeight, hasSelection);
+            return this._renderArrowPath(d, resolveSourceEndpoint, resolveTargetEndpoint, taskCenterY, taskHeight, hasSelection);
           })}
         </svg>
       </div>
@@ -1264,9 +1296,9 @@ class NottarioGantt extends LitElement {
   // by the main render: the default (non-promoted) pass before the
   // task rects, and the promoted pass after, so selection-incident
   // arrows always land on top of every box they cross.
-  _renderArrowPath(d, posByTaskID, taskCenterY, taskHeight, hasSelection) {
-    const from = posByTaskID.get(d.DependsOnID);
-    const to = posByTaskID.get(d.TaskID);
+  _renderArrowPath(d, resolveSource, resolveTarget, taskCenterY, taskHeight, hasSelection) {
+    const from = resolveSource(d.DependsOnID);
+    const to = resolveTarget(d.TaskID);
     if (!from || !to) return null;
     const markerW = 8;
     const promoted = hasSelection &&
