@@ -1381,6 +1381,34 @@ class NottarioGantt extends LitElement {
     }
   }
 
+  // After every render, measure the hover card's real width and
+  // re-position it if our estimate (used in `_renderHoverCard`) was
+  // off by more than a pixel. Without this the left-flip would
+  // assume the max width (320) while content-driven cards are
+  // often narrower, opening an oversized gap on the cursor side.
+  updated() {
+    const card = this.shadowRoot?.querySelector('.hover-card');
+    if (!card || !this._hover) {
+      this._lastCardW = null;
+      return;
+    }
+    const measuredW = card.offsetWidth;
+    if (Math.abs((this._lastCardW || 0) - measuredW) < 1) return;
+    this._lastCardW = measuredW;
+    // Recompute left so the gap matches the right-side anchor.
+    const { barX, cursor } = this._hover;
+    const stage = this.shadowRoot.querySelector('.stage');
+    const scrollLeft = stage?.scrollLeft || 0;
+    const stageW = stage?.clientWidth || 800;
+    const anchorX = cursor ? cursor.x : barX;
+    const offX = cursor ? 14 : 8;
+    let left = anchorX + offX;
+    if (left + measuredW > scrollLeft + stageW) {
+      left = Math.max(scrollLeft + 8, anchorX - measuredW - offX);
+    }
+    card.style.left = `${left}px`;
+  }
+
   // Render the popup for the currently-hovered task. Position is
   // computed against the bar's SVG coords; the stage's scrollLeft
   // and a small offset keep the card visually anchored.
@@ -1392,20 +1420,18 @@ class NottarioGantt extends LitElement {
     const scrollLeft = stage?.scrollLeft || 0;
     // The card is `position: absolute` inside `.stage` (which is
     // `position: relative` + `overflow: auto`), so its coordinates
-    // are in the scrolled SVG content space, not the viewport. When
-    // a pointer cursor is available we anchor to it (offset so the
-    // popup never covers what it describes); on keyboard focus we
-    // fall back to the bar's top-left.
-    const cardW = 320;
+    // are in the scrolled SVG content space, not the viewport.
+    // Width is content-driven (min 220, max 320 in CSS) — we cache
+    // the previous render's measured width in `_lastCardW` so the
+    // flip math matches reality; first render falls back to the
+    // min width so the gap can only ever come out smaller, not
+    // wider, than intended.
+    const cardW = this._lastCardW || 220;
     const anchorX = cursor ? cursor.x : barX;
     const anchorY = cursor ? cursor.y : barY;
-    // The mac/Windows pointer arrow has its hotspot at the top-left
-    // tip and its body extends DOWN-RIGHT into the area where a
-    // right-anchored popup sits. To make the visual gap look the
-    // same on both sides we need a smaller numeric gap on the left
-    // (where the cursor body points away from the card).
-    const offX     = cursor ? 14 : 8;
-    const offXLeft = cursor ? 4  : 8;
+    // Same numeric gap on both sides — the previous left-flip drift
+    // was a width-estimate bug, not a perception issue.
+    const offX = cursor ? 14 : 8;
     const offY = cursor ? 16 : -8;
     let left = anchorX + offX;
     const top = Math.max(8, anchorY + offY);
@@ -1413,7 +1439,7 @@ class NottarioGantt extends LitElement {
     // past the visible viewport's right edge.
     const viewportRight = scrollLeft + stageW;
     if (left + cardW > viewportRight) {
-      left = Math.max(scrollLeft + 8, anchorX - cardW - offXLeft);
+      left = Math.max(scrollLeft + 8, anchorX - cardW - offX);
     }
 
     const role = t.TargetRoleID ? this.roles.find(r => r.ID === t.TargetRoleID) : null;
