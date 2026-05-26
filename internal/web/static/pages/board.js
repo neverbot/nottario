@@ -294,7 +294,7 @@ class NottarioBoardPage extends LitElement {
     .detail .meta .val .muted { color: #8b949e; font-style: italic; font-weight: 400; }
     .detail .meta .author-cell { display: inline-flex; align-items: center; gap: 6px; }
     /* Inline assignee picker: keep the avatar + select on one row.
-       The select gets the standard `<nottario-field>` chrome via the
+       The select gets the standard nottario-field chrome via the
        same chevron-normalisation pattern (see components/field.js). */
     .detail .meta .assignee-edit {
       display: inline-flex;
