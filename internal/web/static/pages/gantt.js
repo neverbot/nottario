@@ -32,6 +32,7 @@ class NottarioGantt extends LitElement {
     _hover: { state: true },
     _selectedAnchor: { state: true },
     _selectedSet: { state: true },
+    _justAppeared: { state: true },
   };
 
   static styles = css`
@@ -102,6 +103,19 @@ class NottarioGantt extends LitElement {
     .arrow.dim { opacity: 0.18; }
     .arrow { cursor: pointer; }
     .arrow.promoted { stroke: #1f2328; }
+    /* Bars that became visible via a feature unfold get a brief
+       opacity fade-in so the eye locates them after the layout
+       reflows. Refold has no motion. */
+    .task-rect.just-appeared {
+      animation: gantt-bar-appear 240ms ease-out;
+    }
+    @keyframes gantt-bar-appear {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .task-rect.just-appeared { animation: none; }
+    }
     .task-rect.done {
       fill: #d1d9e0;
       stroke: #afb8c1;
@@ -264,6 +278,13 @@ class NottarioGantt extends LitElement {
     // `this.deps`). Both null/empty means no selection.
     this._selectedAnchor = null;
     this._selectedSet = new Set();
+    // IDs of task bars that just became visible via a feature
+    // unfold; rendered with the `.just-appeared` CSS class for a
+    // brief opacity fade-in. Cleared after the animation finishes.
+    this._justAppeared = new Set();
+    // Set when the next render should scroll-to-leftmost of the
+    // just-appeared bars. Cleared once the scroll runs.
+    this._pendingUnfoldScroll = false;
   }
 
   // Compute the undirected connected component of taskID in the
@@ -348,7 +369,28 @@ class NottarioGantt extends LitElement {
     this._hover = null;
     this._pointerBarID = null;
     const next = new Set(this.foldedFeatures);
-    if (next.has(featureID)) next.delete(featureID); else next.add(featureID);
+    const isUnfold = next.has(featureID);
+    if (isUnfold) {
+      next.delete(featureID);
+      // Mark the (now revealed) children for the appear animation,
+      // and request a scroll-to-leftmost pass on the next paint.
+      // Refold has no motion — we intentionally only animate the
+      // open direction (design call, see task `5245b74c`).
+      const children = (this.tasks || [])
+        .filter(t => t.ParentTaskID === featureID)
+        .map(t => t.ID);
+      this._justAppeared = new Set(children);
+      this._pendingUnfoldScroll = true;
+      // Drop the class after the animation has had time to finish
+      // so the next interaction doesn't re-fire it. 320 ms ≈ the
+      // 240 ms animation + a small buffer.
+      clearTimeout(this._appearTimer);
+      this._appearTimer = setTimeout(() => {
+        this._justAppeared = new Set();
+      }, 320);
+    } else {
+      next.add(featureID);
+    }
     this.foldedFeatures = next;
   }
 
@@ -379,6 +421,71 @@ class NottarioGantt extends LitElement {
       this._centerOnNow();
     }
     this._repositionHoverCard();
+    if (this._pendingUnfoldScroll) {
+      this._pendingUnfoldScroll = false;
+      this._scrollToJustAppeared();
+    }
+  }
+
+  // Smoothly scroll the .stage so the leftmost just-appeared child
+  // sits a comfortable distance from the left edge. Optionally
+  // scrolls vertically too when the child's lane falls outside the
+  // current viewport. Snaps under prefers-reduced-motion.
+  _scrollToJustAppeared() {
+    const stage = this.shadowRoot?.querySelector('.stage');
+    if (!stage || !this._justAppeared || this._justAppeared.size === 0) return;
+    // Read every just-appeared task's bounding box in stage-content
+    // coords (its DOM position relative to .stage padding box, plus
+    // current scroll). Pick the leftmost.
+    const rects = [...this._justAppeared].map(id => {
+      const el = this.shadowRoot.querySelector(`[data-task-id="${CSS.escape(id)}"]`);
+      if (!el) return null;
+      const br = el.getBoundingClientRect();
+      const sr = stage.getBoundingClientRect();
+      return {
+        left: (br.left - sr.left) + stage.scrollLeft,
+        top:  (br.top  - sr.top)  + stage.scrollTop,
+        height: br.height,
+      };
+    }).filter(Boolean);
+    if (!rects.length) return;
+    rects.sort((a, b) => a.left - b.left);
+    const left = rects[0].left;
+    const top  = rects[0].top;
+    const stageW = stage.clientWidth;
+    const stageH = stage.clientHeight;
+    // 32px gutter from the left edge so the bar isn't flush.
+    let targetLeft = Math.max(0, left - 32);
+    // Don't scroll right if the bar is already visible comfortably.
+    if (left > stage.scrollLeft && left < stage.scrollLeft + stageW - 100) {
+      targetLeft = stage.scrollLeft;
+    }
+    // Vertical: only scroll when the child's lane is outside the
+    // visible band. Otherwise keep scrollTop where it was.
+    let targetTop = stage.scrollTop;
+    if (top < stage.scrollTop || top + rects[0].height > stage.scrollTop + stageH) {
+      targetTop = Math.max(0, top - 32);
+    }
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      stage.scrollLeft = targetLeft;
+      stage.scrollTop  = targetTop;
+      return;
+    }
+    const startL = stage.scrollLeft, deltaL = targetLeft - startL;
+    const startT = stage.scrollTop,  deltaT = targetTop  - startT;
+    if (Math.abs(deltaL) < 1 && Math.abs(deltaT) < 1) return;
+    const t0 = performance.now();
+    const duration = 220;
+    const ease = (t) => 1 - Math.pow(1 - t, 4); // ease-out-quart
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / duration);
+      const k = ease(t);
+      stage.scrollLeft = startL + deltaL * k;
+      stage.scrollTop  = startT + deltaT * k;
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   // After every render, measure the hover card's real width/height
@@ -1235,8 +1342,10 @@ class NottarioGantt extends LitElement {
               const dotsStartX = p.to - dotPadRight - dotsBlockW + dotR;
               const labelRoom = Math.max(6, Math.floor((dotsStartX - dotR - labelX - 6) / 7));
               const aggDimmed = hasSelection && !this._selectedSet.has(t.ID);
+              const aggAppeared = this._justAppeared?.has(t.ID) ? ' just-appeared' : '';
               return svg`
-                <rect class=${`task-rect feature-agg${aggDimmed ? ' dim' : ''}`}
+                <rect class=${`task-rect feature-agg${aggDimmed ? ' dim' : ''}${aggAppeared}`}
+                      data-task-id=${t.ID}
                       x=${p.from} y=${y}
                       width=${w} height=${taskHeight}
                       rx="6" ry="6"
@@ -1270,8 +1379,10 @@ class NottarioGantt extends LitElement {
             // Childless features and (defensive) any feature reaching here render as normal.
             const taskDimmed = hasSelection && !this._selectedSet.has(t.ID);
             const todoFill = bandFill[p.bi] || '#fff';
+            const taskAppeared = this._justAppeared?.has(t.ID) ? ' just-appeared' : '';
             return svg`
-              <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}`}
+              <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}${taskAppeared}`}
+                    data-task-id=${t.ID}
                     x=${p.from} y=${y}
                     width=${w} height=${taskHeight}
                     rx="6" ry="6"
