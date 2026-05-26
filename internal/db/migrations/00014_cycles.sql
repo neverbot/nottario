@@ -31,7 +31,24 @@ SET owner_user_id = COALESCE(
 
 ALTER TABLE projects ALTER COLUMN owner_user_id SET NOT NULL;
 
+-- One sprint-1 per project, position 1, open.
+INSERT INTO cycles (project_id, name, position)
+SELECT id, 'sprint-1', 1 FROM projects;
+
+ALTER TABLE tasks
+    ADD COLUMN cycle_id uuid REFERENCES cycles(id) ON DELETE RESTRICT;
+
+UPDATE tasks t
+SET cycle_id = c.id
+FROM cycles c
+WHERE c.project_id = t.project_id AND c.position = 1;
+
+ALTER TABLE tasks ALTER COLUMN cycle_id SET NOT NULL;
+CREATE INDEX tasks_cycle_id_idx ON tasks(cycle_id);
+
 -- +goose Down
+DROP INDEX IF EXISTS tasks_cycle_id_idx;
+ALTER TABLE tasks DROP COLUMN IF EXISTS cycle_id;
 ALTER TABLE projects DROP COLUMN IF EXISTS owner_user_id;
 ALTER TABLE projects DROP COLUMN IF EXISTS cycle_label;
 DROP INDEX IF EXISTS cycles_one_active_per_project;

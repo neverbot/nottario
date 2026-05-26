@@ -198,6 +198,7 @@ type Task struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	SearchVector     interface{}
+	CycleID          uuid.UUID
 }
 
 type TaskComment struct {
