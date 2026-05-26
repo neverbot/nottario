@@ -293,6 +293,31 @@ class NottarioBoardPage extends LitElement {
     .detail .meta .val { color: #1f2328; }
     .detail .meta .val .muted { color: #8b949e; font-style: italic; font-weight: 400; }
     .detail .meta .author-cell { display: inline-flex; align-items: center; gap: 6px; }
+    /* Inline assignee picker: keep the avatar + select on one row.
+       The select gets the standard `<nottario-field>` chrome via the
+       same chevron-normalisation pattern (see components/field.js). */
+    .detail .meta .assignee-edit {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .detail .meta .assignee-edit select {
+      padding: 4px 28px 4px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 12px;
+      background: #fff;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%2359636e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+    .detail .meta .assignee-edit select:focus {
+      outline: 2px solid #0969da;
+      border-color: #0969da;
+    }
 
     /* State control as compact segmented pill — three buttons share a
        single rounded shell; the active one is the GitHub-green primary
@@ -707,6 +732,7 @@ class NottarioBoardPage extends LitElement {
       priority_key: f.priority_key.value,
     };
     if (f.target_role_id.value) body.target_role_id = f.target_role_id.value;
+    if (f.assignee_user_id.value) body.assignee_user_id = f.assignee_user_id.value;
     try {
       const r = await fetch(`/api/projects/${this.projectId}/tasks`, {
         method: 'POST',
@@ -738,6 +764,20 @@ class NottarioBoardPage extends LitElement {
     if (r.ok) {
       await this.load();
       if (this.selected) await this.loadDetail(taskID);
+    }
+  }
+
+  async setAssignee(taskID, userID) {
+    const r = await fetch(`/api/projects/${this.projectId}/tasks/${taskID}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignee_user_id: userID }),
+    });
+    if (r.ok) {
+      await this.load();
+      if (this.selected) await this.loadDetail(taskID);
+    } else {
+      this.error = (await r.json().catch(() => ({}))).error || 'failed';
     }
   }
 
@@ -868,6 +908,13 @@ class NottarioBoardPage extends LitElement {
                 </select>
               </nottario-field>
             </div>
+            <nottario-field label="Assignee" hint="optional">
+              <select name="assignee_user_id">
+                <option value="">— none —</option>
+                ${[...new Map((this.members || []).map(m => [m.UserID, m])).values()]
+                  .map(m => html`<option value=${m.UserID}>${m.DisplayName || m.GithubLogin}</option>`)}
+              </select>
+            </nottario-field>
             <div class="actions-row">
               <button type="button" class="btn secondary" @click=${() => this.showCreate = false}>Cancel</button>
               <button type="submit" class="btn primary">Create</button>
@@ -964,15 +1011,21 @@ class NottarioBoardPage extends LitElement {
 
               <div class="field-line">
                 <span class="lbl">Assignee</span>
-                <span class="val">
-                  ${assignee ? html`
-                    <span class="author-cell">
-                      <nottario-avatar size="20"
-                        src=${assignee.AvatarURL || ''}
-                        name=${assignee.DisplayName || assignee.GithubLogin || ''}></nottario-avatar>
-                      ${assignee.DisplayName || assignee.GithubLogin}
-                    </span>
-                  ` : html`<span class="muted">unassigned</span>`}
+                <span class="val assignee-edit">
+                  ${assignee && assignee.AvatarURL
+                    ? html`<nottario-avatar size="20"
+                              src=${assignee.AvatarURL}
+                              name=${assignee.DisplayName || assignee.GithubLogin || ''}></nottario-avatar>`
+                    : null}
+                  <select @change=${(e) => this.setAssignee(task.ID, e.target.value)}>
+                    <option value="" ?selected=${!task.AssigneeUserID}>— unassigned —</option>
+                    ${[...new Map((this.members || []).map(m => [m.UserID, m])).values()]
+                      .map(m => html`
+                        <option value=${m.UserID} ?selected=${m.UserID === task.AssigneeUserID}>
+                          ${m.DisplayName || m.GithubLogin}
+                        </option>
+                      `)}
+                  </select>
                 </span>
               </div>
             </div>
