@@ -30,6 +30,8 @@ class NottarioGantt extends LitElement {
     now: { state: true },
     foldedFeatures: { state: true },
     _hover: { state: true },
+    _selectedAnchor: { state: true },
+    _selectedSet: { state: true },
   };
 
   static styles = css`
@@ -92,6 +94,14 @@ class NottarioGantt extends LitElement {
       ry: 4;
     }
     .task-rect:hover { stroke: #1f2328; }
+    /* Selection: when something is selected, non-connected bars dim
+       and non-connected arrows fade so the focused subgraph reads
+       loudly. Promoted arrows render in a second pass (after the
+       task rects) so they sit on top of any box they cross. */
+    .task-rect.dim { opacity: 0.35; }
+    .arrow.dim { opacity: 0.18; }
+    .arrow { cursor: pointer; }
+    .arrow.promoted { stroke: #1f2328; }
     .task-rect.done {
       fill: #d1d9e0;
       stroke: #afb8c1;
@@ -241,6 +251,67 @@ class NottarioGantt extends LitElement {
     this._reducedMotion = (typeof window !== 'undefined' && window.matchMedia)
       ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
       : false;
+    // Selection: the anchor is the task the user actually clicked
+    // first; the set is anchor + every task transitively reachable
+    // via incoming/outgoing dependency edges (undirected BFS over
+    // `this.deps`). Both null/empty means no selection.
+    this._selectedAnchor = null;
+    this._selectedSet = new Set();
+  }
+
+  // Compute the undirected connected component of taskID in the
+  // dependency graph. Result is a Set of task IDs that always
+  // contains taskID itself.
+  _computeConnectedSet(taskID) {
+    const adj = new Map();
+    const add = (a, b) => {
+      if (!adj.has(a)) adj.set(a, new Set());
+      adj.get(a).add(b);
+    };
+    for (const d of (this.deps || [])) {
+      add(d.TaskID, d.DependsOnID);
+      add(d.DependsOnID, d.TaskID);
+    }
+    const out = new Set([taskID]);
+    const stack = [taskID];
+    while (stack.length) {
+      const id = stack.pop();
+      for (const n of (adj.get(id) || [])) {
+        if (!out.has(n)) { out.add(n); stack.push(n); }
+      }
+    }
+    return out;
+  }
+
+  _selectTask(taskID) {
+    this._selectedAnchor = taskID;
+    this._selectedSet = this._computeConnectedSet(taskID);
+    this.requestUpdate();
+  }
+
+  _clearSelection() {
+    if (!this._selectedAnchor && this._selectedSet.size === 0) return;
+    this._selectedAnchor = null;
+    this._selectedSet = new Set();
+    this.requestUpdate();
+  }
+
+  // Click on a task bar. If the task is already in the selected set,
+  // open the detail panel (the historical single-click behaviour).
+  // Otherwise replace the selection with this task's connected set.
+  _onTaskClick(t) {
+    if (this._selectedSet.has(t.ID)) {
+      this._emitSelect(t);
+      return;
+    }
+    this._selectTask(t.ID);
+  }
+
+  // Click on a dependency arrow. Selects the union of both endpoints'
+  // connected components (which is the same component since they're
+  // already connected).
+  _onArrowClick(fromID) {
+    this._selectTask(fromID);
   }
 
   // Update the folded set when fresh tasks arrive: new feature IDs
@@ -953,9 +1024,28 @@ class NottarioGantt extends LitElement {
       }
     }
 
+    // Pre-compute band fill per band index so todo bars can read
+    // solid against the lane background instead of letting arrows
+    // show through a transparent fill.
+    let visIdx = 0;
+    const bandFill = displayBands.map(b => {
+      if (b.role.ID === '__features__') return '#f0f2f5';
+      const c = visIdx % 2 ? '#fff' : '#f6f8fa';
+      visIdx++;
+      return c;
+    });
+
+    // Selection-aware predicates: when nothing is selected every bar
+    // and arrow renders at full strength. Otherwise the connected
+    // set is bright and its arrows promote on top of the task rects.
+    const hasSelection = this._selectedSet.size > 0;
+    const isPromotedEdge = (d) =>
+      hasSelection && (this._selectedSet.has(d.TaskID) || this._selectedSet.has(d.DependsOnID));
+
     return html`
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
-      <div class="stage" @keydown=${(e) => this._onStageKey(e)}>
+      <div class="stage" @keydown=${(e) => this._onStageKey(e)}
+           @click=${() => this._clearSelection()}>
         ${this._renderHoverCard()}
         <svg width=${width} height=${totalHeight}
              role="img"
@@ -1026,6 +1116,16 @@ class NottarioGantt extends LitElement {
             now
           </text>
 
+          <!-- Dependency arrows, FIRST PASS: rendered before the task
+               rects so the bars paint on top of them. Selection-incident
+               edges are deliberately SKIPPED here and re-rendered after
+               the bars (promoted pass) so they read above any rect they
+               cross. -->
+          ${this.deps.map(d => {
+            if (isPromotedEdge(d)) return null;
+            return this._renderArrowPath(d, posByTaskID, taskCenterY, taskHeight, hasSelection);
+          })}
+
           <!-- Tasks placed in their lane -->
           ${positions.map(p => {
             const t = p.task;
@@ -1047,8 +1147,9 @@ class NottarioGantt extends LitElement {
               const dotsBlockW = dots.length * (dotR * 2) + Math.max(0, dots.length - 1) * dotGap;
               const dotsStartX = p.to - dotPadRight - dotsBlockW + dotR;
               const labelRoom = Math.max(6, Math.floor((dotsStartX - dotR - labelX - 6) / 7));
+              const aggDimmed = hasSelection && !this._selectedSet.has(t.ID);
               return svg`
-                <rect class="task-rect feature-agg"
+                <rect class=${`task-rect feature-agg${aggDimmed ? ' dim' : ''}`}
                       x=${p.from} y=${y}
                       width=${w} height=${taskHeight}
                       rx="6" ry="6"
@@ -1079,14 +1180,17 @@ class NottarioGantt extends LitElement {
             }
             const isFeatureUnfolded = t.Type === 'feature' && !this.foldedFeatures.has(t.ID);
             // Childless features and (defensive) any feature reaching here render as normal.
+            const taskDimmed = hasSelection && !this._selectedSet.has(t.ID);
+            const todoFill = bandFill[p.bi] || '#fff';
             return svg`
-              <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}`}
+              <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}`}
                     x=${p.from} y=${y}
                     width=${w} height=${taskHeight}
                     rx="6" ry="6"
-                    fill=${t.State === 'done' ? '#d1d9e0' : (t.State === 'doing' ? color : 'transparent')}
+                    fill=${t.State === 'done' ? '#d1d9e0' : (t.State === 'doing' ? color : todoFill)}
                     stroke=${color}
-                    @click=${(e) => { e.stopPropagation(); this._emitSelect(t); }}
+                    @click=${(e) => { e.stopPropagation(); this._onTaskClick(t); }}
+                    @dblclick=${(e) => { e.stopPropagation(); this._emitSelect(t); }}
                     @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
                     @mouseleave=${() => this._onBarLeave()}
                     @focus=${(e) => this._onBarHover(e, t, p.from, y)}
@@ -1110,56 +1214,12 @@ class NottarioGantt extends LitElement {
             `;
           })}
 
-          <!-- Dependency arrows: anchored to each task's actual lane Y.
-               The path stops one markerWidth before the target rect's
-               left edge so the arrowhead tip lands exactly on the
-               border, not inside the box. -->
+          <!-- Dependency arrows, SECOND PASS: only the arrows incident
+               to the currently-selected subgraph, rendered after the
+               task rects so they sit on top of every box they cross. -->
           ${this.deps.map(d => {
-            const from = posByTaskID.get(d.DependsOnID);
-            const to = posByTaskID.get(d.TaskID);
-            if (!from || !to) return null;
-            const markerW = 8;
-            // Forward / backward decision uses the BOX edges, not the
-            // marker-adjusted endpoints. Otherwise a target sitting in
-            // the slot immediately to the right of the source (its left
-            // edge ≈ source.right + 6, then -8 for the marker) would
-            // appear as if it were behind the source by 2 px and
-            // trigger an unnecessary loop.
-            const sourceRight = from.to;
-            const targetLeft = to.from;
-            const x1 = sourceRight;
-            const y1 = taskCenterY(from.bi, from.lane);
-            const y2 = taskCenterY(to.bi, to.lane);
-
-            // Forward edge (target's left edge is at or to the right of
-            // source's right edge): one S-curve. We compute the path
-            // endpoint so the marker tip lands on the target's left
-            // border, but clamp it forward of the source so the cubic's
-            // end tangent is always +x. Otherwise adjacent boxes (gap
-            // smaller than markerW) would produce a tiny backward
-            // tangent and `auto-start-reverse` would flip the marker.
-            if (targetLeft >= sourceRight) {
-              const x2 = Math.max(targetLeft - markerW, x1 + 2);
-              const cx = (x1 + x2) / 2;
-              return svg`<path class="arrow" d=${`M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`}></path>`;
-            }
-            const x2 = targetLeft - markerW;
-
-            // Backward edge (target is at or left of source — typically an
-            // inconsistency where a done task depends on a still-todo one).
-            // Both endpoints must keep horizontal tangents pointing right
-            // so the marker ends up rotated toward the target's left edge.
-            // We detour below the lower endpoint with two cubic segments
-            // meeting at a midpoint waypoint.
-            const bow = 60;                              // horizontal stick-out
-            const arch = Math.max(40, taskHeight + 24);  // vertical detour
-            const yMid = Math.max(y1, y2) + arch;
-            const xMid = (x1 + x2) / 2;
-            return svg`<path class="arrow" d=${
-              `M ${x1} ${y1} ` +
-              `C ${x1 + bow} ${y1} ${x1 + bow} ${yMid} ${xMid} ${yMid} ` +
-              `S ${x2 - bow} ${y2} ${x2} ${y2}`
-            }></path>`;
+            if (!isPromotedEdge(d)) return null;
+            return this._renderArrowPath(d, posByTaskID, taskCenterY, taskHeight, hasSelection);
           })}
         </svg>
       </div>
@@ -1200,6 +1260,46 @@ class NottarioGantt extends LitElement {
     return { from, to: from + minBarWidth };
   }
 
+  // Render one dependency arrow as an SVG <path>. Used in two passes
+  // by the main render: the default (non-promoted) pass before the
+  // task rects, and the promoted pass after, so selection-incident
+  // arrows always land on top of every box they cross.
+  _renderArrowPath(d, posByTaskID, taskCenterY, taskHeight, hasSelection) {
+    const from = posByTaskID.get(d.DependsOnID);
+    const to = posByTaskID.get(d.TaskID);
+    if (!from || !to) return null;
+    const markerW = 8;
+    const promoted = hasSelection &&
+      (this._selectedSet.has(d.TaskID) || this._selectedSet.has(d.DependsOnID));
+    const dimmed = hasSelection && !promoted;
+    const cls = `arrow${promoted ? ' promoted' : ''}${dimmed ? ' dim' : ''}`;
+    const onClick = (e) => { e.stopPropagation(); this._onArrowClick(d.DependsOnID); };
+    const sourceRight = from.to;
+    const targetLeft = to.from;
+    const x1 = sourceRight;
+    const y1 = taskCenterY(from.bi, from.lane);
+    const y2 = taskCenterY(to.bi, to.lane);
+    if (targetLeft >= sourceRight) {
+      const x2 = Math.max(targetLeft - markerW, x1 + 2);
+      const cx = (x1 + x2) / 2;
+      return svg`<path class=${cls}
+                       d=${`M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`}
+                       @click=${onClick}></path>`;
+    }
+    const x2 = targetLeft - markerW;
+    const bow = 60;
+    const arch = Math.max(40, taskHeight + 24);
+    const yMid = Math.max(y1, y2) + arch;
+    const xMid = (x1 + x2) / 2;
+    return svg`<path class=${cls}
+                     d=${
+      `M ${x1} ${y1} ` +
+      `C ${x1 + bow} ${y1} ${x1 + bow} ${yMid} ${xMid} ${yMid} ` +
+      `S ${x2 - bow} ${y2} ${x2} ${y2}`
+    }
+                     @click=${onClick}></path>`;
+  }
+
   _emitSelect(t) {
     this.dispatchEvent(new CustomEvent('task-selected', {
       detail: { task: t },
@@ -1225,11 +1325,13 @@ class NottarioGantt extends LitElement {
     this._hover = null;
   }
   _onStageKey(e) {
-    if (e.key === 'Escape' && this._hover) {
+    if (e.key !== 'Escape') return;
+    if (this._hover) {
       this._hover = null;
-      // Move focus off the bar so it doesn't immediately re-trigger
-      // via the focus handler.
       this.shadowRoot?.querySelector('.task-rect:focus')?.blur?.();
+    }
+    if (this._selectedAnchor || this._selectedSet.size > 0) {
+      this._clearSelection();
     }
   }
 
