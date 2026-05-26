@@ -6,10 +6,12 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 //
 // Slot-based form field. Renders the `<label>` (with optional muted
 // hint inline) and projects the user's input/textarea/select via
-// shadow DOM `<slot>`. Saves ~5 lines per field across every form on
-// the site — board, projects, project-settings, tokens, docs all use
-// the same `<div class="field"><label>...</label><input></div>`
-// boilerplate that this replaces.
+// shadow DOM `<slot>`. The canonical form-field primitive across the
+// app — board, projects, project-settings, tokens, docs all compose
+// it. The shadow styles here own the per-control chrome (border,
+// padding, focus ring, normalized select chevron); form-level
+// helpers (`.actions-row`, `.helper`, number-spinner kill) live in
+// ./fields.js so they apply to host-level markup.
 //
 // The slotted control still lives in the host's light DOM, so:
 //   - `form.elements.<name>` keeps working (form serialization sees

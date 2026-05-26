@@ -311,18 +311,19 @@ class NottarioProjectSettings extends LitElement {
       <p class="helper" style="margin:0 0 12px">
         Settings that affect how this project is exposed over the MCP server.
       </p>
-      <div class="field" style="max-width:320px">
-        <label>Default page size for <code>tasks.list</code></label>
-        ${admin
-          ? html`
-            <div style="display:flex;align-items:center;gap:8px">
-              <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
-                     @change=${(e) => this.saveMCPPageSize(e.target.value)}
-                     style="width:96px;font-variant-numeric:tabular-nums">
-              <span class="muted">tasks per page</span>
-            </div>`
-          : html`${p.MCPPageSize || 50} tasks per page <span class="muted">(admin only)</span>`}
-      </div>
+      ${admin
+        ? html`
+          <nottario-field label="Default page size for tasks.list" hint="tasks per page" style="max-width:320px">
+            <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
+                   @change=${(e) => this.saveMCPPageSize(e.target.value)}
+                   style="width:96px;font-variant-numeric:tabular-nums">
+          </nottario-field>`
+        : html`
+          <p style="margin:0 0 12px">
+            <strong>Default page size for tasks.list:</strong>
+            ${p.MCPPageSize || 50} tasks per page
+            <span class="muted">(admin only)</span>
+          </p>`}
       <p class="helper" style="margin-top:8px">
         Agents that call <code>nottario.tasks.list</code> without an explicit
         <code>limit</code> get this many tasks per page. Hard range: 1–500.

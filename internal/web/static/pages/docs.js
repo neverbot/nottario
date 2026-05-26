@@ -2,6 +2,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { fieldStyles } from '/static/components/fields.js';
+import '/static/components/field.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
 import '/static/components/search-input.js';
@@ -1009,21 +1010,16 @@ class NottarioDocsPage extends LitElement {
           </div>
         </div>
         <div class="editor-form">
-          <div class="field">
-            <label>Path
-              <span style="font-weight:400;color:#59636e">
-                e.g. <code>projects/${this.projectId}/context/glossary.md</code>
-              </span>
-            </label>
+          <nottario-field label="Path"
+            hint=${`e.g. projects/${this.projectId}/context/glossary.md`}>
             <input .value=${this.newPath} @input=${(e) => { this.newPath = e.target.value; }}
                    placeholder="projects/${this.projectId}/context/your-doc.md">
-          </div>
-          <div class="field">
-            <label>Markdown (with optional frontmatter)</label>
+          </nottario-field>
+          <nottario-field label="Markdown (with optional frontmatter)">
             <textarea aria-label="Markdown content"
                       .value=${this.draft}
                       @input=${(e) => { this.draft = e.target.value; }}></textarea>
-          </div>
+          </nottario-field>
         </div>
       </div>
     `;
