@@ -178,19 +178,33 @@ func TestSearch_StemmingRegression(t *testing.T) {
 		t.Fatalf("task: %v", err)
 	}
 
-	// The index uses to_tsvector('simple', …), so the plural form is
-	// NOT stemmed back to the singular. Searching for "task" should
-	// find ZERO hits even though the row contains "tasks". When that
-	// behaviour gets fixed (task `be13415d`), this assertion will
-	// flip and we'll have proof of the upgrade.
+	// After be13415d the search vector unions simple+english+spanish
+	// configs, so "task" stems via english and matches stored
+	// "tasks". Also assert the spanish stemmer works.
 	hits, err := search.Search(ctx, fx.pool, "task", search.Filter{
 		ProjectID: fx.projectID, Kinds: []search.Kind{search.KindTask},
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(hits) != 0 {
-		t.Logf("stemming behaviour changed: 'task' now matches 'tasks' → %d hit(s). Update task be13415d to mark stemming as enabled and flip this regression test.", len(hits))
+	if len(hits) == 0 {
+		t.Errorf("expected 'task' to stem-match stored 'tasks', got 0 hits")
+	}
+
+	if _, err := tasks.Create(ctx, fx.pool, tasks.CreateParams{
+		ProjectID: fx.projectID, Type: tasks.TypeTask, Title: "tareas pendientes",
+		TargetRoleID: &roles[0].ID,
+	}, tasks.Authorship{UserID: &fx.userID}); err != nil {
+		t.Fatalf("spanish task: %v", err)
+	}
+	spanish, err := search.Search(ctx, fx.pool, "tarea", search.Filter{
+		ProjectID: fx.projectID, Kinds: []search.Kind{search.KindTask},
+	})
+	if err != nil {
+		t.Fatalf("Search spanish: %v", err)
+	}
+	if len(spanish) == 0 {
+		t.Errorf("expected 'tarea' to stem-match stored 'tareas' (spanish), got 0 hits")
 	}
 }
 

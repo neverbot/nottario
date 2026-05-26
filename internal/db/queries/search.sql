@@ -6,7 +6,18 @@
 -- only then swap the sentinels for <mark>...</mark>. This keeps any
 -- raw '<' or '>' in user content escaped while still producing
 -- highlighted snippets the UI can render with unsafeHTML.
-WITH q AS (SELECT plainto_tsquery('simple', sqlc.arg('query')::text) AS tsq)
+WITH q AS (
+    -- Union the same three dictionaries the search_vector columns
+    -- use (see migrations/00013_search_multilang.sql) so a query for
+    -- "task" matches stored "tasks" via the english stemmer, "tarea"
+    -- matches "tareas" via the spanish stemmer, and verbatim words /
+    -- slugs / non-Latin terms still match via the simple config.
+    SELECT (
+        plainto_tsquery('simple',  sqlc.arg('query')::text) ||
+        plainto_tsquery('english', sqlc.arg('query')::text) ||
+        plainto_tsquery('spanish', sqlc.arg('query')::text)
+    ) AS tsq
+)
 (
     SELECT 'task'::text AS kind,
            project_id::text AS project_id,

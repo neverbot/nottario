@@ -74,14 +74,23 @@ WHERE scope = sqlc.arg('scope')::text
 ORDER BY path;
 
 -- name: SearchDocuments :many
+-- Multi-config tsquery: simple || english || spanish, matching the
+-- documents.search_vector definition in migrations/00013.
+WITH q AS (
+    SELECT (
+        plainto_tsquery('simple',  sqlc.arg('query')::text) ||
+        plainto_tsquery('english', sqlc.arg('query')::text) ||
+        plainto_tsquery('spanish', sqlc.arg('query')::text)
+    ) AS tsq
+)
 SELECT id, scope, project_id, path, kind, title, description, current_version,
        updated_by_user_id, updated_by_token_id, updated_at,
-       ts_rank(search_vector, plainto_tsquery('simple', sqlc.arg('query')::text))::real AS rank
+       ts_rank(search_vector, (SELECT tsq FROM q))::real AS rank
 FROM documents
 WHERE scope = sqlc.arg('scope')::text
   AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
   AND deleted_at IS NULL
-  AND search_vector @@ plainto_tsquery('simple', sqlc.arg('query')::text)
+  AND search_vector @@ (SELECT tsq FROM q)
   AND (sqlc.narg('kind')::text IS NULL OR kind = sqlc.narg('kind')::text)
 ORDER BY rank DESC, path;
 
