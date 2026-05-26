@@ -17,6 +17,7 @@ class NottarioProjectSettings extends LitElement {
     roles: { state: true },
     members: { state: true },
     priorities: { state: true },
+    users: { state: true },
     activeTab: { state: true },
     error: { state: true },
   };
@@ -122,6 +123,7 @@ class NottarioProjectSettings extends LitElement {
     this.roles = [];
     this.members = [];
     this.priorities = [];
+    this.users = [];
     this.activeTab = 'general';
     this.error = '';
   }
@@ -138,17 +140,19 @@ class NottarioProjectSettings extends LitElement {
   async load() {
     if (!this.projectId) return;
     try {
-      const [pr, rr, mr, qr] = await Promise.all([
+      const [pr, rr, mr, qr, ur] = await Promise.all([
         fetch(`/api/projects/${this.projectId}`),
         fetch(`/api/projects/${this.projectId}/roles`),
         fetch(`/api/projects/${this.projectId}/members`),
         fetch(`/api/projects/${this.projectId}/priorities`),
+        fetch(`/api/users`),
       ]);
       if (!pr.ok) throw new Error('project not found');
       this.project = await pr.json();
       this.roles = (await rr.json()).roles || [];
       this.members = (await mr.json()).members || [];
       this.priorities = (await qr.json()).priorities || [];
+      this.users = ur.ok ? ((await ur.json()).users || []) : [];
     } catch (e) {
       this.error = e.message;
     }
@@ -511,14 +515,20 @@ class NottarioProjectSettings extends LitElement {
   }
 
   renderMembers() {
+    const admin = this.me?.is_admin;
+    const colCount = admin ? 3 : 2;
     return html`
       <table class="data-table">
         <thead>
-          <tr><th>User</th><th style="width:180px">Role</th></tr>
+          <tr>
+            <th>User</th>
+            <th style="width:180px">Role</th>
+            ${admin ? html`<th style="width:60px"></th>` : null}
+          </tr>
         </thead>
         <tbody>
           ${this.members.length === 0
-            ? html`<tr><td colspan="2" class="muted" style="text-align:center;padding:16px">No members yet.</td></tr>`
+            ? html`<tr><td colspan=${colCount} class="muted" style="text-align:center;padding:16px">No members yet.</td></tr>`
             : this.members.map(m => html`
               <tr>
                 <td>
@@ -539,12 +549,73 @@ class NottarioProjectSettings extends LitElement {
                   ${m.RoleColor ? html`<span class="color-dot" style=${`background:${m.RoleColor}`}></span>` : ''}
                   ${m.RoleLabel}
                 </td>
+                ${admin ? html`
+                  <td class="row-actions">
+                    <button class="delete"
+                            title="Remove this role from ${m.DisplayName || m.GithubLogin}"
+                            @click=${() => this.removeMember(m.UserID, m.RoleID)}>×</button>
+                  </td>
+                ` : null}
               </tr>
             `)}
         </tbody>
       </table>
-      <p class="helper" style="margin-top:12px">Adding members from the UI is coming in a later milestone. For now, the first user who logs in is admin; other users self-register via GitHub OAuth on first login and an admin can grant them roles via the API.</p>
+      ${admin ? html`
+        <form class="add-row" @submit=${(e) => this.addMember(e)}>
+          <nottario-field label="User">
+            <select name="user_id" required>
+              <option value="" disabled selected>Pick a user…</option>
+              ${this.users.map(u => html`
+                <option value=${u.ID}>${u.DisplayName || u.GithubLogin} (@${u.GithubLogin})</option>
+              `)}
+            </select>
+          </nottario-field>
+          <nottario-field label="Role" class="narrow" style="flex:0 0 180px;min-width:180px">
+            <select name="role_id" required>
+              <option value="" disabled selected>Pick a role…</option>
+              ${this.roles.map(r => html`<option value=${r.ID}>${r.Label}</option>`)}
+            </select>
+          </nottario-field>
+          <div class="add-action">
+            <button type="submit" class="btn primary">Add membership</button>
+          </div>
+        </form>
+        <p class="helper" style="margin-top:12px">
+          A user can hold multiple roles in a project — add the same user with a different role to grant both. Removing the last role of a user takes them out of the project entirely.
+        </p>
+      ` : html`
+        <p class="helper" style="margin-top:12px">Only admins can add or remove members.</p>
+      `}
     `;
+  }
+
+  async addMember(e) {
+    e.preventDefault();
+    const form = e.target;
+    const user_id = form.user_id.value;
+    const role_id = form.role_id.value;
+    if (!user_id || !role_id) return;
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id, role_id }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'failed');
+      form.reset();
+      await this.load();
+    } catch (err) { this.error = err.message; }
+  }
+
+  async removeMember(userID, roleID) {
+    if (!confirm('Remove this membership?')) return;
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/members/${userID}/${roleID}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'remove failed');
+      await this.load();
+    } catch (err) { this.error = err.message; }
   }
 
 }
