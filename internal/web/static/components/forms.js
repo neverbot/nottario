@@ -4,7 +4,7 @@ import { css } from '/static/vendor/lit/lit.js';
 // `<nottario-field>` (see ./field.js). Compose into a component's
 // `static styles`:
 //
-//   static styles = [fieldStyles, css`…page-specific…`];
+//   static styles = [formStyles, css`…page-specific…`];
 //
 // Owns:
 //   - `.actions-row` — right-aligned button cluster at the foot of
@@ -18,7 +18,7 @@ import { css } from '/static/vendor/lit/lit.js';
 // The per-control chrome (border, padding, focus ring, normalized
 // select chevron) lives in `<nottario-field>`'s shadow styles so it
 // stays defined in exactly one place.
-export const fieldStyles = css`
+export const formStyles = css`
   .actions-row {
     margin-top: 16px;
     display: flex;

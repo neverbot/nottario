@@ -3,7 +3,7 @@ import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { dialogStyles } from '/static/components/surfaces.js';
-import { fieldStyles } from '/static/components/fields.js';
+import { formStyles } from '/static/components/forms.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/field.js';
 import '/static/components/page-header.js';
@@ -29,7 +29,7 @@ class NottarioBoardPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, dialogStyles, fieldStyles, badgeStyles, css`
+  static styles = [buttonStyles, dialogStyles, formStyles, badgeStyles, css`
     :host { display: block; }
     .spacer { flex: 1; }
     .columns {

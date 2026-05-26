@@ -11,19 +11,19 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 // it. The shadow styles here own the per-control chrome (border,
 // padding, focus ring, normalized select chevron); form-level
 // helpers (`.actions-row`, `.helper`, number-spinner kill) live in
-// ./fields.js so they apply to host-level markup.
+// ./forms.js so they apply to host-level markup.
 //
 // The slotted control still lives in the host's light DOM, so:
 //   - `form.elements.<name>` keeps working (form serialization sees
 //     light-DOM descendants of <form>).
-//   - the page's own `fieldStyles` still applies things like the
+//   - the page's own `formStyles` still applies things like the
 //     number-spinner kill (which targets pseudo-elements that
 //     `::slotted` cannot reach).
 //
 // Styling responsibility split:
 //   - <nottario-field> shadow CSS owns label typography and the
 //     `::slotted(input/textarea/select)` chrome + focus ring.
-//   - the page's composed `fieldStyles` keeps owning `.helper`,
+//   - the page's composed `formStyles` keeps owning `.helper`,
 //     `.actions-row`, number-spinner removal.
 class NottarioField extends LitElement {
   static properties = {

@@ -2,7 +2,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles } from '/static/components/surfaces.js';
-import { fieldStyles } from '/static/components/fields.js';
+import { formStyles } from '/static/components/forms.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/field.js';
 import '/static/components/avatar.js';
@@ -22,7 +22,7 @@ class NottarioProjectSettings extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, tableStyles, fieldStyles, badgeStyles, css`
+  static styles = [buttonStyles, tableStyles, formStyles, badgeStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 

@@ -1,7 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
-import { fieldStyles } from '/static/components/fields.js';
+import { formStyles } from '/static/components/forms.js';
 import '/static/components/field.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
@@ -28,7 +28,7 @@ class NottarioDocsPage extends LitElement {
     viewingVersion: { state: true },
   };
 
-  static styles = [buttonStyles, fieldStyles, badgeStyles, css`
+  static styles = [buttonStyles, formStyles, badgeStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 

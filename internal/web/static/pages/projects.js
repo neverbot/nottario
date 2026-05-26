@@ -3,7 +3,7 @@ import { defaultPathFor, viewByKey } from '/static/views.js';
 import { EscController } from '/static/components/esc.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, dialogStyles } from '/static/components/surfaces.js';
-import { fieldStyles } from '/static/components/fields.js';
+import { formStyles } from '/static/components/forms.js';
 import '/static/components/field.js';
 import '/static/components/avatar.js';
 import '/static/components/page-header.js';
@@ -17,7 +17,7 @@ class NottarioProjectsPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, surfaceStyles, dialogStyles, fieldStyles, css`
+  static styles = [buttonStyles, surfaceStyles, dialogStyles, formStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
     .grid {
