@@ -1491,25 +1491,18 @@ class NottarioGantt extends LitElement {
     const user = t.AssigneeUserID
       ? this.members.find(m => m.UserID === t.AssigneeUserID)
       : null;
-
-    // Collapsed feature → short summary card.
-    if (t.Type === 'feature' && this.foldedFeatures.has(t.ID)) {
-      const childCount = (this.tasks || []).filter(x => x.ParentTaskID === t.ID).length;
-      const rolesText = this._featureRoles(t.ID);
-      return html`
-        <div class="hover-card" role="tooltip"
-             style=${`left:${left}px; top:${top}px`}>
-          <div class="title">${t.Title}</div>
-          <div class="meta">${childCount} task${childCount === 1 ? '' : 's'} · ${rolesText}</div>
-          <div class="meta">Double-click to expand</div>
-        </div>
-      `;
-    }
-
-    // Regular task card.
     const dateStr = (iso) => iso ? new Date(iso).toLocaleDateString() : '';
     const start = t.ActualStart || t.PlannedStart;
     const end   = t.ActualEnd   || t.PlannedEnd;
+    const isFolded = t.Type === 'feature' && this.foldedFeatures.has(t.ID);
+    const childCount = isFolded
+      ? (this.tasks || []).filter(x => x.ParentTaskID === t.ID).length
+      : 0;
+
+    // Single template for every bar — features and tasks share the
+    // same chrome (chip row + optional dates + optional assignee).
+    // Feature-only meta sits below the dates so the layout reads
+    // identical regardless of type.
     return html`
       <div class="hover-card" role="tooltip"
            style=${`left:${left}px; top:${top}px`}>
@@ -1534,6 +1527,10 @@ class NottarioGantt extends LitElement {
             ${user.AvatarURL ? html`<img src=${user.AvatarURL} alt="">` : null}
             <span>${user.DisplayName || user.GithubLogin}</span>
           </div>
+        ` : null}
+        ${isFolded ? html`
+          <div class="meta">${childCount} task${childCount === 1 ? '' : 's'} · ${this._featureRoles(t.ID)}</div>
+          <div class="meta">Double-click to expand</div>
         ` : null}
       </div>
     `;
