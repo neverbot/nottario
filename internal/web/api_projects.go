@@ -203,6 +203,44 @@ func UpdateProjectDefaultViewHandler(d ProjectDeps) http.Handler {
 	})
 }
 
+type setOwnerRequest struct {
+	OwnerUserID uuid.UUID `json:"owner_user_id"`
+}
+
+// SetOwnerHandler reassigns the project owner. Admin-only.
+func SetOwnerHandler(d ProjectDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		if !c.IsAdmin {
+			writeError(w, http.StatusForbidden, "admin only")
+			return
+		}
+		id, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		var req setOwnerRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if req.OwnerUserID == uuid.Nil {
+			writeError(w, http.StatusBadRequest, "owner_user_id is required")
+			return
+		}
+		if err := identity.SetProjectOwner(r.Context(), d.Pool, id, req.OwnerUserID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
 // DeleteProjectHandler removes a project. Admin-only.
 func DeleteProjectHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

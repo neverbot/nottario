@@ -62,7 +62,12 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("PATCH /api/projects/{id}", UpdateProjectHandler(proj))
 	mux.Handle("PATCH /api/projects/{id}/mcp", UpdateProjectMCPHandler(proj))
 	mux.Handle("PATCH /api/projects/{id}/default_view", UpdateProjectDefaultViewHandler(proj))
+	mux.Handle("PATCH /api/projects/{id}/owner", SetOwnerHandler(proj))
 	mux.Handle("DELETE /api/projects/{id}", DeleteProjectHandler(proj))
+
+	mux.Handle("GET /api/projects/{id}/cycles", ListCyclesHandler(proj))
+	mux.Handle("GET /api/projects/{id}/cycles/current", GetCurrentCycleHandler(proj))
+	mux.Handle("POST /api/projects/{id}/cycles/end", EndCycleHandler(proj))
 
 	mux.Handle("GET /api/projects/{id}/roles", ListRolesHandler(proj))
 	mux.Handle("POST /api/projects/{id}/roles", CreateRoleHandler(proj))
