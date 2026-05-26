@@ -43,6 +43,7 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 		PrimaryLanguage: primaryLanguage,
 		ProjectType:     projectType,
 		CreatedByUserID: &createdByUserID,
+		OwnerUserID:     createdByUserID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
@@ -84,6 +85,13 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 		}
 		p.Repos = append(p.Repos, repo)
 	}
+	if _, err := q.InsertCycle(ctx, dbq.InsertCycleParams{
+		ProjectID: p.ID,
+		Name:      "sprint-1",
+		Position:  1,
+	}); err != nil {
+		return nil, fmt.Errorf("seed initial cycle: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
@@ -112,6 +120,8 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 				ProjectType:     r.ProjectType,
 				MCPPageSize:     int(r.McpPageSize),
 				DefaultView:     r.DefaultView,
+				CycleLabel:      r.CycleLabel,
+				OwnerUserID:     r.OwnerUserID,
 				CreatedByUserID: r.CreatedByUserID,
 				CreatedAt:       r.CreatedAt.Time,
 				UpdatedAt:       r.UpdatedAt.Time,
@@ -133,6 +143,8 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 				ProjectType:     r.ProjectType,
 				MCPPageSize:     int(r.McpPageSize),
 				DefaultView:     r.DefaultView,
+				CycleLabel:      r.CycleLabel,
+				OwnerUserID:     r.OwnerUserID,
 				CreatedByUserID: r.CreatedByUserID,
 				CreatedAt:       r.CreatedAt.Time,
 				UpdatedAt:       r.UpdatedAt.Time,
@@ -213,6 +225,8 @@ func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Proj
 		ProjectType:     row.ProjectType,
 		MCPPageSize:     int(row.McpPageSize),
 		DefaultView:     row.DefaultView,
+		CycleLabel:      row.CycleLabel,
+		OwnerUserID:     row.OwnerUserID,
 		CreatedByUserID: row.CreatedByUserID,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -336,6 +350,8 @@ func projectFromInsertRow(r dbq.InsertProjectRow) Project {
 		ProjectType:     r.ProjectType,
 		MCPPageSize:     int(r.McpPageSize),
 		DefaultView:     r.DefaultView,
+		CycleLabel:      r.CycleLabel,
+		OwnerUserID:     r.OwnerUserID,
 		CreatedByUserID: r.CreatedByUserID,
 		CreatedAt:       r.CreatedAt.Time,
 		UpdatedAt:       r.UpdatedAt.Time,

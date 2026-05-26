@@ -295,9 +295,9 @@ const insertTask = `-- name: InsertTask :one
 INSERT INTO tasks (
   project_id, parent_task_id, type, title, description_md,
   state, priority, assignee_user_id, target_role_id,
-  created_by_user_id, created_by_token_id
+  created_by_user_id, created_by_token_id, cycle_id
 )
-VALUES ($1, $2, $3, $4, $5, 'todo', $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, 'todo', $6, $7, $8, $9, $10, $11)
 RETURNING id, project_id, parent_task_id, type, title, description_md,
           state, priority, assignee_user_id, target_role_id,
           actual_start, actual_end,
@@ -316,6 +316,7 @@ type InsertTaskParams struct {
 	TargetRoleID     *uuid.UUID
 	CreatedByUserID  *uuid.UUID
 	CreatedByTokenID *uuid.UUID
+	CycleID          uuid.UUID
 }
 
 type InsertTaskRow struct {
@@ -349,6 +350,7 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertT
 		arg.TargetRoleID,
 		arg.CreatedByUserID,
 		arg.CreatedByTokenID,
+		arg.CycleID,
 	)
 	var i InsertTaskRow
 	err := row.Scan(

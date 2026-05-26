@@ -49,6 +49,8 @@ type Project struct {
 	ProjectType     string
 	MCPPageSize     int
 	DefaultView     string
+	CycleLabel      string
+	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

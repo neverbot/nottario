@@ -34,7 +34,7 @@ const getProjectByIDOrSlug = `-- name: GetProjectByIDOrSlug :one
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size, default_view,
+       mcp_page_size, default_view, cycle_label, owner_user_id,
        created_by_user_id, created_at, updated_at
 FROM projects
 WHERE id::text = $1::text
@@ -50,6 +50,8 @@ type GetProjectByIDOrSlugRow struct {
 	ProjectType     string
 	McpPageSize     int32
 	DefaultView     string
+	CycleLabel      string
+	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -67,6 +69,8 @@ func (q *Queries) GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (Ge
 		&i.ProjectType,
 		&i.McpPageSize,
 		&i.DefaultView,
+		&i.CycleLabel,
+		&i.OwnerUserID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -75,13 +79,14 @@ func (q *Queries) GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (Ge
 }
 
 const insertProject = `-- name: InsertProject :one
-INSERT INTO projects (slug, name, description, primary_language, project_type, created_by_user_id)
-VALUES ($1, $2, $3, NULLIF($5::text, ''),
-        NULLIF($6::text, ''), $4)
+INSERT INTO projects (slug, name, description, primary_language, project_type,
+                      created_by_user_id, owner_user_id)
+VALUES ($1, $2, $3, NULLIF($6::text, ''),
+        NULLIF($7::text, ''), $4, $5)
 RETURNING id, slug, name, description,
           COALESCE(primary_language, '')::text AS primary_language,
           COALESCE(project_type, '')::text AS project_type,
-          mcp_page_size, default_view,
+          mcp_page_size, default_view, cycle_label, owner_user_id,
           created_by_user_id, created_at, updated_at
 `
 
@@ -90,6 +95,7 @@ type InsertProjectParams struct {
 	Name            string
 	Description     string
 	CreatedByUserID *uuid.UUID
+	OwnerUserID     uuid.UUID
 	PrimaryLanguage string
 	ProjectType     string
 }
@@ -103,6 +109,8 @@ type InsertProjectRow struct {
 	ProjectType     string
 	McpPageSize     int32
 	DefaultView     string
+	CycleLabel      string
+	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -114,6 +122,7 @@ func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) (I
 		arg.Name,
 		arg.Description,
 		arg.CreatedByUserID,
+		arg.OwnerUserID,
 		arg.PrimaryLanguage,
 		arg.ProjectType,
 	)
@@ -127,6 +136,8 @@ func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) (I
 		&i.ProjectType,
 		&i.McpPageSize,
 		&i.DefaultView,
+		&i.CycleLabel,
+		&i.OwnerUserID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -274,7 +285,7 @@ const listProjectsAdmin = `-- name: ListProjectsAdmin :many
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size, default_view,
+       mcp_page_size, default_view, cycle_label, owner_user_id,
        created_by_user_id, created_at, updated_at
 FROM projects
 ORDER BY name
@@ -289,6 +300,8 @@ type ListProjectsAdminRow struct {
 	ProjectType     string
 	McpPageSize     int32
 	DefaultView     string
+	CycleLabel      string
+	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -312,6 +325,8 @@ func (q *Queries) ListProjectsAdmin(ctx context.Context) ([]ListProjectsAdminRow
 			&i.ProjectType,
 			&i.McpPageSize,
 			&i.DefaultView,
+			&i.CycleLabel,
+			&i.OwnerUserID,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -330,7 +345,7 @@ const listProjectsForUser = `-- name: ListProjectsForUser :many
 SELECT DISTINCT p.id, p.slug, p.name, p.description,
        COALESCE(p.primary_language, '')::text AS primary_language,
        COALESCE(p.project_type, '')::text AS project_type,
-       p.mcp_page_size, p.default_view,
+       p.mcp_page_size, p.default_view, p.cycle_label, p.owner_user_id,
        p.created_by_user_id, p.created_at, p.updated_at
 FROM projects p
 JOIN memberships m ON m.project_id = p.id
@@ -347,6 +362,8 @@ type ListProjectsForUserRow struct {
 	ProjectType     string
 	McpPageSize     int32
 	DefaultView     string
+	CycleLabel      string
+	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -370,6 +387,8 @@ func (q *Queries) ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]
 			&i.ProjectType,
 			&i.McpPageSize,
 			&i.DefaultView,
+			&i.CycleLabel,
+			&i.OwnerUserID,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -393,6 +412,21 @@ func (q *Queries) ProjectSlugExists(ctx context.Context, slug string) (bool, err
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const setProjectOwner = `-- name: SetProjectOwner :exec
+UPDATE projects SET owner_user_id = $1::uuid, updated_at = now()
+WHERE id = $2::uuid
+`
+
+type SetProjectOwnerParams struct {
+	OwnerUserID uuid.UUID
+	ID          uuid.UUID
+}
+
+func (q *Queries) SetProjectOwner(ctx context.Context, arg SetProjectOwnerParams) error {
+	_, err := q.db.Exec(ctx, setProjectOwner, arg.OwnerUserID, arg.ID)
+	return err
 }
 
 const updateProjectDefaultView = `-- name: UpdateProjectDefaultView :exec

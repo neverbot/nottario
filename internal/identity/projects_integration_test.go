@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/testutil"
 )
@@ -65,5 +66,25 @@ func TestCreateProject_SeedsRolesAndPriorities(t *testing.T) {
 	}
 	if len(creatorRoles) != len(identity.DefaultRoleCatalogue) {
 		t.Fatalf("expected creator auto-joined with %d roles, got %d", len(identity.DefaultRoleCatalogue), len(creatorRoles))
+	}
+
+	if p.OwnerUserID != u.ID {
+		t.Fatalf("expected OwnerUserID == creator %s, got %s", u.ID, p.OwnerUserID)
+	}
+	if p.CycleLabel != "sprint" {
+		t.Fatalf("expected CycleLabel default 'sprint', got %q", p.CycleLabel)
+	}
+	cs, err := cycles.List(ctx, pool, p.ID)
+	if err != nil {
+		t.Fatalf("cycles.List: %v", err)
+	}
+	if len(cs) != 1 {
+		t.Fatalf("expected exactly 1 cycle seeded, got %d", len(cs))
+	}
+	if cs[0].Name != "sprint-1" {
+		t.Fatalf("expected seeded cycle name 'sprint-1', got %q", cs[0].Name)
+	}
+	if cs[0].ClosedAt != nil {
+		t.Fatalf("expected seeded cycle to be active (closed_at nil), got %v", cs[0].ClosedAt)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
@@ -59,6 +60,15 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	if p.Priority != nil {
 		priority = *p.Priority
 	}
+	// Resolve the project's active cycle so the top-level insert has a
+	// concrete cycle_id (NOT NULL). For parented tasks the cascade
+	// trigger overrides whatever we pass with the parent's cycle_id,
+	// so the value we use here is irrelevant in that case but must
+	// still satisfy NOT NULL — the active cycle works for both.
+	active, err := cycles.ActiveCycle(ctx, pool, p.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve active cycle: %w", err)
+	}
 	row, err := dbq.New(pool).InsertTask(ctx, dbq.InsertTaskParams{
 		ProjectID:        p.ProjectID,
 		ParentTaskID:     p.ParentTaskID,
@@ -70,6 +80,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 		TargetRoleID:     p.TargetRoleID,
 		CreatedByUserID:  by.UserID,
 		CreatedByTokenID: by.TokenID,
+		CycleID:          active.ID,
 	})
 	if err != nil {
 		return nil, err

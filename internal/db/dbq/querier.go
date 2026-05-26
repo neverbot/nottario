@@ -166,6 +166,7 @@ type Querier interface {
 	// documents.search_vector definition in migrations/00013.
 	SearchDocuments(ctx context.Context, arg SearchDocumentsParams) ([]SearchDocumentsRow, error)
 	SeedDefaultPriority(ctx context.Context, arg SeedDefaultPriorityParams) error
+	SetProjectOwner(ctx context.Context, arg SetProjectOwnerParams) error
 	SetRolePosition(ctx context.Context, arg SetRolePositionParams) error
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
