@@ -1194,7 +1194,7 @@ class NottarioGantt extends LitElement {
                       @mousemove=${(e) => this._onBarMove(e, t, p.from, y)}
                       @mouseleave=${() => this._onBarLeave()}
                       @focus=${(e) => this._onBarHover(e, t, p.from, y)}
-                      @blur=${() => this._onBarLeave()}
+                      @blur=${() => this._onBarBlur()}
                       tabindex="0">
                 </rect>
                 <text class="task-label" x=${labelX} y=${y + taskHeight / 2 + 4}
@@ -1228,7 +1228,7 @@ class NottarioGantt extends LitElement {
                     @mousemove=${(e) => this._onBarMove(e, t, p.from, y)}
                     @mouseleave=${() => this._onBarLeave()}
                     @focus=${(e) => this._onBarHover(e, t, p.from, y)}
-                    @blur=${() => this._onBarLeave()}
+                    @blur=${() => this._onBarBlur()}
                     tabindex="0">
               </rect>
               ${user && user.AvatarURL ? svg`
@@ -1358,6 +1358,7 @@ class NottarioGantt extends LitElement {
     const prior = this._hover;
     const cursor = (prior && prior.task && prior.task.ID === task.ID) ? prior.cursor : null;
     this._hover = { task, barX, barY, cursor };
+    this._pointerBarID = task.ID;
   }
   // Convert a pointer event into scrolled-content coords (the same
   // frame `position: absolute` children of `.stage` live in) and
@@ -1371,9 +1372,22 @@ class NottarioGantt extends LitElement {
       y: (e.clientY - r.top)  + stage.scrollTop,
     };
     this._hover = { task, barX, barY, cursor };
+    this._pointerBarID = task.ID;
   }
+  // Pointer left the bar: drop the hover entirely.
   _onBarLeave() {
+    this._pointerBarID = null;
     this._hover = null;
+  }
+  // Keyboard focus left a bar (also fires on click-induced focus
+  // shift between two bars). Only clear when the pointer isn't
+  // sitting on a bar — otherwise the new bar's mouseenter has
+  // already populated `_hover` with a valid cursor and we don't
+  // want a stale blur from the previous bar to wipe it.
+  _onBarBlur() {
+    if (this._pointerBarID == null) {
+      this._hover = null;
+    }
   }
   _onStageKey(e) {
     if (e.key !== 'Escape') return;
