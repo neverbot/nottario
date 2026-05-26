@@ -76,6 +76,16 @@ class NottarioSearchBox extends LitElement {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    /* ts_headline yields snippets with <mark> around matches. The
+       server escapes everything else so the only HTML here is the
+       <mark> tag itself. */
+    .hit mark {
+      background: #fff8c5;
+      color: inherit;
+      padding: 0 1px;
+      border-radius: 2px;
+      font-weight: 600;
+    }
     .hit .meta {
       font-size: 11px;
       color: #59636e;
@@ -161,6 +171,28 @@ class NottarioSearchBox extends LitElement {
   onFocus() { if (this.query) this.open = true; }
   onBlur() { setTimeout(() => { this.open = false; }, 150); }
 
+  // After every render, paint the highlighted snippets into the
+  // matching elements. The server already escaped everything except
+  // the `<mark>` tags it added, so writing innerHTML here is safe.
+  // We do this in `updated` instead of using Lit's `unsafeHTML`
+  // directive because that directive isn't part of the vendored Lit
+  // bundle (see internal/web/static/components/markdown.js).
+  updated() {
+    if (!this.hits || !this.hits.length) return;
+    const root = this.shadowRoot;
+    if (!root) return;
+    this.hits.forEach((h, i) => {
+      if (h.title_html) {
+        const el = root.querySelector(`[data-html-idx="t${i}"]`);
+        if (el) el.innerHTML = h.title_html;
+      }
+      if (h.description_html) {
+        const el = root.querySelector(`[data-html-idx="d${i}"]`);
+        if (el) el.innerHTML = h.description_html;
+      }
+    });
+  }
+
   goto(hit) {
     let path = null;
     switch (hit.kind) {
@@ -198,13 +230,15 @@ class NottarioSearchBox extends LitElement {
         <div class="panel">
           ${this.loading && this.hits === null ? html`<div class="hint">Searching…</div>` : null}
           ${this.hits && this.hits.length === 0 ? html`<div class="empty">No matches.</div>` : null}
-          ${this.hits ? this.hits.map(h => html`
+          ${this.hits ? this.hits.map((h, i) => html`
             <div class="hit" @mousedown=${(e) => { e.preventDefault(); this.goto(h); }}>
               <div>
                 <span class=${`kind-pill ${h.kind}`}>${h.kind.replace('_', ' ')}</span>
-                <span class="title">${h.title || '(untitled)'}</span>
+                <span class="title" data-html-idx=${`t${i}`}>${h.title || '(untitled)'}</span>
               </div>
-              ${h.description ? html`<div class="desc">${h.description}</div>` : null}
+              ${h.description || h.description_html
+                ? html`<div class="desc" data-html-idx=${`d${i}`}>${h.description || ''}</div>`
+                : null}
               <div class="meta">
                 ${h.kind === 'task' ? html`state: ${h.task_state} · type: ${h.task_type}` : null}
                 ${h.kind === 'document' ? html`path: ${h.doc_path}` : null}

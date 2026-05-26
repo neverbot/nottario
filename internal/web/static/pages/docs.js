@@ -533,6 +533,13 @@ class NottarioDocsPage extends LitElement {
       );
       if (!r.ok) throw new Error('read failed');
       this.selected = await r.json();
+      // Bring the rail's active row into view; without this a deep
+      // link from the topbar search lands on a doc whose entry sits
+      // off-screen in the tree.
+      requestAnimationFrame(() => {
+        const row = this.shadowRoot?.querySelector('.tree li.active');
+        row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
     } catch (e) {
       this.error = e.message;
     }

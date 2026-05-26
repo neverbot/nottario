@@ -155,6 +155,13 @@ type Querier interface {
 	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
+	// Each domain returns the same shape, plus title_headline /
+	// description_headline computed with ts_headline. The headline
+	// options use rare sentinel strings («MARK» / «/MARK») instead of
+	// HTML tags so the Go layer can html-escape the result safely and
+	// only then swap the sentinels for <mark>...</mark>. This keeps any
+	// raw '<' or '>' in user content escaped while still producing
+	// highlighted snippets the UI can render with unsafeHTML.
 	UnifiedSearch(ctx context.Context, arg UnifiedSearchParams) ([]UnifiedSearchRow, error)
 	UpdateArchNode(ctx context.Context, arg UpdateArchNodeParams) (UpdateArchNodeRow, error)
 	UpdateDocument(ctx context.Context, arg UpdateDocumentParams) (UpdateDocumentRow, error)

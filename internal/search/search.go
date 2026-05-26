@@ -6,6 +6,7 @@ package search
 import (
 	"context"
 	"errors"
+	"html"
 	"strings"
 
 	"github.com/google/uuid"
@@ -24,19 +25,45 @@ const (
 )
 
 // Hit is one search result.
+//
+// `TitleHTML` and `DescriptionHTML` carry highlighted snippets safe
+// for `unsafeHTML` rendering: the raw text is HTML-escaped, then the
+// `ts_headline` sentinels are swapped for `<mark>` tags. Consumers
+// may fall back to `Title`/`Description` when they prefer plain text.
 type Hit struct {
-	Kind        Kind    `json:"kind"`
-	ProjectID   string  `json:"project_id"`
-	Rank        float32 `json:"rank"`
-	Title       string  `json:"title"`
-	Description string  `json:"description,omitempty"`
-	TaskID      string  `json:"task_id,omitempty"`
-	DocPath     string  `json:"doc_path,omitempty"`
-	DocScope    string  `json:"doc_scope,omitempty"`
-	NodeSlug    string  `json:"node_slug,omitempty"`
-	NodeKind    string  `json:"node_kind,omitempty"`
-	TaskState   string  `json:"task_state,omitempty"`
-	TaskType    string  `json:"task_type,omitempty"`
+	Kind            Kind    `json:"kind"`
+	ProjectID       string  `json:"project_id"`
+	Rank            float32 `json:"rank"`
+	Title           string  `json:"title"`
+	Description     string  `json:"description,omitempty"`
+	TitleHTML       string  `json:"title_html,omitempty"`
+	DescriptionHTML string  `json:"description_html,omitempty"`
+	TaskID          string  `json:"task_id,omitempty"`
+	DocPath         string  `json:"doc_path,omitempty"`
+	DocScope        string  `json:"doc_scope,omitempty"`
+	NodeSlug        string  `json:"node_slug,omitempty"`
+	NodeKind        string  `json:"node_kind,omitempty"`
+	TaskState       string  `json:"task_state,omitempty"`
+	TaskType        string  `json:"task_type,omitempty"`
+}
+
+// highlightSentinelStart / End are the rare strings ts_headline wraps
+// around matches (configured in queries/search.sql). They are escaped
+// before being swapped for real <mark> tags so user content that
+// happens to contain HTML stays escaped.
+const (
+	highlightSentinelStart = "«MARK»"
+	highlightSentinelEnd   = "«/MARK»"
+)
+
+func highlightSnippet(s string) string {
+	if s == "" {
+		return ""
+	}
+	out := html.EscapeString(s)
+	out = strings.ReplaceAll(out, highlightSentinelStart, "<mark>")
+	out = strings.ReplaceAll(out, highlightSentinelEnd, "</mark>")
+	return out
 }
 
 // Filter narrows a Search call.
@@ -84,18 +111,20 @@ func Search(ctx context.Context, pool *pgxpool.Pool, query string, f Filter) ([]
 	out := make([]Hit, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, Hit{
-			Kind:        Kind(r.Kind),
-			ProjectID:   r.ProjectID,
-			Rank:        r.Rank,
-			Title:       r.Title,
-			Description: r.Description,
-			TaskID:      r.TaskID,
-			DocPath:     r.DocPath,
-			DocScope:    r.DocScope,
-			NodeSlug:    r.NodeSlug,
-			NodeKind:    r.NodeKind,
-			TaskState:   r.TaskState,
-			TaskType:    r.TaskType,
+			Kind:            Kind(r.Kind),
+			ProjectID:       r.ProjectID,
+			Rank:            r.Rank,
+			Title:           r.Title,
+			Description:     r.Description,
+			TitleHTML:       highlightSnippet(string(r.TitleHeadline)),
+			DescriptionHTML: highlightSnippet(string(r.DescriptionHeadline)),
+			TaskID:          r.TaskID,
+			DocPath:         r.DocPath,
+			DocScope:        r.DocScope,
+			NodeSlug:        r.NodeSlug,
+			NodeKind:        r.NodeKind,
+			TaskState:       r.TaskState,
+			TaskType:        r.TaskType,
 		})
 	}
 	return out, nil
