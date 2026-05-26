@@ -105,6 +105,28 @@ class NottarioProjectSettings extends LitElement {
     /* project-settings-only override: separation from inline name. */
     .badge.admin { margin-left: 6px; }
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
+    .owner-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #f6f8fa;
+    }
+    .owner-row .lbl {
+      font-weight: 600;
+      color: #1f2328;
+      min-width: 60px;
+    }
+    .owner-row select {
+      padding: 4px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #fff;
+      font: inherit;
+    }
     tr[draggable] { cursor: grab; }
     tr.dragging { opacity: 0.45; }
     tr.drag-over td:first-child { box-shadow: inset 2px 0 0 0 #1f6feb; }
@@ -261,6 +283,7 @@ class NottarioProjectSettings extends LitElement {
           <dt><strong>Primary language</strong></dt><dd>${p.PrimaryLanguage || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Project type</strong></dt><dd>${p.ProjectType || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Default view</strong></dt><dd>${currentView.label}</dd>
+          <dt><strong>Cycle label</strong></dt><dd>${p.CycleLabel || 'sprint'}</dd>
           <dt><strong>Repositories</strong></dt>
           <dd>${p.Repos && p.Repos.length
                 ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map(r => html`<li>${r}</li>`)}</ul>`
@@ -293,6 +316,9 @@ class NottarioProjectSettings extends LitElement {
               <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
             `)}
           </select>
+        </nottario-field>
+        <nottario-field label="Cycle label" hint="e.g. sprint, iteration, milestone — used when auto-naming new cycles">
+          <input name="cycle_label" .value=${p.CycleLabel || 'sprint'} style="max-width:260px">
         </nottario-field>
         <nottario-field label="Repositories" hint="one per line or comma-separated, format owner/repo">
           <textarea name="repos" rows="3" .value=${reposText}></textarea>
@@ -340,6 +366,7 @@ class NottarioProjectSettings extends LitElement {
       primary_language: f.primary_language.value.trim(),
       project_type: f.project_type.value.trim(),
       default_view: f.default_view.value,
+      cycle_label: f.cycle_label.value.trim(),
       repos: f.repos.value.split(/\s*,\s*|\n+/).map(s => s.trim()).filter(Boolean),
     };
     try {
@@ -515,10 +542,54 @@ class NottarioProjectSettings extends LitElement {
     } catch (err) { this.error = err.message; }
   }
 
+  _uniqueMembers() {
+    return [...new Map((this.members || []).map(m => [m.UserID, m])).values()];
+  }
+
+  _memberByID(uid) {
+    if (!uid) return null;
+    return this._uniqueMembers().find(m => m.UserID === uid) || null;
+  }
+
+  async _setOwner(userID) {
+    if (!userID) return;
+    try {
+      const r = await fetch(`/api/projects/${this.projectId}/owner`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_user_id: userID }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        this.error = body.error || 'failed to set owner';
+        return;
+      }
+      await this.load();
+    } catch (err) { this.error = err.message; }
+  }
+
   renderMembers() {
     const admin = this.me?.is_admin;
     const colCount = admin ? 3 : 2;
+    const owner = this._memberByID(this.project.OwnerUserID);
     return html`
+      ${admin ? html`
+        <div class="owner-row">
+          <span class="lbl">Owner</span>
+          <select @change=${(e) => this._setOwner(e.target.value)}>
+            ${this._uniqueMembers().map(m => html`
+              <option value=${m.UserID} ?selected=${m.UserID === this.project.OwnerUserID}>
+                ${m.DisplayName || m.GithubLogin}
+              </option>
+            `)}
+          </select>
+        </div>
+      ` : html`
+        <div class="owner-row">
+          <span class="lbl">Owner</span>
+          <span>${owner ? (owner.DisplayName || owner.GithubLogin) : html`<span class="muted">—</span>`}</span>
+        </div>
+      `}
       <table class="data-table">
         <thead>
           <tr>

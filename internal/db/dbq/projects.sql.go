@@ -429,6 +429,21 @@ func (q *Queries) SetProjectOwner(ctx context.Context, arg SetProjectOwnerParams
 	return err
 }
 
+const updateProjectCycleLabel = `-- name: UpdateProjectCycleLabel :exec
+UPDATE projects SET cycle_label = $1::text, updated_at = now()
+WHERE id = $2::uuid
+`
+
+type UpdateProjectCycleLabelParams struct {
+	CycleLabel string
+	ID         uuid.UUID
+}
+
+func (q *Queries) UpdateProjectCycleLabel(ctx context.Context, arg UpdateProjectCycleLabelParams) error {
+	_, err := q.db.Exec(ctx, updateProjectCycleLabel, arg.CycleLabel, arg.ID)
+	return err
+}
+
 const updateProjectDefaultView = `-- name: UpdateProjectDefaultView :exec
 UPDATE projects SET default_view = $1::text, updated_at = now()
 WHERE id = $2::uuid

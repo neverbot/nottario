@@ -59,6 +59,10 @@ UPDATE projects SET mcp_page_size = $2, updated_at = now() WHERE id = $1;
 UPDATE projects SET default_view = sqlc.arg('default_view')::text, updated_at = now()
 WHERE id = sqlc.arg('id')::uuid;
 
+-- name: UpdateProjectCycleLabel :exec
+UPDATE projects SET cycle_label = sqlc.arg('cycle_label')::text, updated_at = now()
+WHERE id = sqlc.arg('id')::uuid;
+
 -- name: DeleteProjectByID :exec
 DELETE FROM projects WHERE id = $1;
 

@@ -242,7 +242,7 @@ func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Proj
 // UpdateProject mutates the human-editable fields. defaultView is
 // optional: when empty, the column is left untouched; otherwise it
 // must be a key from ValidDefaultViews.
-func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, description, primaryLanguage, projectType, defaultView string, repos []string) (*Project, error) {
+func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, description, primaryLanguage, projectType, defaultView, cycleLabel string, repos []string) (*Project, error) {
 	if defaultView != "" && !ValidDefaultViews[defaultView] {
 		return nil, errors.New("invalid default_view")
 	}
@@ -266,6 +266,14 @@ func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, 
 		if err := q.UpdateProjectDefaultView(ctx, dbq.UpdateProjectDefaultViewParams{
 			ID:          id,
 			DefaultView: defaultView,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if cycleLabel != "" {
+		if err := q.UpdateProjectCycleLabel(ctx, dbq.UpdateProjectCycleLabelParams{
+			ID:         id,
+			CycleLabel: cycleLabel,
 		}); err != nil {
 			return nil, err
 		}
