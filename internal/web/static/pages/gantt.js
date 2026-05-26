@@ -354,7 +354,7 @@ class NottarioGantt extends LitElement {
   }
 
   updated(c) {
-    if (c.has('projectId')) {
+    if (c && c.has && c.has('projectId')) {
       this.load();
       this._subscribe();
       this._initialCenterDone = false; // re-centre when project changes
@@ -365,6 +365,48 @@ class NottarioGantt extends LitElement {
     if (!this._initialCenterDone && this.tasks && this.tasks.length) {
       this._centerOnNow();
     }
+    this._repositionHoverCard();
+  }
+
+  // After every render, measure the hover card's real width/height
+  // and reposition it. Content-driven width (220–320 in CSS) and
+  // height mean the template's estimate can be off until we measure
+  // — without this the left/up flip math opens an oversized gap.
+  _repositionHoverCard() {
+    const card = this.shadowRoot?.querySelector('.hover-card');
+    if (!card || !this._hover) {
+      this._lastCardW = null;
+      this._lastCardH = null;
+      return;
+    }
+    const measuredW = card.offsetWidth;
+    const measuredH = card.offsetHeight;
+    const dwOK = Math.abs((this._lastCardW || 0) - measuredW) < 1;
+    const dhOK = Math.abs((this._lastCardH || 0) - measuredH) < 1;
+    if (dwOK && dhOK) return;
+    this._lastCardW = measuredW;
+    this._lastCardH = measuredH;
+    const { barX, barY, cursor } = this._hover;
+    const stage = this.shadowRoot.querySelector('.stage');
+    const scrollLeft = stage?.scrollLeft || 0;
+    const stageW = stage?.clientWidth || 800;
+    const scrollTop = stage?.scrollTop || 0;
+    const stageH = stage?.clientHeight || 600;
+    const anchorX = cursor ? cursor.x : barX;
+    const anchorY = cursor ? cursor.y : barY;
+    const offX = cursor ? 14 : 8;
+    const offYBelow = cursor ? 16 : -8;
+    const offYAbove = cursor ? 16 : 8;
+    let left = anchorX + offX;
+    if (left + measuredW > scrollLeft + stageW) {
+      left = Math.max(scrollLeft + 8, anchorX - measuredW - offX);
+    }
+    let top = Math.max(8, anchorY + offYBelow);
+    if (top + measuredH > scrollTop + stageH) {
+      top = Math.max(scrollTop + 8, anchorY - measuredH - offYAbove);
+    }
+    card.style.left = `${left}px`;
+    card.style.top  = `${top}px`;
   }
 
   // Public: called from the board page's "↻ Now" button. Same target
@@ -1398,51 +1440,6 @@ class NottarioGantt extends LitElement {
     if (this._selectedAnchor || this._selectedSet.size > 0) {
       this._clearSelection();
     }
-  }
-
-  // After every render, measure the hover card's real width and
-  // re-position it if our estimate (used in `_renderHoverCard`) was
-  // off by more than a pixel. Without this the left-flip would
-  // assume the max width (320) while content-driven cards are
-  // often narrower, opening an oversized gap on the cursor side.
-  updated() {
-    const card = this.shadowRoot?.querySelector('.hover-card');
-    if (!card || !this._hover) {
-      this._lastCardW = null;
-      this._lastCardH = null;
-      return;
-    }
-    const measuredW = card.offsetWidth;
-    const measuredH = card.offsetHeight;
-    const dwOK = Math.abs((this._lastCardW || 0) - measuredW) < 1;
-    const dhOK = Math.abs((this._lastCardH || 0) - measuredH) < 1;
-    if (dwOK && dhOK) return;
-    this._lastCardW = measuredW;
-    this._lastCardH = measuredH;
-    // Recompute both axes so the gap matches whichever side the
-    // popup ends up on; with content-driven width AND height the
-    // template's estimates can be off until we measure.
-    const { barX, barY, cursor } = this._hover;
-    const stage = this.shadowRoot.querySelector('.stage');
-    const scrollLeft = stage?.scrollLeft || 0;
-    const stageW = stage?.clientWidth || 800;
-    const scrollTop = stage?.scrollTop || 0;
-    const stageH = stage?.clientHeight || 600;
-    const anchorX = cursor ? cursor.x : barX;
-    const anchorY = cursor ? cursor.y : barY;
-    const offX = cursor ? 14 : 8;
-    const offYBelow = cursor ? 16 : -8;
-    const offYAbove = cursor ? 16 : 8;
-    let left = anchorX + offX;
-    if (left + measuredW > scrollLeft + stageW) {
-      left = Math.max(scrollLeft + 8, anchorX - measuredW - offX);
-    }
-    let top = Math.max(8, anchorY + offYBelow);
-    if (top + measuredH > scrollTop + stageH) {
-      top = Math.max(scrollTop + 8, anchorY - measuredH - offYAbove);
-    }
-    card.style.left = `${left}px`;
-    card.style.top  = `${top}px`;
   }
 
   // Render the popup for the currently-hovered task. Position is
