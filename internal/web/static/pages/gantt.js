@@ -341,6 +341,12 @@ class NottarioGantt extends LitElement {
   }
 
   _toggleFold(featureID) {
+    // Expanding/collapsing reflows the bars below this point;
+    // dismiss the hover popup so it doesn't hang in space anchored
+    // to a coordinate that no longer matches the bar the user
+    // clicked.
+    this._hover = null;
+    this._pointerBarID = null;
     const next = new Set(this.foldedFeatures);
     if (next.has(featureID)) next.delete(featureID); else next.add(featureID);
     this.foldedFeatures = next;
