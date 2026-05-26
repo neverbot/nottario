@@ -1231,7 +1231,8 @@ class NottarioGantt extends LitElement {
                       stroke=${color}
                       stroke-dasharray="6 3"
                       style="cursor:pointer"
-                      @click=${(e) => { e.stopPropagation(); this._toggleFold(t.ID); }}
+                      @click=${(e) => { e.stopPropagation(); this._onTaskClick(t); }}
+                      @dblclick=${(e) => { e.stopPropagation(); this._toggleFold(t.ID); }}
                       @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
                       @mousemove=${(e) => this._onBarMove(e, t, p.from, y)}
                       @mouseleave=${() => this._onBarLeave()}
@@ -1500,7 +1501,7 @@ class NottarioGantt extends LitElement {
              style=${`left:${left}px; top:${top}px`}>
           <div class="title">${t.Title}</div>
           <div class="meta">${childCount} task${childCount === 1 ? '' : 's'} · ${rolesText}</div>
-          <div class="meta">Click to expand</div>
+          <div class="meta">Double-click to expand</div>
         </div>
       `;
     }
