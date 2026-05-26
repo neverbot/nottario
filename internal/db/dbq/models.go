@@ -71,6 +71,17 @@ type ArchNodeLink struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type Cycle struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	Name            string
+	Position        int32
+	OpenedAt        pgtype.Timestamptz
+	ClosedAt        pgtype.Timestamptz
+	ClosedByUserID  *uuid.UUID
+	ClosedByTokenID *uuid.UUID
+}
+
 type Document struct {
 	ID               uuid.UUID
 	Scope            string
