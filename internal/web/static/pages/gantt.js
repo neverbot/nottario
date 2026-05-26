@@ -1350,9 +1350,14 @@ class NottarioGantt extends LitElement {
   // _onBarHover stashes the task plus the bar's top-left in SVG
   // (scrolled-content) coords. The bar anchor is the keyboard-focus
   // fallback when no cursor is available. For pointer hover the
-  // popup follows the mouse via _onBarMove.
+  // popup follows the mouse via _onBarMove. If a cursor was already
+  // tracked for this same task (mouseenter then click → focus), we
+  // keep it so the popup doesn't jump back to the bar's top-left
+  // just because the rect received keyboard focus.
   _onBarHover(_e, task, barX, barY) {
-    this._hover = { task, barX, barY, cursor: null };
+    const prior = this._hover;
+    const cursor = (prior && prior.task && prior.task.ID === task.ID) ? prior.cursor : null;
+    this._hover = { task, barX, barY, cursor };
   }
   // Convert a pointer event into scrolled-content coords (the same
   // frame `position: absolute` children of `.stage` live in) and
