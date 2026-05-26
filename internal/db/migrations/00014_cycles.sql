@@ -15,6 +15,24 @@ CREATE TABLE cycles (
 CREATE UNIQUE INDEX cycles_one_active_per_project
     ON cycles(project_id) WHERE closed_at IS NULL;
 
+ALTER TABLE projects
+    ADD COLUMN cycle_label text NOT NULL DEFAULT 'sprint',
+    ADD COLUMN owner_user_id uuid REFERENCES users(id);
+
+-- Backfill: owner = creator. created_by_user_id is nullable but
+-- every real project has it set; defensive default to first admin
+-- if absent (instance always has at least one admin after first
+-- login).
+UPDATE projects
+SET owner_user_id = COALESCE(
+        created_by_user_id,
+        (SELECT id FROM users WHERE is_admin ORDER BY created_at LIMIT 1)
+    );
+
+ALTER TABLE projects ALTER COLUMN owner_user_id SET NOT NULL;
+
 -- +goose Down
+ALTER TABLE projects DROP COLUMN IF EXISTS owner_user_id;
+ALTER TABLE projects DROP COLUMN IF EXISTS cycle_label;
 DROP INDEX IF EXISTS cycles_one_active_per_project;
 DROP TABLE IF EXISTS cycles;

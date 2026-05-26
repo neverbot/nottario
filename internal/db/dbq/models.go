@@ -141,6 +141,8 @@ type Project struct {
 	UpdatedAt       pgtype.Timestamptz
 	McpPageSize     int32
 	DefaultView     string
+	CycleLabel      string
+	OwnerUserID     uuid.UUID
 }
 
 type ProjectPriority struct {
