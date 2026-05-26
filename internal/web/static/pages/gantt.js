@@ -1191,6 +1191,7 @@ class NottarioGantt extends LitElement {
                       style="cursor:pointer"
                       @click=${(e) => { e.stopPropagation(); this._toggleFold(t.ID); }}
                       @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
+                      @mousemove=${(e) => this._onBarMove(e, t, p.from, y)}
                       @mouseleave=${() => this._onBarLeave()}
                       @focus=${(e) => this._onBarHover(e, t, p.from, y)}
                       @blur=${() => this._onBarLeave()}
@@ -1224,6 +1225,7 @@ class NottarioGantt extends LitElement {
                     @click=${(e) => { e.stopPropagation(); this._onTaskClick(t); }}
                     @dblclick=${(e) => { e.stopPropagation(); this._emitSelect(t); }}
                     @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
+                    @mousemove=${(e) => this._onBarMove(e, t, p.from, y)}
                     @mouseleave=${() => this._onBarLeave()}
                     @focus=${(e) => this._onBarHover(e, t, p.from, y)}
                     @blur=${() => this._onBarLeave()}
@@ -1345,13 +1347,25 @@ class NottarioGantt extends LitElement {
     return s.length > n ? s.slice(0, Math.max(0, n - 1)) + '…' : s;
   }
 
-  // _onBarHover stashes the task + its on-canvas anchor coords so
-  // the popup template can render. The anchor is the bar's
-  // top-left in SVG coords; we convert to DOM-relative-to-stage
-  // pixels at render time (the stage scrolls horizontally, so we
-  // also account for current scrollLeft / scrollTop).
+  // _onBarHover stashes the task plus the bar's top-left in SVG
+  // (scrolled-content) coords. The bar anchor is the keyboard-focus
+  // fallback when no cursor is available. For pointer hover the
+  // popup follows the mouse via _onBarMove.
   _onBarHover(_e, task, barX, barY) {
-    this._hover = { task, barX, barY };
+    this._hover = { task, barX, barY, cursor: null };
+  }
+  // Convert a pointer event into scrolled-content coords (the same
+  // frame `position: absolute` children of `.stage` live in) and
+  // stash them so the popup can track the cursor on mousemove.
+  _onBarMove(e, task, barX, barY) {
+    const stage = this.shadowRoot?.querySelector('.stage');
+    if (!stage) return;
+    const r = stage.getBoundingClientRect();
+    const cursor = {
+      x: (e.clientX - r.left) + stage.scrollLeft,
+      y: (e.clientY - r.top)  + stage.scrollTop,
+    };
+    this._hover = { task, barX, barY, cursor };
   }
   _onBarLeave() {
     this._hover = null;
@@ -1372,23 +1386,28 @@ class NottarioGantt extends LitElement {
   // and a small offset keep the card visually anchored.
   _renderHoverCard() {
     if (!this._hover) return null;
-    const { task: t, barX, barY } = this._hover;
+    const { task: t, barX, barY, cursor } = this._hover;
     const stage = this.shadowRoot?.querySelector('.stage');
     const stageW = stage?.clientWidth || 800;
     const scrollLeft = stage?.scrollLeft || 0;
     // The card is `position: absolute` inside `.stage` (which is
     // `position: relative` + `overflow: auto`), so its coordinates
-    // are in the scrolled SVG content space, not the viewport. We
-    // do NOT subtract scrollLeft. Default anchor: 8px to the right
-    // of the bar's start, just above it.
+    // are in the scrolled SVG content space, not the viewport. When
+    // a pointer cursor is available we anchor to it (offset so the
+    // popup never covers what it describes); on keyboard focus we
+    // fall back to the bar's top-left.
     const cardW = 320;
-    let left = barX + 8;
-    const top = Math.max(8, barY - 8);
-    // Flip to the left side of the bar if the card would extend
+    const anchorX = cursor ? cursor.x : barX;
+    const anchorY = cursor ? cursor.y : barY;
+    const offX = cursor ? 14 : 8;
+    const offY = cursor ? 16 : -8;
+    let left = anchorX + offX;
+    const top = Math.max(8, anchorY + offY);
+    // Flip to the left side of the anchor if the card would extend
     // past the visible viewport's right edge.
     const viewportRight = scrollLeft + stageW;
     if (left + cardW > viewportRight) {
-      left = Math.max(scrollLeft + 8, barX - cardW - 8);
+      left = Math.max(scrollLeft + 8, anchorX - cardW - offX);
     }
 
     const role = t.TargetRoleID ? this.roles.find(r => r.ID === t.TargetRoleID) : null;
