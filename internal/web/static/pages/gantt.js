@@ -1399,7 +1399,13 @@ class NottarioGantt extends LitElement {
     const cardW = 320;
     const anchorX = cursor ? cursor.x : barX;
     const anchorY = cursor ? cursor.y : barY;
-    const offX = cursor ? 14 : 8;
+    // The mac/Windows pointer arrow has its hotspot at the top-left
+    // tip and its body extends DOWN-RIGHT into the area where a
+    // right-anchored popup sits. To make the visual gap look the
+    // same on both sides we need a smaller numeric gap on the left
+    // (where the cursor body points away from the card).
+    const offX     = cursor ? 14 : 8;
+    const offXLeft = cursor ? 4  : 8;
     const offY = cursor ? 16 : -8;
     let left = anchorX + offX;
     const top = Math.max(8, anchorY + offY);
@@ -1407,7 +1413,7 @@ class NottarioGantt extends LitElement {
     // past the visible viewport's right edge.
     const viewportRight = scrollLeft + stageW;
     if (left + cardW > viewportRight) {
-      left = Math.max(scrollLeft + 8, anchorX - cardW - offX);
+      left = Math.max(scrollLeft + 8, anchorX - cardW - offXLeft);
     }
 
     const role = t.TargetRoleID ? this.roles.find(r => r.ID === t.TargetRoleID) : null;
