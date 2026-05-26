@@ -1614,18 +1614,16 @@ class NottarioGantt extends LitElement {
     const user = t.AssigneeUserID
       ? this.members.find(m => m.UserID === t.AssigneeUserID)
       : null;
-    const dateStr = (iso) => iso ? new Date(iso).toLocaleDateString() : '';
-    const start = t.ActualStart || t.PlannedStart;
-    const end   = t.ActualEnd   || t.PlannedEnd;
     const isFolded = t.Type === 'feature' && this.foldedFeatures.has(t.ID);
     const childCount = isFolded
       ? (this.tasks || []).filter(x => x.ParentTaskID === t.ID).length
       : 0;
 
     // Single template for every bar — features and tasks share the
-    // same chrome (chip row + optional dates + optional assignee).
-    // Feature-only meta sits below the dates so the layout reads
-    // identical regardless of type.
+    // same chrome (chip row + optional assignee). Nottario doesn't
+    // model calendar dates for tasks (Gantt positions are by zone +
+    // priority + topological depth, not dates), so the popup
+    // intentionally omits any date row.
     return html`
       <div class="hover-card" role="tooltip"
            style=${`left:${left}px; top:${top}px`}>
@@ -1642,9 +1640,6 @@ class NottarioGantt extends LitElement {
             <span class="chip role" style=${`background:${role.Color || '#59636e'}`}>${role.Label}</span>
           ` : null}
         </div>
-        ${start || end ? html`
-          <div class="meta">${dateStr(start)}${start && end ? ' → ' : ''}${dateStr(end)}</div>
-        ` : null}
         ${user ? html`
           <div class="assignee">
             ${user.AvatarURL ? html`<img src=${user.AvatarURL} alt="">` : null}
