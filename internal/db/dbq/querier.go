@@ -12,6 +12,7 @@ import (
 )
 
 type Querier interface {
+	AcquireCycleLock(ctx context.Context, projectID string) error
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
 	ArchKindExists(ctx context.Context, arg ArchKindExistsParams) (bool, error)
 	ArchNodeCycleCheck(ctx context.Context, arg ArchNodeCycleCheckParams) (bool, error)
@@ -22,6 +23,7 @@ type Querier interface {
 	ClaimNextEligibleTask(ctx context.Context, arg ClaimNextEligibleTaskParams) (ClaimNextEligibleTaskRow, error)
 	ClaimTask(ctx context.Context, arg ClaimTaskParams) error
 	ClearProjectRepos(ctx context.Context, projectID uuid.UUID) error
+	CloseCycle(ctx context.Context, arg CloseCycleParams) error
 	CountArchKinds(ctx context.Context, projectID uuid.UUID) (int32, error)
 	CountArchNodeChildren(ctx context.Context, parentID *uuid.UUID) (int32, error)
 	CountNodesByKind(ctx context.Context, arg CountNodesByKindParams) (int32, error)
@@ -38,11 +40,13 @@ type Querier interface {
 	DeleteSessionByID(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
+	GetActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
 	// Resolves an architecture node chip by slug.
 	GetArchChipBySlug(ctx context.Context, arg GetArchChipBySlugParams) (GetArchChipBySlugRow, error)
 	GetArchNodeBySlug(ctx context.Context, arg GetArchNodeBySlugParams) (GetArchNodeBySlugRow, error)
 	GetArchNodeIDBySlug(ctx context.Context, arg GetArchNodeIDBySlugParams) (uuid.UUID, error)
+	GetCycle(ctx context.Context, id uuid.UUID) (Cycle, error)
 	// Resolves a doc chip by its logical path within a project.
 	GetDocChipByPath(ctx context.Context, arg GetDocChipByPathParams) (GetDocChipByPathRow, error)
 	GetDocumentByPath(ctx context.Context, arg GetDocumentByPathParams) (GetDocumentByPathRow, error)
@@ -52,6 +56,7 @@ type Querier interface {
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
 	GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (GetProjectByIDOrSlugRow, error)
+	GetProjectCycleLabel(ctx context.Context, id uuid.UUID) (string, error)
 	// Reads the body and frontmatter of a single skill-override document
 	// keyed by its full path (e.g. 'global/skills/domains/tasks.md').
 	// Returns ErrNoRows when there is no override for that path.
@@ -71,6 +76,7 @@ type Querier interface {
 	InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error)
 	InsertArchNode(ctx context.Context, arg InsertArchNodeParams) (InsertArchNodeRow, error)
 	InsertArchNodeLink(ctx context.Context, arg InsertArchNodeLinkParams) error
+	InsertCycle(ctx context.Context, arg InsertCycleParams) (Cycle, error)
 	InsertDefaultArchKind(ctx context.Context, arg InsertDefaultArchKindParams) error
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
 	InsertDocument(ctx context.Context, arg InsertDocumentParams) (InsertDocumentRow, error)
@@ -96,6 +102,7 @@ type Querier interface {
 	ListArchKinds(ctx context.Context, projectID uuid.UUID) ([]ArchNodeKind, error)
 	ListArchNodeLinks(ctx context.Context, nodeID uuid.UUID) ([]ArchNodeLink, error)
 	ListArchNodes(ctx context.Context, arg ListArchNodesParams) ([]ListArchNodesRow, error)
+	ListCycles(ctx context.Context, projectID uuid.UUID) ([]Cycle, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
 	ListDocumentVersions(ctx context.Context, documentID uuid.UUID) ([]ListDocumentVersionsRow, error)
@@ -130,11 +137,21 @@ type Querier interface {
 	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
 	ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	LockActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LookupAPIToken(ctx context.Context, tokenHash []byte) (LookupAPITokenRow, error)
 	MoveArchNode(ctx context.Context, arg MoveArchNodeParams) (MoveArchNodeRow, error)
+	// For every feature in `from_cycle` that isn't done, move it AND
+	// all its recursive descendants to `to_cycle`. Done children of
+	// those features get re-stamped (they had cycle_id = from_cycle).
+	MovePartialFeatureSubtrees(ctx context.Context, arg MovePartialFeatureSubtreesParams) (int64, error)
+	// Move any task in `from_cycle` that is not yet done AND was not
+	// already moved as part of a feature subtree (i.e. its cycle_id is
+	// still the closing cycle).
+	MoveStandaloneNonDone(ctx context.Context, arg MoveStandaloneNonDoneParams) (int64, error)
+	NextCyclePosition(ctx context.Context, projectID uuid.UUID) (int32, error)
 	// Preview: returns the next pickable task without claiming it. Same
 	// eligibility rules as ClaimNextEligibleTask but no row lock and no
 	// mutation. Use ClaimNextEligibleTask for atomic pickup.
