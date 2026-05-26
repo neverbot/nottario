@@ -29,6 +29,15 @@ SET owner_user_id = COALESCE(
         (SELECT id FROM users WHERE is_admin ORDER BY created_at LIMIT 1)
     );
 
+-- +goose StatementBegin
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM projects WHERE owner_user_id IS NULL) THEN
+        RAISE EXCEPTION 'cannot backfill projects.owner_user_id: % project(s) have no owner candidate (no created_by_user_id and no admin users to fall back to)',
+            (SELECT count(*) FROM projects WHERE owner_user_id IS NULL);
+    END IF;
+END $$;
+-- +goose StatementEnd
+
 ALTER TABLE projects ALTER COLUMN owner_user_id SET NOT NULL;
 
 -- One sprint-1 per project, position 1, open.
@@ -44,7 +53,7 @@ FROM cycles c
 WHERE c.project_id = t.project_id AND c.position = 1;
 
 ALTER TABLE tasks ALTER COLUMN cycle_id SET NOT NULL;
-CREATE INDEX tasks_cycle_id_idx ON tasks(cycle_id);
+CREATE INDEX tasks_cycle_idx ON tasks(cycle_id);
 
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION tasks_enforce_cycle_cascade() RETURNS trigger AS $$
@@ -68,7 +77,7 @@ CREATE TRIGGER tasks_cycle_cascade
 -- +goose Down
 DROP TRIGGER IF EXISTS tasks_cycle_cascade ON tasks;
 DROP FUNCTION IF EXISTS tasks_enforce_cycle_cascade();
-DROP INDEX IF EXISTS tasks_cycle_id_idx;
+DROP INDEX IF EXISTS tasks_cycle_idx;
 ALTER TABLE tasks DROP COLUMN IF EXISTS cycle_id;
 ALTER TABLE projects DROP COLUMN IF EXISTS owner_user_id;
 ALTER TABLE projects DROP COLUMN IF EXISTS cycle_label;
