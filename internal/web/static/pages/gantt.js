@@ -1409,23 +1409,40 @@ class NottarioGantt extends LitElement {
     const card = this.shadowRoot?.querySelector('.hover-card');
     if (!card || !this._hover) {
       this._lastCardW = null;
+      this._lastCardH = null;
       return;
     }
     const measuredW = card.offsetWidth;
-    if (Math.abs((this._lastCardW || 0) - measuredW) < 1) return;
+    const measuredH = card.offsetHeight;
+    const dwOK = Math.abs((this._lastCardW || 0) - measuredW) < 1;
+    const dhOK = Math.abs((this._lastCardH || 0) - measuredH) < 1;
+    if (dwOK && dhOK) return;
     this._lastCardW = measuredW;
-    // Recompute left so the gap matches the right-side anchor.
-    const { barX, cursor } = this._hover;
+    this._lastCardH = measuredH;
+    // Recompute both axes so the gap matches whichever side the
+    // popup ends up on; with content-driven width AND height the
+    // template's estimates can be off until we measure.
+    const { barX, barY, cursor } = this._hover;
     const stage = this.shadowRoot.querySelector('.stage');
     const scrollLeft = stage?.scrollLeft || 0;
     const stageW = stage?.clientWidth || 800;
+    const scrollTop = stage?.scrollTop || 0;
+    const stageH = stage?.clientHeight || 600;
     const anchorX = cursor ? cursor.x : barX;
+    const anchorY = cursor ? cursor.y : barY;
     const offX = cursor ? 14 : 8;
+    const offYBelow = cursor ? 16 : -8;
+    const offYAbove = cursor ? 16 : 8;
     let left = anchorX + offX;
     if (left + measuredW > scrollLeft + stageW) {
       left = Math.max(scrollLeft + 8, anchorX - measuredW - offX);
     }
+    let top = Math.max(8, anchorY + offYBelow);
+    if (top + measuredH > scrollTop + stageH) {
+      top = Math.max(scrollTop + 8, anchorY - measuredH - offYAbove);
+    }
     card.style.left = `${left}px`;
+    card.style.top  = `${top}px`;
   }
 
   // Render the popup for the currently-hovered task. Position is
@@ -1446,6 +1463,9 @@ class NottarioGantt extends LitElement {
     // min width so the gap can only ever come out smaller, not
     // wider, than intended.
     const cardW = this._lastCardW || 220;
+    const cardH = this._lastCardH || 80;
+    const stageH = stage?.clientHeight || 600;
+    const scrollTop = stage?.scrollTop || 0;
     const anchorX = cursor ? cursor.x : barX;
     const anchorY = cursor ? cursor.y : barY;
     // Same numeric gap on both sides — the previous left-flip drift
@@ -1453,12 +1473,20 @@ class NottarioGantt extends LitElement {
     const offX = cursor ? 14 : 8;
     const offY = cursor ? 16 : -8;
     let left = anchorX + offX;
-    const top = Math.max(8, anchorY + offY);
+    let top = Math.max(8, anchorY + offY);
     // Flip to the left side of the anchor if the card would extend
     // past the visible viewport's right edge.
     const viewportRight = scrollLeft + stageW;
     if (left + cardW > viewportRight) {
       left = Math.max(scrollLeft + 8, anchorX - cardW - offX);
+    }
+    // Flip above the cursor if the card would extend past the
+    // visible viewport's bottom edge — last-row tasks would
+    // otherwise push the popup outside the stage. Symmetrical gap
+    // so above-cursor placement feels the same as below.
+    const viewportBottom = scrollTop + stageH;
+    if (top + cardH > viewportBottom) {
+      top = Math.max(scrollTop + 8, anchorY - cardH - (cursor ? 16 : 8));
     }
 
     const role = t.TargetRoleID ? this.roles.find(r => r.ID === t.TargetRoleID) : null;
