@@ -17,6 +17,7 @@ WITH candidate AS (
   SELECT t.id FROM tasks t
   WHERE t.project_id = $1
     AND t.state = 'todo'
+    AND ($3::uuid IS NULL OR t.cycle_id = $3::uuid)
     AND (
       t.type <> 'feature'
       OR NOT EXISTS (
@@ -31,16 +32,16 @@ WITH candidate AS (
     )
     AND (
       CASE
-        WHEN $3::uuid IS NOT NULL
-             AND coalesce(array_length($4::uuid[], 1), 0) > 0 THEN
-          t.assignee_user_id = $3::uuid
+        WHEN $4::uuid IS NOT NULL
+             AND coalesce(array_length($5::uuid[], 1), 0) > 0 THEN
+          t.assignee_user_id = $4::uuid
           OR (t.assignee_user_id IS NULL AND
               (t.target_role_id IS NULL
-               OR t.target_role_id = ANY($4::uuid[])))
-        WHEN $3::uuid IS NOT NULL THEN
-          t.assignee_user_id = $3::uuid
-        WHEN $5::uuid IS NOT NULL THEN
-          t.target_role_id = $5::uuid OR t.target_role_id IS NULL
+               OR t.target_role_id = ANY($5::uuid[])))
+        WHEN $4::uuid IS NOT NULL THEN
+          t.assignee_user_id = $4::uuid
+        WHEN $6::uuid IS NOT NULL THEN
+          t.target_role_id = $6::uuid OR t.target_role_id IS NULL
         ELSE TRUE
       END
     )
@@ -65,6 +66,7 @@ RETURNING t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_m
 type ClaimNextEligibleTaskParams struct {
 	ProjectID      uuid.UUID
 	CallerUserID   uuid.UUID
+	CycleID        *uuid.UUID
 	AssigneeUserID *uuid.UUID
 	UserRoleIds    []uuid.UUID
 	RoleID         *uuid.UUID
@@ -97,6 +99,7 @@ func (q *Queries) ClaimNextEligibleTask(ctx context.Context, arg ClaimNextEligib
 	row := q.db.QueryRow(ctx, claimNextEligibleTask,
 		arg.ProjectID,
 		arg.CallerUserID,
+		arg.CycleID,
 		arg.AssigneeUserID,
 		arg.UserRoleIds,
 		arg.RoleID,
@@ -381,10 +384,11 @@ WHERE project_id = $1
   AND ($3::text IS NULL OR type = $3::text)
   AND ($4::uuid IS NULL OR assignee_user_id = $4::uuid)
   AND ($5::uuid IS NULL OR target_role_id = $5::uuid)
+  AND ($6::uuid IS NULL OR cycle_id = $6::uuid)
   AND (
     CASE
-      WHEN $6::uuid IS NOT NULL THEN parent_task_id = $6::uuid
-      WHEN $7::bool THEN TRUE
+      WHEN $7::uuid IS NOT NULL THEN parent_task_id = $7::uuid
+      WHEN $8::bool THEN TRUE
       ELSE parent_task_id IS NULL
     END
   )
@@ -397,6 +401,7 @@ type ListTasksParams struct {
 	Type            pgtype.Text
 	AssigneeUserID  *uuid.UUID
 	TargetRoleID    *uuid.UUID
+	CycleID         *uuid.UUID
 	ParentTaskID    *uuid.UUID
 	IncludeChildren bool
 }
@@ -430,6 +435,7 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTas
 		arg.Type,
 		arg.AssigneeUserID,
 		arg.TargetRoleID,
+		arg.CycleID,
 		arg.ParentTaskID,
 		arg.IncludeChildren,
 	)
@@ -480,23 +486,24 @@ WHERE project_id = $1
   AND ($3::text IS NULL OR type = $3::text)
   AND ($4::uuid IS NULL OR assignee_user_id = $4::uuid)
   AND ($5::uuid IS NULL OR target_role_id = $5::uuid)
+  AND ($6::uuid IS NULL OR cycle_id = $6::uuid)
   AND (
     CASE
-      WHEN $6::uuid IS NOT NULL THEN parent_task_id = $6::uuid
-      WHEN $7::bool THEN TRUE
+      WHEN $7::uuid IS NOT NULL THEN parent_task_id = $7::uuid
+      WHEN $8::bool THEN TRUE
       ELSE parent_task_id IS NULL
     END
   )
   AND (
-    $8::int IS NULL
-    OR priority < $8::int
-    OR (priority = $8::int AND created_at > $9::timestamptz)
-    OR (priority = $8::int
-        AND created_at = $9::timestamptz
-        AND id > $10::uuid)
+    $9::int IS NULL
+    OR priority < $9::int
+    OR (priority = $9::int AND created_at > $10::timestamptz)
+    OR (priority = $9::int
+        AND created_at = $10::timestamptz
+        AND id > $11::uuid)
   )
 ORDER BY priority DESC, created_at ASC, id ASC
-LIMIT $11::int
+LIMIT $12::int
 `
 
 type ListTasksPaginatedParams struct {
@@ -505,6 +512,7 @@ type ListTasksPaginatedParams struct {
 	Type            pgtype.Text
 	AssigneeUserID  *uuid.UUID
 	TargetRoleID    *uuid.UUID
+	CycleID         *uuid.UUID
 	ParentTaskID    *uuid.UUID
 	IncludeChildren bool
 	CursorPriority  pgtype.Int4
@@ -543,6 +551,7 @@ func (q *Queries) ListTasksPaginated(ctx context.Context, arg ListTasksPaginated
 		arg.Type,
 		arg.AssigneeUserID,
 		arg.TargetRoleID,
+		arg.CycleID,
 		arg.ParentTaskID,
 		arg.IncludeChildren,
 		arg.CursorPriority,
@@ -644,6 +653,7 @@ SELECT t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_md,
 FROM tasks t
 WHERE t.project_id = $1
   AND t.state = 'todo'
+  AND ($2::uuid IS NULL OR t.cycle_id = $2::uuid)
   AND (
     t.type <> 'feature'
     OR NOT EXISTS (
@@ -658,16 +668,16 @@ WHERE t.project_id = $1
   )
   AND (
     CASE
-      WHEN $2::uuid IS NOT NULL
-           AND coalesce(array_length($3::uuid[], 1), 0) > 0 THEN
-        t.assignee_user_id = $2::uuid
+      WHEN $3::uuid IS NOT NULL
+           AND coalesce(array_length($4::uuid[], 1), 0) > 0 THEN
+        t.assignee_user_id = $3::uuid
         OR (t.assignee_user_id IS NULL AND
             (t.target_role_id IS NULL
-             OR t.target_role_id = ANY($3::uuid[])))
-      WHEN $2::uuid IS NOT NULL THEN
-        t.assignee_user_id = $2::uuid
-      WHEN $4::uuid IS NOT NULL THEN
-        t.target_role_id = $4::uuid OR t.target_role_id IS NULL
+             OR t.target_role_id = ANY($4::uuid[])))
+      WHEN $3::uuid IS NOT NULL THEN
+        t.assignee_user_id = $3::uuid
+      WHEN $5::uuid IS NOT NULL THEN
+        t.target_role_id = $5::uuid OR t.target_role_id IS NULL
       ELSE TRUE
     END
   )
@@ -677,6 +687,7 @@ LIMIT 1
 
 type NextEligibleTaskParams struct {
 	ProjectID      uuid.UUID
+	CycleID        *uuid.UUID
 	AssigneeUserID *uuid.UUID
 	UserRoleIds    []uuid.UUID
 	RoleID         *uuid.UUID
@@ -707,6 +718,7 @@ type NextEligibleTaskRow struct {
 func (q *Queries) NextEligibleTask(ctx context.Context, arg NextEligibleTaskParams) (NextEligibleTaskRow, error) {
 	row := q.db.QueryRow(ctx, nextEligibleTask,
 		arg.ProjectID,
+		arg.CycleID,
 		arg.AssigneeUserID,
 		arg.UserRoleIds,
 		arg.RoleID,

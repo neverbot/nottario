@@ -25,6 +25,7 @@ WHERE project_id = $1
   AND (sqlc.narg('type')::text IS NULL OR type = sqlc.narg('type')::text)
   AND (sqlc.narg('assignee_user_id')::uuid IS NULL OR assignee_user_id = sqlc.narg('assignee_user_id')::uuid)
   AND (sqlc.narg('target_role_id')::uuid IS NULL OR target_role_id = sqlc.narg('target_role_id')::uuid)
+  AND (sqlc.narg('cycle_id')::uuid IS NULL OR cycle_id = sqlc.narg('cycle_id')::uuid)
   AND (
     CASE
       WHEN sqlc.narg('parent_task_id')::uuid IS NOT NULL THEN parent_task_id = sqlc.narg('parent_task_id')::uuid
@@ -50,6 +51,7 @@ WHERE project_id = $1
   AND (sqlc.narg('type')::text IS NULL OR type = sqlc.narg('type')::text)
   AND (sqlc.narg('assignee_user_id')::uuid IS NULL OR assignee_user_id = sqlc.narg('assignee_user_id')::uuid)
   AND (sqlc.narg('target_role_id')::uuid IS NULL OR target_role_id = sqlc.narg('target_role_id')::uuid)
+  AND (sqlc.narg('cycle_id')::uuid IS NULL OR cycle_id = sqlc.narg('cycle_id')::uuid)
   AND (
     CASE
       WHEN sqlc.narg('parent_task_id')::uuid IS NOT NULL THEN parent_task_id = sqlc.narg('parent_task_id')::uuid
@@ -108,6 +110,7 @@ SELECT t.id, t.project_id, t.parent_task_id, t.type, t.title, t.description_md,
 FROM tasks t
 WHERE t.project_id = $1
   AND t.state = 'todo'
+  AND (sqlc.narg('cycle_id')::uuid IS NULL OR t.cycle_id = sqlc.narg('cycle_id')::uuid)
   AND (
     t.type <> 'feature'
     OR NOT EXISTS (
@@ -147,6 +150,7 @@ WITH candidate AS (
   SELECT t.id FROM tasks t
   WHERE t.project_id = $1
     AND t.state = 'todo'
+    AND (sqlc.narg('cycle_id')::uuid IS NULL OR t.cycle_id = sqlc.narg('cycle_id')::uuid)
     AND (
       t.type <> 'feature'
       OR NOT EXISTS (
