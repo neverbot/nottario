@@ -37,6 +37,7 @@ class NottarioGantt extends LitElement {
     _selectedAnchor: { state: true },
     _selectedSet: { state: true },
     _justAppeared: { state: true },
+    _stageWidth: { state: true },
   };
 
   static styles = css`
@@ -410,6 +411,28 @@ class NottarioGantt extends LitElement {
     super.disconnectedCallback();
     clearInterval(this._tick);
     this._unsub?.();
+    this._stageResizeObs?.disconnect();
+  }
+
+  // Measure the .stage's visible width so the SVG can stretch to
+  // cover the viewport even when the backlog is sparse. Without
+  // this the band-bg stripes end where the rightmost task lives and
+  // the stage's white background shows through on the right.
+  _observeStageWidth() {
+    const stage = this.shadowRoot?.querySelector('.stage');
+    if (!stage) return;
+    if (this._stageResizeObs) return; // already wired
+    const update = () => {
+      const w = stage.clientWidth;
+      if (w && Math.abs(w - (this._stageWidth || 0)) > 1) {
+        this._stageWidth = w;
+      }
+    };
+    update();
+    if (typeof ResizeObserver !== 'undefined') {
+      this._stageResizeObs = new ResizeObserver(update);
+      this._stageResizeObs.observe(stage);
+    }
   }
 
   updated(c) {
@@ -433,6 +456,7 @@ class NottarioGantt extends LitElement {
       this._pendingUnfoldScroll = false;
       this._scrollToJustAppeared();
     }
+    this._observeStageWidth();
   }
 
   // Smoothly scroll the .stage so the leftmost just-appeared child
@@ -1154,8 +1178,12 @@ class NottarioGantt extends LitElement {
 
     // Calculate total svg width — the future zone now sizes itself
     // from the sub-column buckets (depth × priority), so we use the
-    // running cursor stashed in _futureEndX.
-    const width = Math.max(futureStartX + futureColumnWidth, this._futureEndX || futureStartX) + 16;
+    // running cursor stashed in _futureEndX. We also floor it at the
+    // stage's visible width (measured after first paint) so the
+    // band-bg stripes never end before the right edge of the viewport
+    // when the backlog is sparse.
+    const intrinsicWidth = Math.max(futureStartX + futureColumnWidth, this._futureEndX || futureStartX) + 16;
+    const width = Math.max(intrinsicWidth, this._stageWidth || 0);
 
     // Build an index for dependency arrows.
     const posByTaskID = new Map(positions.map(p => [p.task.ID, p]));
