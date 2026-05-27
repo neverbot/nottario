@@ -214,6 +214,46 @@ artefacts written to disk must be in English regardless.
 - This `claude.md` lives at `projects/<id>/context/claude.md` in
   Nottario; keep it in sync.
 
+## Dev database is sacred — NEVER wipe it
+
+The dev Postgres container (`nottario-db-1`) and its named volume
+`nottario_db-data` hold the user's real working state: projects,
+tasks, comments, docs, arch nodes, API tokens, memberships. **Under
+no circumstances may an agent (or any human action proxied through
+an agent) execute commands that drop, wipe, or recreate that
+volume.** Specifically banned:
+
+- `docker compose down -v` (the `-v` removes named volumes).
+- `docker volume rm nottario_db-data` (or any volume rm against it).
+- `DROP DATABASE nottario` from psql against the dev container.
+- `TRUNCATE` / `DELETE` against tables in the dev DB without an
+  explicit, in-this-session user request that names the rows.
+- "Reset DB to verify a migration" workflows that touch the dev
+  container.
+
+If you need a clean DB to verify a migration, **use one of these
+options instead**:
+
+1. The Go test helper `internal/testutil.NewPool(t)` creates a
+   fresh, uniquely-named database (via `CREATE DATABASE`) inside
+   the same Postgres instance, runs migrations, and drops it on
+   `t.Cleanup`. Never touches the `nottario` DB.
+2. A separate ephemeral compose project for migration smoke
+   (different `-p` name) so a different volume gets created.
+3. A scratch postgres container started by hand with no volume
+   mount.
+
+If you cannot proceed without resetting the user's DB, **stop and
+ask the user first.** Wiping their backlog and history is
+catastrophic and unrecoverable without external backups, which we
+don't have by default.
+
+History: on 2026-05-26 the dev volume was wiped during the cycles
+feature implementation; the user lost ~60 tasks, every doc, every
+arch node, every comment, and all linked commits. The recovery
+required hand-reconstructing the backlog from `git log` and
+conversation memory. Do not let this happen twice.
+
 ## Pre-commit gate
 
 Before **every** `git commit`, run:
