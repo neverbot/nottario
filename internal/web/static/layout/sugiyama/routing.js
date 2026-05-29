@@ -209,3 +209,74 @@ export function routeOrthogonal(nodes, edges) {
   }
   return routed;
 }
+
+// Post-process: shift overlapping verticals/horizontals apart by
+// TRACK_PITCH. Stub-connected segments (those sharing x with the first
+// or last waypoint) are NOT moved — those connect to face anchors.
+function separateOverlappingSegments(routed) {
+  const TOL = 4;
+  const OVERLAP_MIN = 6;
+  const collectV = () => {
+    const out = [];
+    for (const r of routed) {
+      const wp = r.waypoints;
+      const firstX = wp[0].x, lastX = wp[wp.length - 1].x;
+      for (let i = 0; i < wp.length - 1; i++) {
+        const a = wp[i], b = wp[i + 1];
+        if (Math.abs(a.x - b.x) >= 0.5 || Math.abs(a.y - b.y) <= 1) continue;
+        if (Math.abs(a.x - firstX) < 0.5 || Math.abs(a.x - lastX) < 0.5) continue;
+        out.push({ r, i, x: a.x, y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y) });
+      }
+    }
+    return out;
+  };
+  const collectH = () => {
+    const out = [];
+    for (const r of routed) {
+      const wp = r.waypoints;
+      const firstY = wp[0].y, lastY = wp[wp.length - 1].y;
+      for (let i = 0; i < wp.length - 1; i++) {
+        const a = wp[i], b = wp[i + 1];
+        if (Math.abs(a.y - b.y) >= 0.5 || Math.abs(a.x - b.x) <= 1) continue;
+        if (Math.abs(a.y - firstY) < 0.5 || Math.abs(a.y - lastY) < 0.5) continue;
+        out.push({ r, i, y: a.y, x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x) });
+      }
+    }
+    return out;
+  };
+  const spread = (segs, axis) => {
+    const co = axis === 'v' ? 'x' : 'y';
+    const lo = axis === 'v' ? 'y0' : 'x0';
+    const hi = axis === 'v' ? 'y1' : 'x1';
+    segs.sort((a, b) => a[co] - b[co]);
+    let i = 0;
+    while (i < segs.length) {
+      let j = i + 1;
+      while (j < segs.length && segs[j][co] - segs[i][co] < TOL) j++;
+      const group = segs.slice(i, j);
+      if (group.length > 1) {
+        let conflict = false;
+        for (let a = 0; a < group.length && !conflict; a++) {
+          for (let b = a + 1; b < group.length && !conflict; b++) {
+            const ov = Math.min(group[a][hi], group[b][hi]) -
+                       Math.max(group[a][lo], group[b][lo]);
+            if (ov > OVERLAP_MIN) conflict = true;
+          }
+        }
+        if (conflict) {
+          group.sort((a, b) => a[lo] - b[lo]);
+          const center = group.reduce((s, g) => s + g[co], 0) / group.length;
+          group.forEach((g, k) => {
+            const newCo = center + (k - (group.length - 1) / 2) * TRACK_PITCH;
+            g.r.waypoints[g.i][co] = newCo;
+            g.r.waypoints[g.i + 1][co] = newCo;
+          });
+        }
+      }
+      i = j;
+    }
+  };
+  spread(collectV(), 'v');
+  spread(collectH(), 'h');
+  spread(collectV(), 'v');
+}
