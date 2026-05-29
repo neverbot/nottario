@@ -106,7 +106,16 @@ export function layout({ nodes, edges, expanded }, opts = {}) {
       const w = wrappers.get(id);
       return w ? w.w : 8; // dummy nodes get small width
     };
-    const { x, layerExtents } = assignXCoords(reordered, simpleEdges, nodeWidth);
+    const { x } = assignXCoords(reordered, simpleEdges, nodeWidth);
+    // Normalise x so the leftmost node's LEFT edge sits at 0; the
+    // container's interior padding is added when we place children.
+    let minLeft = Infinity;
+    for (const id of x.keys()) {
+      const wp = wrappers.get(id);
+      const w = wp ? wp.w : 8;
+      minLeft = Math.min(minLeft, x.get(id) - w / 2);
+    }
+    if (!Number.isFinite(minLeft)) minLeft = 0;
     // Apply positions. Each layer has its own y based on cumulative
     // height + LAYER_GAP between layers.
     let cy = LABEL_STRIP + PAD;
@@ -116,7 +125,7 @@ export function layout({ nodes, edges, expanded }, opts = {}) {
       for (const id of layer) {
         const wp = wrappers.get(id);
         if (!wp) continue; // dummy
-        const cx = x.get(id);
+        const cx = x.get(id) - minLeft + PAD;
         wp._relX = cx - wp.w / 2;
         wp._relY = cy;
         if (wp.h > rowH) rowH = wp.h;
@@ -161,6 +170,13 @@ export function layout({ nodes, edges, expanded }, opts = {}) {
   const { layers: rootReordered } = reduceCrossings(rootLayers, rSimple);
   const rootNodeW = (id) => wrappers.get(id)?.w ?? 8;
   const { x: rootX } = assignXCoords(rootReordered, rSimple, rootNodeW);
+  let rootMinLeft = Infinity;
+  for (const id of rootX.keys()) {
+    const wp = wrappers.get(id);
+    const w = wp ? wp.w : 8;
+    rootMinLeft = Math.min(rootMinLeft, rootX.get(id) - w / 2);
+  }
+  if (!Number.isFinite(rootMinLeft)) rootMinLeft = 0;
   // Apply root positions.
   let rcy = CANVAS_PAD;
   for (let li = 0; li < rootReordered.length; li++) {
@@ -169,8 +185,8 @@ export function layout({ nodes, edges, expanded }, opts = {}) {
     for (const id of layer) {
       const wp = wrappers.get(id);
       if (!wp) continue;
-      const cx = rootX.get(id);
-      wp.x = cx - wp.w / 2 + CANVAS_PAD;
+      const cx = rootX.get(id) - rootMinLeft + CANVAS_PAD;
+      wp.x = cx - wp.w / 2;
       wp.y = rcy;
       if (wp.h > rowH) rowH = wp.h;
     }
