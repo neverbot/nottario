@@ -404,7 +404,10 @@ class NottarioArchGraph extends LitElement {
         <div class="engine-toggle" role="radiogroup" aria-label="Layout engine">
           <button class=${`btn ${this._engine === 'custom' ? 'on' : ''}`}
                   role="radio" aria-checked=${this._engine === 'custom'}
-                  @click=${() => this._setEngine('custom')}>Custom</button>
+                  @click=${() => this._setEngine('custom')}>Custom (v1)</button>
+          <button class=${`btn ${this._engine === 'sugiyama' ? 'on' : ''}`}
+                  role="radio" aria-checked=${this._engine === 'sugiyama'}
+                  @click=${() => this._setEngine('sugiyama')}>Sugiyama</button>
           <button class=${`btn ${this._engine === 'elk' ? 'on' : ''}`}
                   role="radio" aria-checked=${this._engine === 'elk'}
                   @click=${() => this._setEngine('elk')}>ELK</button>

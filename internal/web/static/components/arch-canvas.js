@@ -695,9 +695,19 @@ class NottarioArchCanvas extends LitElement {
     // it doesn't, fire the async computation (re-renders happen via
     // requestUpdate at completion) and fall through to the hand-rolled
     // layout as a placeholder so the first paint isn't empty.
-    if ((this.engine || 'custom') === 'elk') {
+    const engine = this.engine || 'custom';
+    if (engine === 'elk') {
       if (this._elkCache && this._elkCacheKey === key) return this._elkCache;
       this._kickElkLayout(key);
+    }
+    if (engine === 'sugiyama') {
+      if (this._sugCache && this._sugCacheKey === key) return this._sugCache;
+      const out = this._runSugiyamaLayout();
+      if (out) {
+        this._sugCache = out;
+        this._sugCacheKey = key;
+        return out;
+      }
     }
     if (this._cachedLayoutKey === key && this._cachedLayout) {
       return this._cachedLayout;
@@ -770,6 +780,82 @@ class NottarioArchCanvas extends LitElement {
       this._kickReflowAnimation(prevPositions, layout);
     }
     return layout;
+  }
+
+  // ----- Faithful Sugiyama layout engine -----
+  // Synchronous (no Promise) so it fits into the existing render flow.
+  // Calls into `internal/web/static/layout/sugiyama/index.js`, which
+  // implements the published algorithms phase by phase with invariants.
+  _runSugiyamaLayout() {
+    try {
+      if (!this._sugModule) {
+        // Lazy load the ES module on first use. Cache the namespace so
+        // subsequent calls are synchronous.
+        if (!this._sugModulePromise) {
+          this._sugModulePromise = import('/static/layout/sugiyama/index.js').then(m => {
+            this._sugModule = m;
+            this.requestUpdate();
+          }).catch(err => {
+            // eslint-disable-next-line no-console
+            console.warn('Failed to load Sugiyama module:', err);
+          });
+        }
+        return null;
+      }
+      const { roots, byID } = this._buildTree();
+      if (!roots.length) {
+        return { roots: [], flat: [], byID, width: 600, height: 480 };
+      }
+      // Convert our tree to plain nodes/edges for the module.
+      const moduleNodes = [];
+      const visit = (w) => {
+        moduleNodes.push({
+          id: w.node.ID,
+          parentID: w.node.ParentID || null,
+          kind: w.node.Kind,
+          name: w.node.Name,
+          w: NottarioArchCanvas.LEAF_W,
+          h: NottarioArchCanvas.LEAF_H,
+        });
+        for (const c of w.children || []) visit(c);
+      };
+      for (const r of roots) visit(r);
+      const moduleEdges = (this.edges || []).map(e => ({
+        id: e.FromNodeID + '__' + e.ToNodeID,
+        src: e.FromNodeID,
+        tgt: e.ToNodeID,
+        _orig: e,
+      }));
+      const expanded = new Set(this.expanded || []);
+      const result = this._sugModule.layout(
+        { nodes: moduleNodes, edges: moduleEdges, expanded },
+        { debug: false });
+      // Apply positions to the wrapper tree.
+      for (const w of byID.values()) {
+        const p = result.positions.get(w.node.ID);
+        if (!p) continue;
+        w.x = p.x; w.y = p.y; w.w = p.w; w.h = p.h;
+        w._isContainer = (w.children?.length || 0) > 0;
+        w._expanded = w._isContainer && expanded.has(w.node.ID);
+      }
+      const flat = this._flatten(roots);
+      // Translate routes (using original edge objects) into our format.
+      const routedEdges = result.routes.map(r => ({
+        d: this._pathD(r.waypoints),
+        waypoints: r.waypoints,
+        edge: r.edge,
+      }));
+      return {
+        roots, flat, byID,
+        width:  result.width  || 600,
+        height: result.height || 480,
+        _elkRouted: routedEdges, // reuse the same field name; render() reads it
+      };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('Sugiyama layout failed, falling back to custom:', err);
+      return null;
+    }
   }
 
   // ----- ELK-based layout engine -----
