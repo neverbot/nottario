@@ -68,7 +68,15 @@ class NottarioArchGraph extends LitElement {
     nottario-arch-canvas {
       display: block;
       border-right: 1px solid #d1d9e0;
-      min-height: 70vh;
+      /* HEIGHT, not min-height. With min-height alone, the inner SVG
+         (width:100% height:100% with a viewBox) auto-grows to keep
+         the viewBox's aspect ratio, dragging the host's height
+         along. The fit() result then renders at a much larger pixel
+         size than the visible viewport, which reads as "zoomed in"
+         on first paint. A fixed viewport-relative height caps the
+         host, the SVG fills it, and preserveAspectRatio="meet" does
+         the visible fitting. */
+      height: 70vh;
       /* Round only the LEFT corners so the right-side separator
          (border-right above) stays a perfectly vertical line. */
       border-top-left-radius: 7px;
