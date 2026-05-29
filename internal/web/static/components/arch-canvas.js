@@ -47,6 +47,9 @@ class NottarioArchCanvas extends LitElement {
     // two endpoints) — drives the panel-hover-an-edge UX where the
     // right rail wants the canvas to single-out one connection.
     highlightEdge: { type: String, attribute: 'highlight-edge' },
+    // 'custom' uses our hand-rolled Sugiyama+channel router.
+    // 'elk'    uses vendored elkjs (layered+orthogonal) via _elkLayout.
+    engine: { type: String },
 
     _viewBox: { state: true },
     _hover:   { state: true },
@@ -207,6 +210,10 @@ class NottarioArchCanvas extends LitElement {
     this.focus = '';
     this.query = '';
     this.highlightEdge = '';
+    this.engine = 'custom';
+    this._elkLoadPromise = null;
+    this._elkCache = null;
+    this._elkCacheKey = '';
 
     this._viewBox = null;         // { x, y, w, h } — null until first layout
     this._hover = '';
@@ -264,11 +271,12 @@ class NottarioArchCanvas extends LitElement {
   updated(changed) {
     super.updated?.(changed);
     // Layout changes when nodes/edges/expanded change.
-    const layoutChanged = changed.has('nodes') || changed.has('edges') || changed.has('expanded');
+    const layoutChanged = changed.has('nodes') || changed.has('edges') || changed.has('expanded') || changed.has('engine');
     if (layoutChanged) {
       this._cachedLayoutKey = '';   // invalidate layout cache
       this._cachedRoutes = null;    // route cache is keyed on the layout
       this._cachedRoutesKey = '';
+      this._elkCacheKey = '';       // ELK cache shares the same lifetime
     }
     // Animate the viewBox toward the focused subtree when focus changes.
     if (changed.has('focus')) {
@@ -675,12 +683,22 @@ class NottarioArchCanvas extends LitElement {
   }
 
   _layout() {
-    // Memoise — layout is purely a function of (nodes, edges, expanded).
+    // Memoise — layout is purely a function of (engine, nodes, edges, expanded).
     const key = JSON.stringify({
+      engine: this.engine || 'custom',
       nodes: (this.nodes || []).map(n => n.ID + '|' + n.ParentID),
       edges: (this.edges || []).map(e => e.FromNodeID + '>' + e.ToNodeID),
       expanded: [...(this.expanded || [])].sort(),
     });
+    // ELK is async; we keep its output in `_elkCache` and reuse it.
+    // When the cache key matches, return the ELK-computed layout. When
+    // it doesn't, fire the async computation (re-renders happen via
+    // requestUpdate at completion) and fall through to the hand-rolled
+    // layout as a placeholder so the first paint isn't empty.
+    if ((this.engine || 'custom') === 'elk') {
+      if (this._elkCache && this._elkCacheKey === key) return this._elkCache;
+      this._kickElkLayout(key);
+    }
     if (this._cachedLayoutKey === key && this._cachedLayout) {
       return this._cachedLayout;
     }
@@ -752,6 +770,183 @@ class NottarioArchCanvas extends LitElement {
       this._kickReflowAnimation(prevPositions, layout);
     }
     return layout;
+  }
+
+  // ----- ELK-based layout engine -----
+  //
+  // Calls vendored elkjs to produce positions + edge waypoints. The
+  // result is shaped to look identical to a hand-rolled `_layout()`
+  // result (roots[], flat[], byID, width, height with wrappers carrying
+  // x/y/w/h and _relX/_relY) so all downstream rendering, animation,
+  // focus, hover, and edge label code keeps working unchanged.
+
+  _ensureElkLoaded() {
+    if (typeof window !== 'undefined' && window.ELK) return Promise.resolve();
+    if (this._elkLoadPromise) return this._elkLoadPromise;
+    this._elkLoadPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/static/vendor/elkjs/elk.bundled.js';
+      s.async = true;
+      s.onload  = () => resolve();
+      s.onerror = () => reject(new Error('Failed to load elkjs'));
+      document.head.appendChild(s);
+    });
+    return this._elkLoadPromise;
+  }
+
+  async _kickElkLayout(targetKey) {
+    if (this._elkComputing === targetKey) return;
+    this._elkComputing = targetKey;
+    try {
+      await this._ensureElkLoaded();
+      const out = await this._runElkLayout();
+      if (this._elkComputing !== targetKey) return; // superseded
+      this._elkCache = out;
+      this._elkCacheKey = targetKey;
+      this.requestUpdate();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('ELK layout failed, falling back to custom:', err);
+    } finally {
+      if (this._elkComputing === targetKey) this._elkComputing = null;
+    }
+  }
+
+  async _runElkLayout() {
+    // Build a tree of wrappers (same shape _buildTree produces) so the
+    // downstream code can read .children / parent links.
+    const { roots, byID } = this._buildTree();
+    if (!roots.length) {
+      return { roots: [], flat: [], byID, width: 600, height: 480 };
+    }
+    // Determine which container wrappers are visually expanded; only
+    // those expose their children to ELK. Collapsed containers and
+    // leaves get a fixed leaf size.
+    const isExpanded = (w, depth) => this._isExpanded(w, depth);
+    const elkNodeFor = (w, depth = 0) => {
+      const hasKids = (w.children?.length || 0) > 0;
+      const expanded = hasKids && isExpanded(w, depth);
+      const node = {
+        id: w.node.ID,
+        labels: [{ text: w.node.Name || '' }],
+        layoutOptions: {
+          'elk.padding': '[top=44,left=24,bottom=24,right=24]',
+        },
+      };
+      if (!hasKids || !expanded) {
+        node.width  = NottarioArchCanvas.LEAF_W;
+        node.height = NottarioArchCanvas.LEAF_H;
+      } else {
+        node.children = w.children.map(c => elkNodeFor(c, depth + 1));
+      }
+      return node;
+    };
+    const elkChildren = roots.map(r => elkNodeFor(r, 0));
+    // Edges: ELK wants source/target as node IDs. We pass the raw IDs;
+    // ELK handles hierarchy and projection internally for layered.
+    const visibleIDs = new Set();
+    const collect = (n) => {
+      visibleIDs.add(n.id);
+      for (const c of (n.children || [])) collect(c);
+    };
+    for (const r of elkChildren) collect(r);
+    const elkEdges = [];
+    for (const e of (this.edges || [])) {
+      // Only include edges whose endpoints are reachable in the layered
+      // graph. For collapsed containers, we project the endpoint to its
+      // nearest visible ancestor.
+      const project = (id) => {
+        if (visibleIDs.has(id)) return id;
+        let w = byID.get(id);
+        while (w && w.node.ParentID) {
+          if (visibleIDs.has(w.node.ParentID)) return w.node.ParentID;
+          w = byID.get(w.node.ParentID);
+        }
+        return null;
+      };
+      const s = project(e.FromNodeID);
+      const t = project(e.ToNodeID);
+      if (!s || !t || s === t) continue;
+      elkEdges.push({
+        id: `${e.FromNodeID}__${e.ToNodeID}`,
+        sources: [s],
+        targets: [t],
+        _origEdge: e,
+      });
+    }
+    const elkGraph = {
+      id: 'root',
+      layoutOptions: {
+        'elk.algorithm': 'layered',
+        'elk.direction': 'DOWN',
+        'elk.edgeRouting': 'ORTHOGONAL',
+        'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+        'elk.layered.spacing.nodeNodeBetweenLayers': '64',
+        'elk.spacing.nodeNode': '32',
+        'elk.spacing.edgeNode': '16',
+        'elk.spacing.edgeEdge': '14',
+        'elk.layered.nodePlacement.bk.fixedAlignment': 'BALANCED',
+        'elk.layered.crossingMinimization.semiInteractive': 'true',
+      },
+      children: elkChildren,
+      edges: elkEdges,
+    };
+    const elk = new window.ELK();
+    const result = await elk.layout(elkGraph);
+    // Walk the ELK result, copying positions into wrappers (absolute
+    // coords for x/y; w/h for width/height; _relX/_relY mirror x/y
+    // relative to the parent so _placeChildren-style code still works).
+    const applyPositions = (elkNode, parentAbsX = 0, parentAbsY = 0) => {
+      const w = byID.get(elkNode.id);
+      if (!w) return;
+      const absX = parentAbsX + (elkNode.x ?? 0);
+      const absY = parentAbsY + (elkNode.y ?? 0);
+      w.x = absX;
+      w.y = absY;
+      w.w = elkNode.width  ?? NottarioArchCanvas.LEAF_W;
+      w.h = elkNode.height ?? NottarioArchCanvas.LEAF_H;
+      w._relX = elkNode.x ?? 0;
+      w._relY = elkNode.y ?? 0;
+      w._isContainer = (w.children?.length || 0) > 0;
+      w._expanded = w._isContainer && (elkNode.children?.length || 0) > 0;
+      for (const c of (elkNode.children || [])) applyPositions(c, absX, absY);
+    };
+    for (const n of result.children || []) applyPositions(n, 0, 0);
+    // Translate ELK edge sections (sequence of {startPoint, bendPoints,
+    // endPoint}) into our waypoints + d.
+    const routedEdges = [];
+    const wByID = new Map(roots.flatMap(r => this._flatten([r])).map(w => [w.node.ID, w]));
+    for (const ee of (result.edges || [])) {
+      const orig = elkEdges.find(x => x.id === ee.id)?._origEdge;
+      if (!orig) continue;
+      const wp = [];
+      const sec = ee.sections?.[0];
+      if (!sec) continue;
+      // ELK gives endpoints in the COORDINATE SYSTEM of the edge's
+      // container. We need absolute. Find the container and add its
+      // absolute origin to each waypoint.
+      let cx = 0, cy = 0;
+      if (ee.container) {
+        const cw = wByID.get(ee.container);
+        if (cw) { cx = cw.x; cy = cw.y; }
+      }
+      wp.push({ x: cx + sec.startPoint.x, y: cy + sec.startPoint.y });
+      for (const bp of (sec.bendPoints || [])) {
+        wp.push({ x: cx + bp.x, y: cy + bp.y });
+      }
+      wp.push({ x: cx + sec.endPoint.x, y: cy + sec.endPoint.y });
+      routedEdges.push({ d: this._pathD(wp), waypoints: wp, edge: orig });
+    }
+    const flat = this._flatten(roots);
+    const out = {
+      roots,
+      flat,
+      byID,
+      width:  (result.width  || 600),
+      height: (result.height || 480),
+      _elkRouted: routedEdges,
+    };
+    return out;
   }
 
   // Phase C — hub-aware node and channel expansion. Two responsibilities:
@@ -2707,11 +2902,16 @@ class NottarioArchCanvas extends LitElement {
       ({ routedEdges, anchorPlan, wByID, obstacles } = this._cachedRoutes);
     } else {
       wByID = new Map(layout.flat.map(w => [w.node.ID, w]));
-      // Channel router (Phase A rewrite). Replaces the obstacles + A*
-      // + congestion pipeline with deterministic gap-track allocation.
-      const channelRouted = this._routeChannels(this.edges || [], wByID, layout);
-      routedEdges = channelRouted.routed;
-      anchorPlan  = channelRouted.planned;
+      // ELK produces routedEdges directly inside _layout(); reuse them.
+      // For the custom engine, fall through to the channel router.
+      if (layout._elkRouted) {
+        routedEdges = layout._elkRouted;
+        anchorPlan  = [];
+      } else {
+        const channelRouted = this._routeChannels(this.edges || [], wByID, layout);
+        routedEdges = channelRouted.routed;
+        anchorPlan  = channelRouted.planned;
+      }
       // Keep a lightweight obstacle map purely so the existing label
       // placement code (`_renderEdgeLabel`) can avoid printing pills
       // over nodes. The router itself no longer reads it.
