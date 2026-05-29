@@ -74,6 +74,12 @@ class NottarioArchCanvas extends LitElement {
   // congestion penalty.
   static LAYER_GAP   = 96;
   static CANVAS_PAD  = 24;
+  // Constant pitch (in px) between parallel edge tracks AND between
+  // face anchors on the same node side. Using a constant — rather than
+  // dividing the available space by (N+1) — makes parallel edges sit
+  // at predictable, equal distances regardless of how many share the
+  // channel or the face.
+  static TRACK_PITCH = 14;
   static CORNER_R    = 4;
   static FOCUS_MS    = 220;
   static FOCUS_MARGIN = 20;
@@ -217,10 +223,13 @@ class NottarioArchCanvas extends LitElement {
 
   // ----- Public API for the parent -----
 
-  // Reset pan/zoom to fit the whole layout with margin.
+  // Reset pan/zoom to fit the whole layout with margin. Clears the
+  // "user interacted" flag so future data arrivals (edges loading
+  // late, expand-state changing) keep re-fitting automatically.
   fit() {
     const layout = this._layout();
     if (!layout.roots.length) return;
+    this._userInteractedViewBox = false;
     this._animateViewBox({
       x: 0, y: 0, w: layout.width, h: layout.height,
     });
@@ -255,15 +264,23 @@ class NottarioArchCanvas extends LitElement {
   updated(changed) {
     super.updated?.(changed);
     // Layout changes when nodes/edges/expanded change.
-    if (changed.has('nodes') || changed.has('edges') || changed.has('expanded')) {
-      this._cachedLayoutKey = ''; // invalidate cache
+    const layoutChanged = changed.has('nodes') || changed.has('edges') || changed.has('expanded');
+    if (layoutChanged) {
+      this._cachedLayoutKey = '';   // invalidate layout cache
+      this._cachedRoutes = null;    // route cache is keyed on the layout
+      this._cachedRoutesKey = '';
     }
     // Animate the viewBox toward the focused subtree when focus changes.
     if (changed.has('focus')) {
       this._animateForFocus();
     }
-    // First render: initial viewBox is the full layout fit.
-    if (this._viewBox === null) {
+    // (Re)fit viewBox to the current layout. Two cases worth handling:
+    //   • First render — no viewBox yet, set it to the layout bounds.
+    //   • Data arrived later (nodes loaded before edges, expanded set
+    //     changed, …) — the previous fit was over partial data and
+    //     no longer matches what's drawn. Re-fit UNLESS the user has
+    //     already manually panned/zoomed in this session.
+    if (this._viewBox === null || (layoutChanged && !this._userInteractedViewBox)) {
       const layout = this._layout();
       if (layout.roots.length) {
         this._viewBox = { x: 0, y: 0, w: layout.width, h: layout.height };
@@ -451,30 +468,68 @@ class NottarioArchCanvas extends LitElement {
 
   // Pack a single level (layers) into a bounding box, returning
   // per-cell relative coordinates and the totals. Layers stacked
-  // top-down; nodes within a layer left-to-right.
+  // top-down; nodes within a layer left-to-right. When a single
+  // layer holds many nodes (e.g. a level with few inter-child edges,
+  // so Kahn put them all on layer 0), it's reshaped into a roughly
+  // square grid so the parent doesn't blow out horizontally. The
+  // wrapped sub-rows use the same `G` gap as siblings within a
+  // layer (NOT the bigger `LG`) so they read as one logical group.
+  // Edge density between children of the current level; the grid
+  // wrap is only useful when there are very few inter-child edges
+  // (otherwise the regular Sugiyama layers already break a wide
+  // group up into multiple short rows). The caller stashes the
+  // current level's edge count in this._levelEdgeDensity before
+  // calling _packLevel; we fall back to "many edges" so the wrap
+  // never fires when the caller forgot to set it.
   _packLevel(layers) {
     const G  = NottarioArchCanvas.GAP;
     const LG = NottarioArchCanvas.LAYER_GAP;
+    const totalNodes = layers.reduce((s, l) => s + l.length, 0);
+    const sparseEdges = (this._levelEdgeDensity ?? Infinity) * 2 < totalNodes;
+    const WRAP_THRESHOLD = sparseEdges ? 5 : Infinity;
     const gridX = [];
-    const gridY = [];
+    const gridY = []; // gridY[li] is now an array (one Y per cell)
     let curY = 0;
     let maxW = 0;
+    // Phase C adaptive gap: this._adaptiveLayerGap[parentID][li] holds
+    // an override LAYER_GAP for the channel BELOW layer `li` of the
+    // current parent. _phaseCExpand pre-computes these from edge counts.
+    const adaptiveLG = this._currentAdaptiveLG || null;
     for (let li = 0; li < layers.length; li++) {
       const layer = layers[li];
-      let curX = 0;
-      const rowH = layer.length ? Math.max(...layer.map(c => c.h)) : 0;
-      const xs = [];
-      for (const c of layer) {
-        xs.push(curX);
-        curX += c.w + G;
+      const n = layer.length;
+      const wrap = n >= WRAP_THRESHOLD;
+      const cols = wrap ? Math.max(WRAP_THRESHOLD - 1, Math.ceil(Math.sqrt(n))) : n;
+      const xs = new Array(n);
+      const ys = new Array(n);
+      let subRowY = curY;
+      let subRowX = 0;
+      let rowMaxH = 0;
+      let subRowStart = 0;
+      let layerMaxW = 0;
+      for (let i = 0; i < n; i++) {
+        const c = layer[i];
+        if (i > subRowStart && (i - subRowStart) >= cols) {
+          const rowW = Math.max(0, subRowX - G);
+          if (rowW > layerMaxW) layerMaxW = rowW;
+          subRowY += rowMaxH + G;
+          subRowX = 0;
+          rowMaxH = 0;
+          subRowStart = i;
+        }
+        xs[i] = subRowX;
+        ys[i] = subRowY;
+        subRowX += c.w + G;
+        if (c.h > rowMaxH) rowMaxH = c.h;
       }
-      const rowW = Math.max(0, curX - G);
-      if (rowW > maxW) maxW = rowW;
+      const lastRowW = Math.max(0, subRowX - G);
+      if (lastRowW > layerMaxW) layerMaxW = lastRowW;
+      const layerHeight = (subRowY + rowMaxH) - curY;
+      if (layerMaxW > maxW) maxW = layerMaxW;
       gridX.push(xs);
-      gridY.push(curY);
-      // Use the bigger vertical gap between layers so edges + label
-      // pills fit; siblings within a layer still use G.
-      curY += rowH + LG;
+      gridY.push(ys);
+      const thisLG = adaptiveLG?.[li] ?? LG;
+      curY += layerHeight + thisLG;
     }
     return {
       gridX,
@@ -490,8 +545,11 @@ class NottarioArchCanvas extends LitElement {
   // bbox and stores relative child positions in c._relX / c._relY.
   _packSugiyama(w, depth = 0) {
     if (!w.children.length) {
-      w.w = NottarioArchCanvas.LEAF_W;
-      w.h = NottarioArchCanvas.LEAF_H;
+      // Phase C: hub-aware sizing. A leaf widens (or grows tall) when
+      // _phaseCExpand decided one of its faces needs more room for
+      // parallel tracks. _minW/_minH default to LEAF_W/LEAF_H.
+      w.w = Math.max(NottarioArchCanvas.LEAF_W, w._minW || 0);
+      w.h = Math.max(NottarioArchCanvas.LEAF_H, w._minH || 0);
       w._isContainer = false;
       w._expanded = false;
       return;
@@ -508,12 +566,18 @@ class NottarioArchCanvas extends LitElement {
     const edges = this._levelEdges(w.children, w.node.ID);
     const layers = this._assignLayers(w.children, edges);
     this._orderInLayers(layers, edges);
+    this._levelEdgeDensity = edges.length;
+    // Phase C adaptive gap: per-container override stashed by
+    // _phaseCExpand. _packLevel reads `_currentAdaptiveLG` directly.
+    const prevALG = this._currentAdaptiveLG;
+    this._currentAdaptiveLG = this._allAdaptiveLG?.get(w.node.ID) || null;
     const placed = this._packLevel(layers);
+    this._currentAdaptiveLG = prevALG;
     for (let li = 0; li < layers.length; li++) {
       for (let i = 0; i < layers[li].length; i++) {
         const c = layers[li][i];
         c._relX = placed.gridX[li][i];
-        c._relY = placed.gridY[li];
+        c._relY = placed.gridY[li][i];
       }
     }
     const pad = NottarioArchCanvas.PAD;
@@ -646,13 +710,14 @@ class NottarioArchCanvas extends LitElement {
     const rootEdges = this._levelEdges(roots, null);
     const rootLayers = this._assignLayers(roots, rootEdges);
     this._orderInLayers(rootLayers, rootEdges);
+    this._levelEdgeDensity = rootEdges.length;
     const rootPlace = this._packLevel(rootLayers);
     const pad = NottarioArchCanvas.CANVAS_PAD;
     for (let li = 0; li < rootLayers.length; li++) {
       for (let i = 0; i < rootLayers[li].length; i++) {
         const r = rootLayers[li][i];
         r.x = pad + rootPlace.gridX[li][i];
-        r.y = pad + rootPlace.gridY[li];
+        r.y = pad + rootPlace.gridY[li][i];
         this._placeChildren(r);
       }
     }
@@ -663,8 +728,23 @@ class NottarioArchCanvas extends LitElement {
       width:  rootPlace.totalW + pad * 2,
       height: rootPlace.totalH + pad * 2,
     };
-    this._cachedLayout = layout;
-    this._cachedLayoutKey = key;
+    // Phase B — global barycenter reorder. Sugiyama already minimises
+    // intra-container crossings; this pass goes further by including
+    // edges that LEAVE the container (e.g. an Identity→GitHub edge
+    // moves Identity toward GitHub's x within Backend), iterated until
+    // no row order changes. Capped at 5 iterations as a safety belt.
+    for (let iter = 0; iter < 5; iter++) {
+      if (!this._globalBarycenterPass(layout, this.edges || [])) break;
+    }
+    // Phase C — hub-aware expansion. Count edges per face; for each
+    // overloaded face widen/extend the node so all anchors fit at
+    // TRACK_PITCH. Also count edges per inter-row channel and grow
+    // LAYER_GAP if a channel needs more parallel tracks than the
+    // default. If anything expanded, rebuild the layout once.
+    if (this._phaseCExpand(layout, roots, byID, rootPlace, pad)) {
+      // After expansion, _packSugiyama + _packLevel + _placeChildren
+      // ran inside _phaseCExpand. layout.width/height refreshed.
+    }
     // Kick reflow animation if we had a prior layout. The animation
     // mutates the wrappers in-place each frame so subsequent renders
     // (from requestUpdate) see the interpolated positions.
@@ -672,6 +752,211 @@ class NottarioArchCanvas extends LitElement {
       this._kickReflowAnimation(prevPositions, layout);
     }
     return layout;
+  }
+
+  // Phase C — hub-aware node and channel expansion. Two responsibilities:
+  //
+  //   • Face load: count how many edges touch each (node, side). If a
+  //     face needs more anchors than fit at TRACK_PITCH (with corner
+  //     margins), set _minW/_minH on the LEAF so a fresh _packSugiyama
+  //     gives it room.
+  //   • Channel load: count edges per inter-layer channel within each
+  //     container. If a channel needs more parallel tracks than the
+  //     default LAYER_GAP can hold, stash an adaptive LAYER_GAP for
+  //     that specific channel; _packLevel reads `_currentAdaptiveLG`
+  //     to apply per-layer gap overrides during the re-pack.
+  //
+  // Returns true when at least one expansion fired (caller may rebuild
+  // the layout once more if it likes; here we already do it inline).
+  _phaseCExpand(layout, roots, byID, rootPlace, pad) {
+    const PITCH = NottarioArchCanvas.TRACK_PITCH;
+    const MARGIN = 16;
+    const STUB = NottarioArchCanvas.STUB_CELLS * NottarioArchCanvas.GRID_CELL;
+    const LG = NottarioArchCanvas.LAYER_GAP;
+
+    // ---- 1. Face load ----
+    const faceCount = new Map();
+    for (const e of (this.edges || [])) {
+      const src = byID.get(e.FromNodeID);
+      const tgt = byID.get(e.ToNodeID);
+      if (!src || !tgt) continue;
+      if (typeof src.x !== 'number' || typeof tgt.x !== 'number') continue;
+      const [sSide, tSide] = this._chooseSides(src, tgt);
+      const sK = src.node.ID + '|' + sSide;
+      const tK = tgt.node.ID + '|' + tSide;
+      faceCount.set(sK, (faceCount.get(sK) || 0) + 1);
+      faceCount.set(tK, (faceCount.get(tK) || 0) + 1);
+    }
+    let anyExpand = false;
+    for (const [key, n] of faceCount) {
+      if (n <= 1) continue;
+      const [nodeID, side] = key.split('|');
+      const w = byID.get(nodeID);
+      if (!w) continue;
+      if (w._isContainer && w._expanded) continue; // resize handled by children
+      const required = (n - 1) * PITCH + 2 * MARGIN;
+      if (side === 'top' || side === 'bottom') {
+        if ((w._minW || 0) < required) { w._minW = required; anyExpand = true; }
+      } else {
+        if ((w._minH || 0) < required) { w._minH = required; anyExpand = true; }
+      }
+    }
+
+    // ---- 2. Channel load (inter-layer gaps per container) ----
+    const chanCount = new Map(); // key: parentID|liBelow → count
+    for (const e of (this.edges || [])) {
+      const src = byID.get(e.FromNodeID);
+      const tgt = byID.get(e.ToNodeID);
+      if (!src || !tgt) continue;
+      if (typeof src.x !== 'number' || typeof tgt.x !== 'number') continue;
+      const [sSide, tSide] = this._chooseSides(src, tgt);
+      const sV = sSide === 'top' || sSide === 'bottom';
+      const tV = tSide === 'top' || tSide === 'bottom';
+      if (!sV || !tV) continue;
+      // Identify the inter-layer y the edge crosses through. Use the
+      // midpoint between source bottom and target top.
+      const sFY = sSide === 'bottom' ? src.y + src.h : src.y;
+      const tFY = tSide === 'top'    ? tgt.y         : tgt.y + tgt.h;
+      const midY = (sFY + tFY) / 2;
+      // Find a container whose children straddle midY (the channel
+      // lives in that container).
+      for (const w of layout.flat) {
+        if (!w._isContainer || !w._expanded) continue;
+        if (midY <= w.y || midY >= w.y + w.h) continue;
+        // Walk the children; identify the row pair the midY sits in.
+        const ys = [...new Set(w.children.map(c => Math.round(c.y)))].sort((a, b) => a - b);
+        for (let i = 0; i < ys.length - 1; i++) {
+          const rowTop = ys[i];
+          const rowBot = ys[i + 1];
+          // Row block i ends at top of row i+1: gap channel is
+          // (rowTop + LEAF_H, rowTop + LEAF_H + LG).
+          // Use child heights instead of LEAF_H to be robust.
+          const childH = w.children.find(c => Math.round(c.y) === rowTop)?.h
+                       || NottarioArchCanvas.LEAF_H;
+          const channelTop = rowTop + childH;
+          const channelBot = rowBot;
+          if (midY >= channelTop && midY <= channelBot) {
+            const key = w.node.ID + '|' + i;
+            chanCount.set(key, (chanCount.get(key) || 0) + 1);
+          }
+        }
+        break;
+      }
+    }
+    const adaptiveLG = new Map(); // containerID → { liBelow: gapPx }
+    for (const [key, n] of chanCount) {
+      if (n <= 1) continue;
+      const [parentID, liStr] = key.split('|');
+      const li = +liStr;
+      const required = (n - 1) * PITCH + 2 * STUB + 2 * MARGIN;
+      if (required > LG) {
+        if (!adaptiveLG.has(parentID)) adaptiveLG.set(parentID, {});
+        adaptiveLG.get(parentID)[li] = required;
+        anyExpand = true;
+      }
+    }
+
+    if (!anyExpand) return false;
+
+    // ---- 3. Re-pack the layout with new sizes / gaps ----
+    // _allAdaptiveLG is consulted INSIDE _packSugiyama, per container.
+    this._allAdaptiveLG = adaptiveLG;
+    for (const r of roots) this._packSugiyama(r, 0);
+    this._allAdaptiveLG = null;
+
+    // Re-pack the root level.
+    const rootEdges = this._levelEdges(roots, null);
+    const rootLayers = this._assignLayers(roots, rootEdges);
+    this._orderInLayers(rootLayers, rootEdges);
+    this._levelEdgeDensity = rootEdges.length;
+    const newRootPlace = this._packLevel(rootLayers);
+    for (let li = 0; li < rootLayers.length; li++) {
+      for (let i = 0; i < rootLayers[li].length; i++) {
+        const r = rootLayers[li][i];
+        r.x = pad + newRootPlace.gridX[li][i];
+        r.y = pad + newRootPlace.gridY[li][i];
+        this._placeChildren(r);
+      }
+    }
+    layout.width  = newRootPlace.totalW + pad * 2;
+    layout.height = newRootPlace.totalH + pad * 2;
+    return true;
+  }
+
+  // Phase B — single barycenter pass across the whole layout. For each
+  // expanded container, group its children by row, then for each row
+  // reorder by the average x-coordinate of every node each child is
+  // connected to (in absolute coords, so an edge into an external
+  // ancestor like GitHub counts toward the source-side child's
+  // ideal x). Returns true if any row order changed; the caller
+  // re-iterates until stable. Sibling-only barycenter (the kind Sugiyama
+  // already does via _orderInLayers) is captured here too because the
+  // sibling's centre is just another connected x.
+  _globalBarycenterPass(layout, edges) {
+    const absPos = new Map();
+    for (const w of layout.flat) {
+      if (typeof w.x === 'number') {
+        absPos.set(w.node.ID, { cx: w.x + w.w / 2, cy: w.y + w.h / 2 });
+      }
+    }
+    const descCache = new Map();
+    const collectDesc = (w) => {
+      if (descCache.has(w.node.ID)) return descCache.get(w.node.ID);
+      const set = new Set([w.node.ID]);
+      if (w.children) for (const c of w.children) {
+        for (const id of collectDesc(c)) set.add(id);
+      }
+      descCache.set(w.node.ID, set);
+      return set;
+    };
+    let anyChange = false;
+    const containers = layout.flat.filter(w =>
+      w._isContainer && w._expanded && (w.children?.length || 0) > 1);
+    const G = NottarioArchCanvas.GAP;
+    for (const c of containers) {
+      const rows = new Map();
+      for (const child of c.children) {
+        const yKey = Math.round(child._relY ?? 0);
+        if (!rows.has(yKey)) rows.set(yKey, []);
+        rows.get(yKey).push(child);
+      }
+      for (const row of rows.values()) {
+        if (row.length <= 1) continue;
+        for (const child of row) {
+          const descs = collectDesc(child);
+          let sum = 0, n = 0;
+          for (const e of edges) {
+            const inSrc = descs.has(e.FromNodeID);
+            const inDst = descs.has(e.ToNodeID);
+            if (inSrc === inDst) continue; // both inside or both outside → skip
+            const otherID = inSrc ? e.ToNodeID : e.FromNodeID;
+            const p = absPos.get(otherID);
+            if (!p) continue;
+            sum += p.cx; n++;
+          }
+          child._idealX = n > 0 ? (sum / n) : (child.x + child.w / 2);
+        }
+        const oldOrder = row.map(c => c.node.ID).join(',');
+        row.sort((a, b) => a._idealX - b._idealX);
+        const newOrder = row.map(c => c.node.ID).join(',');
+        if (oldOrder !== newOrder) {
+          anyChange = true;
+          // Reassign _relX within the row (preserve total row width).
+          let cur = row[0]._relX; // anchor at leftmost original x
+          for (const child of row) {
+            child._relX = cur;
+            cur += child.w + G;
+          }
+        }
+      }
+    }
+    if (anyChange) {
+      // Recompute absolute positions so the next iteration sees the
+      // new geometry. roots' x/y are already set; placeChildren walks
+      // down using _relX/_relY.
+      for (const r of layout.roots) this._placeChildren(r);
+    }
+    return anyChange;
   }
 
   // Animate every wrapper's x/y/w/h from its previous position to
@@ -797,13 +1082,396 @@ class NottarioArchCanvas extends LitElement {
     return { d: this._pathD(waypoints), waypoints, edge };
   }
 
-  // ----- A* obstacle-avoiding router (layout v2) -----
+  // ----- Channel router (Phase A: deterministic gap-track routing) -----
+  //
+  // For each edge:
+  //   1. Choose source/target face based on the geometric relation
+  //      between the two boxes.
+  //   2. Spread anchors along the face so N edges sharing a face don't
+  //      stack on the same coordinate.
+  //   3. Detect obstacles between source and target. If a non-ancestor
+  //      box would be crossed, route via the closest "column strip" or
+  //      "row strip" of free space (5-bend detour). Otherwise use a
+  //      2-bend mid-track path.
+  //   4. Allocate a unique track per shared channel so parallel edges
+  //      don't overlap.
+  //   5. Assemble waypoints. Done.
+  //
+  // No A*, no congestion penalty, no fallback chain.
+  _routeChannels(edges, byID, layout) {
+    const STUB = NottarioArchCanvas.STUB_CELLS * NottarioArchCanvas.GRID_CELL;
 
-  // Build a coarse 8px grid over the laid-out canvas where each leaf
-  // and each collapsed container is a blocked cell (with a 4px buffer).
-  // Expanded containers DON'T block — only their label strip (top
-  // 28px) does, so edges can route through the inner padding of a
-  // container as long as they don't cross a real child.
+    // ---- 1. Face planning ----
+    const planned = [];
+    for (const edge of (edges || [])) {
+      const src = byID.get(edge.FromNodeID);
+      const tgt = byID.get(edge.ToNodeID);
+      if (!src || !tgt) continue;
+      if (typeof src.x !== 'number' || typeof tgt.x !== 'number') continue;
+      const [sSide, tSide] = this._chooseSides(src, tgt);
+      planned.push({ edge, src, tgt, sSide, tSide, sFrac: 0.5, tFrac: 0.5 });
+    }
+
+    // ---- 2. Spread anchors along each (node, face) bucket ----
+    const buckets = new Map();
+    const push = (k, e, end) => {
+      if (!buckets.has(k)) buckets.set(k, []);
+      buckets.get(k).push({ entry: e, end });
+    };
+    for (const p of planned) {
+      push(`${p.src.node.ID}|${p.sSide}`, p, 's');
+      push(`${p.tgt.node.ID}|${p.tSide}`, p, 't');
+    }
+    const PITCH = NottarioArchCanvas.TRACK_PITCH;
+    for (const [key, list] of buckets) {
+      const side = key.split('|')[1];
+      const perpOf = (it) => {
+        const other = it.end === 's' ? it.entry.tgt : it.entry.src;
+        if (side === 'top' || side === 'bottom') return other.x + other.w / 2;
+        return other.y + other.h / 2;
+      };
+      list.sort((a, b) => perpOf(a) - perpOf(b));
+      const n = list.length;
+      // Constant-pitch face spread: anchors sit at `PITCH` px apart,
+      // centred on the node face. With node face length L and N
+      // anchors, the spread occupies (N-1)·PITCH px of L. We clamp
+      // each anchor's frac to [0.05, 0.95] so the stub stays inside
+      // the rounded corner radius; if the bundle exceeds the face
+      // length the clamp collapses ties (Phase C will detect this
+      // and grow the node).
+      list.forEach((it, i) => {
+        const self = it.end === 's' ? it.entry.src : it.entry.tgt;
+        const L = (side === 'top' || side === 'bottom') ? self.w : self.h;
+        const center = 0.5;
+        const offsetPx = (i - (n - 1) / 2) * PITCH;
+        let frac = center + offsetPx / L;
+        if (frac < 0.05) frac = 0.05;
+        if (frac > 0.95) frac = 0.95;
+        if (it.end === 's') it.entry.sFrac = frac;
+        else                it.entry.tFrac = frac;
+      });
+    }
+
+    // ---- 3a. Per-edge: anchor + stub geometry ----
+    for (const p of planned) {
+      p.sAnchor = this._faceAnchorPx(p.src, p.sSide, p.sFrac);
+      p.tAnchor = this._faceAnchorPx(p.tgt, p.tSide, p.tFrac);
+      p.sStub   = this._stubAnchorPx(p.src, p.sSide, p.sFrac, STUB);
+      p.tStub   = this._stubAnchorPx(p.tgt, p.tSide, p.tFrac, STUB);
+    }
+
+    // ---- 3b. Obstacle detection helpers ----
+    const ancestorsSet = (w) => {
+      const out = new Set();
+      let curID = w?.node?.ParentID;
+      while (curID) {
+        const a = byID.get(curID);
+        if (!a) break;
+        out.add(a);
+        curID = a.node.ParentID;
+      }
+      return out;
+    };
+    // Returns true if [y0, y1] at x crosses any non-exempt node's
+    // rect (ignoring source/target/ancestors).
+    const verticalBlocked = (x, y0, y1, exempt) => {
+      const lo = Math.min(y0, y1), hi = Math.max(y0, y1);
+      for (const w of layout.flat) {
+        if (exempt.has(w)) continue;
+        if (x > w.x + 2 && x < w.x + w.w - 2 && lo < w.y + w.h - 2 && hi > w.y + 2) return w;
+      }
+      return null;
+    };
+    const horizontalBlocked = (y, x0, x1, exempt) => {
+      const lo = Math.min(x0, x1), hi = Math.max(x0, x1);
+      for (const w of layout.flat) {
+        if (exempt.has(w)) continue;
+        if (y > w.y + 2 && y < w.y + w.h - 2 && lo < w.x + w.w - 2 && hi > w.x + 2) return w;
+      }
+      return null;
+    };
+
+    // ---- 4. Track allocation per channel ----
+    // For each "vertical-vertical" edge (bottom→top or top→bottom)
+    // sharing a (srcStubY, tgtStubY) bucket, allocate unique midY.
+    // For "horizontal-horizontal" similarly with midX. For mixed (L)
+    // edges, no shared track — they're each unique.
+    const vvGroups = new Map(); // key: "vv|y0|y1" → [planEntries]
+    const hhGroups = new Map();
+    for (const p of planned) {
+      const sV = p.sSide === 'top' || p.sSide === 'bottom';
+      const tV = p.tSide === 'top' || p.tSide === 'bottom';
+      if (sV && tV) {
+        p.bend = 'vv';
+        const k = `vv|${Math.round(p.sStub.y)}|${Math.round(p.tStub.y)}`;
+        if (!vvGroups.has(k)) vvGroups.set(k, []);
+        vvGroups.get(k).push(p);
+      } else if (!sV && !tV) {
+        p.bend = 'hh';
+        const k = `hh|${Math.round(p.sStub.x)}|${Math.round(p.tStub.x)}`;
+        if (!hhGroups.has(k)) hhGroups.set(k, []);
+        hhGroups.get(k).push(p);
+      } else {
+        p.bend = 'L';
+      }
+    }
+    // Constant-pitch channel tracks: parallel edges sit `PITCH` px
+    // apart, centred on the midpoint between the two stubs. The
+    // bundle thus occupies (N-1)·PITCH px of channel height/width
+    // regardless of N — visually neighbouring channels look uniform.
+    for (const list of vvGroups.values()) {
+      list.sort((a, b) =>
+        ((a.sStub.x + a.tStub.x) / 2) - ((b.sStub.x + b.tStub.x) / 2));
+      const n = list.length;
+      const sY = list[0].sStub.y, tY = list[0].tStub.y;
+      const center = (sY + tY) / 2;
+      list.forEach((p, i) => {
+        const offset = (i - (n - 1) / 2) * PITCH;
+        p.midY = center + offset;
+      });
+    }
+    for (const list of hhGroups.values()) {
+      list.sort((a, b) =>
+        ((a.sStub.y + a.tStub.y) / 2) - ((b.sStub.y + b.tStub.y) / 2));
+      const n = list.length;
+      const sX = list[0].sStub.x, tX = list[0].tStub.x;
+      const center = (sX + tX) / 2;
+      list.forEach((p, i) => {
+        const offset = (i - (n - 1) / 2) * PITCH;
+        p.midX = center + offset;
+      });
+    }
+
+    // ---- 5. Waypoint assembly per edge ----
+    // 5a. For each edge: try the canonical short path. If it crosses
+    //     a non-exempt box, switch to a column-strip / row-strip
+    //     detour (5-bend).
+    const routed = [];
+    for (const p of planned) {
+      const wp = this._assembleEdgePath(p, layout, ancestorsSet,
+                                        verticalBlocked, horizontalBlocked);
+      if (wp && wp.length >= 2) {
+        routed.push({ d: '', waypoints: wp, edge: p.edge });
+      }
+    }
+    // 5b. Global track separation. The per-channel allocation above
+    //     only sees edges sharing the same (srcStubY, tgtStubY) bucket;
+    //     edges from different buckets whose detour columns/rows happen
+    //     to collide are NOT separated until this pass. We shift the
+    //     middle (non-face-anchored) verticals & horizontals apart by
+    //     TRACK_PITCH so parallel detours sit next to each other rather
+    //     than on top of each other.
+    this._separateOverlappingSegments(routed);
+    for (const r of routed) r.d = this._pathD(r.waypoints);
+    return { routed, planned };
+  }
+
+  _separateOverlappingSegments(routed) {
+    const PITCH = NottarioArchCanvas.TRACK_PITCH;
+    const TOL = 4;
+    const OVERLAP_MIN = 6;
+    // Helper: pick segments where both endpoints can move freely without
+    // detaching from a face anchor. The face anchor lives at waypoints[0]
+    // and waypoints[length-1]; any vertical at the same x as either of
+    // those (or any horizontal at the same y) feeds the stub and must
+    // stay put.
+    const collectV = () => {
+      const out = [];
+      for (const r of routed) {
+        const wp = r.waypoints;
+        const firstX = wp[0].x, lastX = wp[wp.length - 1].x;
+        for (let i = 0; i < wp.length - 1; i++) {
+          const a = wp[i], b = wp[i + 1];
+          if (Math.abs(a.x - b.x) >= 0.5 || Math.abs(a.y - b.y) <= 1) continue;
+          if (Math.abs(a.x - firstX) < 0.5 || Math.abs(a.x - lastX) < 0.5) continue;
+          out.push({ r, i, x: a.x, y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y) });
+        }
+      }
+      return out;
+    };
+    const collectH = () => {
+      const out = [];
+      for (const r of routed) {
+        const wp = r.waypoints;
+        const firstY = wp[0].y, lastY = wp[wp.length - 1].y;
+        for (let i = 0; i < wp.length - 1; i++) {
+          const a = wp[i], b = wp[i + 1];
+          if (Math.abs(a.y - b.y) >= 0.5 || Math.abs(a.x - b.x) <= 1) continue;
+          if (Math.abs(a.y - firstY) < 0.5 || Math.abs(a.y - lastY) < 0.5) continue;
+          out.push({ r, i, y: a.y, x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x) });
+        }
+      }
+      return out;
+    };
+    const groupAndSpread = (segs, axis) => {
+      const co = axis === 'v' ? 'x' : 'y';
+      const lo = axis === 'v' ? 'y0' : 'x0';
+      const hi = axis === 'v' ? 'y1' : 'x1';
+      segs.sort((a, b) => a[co] - b[co]);
+      let i = 0;
+      while (i < segs.length) {
+        let j = i + 1;
+        while (j < segs.length && segs[j][co] - segs[i][co] < TOL) j++;
+        const group = segs.slice(i, j);
+        if (group.length > 1) {
+          let conflict = false;
+          for (let a = 0; a < group.length && !conflict; a++) {
+            for (let b = a + 1; b < group.length && !conflict; b++) {
+              const ov = Math.min(group[a][hi], group[b][hi]) -
+                         Math.max(group[a][lo], group[b][lo]);
+              if (ov > OVERLAP_MIN) conflict = true;
+            }
+          }
+          if (conflict) {
+            group.sort((a, b) => a[lo] - b[lo]);
+            const center = group.reduce((s, g) => s + g[co], 0) / group.length;
+            group.forEach((g, k) => {
+              const newCo = center + (k - (group.length - 1) / 2) * PITCH;
+              g.r.waypoints[g.i][co] = newCo;
+              g.r.waypoints[g.i + 1][co] = newCo;
+            });
+          }
+        }
+        i = j;
+      }
+    };
+    // Two iterations: first verticals, then horizontals, then
+    // verticals again so any new vertical collision created by the
+    // horizontal pass is also resolved.
+    groupAndSpread(collectV(), 'v');
+    groupAndSpread(collectH(), 'h');
+    groupAndSpread(collectV(), 'v');
+  }
+
+  // Build the actual waypoint list for one planned edge, retrying with
+  // a detour if the straight mid-path would slice through a box.
+  _assembleEdgePath(p, layout, ancestorsOf, vBlock, hBlock) {
+    const exempt = new Set([p.src, p.tgt, ...ancestorsOf(p.src), ...ancestorsOf(p.tgt)]);
+    const wp = [p.sAnchor, p.sStub];
+
+    if (p.bend === 'vv') {
+      const sameX = Math.abs(p.sStub.x - p.tStub.x) < 0.5;
+      const sVertCross = sameX
+        ? vBlock(p.sStub.x, p.sStub.y, p.tStub.y, exempt)
+        : vBlock(p.sStub.x, p.sStub.y, p.midY, exempt);
+      const horizCross = sameX ? null
+        : hBlock(p.midY, Math.min(p.sStub.x, p.tStub.x),
+                          Math.max(p.sStub.x, p.tStub.x), exempt);
+      const tVertCross = sameX ? null
+        : vBlock(p.tStub.x, p.midY, p.tStub.y, exempt);
+      const clean = !sVertCross && !horizCross && !tVertCross;
+      if (clean) {
+        if (!sameX) {
+          wp.push({ x: p.sStub.x, y: p.midY });
+          wp.push({ x: p.tStub.x, y: p.midY });
+        }
+      } else {
+        // 4-bend detour. Hops at sStub.y and tStub.y stay inside the
+        // row strips just outside the source and target rows (which
+        // are guaranteed clear of the row contents the stub already
+        // cleared). Vertical hop runs through the chosen column strip
+        // for the whole span.
+        const detourX = this._findColumnDetour(p, layout, exempt, vBlock, hBlock);
+        if (detourX != null) {
+          wp.push({ x: detourX, y: p.sStub.y });
+          wp.push({ x: detourX, y: p.tStub.y });
+        } else if (!sameX) {
+          // No clean detour; emit canonical (may cross — surfaces the
+          // case for layout-tuning later).
+          wp.push({ x: p.sStub.x, y: p.midY });
+          wp.push({ x: p.tStub.x, y: p.midY });
+        }
+      }
+    } else if (p.bend === 'hh') {
+      const sameY = Math.abs(p.sStub.y - p.tStub.y) < 0.5;
+      const sHorizCross = sameY
+        ? hBlock(p.sStub.y, p.sStub.x, p.tStub.x, exempt)
+        : hBlock(p.sStub.y, p.sStub.x, p.midX, exempt);
+      const vertCross = sameY ? null
+        : vBlock(p.midX, Math.min(p.sStub.y, p.tStub.y),
+                          Math.max(p.sStub.y, p.tStub.y), exempt);
+      const tHorizCross = sameY ? null
+        : hBlock(p.tStub.y, p.midX, p.tStub.x, exempt);
+      const clean = !sHorizCross && !vertCross && !tHorizCross;
+      if (clean) {
+        if (!sameY) {
+          wp.push({ x: p.midX, y: p.sStub.y });
+          wp.push({ x: p.midX, y: p.tStub.y });
+        }
+      } else {
+        const detourY = this._findRowDetour(p, layout, exempt, vBlock, hBlock);
+        if (detourY != null) {
+          wp.push({ x: p.sStub.x, y: detourY });
+          wp.push({ x: p.tStub.x, y: detourY });
+        } else if (!sameY) {
+          wp.push({ x: p.midX, y: p.sStub.y });
+          wp.push({ x: p.midX, y: p.tStub.y });
+        }
+      }
+    } else {
+      const sV = p.sSide === 'top' || p.sSide === 'bottom';
+      if (sV) wp.push({ x: p.sStub.x, y: p.tStub.y });
+      else    wp.push({ x: p.tStub.x, y: p.sStub.y });
+    }
+
+    wp.push(p.tStub);
+    wp.push(p.tAnchor);
+    return this._simplifyOrtho(wp);
+  }
+
+  // Pick a vertical column x where a top-to-bottom run from sStub.y
+  // to tStub.y clears all non-exempt boxes, AND the two horizontal
+  // hops at sStub.y and tStub.y (between source/target x and the
+  // chosen column) are also clear. Candidates are the natural gaps
+  // between adjacent node columns (left edge − pad, right edge + pad).
+  _findColumnDetour(p, layout, exempt, vBlock, hBlock) {
+    const PAD = 12;
+    const candidates = new Set();
+    for (const w of layout.flat) {
+      candidates.add(w.x - PAD);
+      candidates.add(w.x + w.w + PAD);
+    }
+    let best = null, bestCost = Infinity;
+    const targetX = (p.sStub.x + p.tStub.x) / 2;
+    for (const x of candidates) {
+      if (vBlock(x, p.sStub.y, p.tStub.y, exempt)) continue;
+      if (hBlock(p.sStub.y, Math.min(p.sStub.x, x), Math.max(p.sStub.x, x), exempt)) continue;
+      if (hBlock(p.tStub.y, Math.min(p.tStub.x, x), Math.max(p.tStub.x, x), exempt)) continue;
+      const cost = Math.abs(x - targetX);
+      if (cost < bestCost) { bestCost = cost; best = x; }
+    }
+    return best;
+  }
+
+  _findRowDetour(p, layout, exempt, vBlock, hBlock) {
+    const PAD = 12;
+    const candidates = new Set();
+    for (const w of layout.flat) {
+      candidates.add(w.y - PAD);
+      candidates.add(w.y + w.h + PAD);
+    }
+    let best = null, bestCost = Infinity;
+    const targetY = (p.sStub.y + p.tStub.y) / 2;
+    for (const y of candidates) {
+      if (hBlock(y, p.sStub.x, p.tStub.x, exempt)) continue;
+      if (vBlock(p.sStub.x, Math.min(p.sStub.y, y), Math.max(p.sStub.y, y), exempt)) continue;
+      if (vBlock(p.tStub.x, Math.min(p.tStub.y, y), Math.max(p.tStub.y, y), exempt)) continue;
+      const cost = Math.abs(y - targetY);
+      if (cost < bestCost) { bestCost = cost; best = y; }
+    }
+    return best;
+  }
+
+  // ----- Legacy A* router (kept for fallback compatibility; unused) -----
+
+  // Build a coarse 8px grid over the laid-out canvas where EVERY
+  // node (leaf, collapsed container, AND expanded container) is a
+  // blocked cell (with a 4px buffer). Edges that legitimately need
+  // to cross an expanded container's interior — because the source
+  // or target is nested inside it — get a per-edge exemption in A*
+  // for the ancestor chain; everything else (sibling boxes, unrelated
+  // expanded containers) acts as a hard wall, so edges always rotate
+  // around visible boxes instead of slicing under them.
   static GRID_CELL  = 8;
   static GRID_BUF   = 4;
 
@@ -814,19 +1482,42 @@ class NottarioArchCanvas extends LitElement {
     const H = Math.ceil((layout.height + cell * 4) / cell);
     const grid = new Uint8Array(W * H);
     for (const w of layout.flat) {
-      // Containers when expanded only block their label strip; their
-      // interior is "passable" so edges can use the inner padding.
-      let topH = w.h;
-      if (w._isContainer && w._expanded) topH = NottarioArchCanvas.LABEL_STRIP;
       const x0 = Math.max(0, Math.floor((w.x - buf) / cell));
       const y0 = Math.max(0, Math.floor((w.y - buf) / cell));
       const x1 = Math.min(W, Math.ceil((w.x + w.w + buf) / cell));
-      const y1 = Math.min(H, Math.ceil((w.y + topH + buf) / cell));
+      const y1 = Math.min(H, Math.ceil((w.y + w.h + buf) / cell));
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) grid[y * W + x] = 1;
       }
     }
-    return { grid, W, H, cell };
+    return { grid, W, H, cell, flat: layout.flat };
+  }
+
+  // Walk up the parent chain, returning every visible ancestor wrapper
+  // (skipping the wrapper itself). Used by edge routing to exempt the
+  // containers an edge legitimately needs to traverse from the global
+  // "everything blocks" obstacle set.
+  _ancestorWrappers(w, byID) {
+    const out = [];
+    let curID = w?.node?.ParentID;
+    while (curID) {
+      const parent = byID.get(curID);
+      if (!parent) break;
+      if (typeof parent.x === 'number') out.push(parent);
+      curID = parent.node.ParentID;
+    }
+    return out;
+  }
+
+  // True iff the grid cell (cx, cy) intersects the node's rect plus
+  // buffer halo. Same predicate `_buildObstacles` uses to mark cells.
+  _cellTouchesNode(cx, cy, node, obs) {
+    const cell = obs.cell;
+    const buf  = NottarioArchCanvas.GRID_BUF;
+    const px = cx * cell;
+    const py = cy * cell;
+    return px + cell > node.x - buf && px < node.x + node.w + buf &&
+           py + cell > node.y - buf && py < node.y + node.h + buf;
   }
 
   // Pick the grid cell adjacent to a node's chosen exit face. `frac`
@@ -838,9 +1529,12 @@ class NottarioArchCanvas extends LitElement {
   // regions for the source and target.
   // Number of cells the A* anchor sits OUT from the face. Larger
   // values give a longer guaranteed straight stub before the first
-  // corner, so the arrowhead doesn't look like it merges with the
-  // bend. 3 cells = 24px at GRID_CELL=8.
-  static STUB_CELLS  = 3;
+  // corner, so an edge never appears to ride along the box outline:
+  // it leaves perpendicular for STUB_CELLS × GRID_CELL pixels first,
+  // and only then is A* allowed to bend. 5 cells = 40px at
+  // GRID_CELL=8 — wider than the label-pill padding so the stub
+  // breathes past the label before turning.
+  static STUB_CELLS  = 5;
 
   _anchorCell(node, side, obs, frac = 0.5, offsetCells = NottarioArchCanvas.STUB_CELLS) {
     const { cell, W, H } = obs;
@@ -916,16 +1610,53 @@ class NottarioArchCanvas extends LitElement {
   // standard orthogonal-connector-routing approach (Wybrow et al.,
   // Graph Drawing 2009) used by ELK and similar libraries to keep
   // parallel edges from bundling onto a single track.
-  _astar(obs, start, goal, srcNode, tgtNode, congestion = null) {
-    const { grid, W, H } = obs;
+  _astar(obs, start, goal, srcNode, tgtNode, congestion = null, ancestorRects = null) {
+    const { grid, W, H, flat } = obs;
     const idx = (x, y) => y * W + x;
     const heur = (x, y) => Math.abs(goal.x - x) + Math.abs(goal.y - y);
+    // Stub corridor: cells in the source/target node's buffer halo are
+    // ONLY passable along the anchor's perpendicular column (= the
+    // straight stub from face to start/goal). Without this constraint,
+    // A* could glide along the entire buffer halo of the node and the
+    // edge would appear to ride along its own container's border.
+    const STUB = NottarioArchCanvas.STUB_CELLS;
+    const inStubColumn = (x, y, node, anchor, side) => {
+      if (!node || !side || !anchor) return false;
+      if (side === 'bottom' || side === 'top') {
+        return x === anchor.x;
+      }
+      return y === anchor.y;
+    };
+    // Build the set of nodes whose blocking must be IGNORED for this
+    // edge. ONLY ancestor containers are exempt — the edge legitimately
+    // traverses their interior on its way out/in. Source and target
+    // themselves stay in the obstacle set, with one exception handled
+    // by `_inNodeBufferOnly` below: the buffer halo around their chosen
+    // face is passable so the stub anchor can sit just outside it.
+    // (Earlier this code exempted src/tgt entirely; that made A*
+    // happily route THROUGH the source box because its interior was
+    // marked "free", producing visible U-turns where an edge dipped
+    // into its own container before circling back out.)
+    const exempt = new Set(ancestorRects || []);
+    const nonExempt = flat ? flat.filter(w => !exempt.has(w)) : null;
     const isBlocked = (x, y) => {
       if (x === goal.x && y === goal.y) return false;
       if (x === start.x && y === start.y) return false;
       if (!grid[idx(x, y)]) return false;
-      if (srcNode && this._inNodeBufferOnly(x, y, srcNode, obs)) return false;
-      if (tgtNode && this._inNodeBufferOnly(x, y, tgtNode, obs)) return false;
+      // Source/target buffer halo is passable, BUT only along the
+      // stub column (perpendicular axis from the chosen face anchor).
+      // Cells in the buffer halo that lie off-axis stay blocked so A*
+      // can't slide along the node's own border before turning.
+      if (srcNode && this._inNodeBufferOnly(x, y, srcNode, obs)
+          && inStubColumn(x, y, srcNode, start, start.side)) return false;
+      if (tgtNode && this._inNodeBufferOnly(x, y, tgtNode, obs)
+          && inStubColumn(x, y, tgtNode, goal, goal.side)) return false;
+      if (nonExempt) {
+        for (const w of nonExempt) {
+          if (this._cellTouchesNode(x, y, w, obs)) return true;
+        }
+        return false;
+      }
       return true;
     };
     const open = new Map();
@@ -963,10 +1694,13 @@ class NottarioArchCanvas extends LitElement {
           if (c) {
             // Heavy same-axis penalty forces parallel routes to
             // commit to a different track for the whole channel
-            // rather than partially-overlap with a 1-cell zig-zag
-            // (which is what a small penalty produces).
+            // rather than partially-overlap with a 1-cell zig-zag.
+            // Same-axis bumped to 200 so any longer detour the
+            // grid can offer beats coalescing onto an already-used
+            // track; perpendicular crossings (different bit) are
+            // unavoidable in compound layouts so they stay cheap.
             const sameAxis = dx !== 0 ? (c & 1) : (c & 2);
-            g += sameAxis ? 20 : 4;
+            g += sameAxis ? 200 : 4;
           }
         }
         const existing = open.get(k);
@@ -990,18 +1724,23 @@ class NottarioArchCanvas extends LitElement {
       const [bx, by] = cells[i + 1];
       const horiz = ay === by;
       const bit = horiz ? 1 : 2;
+      const otherBit = horiz ? 2 : 1;
       const sx = Math.min(ax, bx), ex = Math.max(ax, bx);
       const sy = Math.min(ay, by), ey = Math.max(ay, by);
       for (let y = sy; y <= ey; y++) {
         for (let x = sx; x <= ex; x++) {
           congestion[idx(x, y)] |= bit;
-          // Soft 1-cell halo on the perpendicular axis.
+          // Halo cells get the OPPOSITE-axis bit instead of the
+          // travelled-axis bit. Effect in A*: a parallel route in
+          // the next cell over reads "no same-axis flag" and pays
+          // nothing, so adjacent tracks pack tight; only a crossing
+          // (perpendicular usage) at the halo pays the cross-cost.
           if (horiz) {
-            if (y - 1 >= 0) congestion[idx(x, y - 1)] |= bit;
-            if (y + 1 < H)  congestion[idx(x, y + 1)] |= bit;
+            if (y - 1 >= 0) congestion[idx(x, y - 1)] |= otherBit;
+            if (y + 1 < H)  congestion[idx(x, y + 1)] |= otherBit;
           } else {
-            if (x - 1 >= 0) congestion[idx(x - 1, y)] |= bit;
-            if (x + 1 < W)  congestion[idx(x + 1, y)] |= bit;
+            if (x - 1 >= 0) congestion[idx(x - 1, y)] |= otherBit;
+            if (x + 1 < W)  congestion[idx(x + 1, y)] |= otherBit;
           }
         }
       }
@@ -1099,6 +1838,113 @@ class NottarioArchCanvas extends LitElement {
       const [sSide, tSide] = this._chooseSides(src, tgt);
       return { edge, src, tgt, sSide, tSide, sFrac: 0.5, tFrac: 0.5 };
     });
+    // Face-load redistribution. A node with many outgoing/incoming
+    // edges on one face piles them all into a narrow strip; the
+    // _planAnchors spread step then squeezes them into thin tracks
+    // and A* has nowhere to send them. Reroute the edges whose
+    // OTHER endpoint sits clearly off-axis from the original face
+    // through the perpendicular face instead. Example: MCP server
+    // has 7 outgoing-to-bottom edges; the 5 whose targets are
+    // strictly right of MCP exit via the RIGHT face instead, leaving
+    // 2 on BOTTOM for the targets directly below.
+    // Face-load threshold for the redistribute step. Each face can
+    // host ~5 parallel tracks before the routing geometry gets too
+    // tight; tighten this further only when the diagram is wider on
+    // average, since redistributing prematurely steers edges into
+    // adjacent faces whose clearance may be even worse.
+    const MAX_PER_FACE = 5;
+    const countOn = (nodeID, side) => planned.reduce((n, p) =>
+      n + (p && ((p.src.node.ID === nodeID && p.sSide === side) ||
+                 (p.tgt.node.ID === nodeID && p.tSide === side)) ? 1 : 0), 0);
+    const rerouteEnd = (p, end) => {
+      // end === 's' → adjust the SOURCE face; 't' → target face.
+      const side = end === 's' ? p.sSide : p.tSide;
+      if (side === 'bottom' || side === 'top') {
+        const self = end === 's' ? p.src : p.tgt;
+        const other = end === 's' ? p.tgt : p.src;
+        const oCx = other.x + other.w / 2;
+        const right = oCx > self.x + self.w;
+        const left  = oCx < self.x;
+        if (!right && !left) return false; // target is roughly above/below
+        const newSide = right ? 'right' : 'left';
+        if (end === 's') {
+          p.sSide = newSide;
+          // Target side flips to whichever vertical face is closer.
+          const otherCy = other.y + other.h / 2;
+          p.tSide = otherCy < self.y + self.h / 2 ? 'bottom' : 'top';
+        } else {
+          p.tSide = newSide;
+          const selfCy = self.y + self.h / 2;
+          const otherCy = other.y + other.h / 2;
+          p.sSide = otherCy < selfCy ? 'top' : 'bottom';
+        }
+        return true;
+      }
+      if (side === 'left' || side === 'right') {
+        const self = end === 's' ? p.src : p.tgt;
+        const other = end === 's' ? p.tgt : p.src;
+        const oCy = other.y + other.h / 2;
+        const below = oCy > self.y + self.h;
+        const above = oCy < self.y;
+        if (!below && !above) return false;
+        const newSide = below ? 'bottom' : 'top';
+        if (end === 's') {
+          p.sSide = newSide;
+          const otherCx = other.x + other.w / 2;
+          p.tSide = otherCx < self.x + self.w / 2 ? 'right' : 'left';
+        } else {
+          p.tSide = newSide;
+          const selfCx = self.x + self.w / 2;
+          const otherCx = other.x + other.w / 2;
+          p.sSide = otherCx < selfCx ? 'left' : 'right';
+        }
+        return true;
+      }
+      return false;
+    };
+    // Walk faces sorted by overload first so the biggest jams get
+    // relieved before any chain-reaction redistribution.
+    let safety = 8; // bounded relax — cycles theoretically impossible but be safe.
+    while (safety--) {
+      let worst = null;
+      const counts = new Map();
+      for (const p of planned) {
+        if (!p) continue;
+        for (const [nodeID, side] of [[p.src.node.ID, p.sSide], [p.tgt.node.ID, p.tSide]]) {
+          const k = nodeID + '|' + side;
+          counts.set(k, (counts.get(k) || 0) + 1);
+          if (counts.get(k) > (worst?.count || MAX_PER_FACE)) {
+            worst = { key: k, nodeID, side, count: counts.get(k) };
+          }
+        }
+      }
+      if (!worst) break;
+      // Move OFF-AXIS edges from the worst face. Sort by how far
+      // off-axis the other endpoint sits; reroute the most-off-axis
+      // ones first until the face count drops at/below MAX_PER_FACE.
+      const candidates = planned
+        .map((p, i) => ({ p, i }))
+        .filter(({ p }) => p &&
+          ((p.src.node.ID === worst.nodeID && p.sSide === worst.side) ||
+           (p.tgt.node.ID === worst.nodeID && p.tSide === worst.side)))
+        .map(({ p, i }) => {
+          const isS = p.src.node.ID === worst.nodeID && p.sSide === worst.side;
+          const self = isS ? p.src : p.tgt;
+          const other = isS ? p.tgt : p.src;
+          const offAxis = (worst.side === 'top' || worst.side === 'bottom')
+            ? Math.abs((other.x + other.w/2) - (self.x + self.w/2))
+            : Math.abs((other.y + other.h/2) - (self.y + self.h/2));
+          return { p, i, end: isS ? 's' : 't', offAxis };
+        })
+        .sort((a, b) => b.offAxis - a.offAxis);
+      let moved = 0;
+      for (const c of candidates) {
+        if (counts.get(worst.key) - moved <= MAX_PER_FACE) break;
+        if (rerouteEnd(c.p, c.end)) moved++;
+      }
+      if (moved === 0) break; // nothing left to redistribute
+    }
+    // From here on, source side / target side are stable.
     const buckets = new Map(); // key → array of { entry, end:'s'|'t' }
     const push = (key, entry, end) => {
       if (!buckets.has(key)) buckets.set(key, []);
@@ -1160,19 +2006,36 @@ class NottarioArchCanvas extends LitElement {
   // adjacent tracks, which reduces visual crossings vs. sorting by
   // target x alone (which clusters opposite-direction edges into
   // neighbouring tracks and forces crossings).
-  _routeTracked(plans, layoutFlat) {
+  _routeTracked(plans, layoutFlat, byID) {
     const result = new Map();
     const groups = new Map();
     const eligible = (p) =>
       (p.sSide === 'bottom' && p.tSide === 'top') ||
       (p.sSide === 'top' && p.tSide === 'bottom');
+    // Mirror the A* router's "ancestor exemption" rule: a straight
+    // track may cross an expanded container only if that container
+    // is an ancestor of source or target (i.e. the edge legitimately
+    // enters/leaves it). Unrelated expanded containers count as
+    // obstacles and force this edge to fall through to A* routing.
+    const isAncestor = (cont, leaf) => {
+      let cur = leaf?.node?.ParentID;
+      while (cur) {
+        if (cur === cont.node.ID) return true;
+        const w = byID?.get(cur);
+        if (!w) break;
+        cur = w.node.ParentID;
+      }
+      return false;
+    };
     const clearChannel = (p, srcY, tgtY) => {
       const top = Math.min(srcY, tgtY);
       const bot = Math.max(srcY, tgtY);
       for (const w of layoutFlat) {
         if (w === p.src || w === p.tgt) continue;
-        // An expanded container's interior is passable.
-        if (w._isContainer && w._expanded) continue;
+        if (w._isContainer && w._expanded
+            && (isAncestor(w, p.src) || isAncestor(w, p.tgt))) {
+          continue; // legitimately routed through; not an obstacle
+        }
         if (w.y > top && w.y + w.h < bot) return false;
       }
       return true;
@@ -1218,11 +2081,43 @@ class NottarioArchCanvas extends LitElement {
   // edges routed later don't reuse the same corridors.
   _routeEdgeBest(plan, byID, obs, congestion = null) {
     if (!plan) return null;
-    const { edge, src, tgt, sSide, tSide, sFrac, tFrac } = plan;
-    const sCell = this._anchorCell(src, sSide, obs, sFrac);
-    const tCell = this._anchorCell(tgt, tSide, obs, tFrac);
+    let { edge, src, tgt, sSide, tSide, sFrac, tFrac } = plan;
+    let sCell = this._anchorCell(src, sSide, obs, sFrac);
+    let tCell = this._anchorCell(tgt, tSide, obs, tFrac);
     if (!sCell || !tCell) return this._routeEdge(edge, byID);
-    const cells = this._astar(obs, sCell, tCell, src, tgt, congestion);
+    // Ancestor exemption: an edge from inside container A to outside
+    // (or to inside container B) must be allowed to traverse A's
+    // interior on its way out, and B's interior on its way in. Every
+    // OTHER expanded container stays a hard obstacle, so the edge
+    // can't slice under unrelated boxes.
+    const ancestorRects = [
+      ...this._ancestorWrappers(src, byID),
+      ...this._ancestorWrappers(tgt, byID),
+    ];
+    let cells = this._astar(obs, sCell, tCell, src, tgt, congestion, ancestorRects);
+    if (!cells) {
+      // A* couldn't find a path with the planned faces (likely the
+      // redistribute step picked a face whose stub anchor falls
+      // inside an adjacent box's buffer halo). Retry on the natural
+      // bottom/top axis that _chooseSides would have picked from
+      // scratch — that pair almost always has clearance because the
+      // node was originally laid out as a Sugiyama layer.
+      const [fbS, fbT] = this._chooseSides(src, tgt);
+      if (fbS !== sSide || fbT !== tSide) {
+        const sCell2 = this._anchorCell(src, fbS, obs, sFrac);
+        const tCell2 = this._anchorCell(tgt, fbT, obs, tFrac);
+        if (sCell2 && tCell2) {
+          cells = this._astar(obs, sCell2, tCell2, src, tgt, congestion, ancestorRects);
+          if (cells) {
+            // Patch the plan in place so downstream code (path
+            // assembly, label placement) reads the actual faces used.
+            plan.sSide = sSide = fbS;
+            plan.tSide = tSide = fbT;
+            sCell = sCell2; tCell = tCell2;
+          }
+        }
+      }
+    }
     if (cells && congestion) this._markCongestion(cells, obs, congestion);
     if (!cells || cells.length < 2) return this._routeEdge(edge, byID);
     const cell = obs.cell;
@@ -1585,6 +2480,7 @@ class NottarioArchCanvas extends LitElement {
       x: this._dragOrigin.vb.x - dx,
       y: this._dragOrigin.vb.y - dy,
     };
+    this._userInteractedViewBox = true;
     this.requestUpdate();
   }
   _onSvgPointerUp(e) {
@@ -1614,6 +2510,7 @@ class NottarioArchCanvas extends LitElement {
         w: newW,
         h: newH,
       };
+      this._userInteractedViewBox = true;
       this.requestUpdate();
       return;
     }
@@ -1633,6 +2530,7 @@ class NottarioArchCanvas extends LitElement {
       x: this._viewBox.x + e.deltaX * k * scale,
       y: this._viewBox.y + e.deltaY * k * scale,
     };
+    this._userInteractedViewBox = true;
     this.requestUpdate();
   }
 
@@ -1793,47 +2691,36 @@ class NottarioArchCanvas extends LitElement {
       `;
     }
     const vb = this._viewBox || { x: 0, y: 0, w: layout.width, h: layout.height };
-    const wByID = new Map(layout.flat.map(w => [w.node.ID, w]));
-    // Build the obstacle grid once per render, then route each edge
-    // via A*. Falls back to the L-router on per-edge failures (anchor
-    // blocked, no path found, etc).
-    const obstacles = this._buildObstacles(layout);
-    const anchorPlan = this._planAnchors(this.edges || [], wByID);
-    // Track allocation for cross-layer edges (source-bottom →
-    // target-top, or top → bottom). Each such edge gets its own
-    // unique y inside the layer gap, sorted by target x so paths
-    // don't cross. This is the classic Sugiyama-step-5 channel
-    // routing — far more predictable than relying on A*'s
-    // congestion penalty.
-    const tracked = this._routeTracked(anchorPlan, layout.flat);
-    // Everything else (same-row sibling edges) still uses A* with
-    // a congestion grid.
-    const congestion = new Uint8Array(obstacles.W * obstacles.H);
-    const remaining = anchorPlan
-      .map((p, i) => ({ p, i }))
-      .filter(o => o.p && !tracked.has(o.i))
-      .sort((a, b) => {
-        const da = Math.hypot(a.p.tgt.x - a.p.src.x, a.p.tgt.y - a.p.src.y);
-        const db = Math.hypot(b.p.tgt.x - b.p.src.x, b.p.tgt.y - b.p.src.y);
-        return da - db;
-      });
-    const routedById = new Map(tracked);
-    for (const { p, i } of remaining) {
-      // No congestion for A* fallback edges: they're the few
-      // multi-layer ones (the channel between source and target
-      // contains other nodes' rows, so the track router skipped
-      // them). With congestion ON, the second such edge from the
-      // same source had to step laterally to escape the first's
-      // 1-cell halo, producing a zig-zag right after the source
-      // stub. Without congestion, each finds its own clean shortest
-      // path around the obstacles; their sources are already at
-      // different sFracs so they naturally diverge.
-      const r = this._routeEdgeBest(p, wByID, obstacles, null);
-      if (r) routedById.set(i, r);
+    // Edge routing (obstacles + plan + A*) is deterministic given
+    // (layout + edges). Cache by the same layout key as _layout itself
+    // — without this, every hover-driven re-render replays every
+    // edge through A*, which produces a visible ~1s lag on dense
+    // diagrams.
+    // Disable the route cache while the reflow animation is interpolating
+    // wrapper positions: every frame mutates w.x/w.y, so a frozen route
+    // set drawn for one snapshot would float over boxes that have moved
+    // since. Once `_reflowRaf` clears at animation end, the next render
+    // re-enables the cache and reuses the static routes.
+    const animating = this._reflowRaf != null;
+    let routedEdges, anchorPlan, wByID, obstacles;
+    if (!animating && this._cachedRoutes && this._cachedRoutesKey === this._cachedLayoutKey) {
+      ({ routedEdges, anchorPlan, wByID, obstacles } = this._cachedRoutes);
+    } else {
+      wByID = new Map(layout.flat.map(w => [w.node.ID, w]));
+      // Channel router (Phase A rewrite). Replaces the obstacles + A*
+      // + congestion pipeline with deterministic gap-track allocation.
+      const channelRouted = this._routeChannels(this.edges || [], wByID, layout);
+      routedEdges = channelRouted.routed;
+      anchorPlan  = channelRouted.planned;
+      // Keep a lightweight obstacle map purely so the existing label
+      // placement code (`_renderEdgeLabel`) can avoid printing pills
+      // over nodes. The router itself no longer reads it.
+      obstacles = this._buildObstacles(layout);
+      if (!animating) {
+        this._cachedRoutes = { routedEdges, anchorPlan, wByID, obstacles };
+        this._cachedRoutesKey = this._cachedLayoutKey;
+      }
     }
-    const routedEdges = anchorPlan
-      .map((_, i) => routedById.get(i))
-      .filter(Boolean);
 
     // Highlighted set: external edge highlight > hover > query >
     // focus subtree. null = everything full.
