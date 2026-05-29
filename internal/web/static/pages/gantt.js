@@ -108,6 +108,12 @@ class NottarioGantt extends LitElement {
     .arrow.dim { opacity: 0.18; }
     .arrow { cursor: pointer; }
     .arrow.promoted { stroke: #1f2328; }
+    /* A bar that's part of the active selection (single-task pipeline
+       or just-unfolded feature subtree) gets a thicker, darker stroke
+       so done bars — which sit in pale gray and don't visually
+       distinguish themselves from dimmed neighbours otherwise — read
+       as "this is what you're looking at right now". */
+    .task-rect.promoted { stroke: #1f2328 !important; stroke-width: 2 !important; }
     /* Bars that became visible via a feature unfold get a brief
        opacity fade-in so the eye locates them after the layout
        reflows. Refold has no motion. */
@@ -393,6 +399,29 @@ class NottarioGantt extends LitElement {
       this._appearTimer = setTimeout(() => {
         this._justAppeared = new Set();
       }, 320);
+      // Highlight the feature's whole sub-tree (the feature itself
+      // and every descendant) by reusing the selection mechanism.
+      // The user just unfolded one box and several new bars + arrows
+      // appeared inside it; dimming everything else makes "what just
+      // came in" unmistakable. The highlight auto-clears after a few
+      // seconds so it doesn't sit there forever.
+      const childrenByParent = new Map();
+      for (const t of (this.tasks || [])) {
+        if (!t.ParentTaskID) continue;
+        if (!childrenByParent.has(t.ParentTaskID)) childrenByParent.set(t.ParentTaskID, []);
+        childrenByParent.get(t.ParentTaskID).push(t.ID);
+      }
+      const sub = new Set([featureID]);
+      const walk = (id) => {
+        for (const c of (childrenByParent.get(id) || [])) {
+          if (sub.has(c)) continue;
+          sub.add(c);
+          walk(c);
+        }
+      };
+      walk(featureID);
+      this._selectedAnchor = featureID;
+      this._selectedSet = sub;
     } else {
       next.add(featureID);
     }
@@ -787,6 +816,20 @@ class NottarioGantt extends LitElement {
       if (doneByID.has(d.TaskID))      depTouched.add(d.TaskID);
       if (doneByID.has(d.DependsOnID)) depTouched.add(d.DependsOnID);
     }
+    // A done task whose ANCESTOR feature touches a dep edge inherits
+    // that anchored status. Otherwise leaf children of an anchored
+    // feature have succession=0, gravitate to NOW and stretch the
+    // parent's aggregate all the way to the present.
+    const taskByIDForSucc = new Map();
+    for (const t of this.tasks || []) taskByIDForSucc.set(t.ID, t);
+    for (const t of this.tasks || []) {
+      if (!doneByID.has(t.ID)) continue;
+      let p = taskByIDForSucc.get(t.ParentTaskID);
+      while (p) {
+        if (depTouched.has(p.ID)) { depTouched.add(t.ID); break; }
+        p = taskByIDForSucc.get(p.ParentTaskID);
+      }
+    }
     // Future topological depths drive both the future X axis and the
     // lane count each band needs for non-done tasks (which the past
     // packing then reuses).
@@ -821,6 +864,33 @@ class NottarioGantt extends LitElement {
     // own behalf. Their succession ends up at 0 and they cluster at
     // the rightmost slot, then gravitate around the anchored skeleton
     // in the relocation phase below.
+    // Build depSuccessors and inherit each feature's outgoing edges
+    // onto every descendant. Semantically: if X depends_on feature F,
+    // X also "depends on" every leaf of F finishing (F isn't done
+    // until they are). Without this propagation, F's leaf children
+    // have no successors of their own → succession 0 → slot pinned
+    // to NOW → F's aggregate stretches to the present even when F
+    // itself sits far in the past.
+    const depSuccessors = new Map();
+    for (const d of this.deps) {
+      if (doneByID.has(d.TaskID) && doneByID.has(d.DependsOnID)) {
+        if (!depSuccessors.has(d.DependsOnID)) depSuccessors.set(d.DependsOnID, []);
+        depSuccessors.get(d.DependsOnID).push(d.TaskID);
+      }
+    }
+    for (const t of this.tasks || []) {
+      if (!doneByID.has(t.ID)) continue;
+      let p = taskByIDForSucc.get(t.ParentTaskID);
+      while (p) {
+        const parentSuccs = depSuccessors.get(p.ID);
+        if (parentSuccs && parentSuccs.length) {
+          if (!depSuccessors.has(t.ID)) depSuccessors.set(t.ID, []);
+          const list = depSuccessors.get(t.ID);
+          for (const s of parentSuccs) if (!list.includes(s)) list.push(s);
+        }
+        p = taskByIDForSucc.get(p.ParentTaskID);
+      }
+    }
     const bandSuccessor = new Map();
     for (const b of bands) {
       const anchoredChronoSorted = b.tasks
@@ -830,12 +900,14 @@ class NottarioGantt extends LitElement {
         bandSuccessor.set(anchoredChronoSorted[i].ID, anchoredChronoSorted[i + 1].ID);
       }
     }
-    const depSuccessors = new Map();
-    for (const d of this.deps) {
-      if (doneByID.has(d.TaskID) && doneByID.has(d.DependsOnID)) {
-        if (!depSuccessors.has(d.DependsOnID)) depSuccessors.set(d.DependsOnID, []);
-        depSuccessors.get(d.DependsOnID).push(d.TaskID);
-      }
+    // Children indexed by parent so a feature's succession can floor
+    // to its deepest descendant's succession (see the "feature floor"
+    // step inside computeSucc below).
+    const childrenByParentForSucc = new Map();
+    for (const t of this.tasks || []) {
+      if (!t.ParentTaskID) continue;
+      if (!childrenByParentForSucc.has(t.ParentTaskID)) childrenByParentForSucc.set(t.ParentTaskID, []);
+      childrenByParentForSucc.get(t.ParentTaskID).push(t.ID);
     }
     const succession = new Map();
     const visiting = new Set();
@@ -848,6 +920,16 @@ class NottarioGantt extends LitElement {
       if (next) s = Math.max(s, 1 + computeSucc(next));
       for (const dep of depSuccessors.get(id) || []) {
         s = Math.max(s, 1 + computeSucc(dep));
+      }
+      // Feature floor: a feature's succession must be at least as
+      // high as its deepest descendant's. Otherwise the parent's slot
+      // lands RIGHT of its leftmost child (children run on a deeper
+      // dep chain than the parent's own outgoing edges), so any
+      // precondition of the feature ends up between the feature's
+      // children and the feature itself, producing backward arrows
+      // when the feature is rendered unfolded.
+      for (const c of (childrenByParentForSucc.get(id) || [])) {
+        s = Math.max(s, computeSucc(c));
       }
       visiting.delete(id);
       succession.set(id, s);
@@ -905,15 +987,46 @@ class NottarioGantt extends LitElement {
         usedGlobalSlots.add(bestSlot);
       }
     }
-    // Compact: drop slot indices that ended up empty after relocation
-    // so the past zone width matches what's actually drawn. Preserves
-    // the slot ORDER so cross-band dep arrows stay forward (succession
-    // already encoded the right ordering, we're just renumbering).
+    // Compact: drop slot indices that no VISIBLE task occupies. A
+    // task is hidden when an ancestor feature is folded (the feature
+    // aggregate renders at the parent's own slot, not at the
+    // children's). Slots whose only occupants are hidden children
+    // would leave empty columns in the past zone, pushing visible
+    // bars left for no visual reason. We drop those slots while
+    // preserving the slot ORDER, so cross-band dep arrows stay
+    // forward. Hidden tasks themselves snap to their nearest visible
+    // ancestor slot (≤ original) so any geometry that still reads
+    // their slot lands on the folded parent's column.
     {
-      const usedSlots = [...new Set(globalPastSlot.values())].sort((a, b) => a - b);
+      const isHiddenByFold = (taskID) => {
+        let cur = taskByIDForSucc.get(taskID);
+        while (cur && cur.ParentTaskID) {
+          if (this.foldedFeatures.has(cur.ParentTaskID)) return true;
+          cur = taskByIDForSucc.get(cur.ParentTaskID);
+        }
+        return false;
+      };
+      const visibleSlots = new Set();
+      for (const [id, s] of globalPastSlot) {
+        if (!isHiddenByFold(id)) visibleSlots.add(s);
+      }
+      const usedSlots = [...visibleSlots].sort((a, b) => a - b);
       const remap = new Map();
       usedSlots.forEach((s, i) => remap.set(s, i));
-      for (const [id, s] of globalPastSlot) globalPastSlot.set(id, remap.get(s));
+      for (const [id, s] of globalPastSlot) {
+        if (remap.has(s)) {
+          globalPastSlot.set(id, remap.get(s));
+          continue;
+        }
+        // Hidden child whose own slot was dropped. Snap to the nearest
+        // visible slot at or below its original; that lands the child
+        // on the same column as its folded parent aggregate.
+        let target = -1;
+        for (const us of usedSlots) {
+          if (us <= s) target = us; else break;
+        }
+        globalPastSlot.set(id, target >= 0 ? remap.get(target) : 0);
+      }
     }
     const compactedPastSlots = (() => {
       let m = -1;
@@ -1064,13 +1177,22 @@ class NottarioGantt extends LitElement {
     // into a dedicated Features lane (decided below). Single-role
     // features stay inside their natural role band.
     const featureAggregates = new Map(); // featureID -> {from, to, bi, crossRole, roleColors}
-    let anyCrossRole = false;
     for (const fid of this.foldedFeatures) {
       const feat = taskByID.get(fid);
       if (!feat || feat.Type !== 'feature') continue;
       const desc = collectDescendants(fid, new Set());
       if (!desc.size) continue;
-      let lo = Infinity, hi = -Infinity;
+      // Aggregate position uses the feature's OWN slot, not the
+      // envelope of its descendants. Descendants live in their own
+      // role bands at slots that follow each task's own succession
+      // depth; the envelope of those would stretch the aggregate
+      // across the entire chronology of the descendants and overlap
+      // arrows between sibling features. bandsSeen still walks the
+      // descendants so the role-dot stack and crossRole flag stay
+      // correct.
+      const pFeat = rawPositions.get(fid);
+      let lo = pFeat?.from ?? Infinity;
+      let hi = pFeat?.to   ?? -Infinity;
       const bandsSeen = new Set();
       const bandVotes = new Map();
       for (const did of desc) {
@@ -1078,14 +1200,11 @@ class NottarioGantt extends LitElement {
         if (!d || d.Type === 'feature') continue;
         const p = rawPositions.get(did);
         if (!p) continue;
-        lo = Math.min(lo, p.from);
-        hi = Math.max(hi, p.to);
         bandsSeen.add(p.bi);
         bandVotes.set(p.bi, (bandVotes.get(p.bi) || 0) + 1);
       }
       if (lo === Infinity) continue;
       const crossRole = bandsSeen.size > 1;
-      if (crossRole) anyCrossRole = true;
       // Natural band (used when not cross-role): feature's own
       // target_role if set, else the band with the most descendants.
       let naturalBi = bandIndexByTaskID.get(fid);
@@ -1107,7 +1226,7 @@ class NottarioGantt extends LitElement {
     // into a synthetic lane at the top of the chart. The display order
     // of bands becomes [Features?, ...roleBands]; everything keyed by
     // band index is shifted by the offset.
-    const featuresBand = anyCrossRole
+    const featuresBand = featureAggregates.size > 0
       ? { role: { ID: '__features__', Key: 'features', Label: 'Features', Color: '#6e7781' }, tasks: [] }
       : null;
     const displayBands = featuresBand ? [featuresBand, ...bands] : bands;
@@ -1120,7 +1239,7 @@ class NottarioGantt extends LitElement {
       if (t.Type === 'feature') {
         if (this.foldedFeatures.has(t.ID) && featureAggregates.has(t.ID)) {
           const agg = featureAggregates.get(t.ID);
-          const targetBi = agg.crossRole ? 0 : agg.bi + bandOffset;
+          const targetBi = 0;
           visiblePerBand[targetBi].push({ task: t, from: agg.from, to: agg.to, kind: 'feature-agg', crossRole: agg.crossRole, roleColors: agg.roleColors });
         } else if (!childrenByParent.has(t.ID)) {
           const p = rawPositions.get(t.ID);
@@ -1383,7 +1502,7 @@ class NottarioGantt extends LitElement {
               const aggDimmed = hasSelection && !this._selectedSet.has(t.ID);
               const aggAppeared = this._justAppeared?.has(t.ID) ? ' just-appeared' : '';
               return svg`
-                <rect class=${`task-rect feature-agg${aggDimmed ? ' dim' : ''}${aggAppeared}`}
+                <rect class=${`task-rect feature-agg${aggDimmed ? ' dim' : ''}${hasSelection && this._selectedSet.has(t.ID) ? ' promoted' : ''}${aggAppeared}`}
                       data-task-id=${t.ID}
                       x=${p.from} y=${y}
                       width=${w} height=${taskHeight}
@@ -1420,7 +1539,7 @@ class NottarioGantt extends LitElement {
             const todoFill = bandFill[p.bi] || '#fff';
             const taskAppeared = this._justAppeared?.has(t.ID) ? ' just-appeared' : '';
             return svg`
-              <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}${taskAppeared}`}
+              <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}${hasSelection && this._selectedSet.has(t.ID) ? ' promoted' : ''}${taskAppeared}`}
                     data-task-id=${t.ID}
                     x=${p.from} y=${y}
                     width=${w} height=${taskHeight}
