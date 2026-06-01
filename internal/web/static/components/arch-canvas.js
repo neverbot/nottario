@@ -1002,15 +1002,45 @@ class NottarioArchCanvas extends LitElement {
     // endPoint}) into our waypoints + d.
     const routedEdges = [];
     const wByID = new Map(roots.flatMap(r => this._flatten([r])).map(w => [w.node.ID, w]));
+    // Snap an entry/exit segment to be perpendicular to the node face it
+    // touches. Without this, ELK occasionally returns a sub-pixel
+    // misaligned last bend-point and the arrowhead ends up tilted with
+    // a tiny diagonal segment running into the box border.
+    const snapTerminalOrthogonal = (wp, terminalNode, end /* 'start'|'end' */) => {
+      if (!terminalNode || wp.length < 2) return;
+      const idx     = end === 'start' ? 0 : wp.length - 1;
+      const sideIdx = end === 'start' ? 1 : wp.length - 2;
+      const terminal = wp[idx];
+      const neighbour = wp[sideIdx];
+      const TOL = 1.5;
+      let face = null;
+      if (Math.abs(terminal.x - terminalNode.x) <= TOL) face = 'left';
+      else if (Math.abs(terminal.x - (terminalNode.x + terminalNode.w)) <= TOL) face = 'right';
+      else if (Math.abs(terminal.y - terminalNode.y) <= TOL) face = 'top';
+      else if (Math.abs(terminal.y - (terminalNode.y + terminalNode.h)) <= TOL) face = 'bottom';
+      if (!face) return;
+      const vertFace = (face === 'top' || face === 'bottom');
+      if (vertFace) {
+        // Last segment must be vertical → neighbour.x must equal terminal.x.
+        if (Math.abs(neighbour.x - terminal.x) > 0.5) {
+          // Insert a corner so the final segment becomes vertical.
+          if (end === 'start') wp.splice(1, 0, { x: terminal.x, y: neighbour.y });
+          else                 wp.splice(wp.length - 1, 0, { x: terminal.x, y: neighbour.y });
+        }
+      } else {
+        if (Math.abs(neighbour.y - terminal.y) > 0.5) {
+          if (end === 'start') wp.splice(1, 0, { x: neighbour.x, y: terminal.y });
+          else                 wp.splice(wp.length - 1, 0, { x: neighbour.x, y: terminal.y });
+        }
+      }
+    };
     for (const ee of (result.edges || [])) {
-      const orig = elkEdges.find(x => x.id === ee.id)?._origEdge;
+      const elkEdgeEntry = elkEdges.find(x => x.id === ee.id);
+      const orig = elkEdgeEntry?._origEdge;
       if (!orig) continue;
       const wp = [];
       const sec = ee.sections?.[0];
       if (!sec) continue;
-      // ELK gives endpoints in the COORDINATE SYSTEM of the edge's
-      // container. We need absolute. Find the container and add its
-      // absolute origin to each waypoint.
       let cx = 0, cy = 0;
       if (ee.container) {
         const cw = wByID.get(ee.container);
@@ -1021,6 +1051,11 @@ class NottarioArchCanvas extends LitElement {
         wp.push({ x: cx + bp.x, y: cy + bp.y });
       }
       wp.push({ x: cx + sec.endPoint.x, y: cy + sec.endPoint.y });
+      // Force entry/exit segments to be perpendicular to source/target.
+      const srcNode = wByID.get(orig.FromNodeID) || wByID.get(elkEdgeEntry.sources[0]);
+      const tgtNode = wByID.get(orig.ToNodeID)   || wByID.get(elkEdgeEntry.targets[0]);
+      snapTerminalOrthogonal(wp, srcNode, 'start');
+      snapTerminalOrthogonal(wp, tgtNode, 'end');
       routedEdges.push({ d: this._pathD(wp), waypoints: wp, edge: orig });
     }
     const flat = this._flatten(roots);
