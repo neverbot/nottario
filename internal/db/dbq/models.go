@@ -21,6 +21,7 @@ type ApiToken struct {
 	CreatedAt     pgtype.Timestamptz
 	LastUsedAt    pgtype.Timestamptz
 	RevokedAt     pgtype.Timestamptz
+	ProjectID     *uuid.UUID
 }
 
 type ArchEdge struct {
