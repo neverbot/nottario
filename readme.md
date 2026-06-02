@@ -99,14 +99,16 @@ require that the underlying user is an instance admin.
 claude mcp add nottario http://localhost:8080/mcp \
   --transport http \
   --header "Authorization: Bearer ntr_…" \
-  --scope user
+  --scope local
 ```
 
-`--scope user` stores the config (and therefore the token) in
-`~/.claude.json`, not in the repo. Use `--scope local` to keep it per
-project but still outside git, or `--scope project` only when the
-server has no secrets to share (Nottario does, so prefer `user` or
-`local`).
+`--scope local` stores the config per-project (still outside git) and
+is the recommended setup: each project gets its own token, so an
+agent working on project A can't accidentally touch project B.
+`--scope user` puts the same token in every project from
+`~/.claude.json` — only use it if you knowingly want one shared
+token. Avoid `--scope project` (it would commit the token into the
+repo).
 
 Verify:
 
