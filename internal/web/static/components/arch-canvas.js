@@ -699,6 +699,13 @@ class NottarioArchCanvas extends LitElement {
     if (engine === 'elk') {
       if (this._elkCache && this._elkCacheKey === key) return this._elkCache;
       this._kickElkLayout(key);
+      // While the new ELK layout is computing, keep showing the LAST
+      // ELK result instead of dropping back to the custom placeholder.
+      // The visible difference between custom and ELK positions caused
+      // a perceived "flicker" (the container briefly opened with
+      // custom coords, then ELK reflowed). With stale-ELK as the
+      // bridge, the user only sees ONE transition: old ELK → new ELK.
+      if (this._elkCache) return this._elkCache;
     }
     if (engine === 'sugiyama') {
       if (this._sugCache && this._sugCacheKey === key) return this._sugCache;
@@ -2898,10 +2905,6 @@ class NottarioArchCanvas extends LitElement {
             <text x="10" y="9">${kindLabel}</text>
           </g>
           <text class="name" x=${w.w / 2} y="18" text-anchor="middle">${n.Name}</text>
-          ${n.Slug ? svg`
-            <text class="slug" x=${w.w / 2} y="46"
-                  text-anchor="middle">${n.Slug}</text>
-          ` : null}
           <!-- Caret glyph (visual hint only; pointer-events: none). -->
           <text class="caret" x=${w.w - 16} y="18" text-anchor="middle">${caret}</text>
           <!-- Whole header strip catches clicks for expand/collapse.
