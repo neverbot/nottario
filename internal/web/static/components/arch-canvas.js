@@ -2952,8 +2952,15 @@ class NottarioArchCanvas extends LitElement {
     ].filter(Boolean).join(' ');
     const lastWP = routed.waypoints[routed.waypoints.length - 1];
     const prevWP = routed.waypoints[routed.waypoints.length - 2];
-    const dx = Math.sign(lastWP.x - prevWP.x);
-    const dy = Math.sign(lastWP.y - prevWP.y);
+    // ELK occasionally returns waypoint x/y as floats whose endpoints
+    // differ by ~1e-14 (e.g. 139.9999999999... vs 140), enough for
+    // Math.sign to report ±1 instead of 0 on the would-be-zero axis.
+    // That false direction value tilts the arrowhead. We snap to
+    // 0 below a 0.5-px threshold so axis-aligned segments stay so.
+    const rawDX = lastWP.x - prevWP.x;
+    const rawDY = lastWP.y - prevWP.y;
+    const dx = Math.abs(rawDX) < 0.5 ? 0 : Math.sign(rawDX);
+    const dy = Math.abs(rawDY) < 0.5 ? 0 : Math.sign(rawDY);
     const aSize = 7;
     // The line should end at the BASE of the arrowhead, not at its
     // tip — otherwise the path and the triangle overlap and the line
