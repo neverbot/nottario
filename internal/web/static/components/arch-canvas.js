@@ -706,6 +706,10 @@ class NottarioArchCanvas extends LitElement {
       if (out) {
         this._sugCache = out;
         this._sugCacheKey = key;
+        // Sugiyama re-computed → route cache (computed against the
+        // placeholder layout, if any) must be discarded.
+        this._cachedRoutes = null;
+        this._cachedRoutesKey = '';
         return out;
       }
     }
@@ -889,6 +893,13 @@ class NottarioArchCanvas extends LitElement {
       if (this._elkComputing !== targetKey) return; // superseded
       this._elkCache = out;
       this._elkCacheKey = targetKey;
+      // Invalidate route cache. Routes were computed against the
+      // placeholder layout we rendered while ELK was still working;
+      // ELK has now produced its own positions, so the placeholder
+      // routes point at the WRONG coordinates and must be discarded
+      // before the next render.
+      this._cachedRoutes = null;
+      this._cachedRoutesKey = '';
       this.requestUpdate();
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -3019,7 +3030,15 @@ class NottarioArchCanvas extends LitElement {
     // re-enables the cache and reuses the static routes.
     const animating = this._reflowRaf != null;
     let routedEdges, anchorPlan, wByID, obstacles;
-    if (!animating && this._cachedRoutes && this._cachedRoutesKey === this._cachedLayoutKey) {
+    // Two checks: key matches (no graph change) AND the cached routes
+    // were computed against THIS exact layout object. The second check
+    // catches the case where the async ELK layout completes after a
+    // placeholder layout was already routed — same cache key, different
+    // node positions.
+    if (!animating
+        && this._cachedRoutes
+        && this._cachedRoutesKey === this._cachedLayoutKey
+        && this._cachedRoutes.forLayout === layout) {
       ({ routedEdges, anchorPlan, wByID, obstacles } = this._cachedRoutes);
     } else {
       wByID = new Map(layout.flat.map(w => [w.node.ID, w]));
@@ -3038,7 +3057,7 @@ class NottarioArchCanvas extends LitElement {
       // over nodes. The router itself no longer reads it.
       obstacles = this._buildObstacles(layout);
       if (!animating) {
-        this._cachedRoutes = { routedEdges, anchorPlan, wByID, obstacles };
+        this._cachedRoutes = { routedEdges, anchorPlan, wByID, obstacles, forLayout: layout };
         this._cachedRoutesKey = this._cachedLayoutKey;
       }
     }
