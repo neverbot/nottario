@@ -29,7 +29,6 @@ class NottarioArchGraph extends LitElement {
     _focus:    { state: true }, // id
     _query:    { state: true }, // string
     _hoveredEdgeID: { state: true }, // edge id, drives canvas highlight
-    _engine: { state: true }, // layout engine: 'custom' | 'elk'
   };
 
   static styles = css`
@@ -57,13 +56,6 @@ class NottarioArchGraph extends LitElement {
     .btn:hover { background: #f6f8fa; border-color: #afb8c1; }
     .btn.on { background: #0969da; color: #fff; border-color: #0969da; }
     .btn.on:hover { background: #0860c4; border-color: #0860c4; }
-    .engine-toggle { display: inline-flex; gap: 0; }
-    .engine-toggle .btn {
-      border-radius: 0;
-      margin: 0;
-    }
-    .engine-toggle .btn:first-child { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
-    .engine-toggle .btn:last-child  { border-top-right-radius: 6px; border-bottom-right-radius: 6px; margin-left: -1px; }
 
     .split {
       display: grid;
@@ -233,8 +225,6 @@ class NottarioArchGraph extends LitElement {
     this._focus = '';
     this._query = '';
     this._hoveredEdgeID = '';
-    this._engine = (typeof localStorage !== 'undefined'
-      && localStorage.getItem('nottario.arch.engine')) || 'custom';
   }
 
   // ----- Lifecycle -----
@@ -364,12 +354,6 @@ class NottarioArchGraph extends LitElement {
 
   // ----- Event handlers -----
 
-  _setEngine(engine) {
-    if (this._engine === engine) return;
-    this._engine = engine;
-    try { localStorage.setItem('nottario.arch.engine', engine); } catch (_) {}
-  }
-
   _onCanvasSelect(e) {
     const id = e.detail.id;
     const n = this._nodeByID(id);
@@ -401,17 +385,6 @@ class NottarioArchGraph extends LitElement {
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
 
       <div class="toolbar">
-        <div class="engine-toggle" role="radiogroup" aria-label="Layout engine">
-          <button class=${`btn ${this._engine === 'custom' ? 'on' : ''}`}
-                  role="radio" aria-checked=${this._engine === 'custom'}
-                  @click=${() => this._setEngine('custom')}>Custom (v1)</button>
-          <button class=${`btn ${this._engine === 'sugiyama' ? 'on' : ''}`}
-                  role="radio" aria-checked=${this._engine === 'sugiyama'}
-                  @click=${() => this._setEngine('sugiyama')}>Sugiyama</button>
-          <button class=${`btn ${this._engine === 'elk' ? 'on' : ''}`}
-                  role="radio" aria-checked=${this._engine === 'elk'}
-                  @click=${() => this._setEngine('elk')}>ELK</button>
-        </div>
         <div class="spacer"></div>
         <nottario-search-input
           placeholder="Filter nodes…"
@@ -431,7 +404,6 @@ class NottarioArchGraph extends LitElement {
           .selected=${selID}
           .query=${this._query}
           .highlightEdge=${this._hoveredEdgeID}
-          .engine=${this._engine}
           @select=${(e) => this._onCanvasSelect(e)}
           @expand-changed=${(e) => this._onExpandChanged(e)}
           @focus-changed=${(e) => this._onFocusChanged(e)}>
