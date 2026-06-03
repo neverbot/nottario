@@ -78,18 +78,26 @@ token.
 
 ### 1. Issue an API token
 
+Tokens in Nottario are **scoped to a single project**: one token = one
+project. An agent using a token issued for project A can never read or
+modify project B, even if the underlying user is a member of both.
+Agents working across multiple projects need one token per project.
+
 In the web UI:
 
 1. Sign in with GitHub.
-2. Open **Tokens** in the top-right menu → **New token**.
-3. Give it a name (e.g. `claude-code-laptop`) and an optional default
+2. Open the project you want the agent to work on.
+3. Go to **Settings → Tokens → New token**.
+4. Give it a name (e.g. `claude-code-laptop`) and an optional default
    role.
-4. Copy the secret — it is shown **once** and starts with `ntr_…`. It
+5. Copy the secret — it is shown **once** and starts with `ntr_…`. It
    is hashed in the database; if you lose it, revoke and issue a new
    one.
 
 The token authenticates as the user that created it. Admin powers
-require that the underlying user is an instance admin.
+require that the underlying user is an instance admin; admin status is
+*not* a bypass of project scope — an admin token issued for project A
+is still rejected against project B.
 
 ### 2. Add the server to your client
 
@@ -155,10 +163,13 @@ not supported.
 ### 3. Verify the connection
 
 From the agent, the first call should be `nottario.whoami`. If it
-returns your `github_login` and your `memberships` (roles per
-project), the connection is healthy. A `401 Unauthorized` with a
-`WWW-Authenticate: Bearer realm="nottario"` header means the token is
-missing, malformed or revoked.
+returns your `github_login` and your `memberships` (roles in the
+**single project the token is scoped to**), the connection is
+healthy. A `401 Unauthorized` with a `WWW-Authenticate: Bearer
+realm="nottario"` header means the token is missing, malformed or
+revoked. A `"token scoped to project X, request targets Y"` error on a
+later tool call means the agent passed the wrong `project_id`; cache
+the value `whoami` returns and pass it on every subsequent call.
 
 ### 4. Pull the skill bundle
 
@@ -186,8 +197,13 @@ upgrade to get new conventions and the latest tool descriptions.
   or check its transport config; Nottario follows the standard
   Streamable HTTP transport.
 - **The agent sees no projects** — the user behind the token has no
-  memberships. An admin must add them via the web UI (Project
-  settings → Members) or grant `is_admin`.
+  membership in the token's project. An admin must add them via the
+  web UI (Project settings → Members) or grant `is_admin`.
+- **`token scoped to project X, request targets Y`** — the agent
+  passed a `project_id` that doesn't match the token's project. Tokens
+  are per-project; either re-issue against the right project or pass
+  the correct id. Cache `whoami`'s `memberships[0].ProjectID` and use
+  it everywhere.
 
 ## Day-to-day commands
 

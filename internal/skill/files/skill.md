@@ -14,20 +14,31 @@ under `domains/`; call `nottario.skill.read` to pull the one you need.
 
 Always start with `nottario.whoami`. It tells you the **user** you act
 on behalf of (`user_id`, `github_login`), whether you are an **admin**,
-and the **token_id** authenticating you. On failure the token is
-missing or revoked — stop and ask the human for a fresh one (web UI →
-**Tokens → New token**).
+the **token_id** authenticating you, and the **single project** the
+token is scoped to (`memberships[0].ProjectID` and friends — token
+callers always see exactly one membership: the one belonging to the
+token's project). On failure the token is missing or revoked — stop
+and ask the human for a fresh one (web UI → open the project →
+**Settings → Tokens → New token**).
+
+Tokens are **per-project**. One token = one project. Passing
+`project_id` of a different project on any subsequent call returns
+`"token scoped to project X, request targets Y"`. Cache the project
+id from `whoami` and reuse it on every tool call — never let the user
+or another step override it without re-running `whoami`.
 
 Deep dive: `references/identity.md`.
 
 ## 2. Locate the project
 
-Nottario does **not** keep an "active project" server-side. Every tool
-call that touches one needs `project_id` as an explicit argument.
+Every tool call that touches a project needs `project_id` as an
+explicit argument. With per-project tokens, the answer comes straight
+from step 1: `whoami.memberships[0].ProjectID` is the only project the
+token can reach. Cache it once and pass it on every call.
 
-Resolve it once at the start of a session: `nottario.projects.list` →
-pick the project whose `slug`/`name` matches the human's intent →
-cache the `id` in your working memory → pass it on every call.
+`nottario.projects.list` exists for completeness but for a token
+caller it returns only that one project. Use it if you want the slug
+or name; the id is the same one `whoami` already gave you.
 
 If you need the role catalogue (to assign to "any backend"), call
 `nottario.projects.list_roles` once and cache.
