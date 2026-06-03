@@ -4,7 +4,6 @@ import './components/topbar.js';
 import './pages/login.js';
 import './pages/projects.js';
 import './pages/project-settings.js';
-import './pages/tokens.js';
 import './pages/users.js';
 import './pages/profile.js';
 import './pages/board.js';
@@ -152,9 +151,6 @@ class NottarioShell extends LitElement {
     const path = this.route;
     if (path === '/' || path === '/projects') {
       return html`<nottario-projects-page .me=${this.me}></nottario-projects-page>`;
-    }
-    if (path === '/tokens') {
-      return html`<nottario-tokens-page .me=${this.me}></nottario-tokens-page>`;
     }
     if (path === '/users') {
       return html`<nottario-users-page .me=${this.me}></nottario-users-page>`;

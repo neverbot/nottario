@@ -1,9 +1,10 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
-import { tableStyles } from '/static/components/surfaces.js';
+import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
 import { formStyles } from '/static/components/forms.js';
 import { badgeStyles } from '/static/components/badges.js';
+import { EscController } from '/static/components/esc.js';
 import '/static/components/field.js';
 import '/static/components/avatar.js';
 import '/static/components/tabs.js';
@@ -20,9 +21,13 @@ class NottarioProjectSettings extends LitElement {
     users: { state: true },
     activeTab: { state: true },
     error: { state: true },
+    tokens: { state: true },
+    showIssueToken: { state: true },
+    issuedToken: { state: true },
+    tokenError: { state: true },
   };
 
-  static styles = [buttonStyles, tableStyles, formStyles, badgeStyles, css`
+  static styles = [buttonStyles, tableStyles, dialogStyles, formStyles, badgeStyles, css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -137,6 +142,53 @@ class NottarioProjectSettings extends LitElement {
       padding: 0 6px;
       font-family: ui-monospace, monospace;
     }
+
+    /* Tokens tab */
+    .tokens-header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .tokens-header .spacer { flex: 1; }
+    .tokens-header p.helper { margin: 0; }
+    .secret-banner {
+      background: #fff8c5;
+      border: 1px solid #d4a72c;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+      color: #7d4e00;
+      box-sizing: border-box;
+    }
+    .secret {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+      padding: 8px 12px;
+      background: #f6f8fa;
+      border: 1px solid #d1d9e0;
+      border-radius: 4px;
+      word-break: break-all;
+      user-select: all;
+      box-sizing: border-box;
+      font-size: 12px;
+    }
+    .snippet {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+      padding: 10px 12px;
+      background: #f6f8fa;
+      border: 1px solid #d1d9e0;
+      border-radius: 6px;
+      white-space: pre;
+      overflow-x: auto;
+      box-sizing: border-box;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+    .dialog .panel { width: 560px; }
+    .dialog .panel h3 { margin: 0 0 16px 0; }
+    .muted { color: #59636e; }
+    .status-active { color: #1f883d; font-weight: 500; }
+    .status-revoked { color: #59636e; }
   `];
 
   constructor() {
@@ -148,6 +200,13 @@ class NottarioProjectSettings extends LitElement {
     this.users = [];
     this.activeTab = 'general';
     this.error = '';
+    this.tokens = null;
+    this.showIssueToken = false;
+    this.issuedToken = null;
+    this.tokenError = '';
+    new EscController(this, (e) => {
+      if (this.showIssueToken) { this._closeTokenDialog(); e.stopPropagation(); }
+    });
   }
 
   connectedCallback() {
@@ -253,6 +312,7 @@ class NottarioProjectSettings extends LitElement {
       { id: 'roles',      label: 'Roles',      body: () => this.renderRoles() },
       { id: 'priorities', label: 'Priorities', body: () => this.renderPriorities() },
       { id: 'members',    label: 'Members',    body: () => this.renderMembers() },
+      { id: 'tokens',     label: 'Tokens',     body: () => this.renderTokens() },
       { id: 'mcp',        label: 'MCP',        body: () => this.renderMCP() },
     ];
     const active = tabs.find(t => t.id === this.activeTab) || tabs[0];
@@ -677,6 +737,191 @@ class NottarioProjectSettings extends LitElement {
       form.reset();
       await this.load();
     } catch (err) { this.error = err.message; }
+  }
+
+  // ---- Tokens tab ----
+
+  _isMember() {
+    if (this.me?.is_admin) return true;
+    const ms = this.me?.memberships || [];
+    return ms.some(m => m.ProjectID === this.projectId);
+  }
+
+  _fmtDate(d) {
+    return d ? new Date(d).toLocaleString() : '—';
+  }
+
+  async _loadTokens() {
+    if (this.tokens !== null) return; // load once when tab opens
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/tokens`);
+      if (!res.ok) throw new Error('failed to load tokens');
+      this.tokens = (await res.json()).tokens || [];
+    } catch (e) {
+      this.tokenError = e.message;
+      this.tokens = [];
+    }
+  }
+
+  _openTokenDialog() {
+    this.showIssueToken = true;
+    this.issuedToken = null;
+    this.tokenError = '';
+  }
+
+  _closeTokenDialog() {
+    this.showIssueToken = false;
+    this.issuedToken = null;
+    this.tokenError = '';
+  }
+
+  async _issueToken(e) {
+    e.preventDefault();
+    const form = e.target;
+    const name = form.name.value.trim();
+    const roleVal = form.default_role_id ? form.default_role_id.value : '';
+    const body = { name };
+    if (roleVal) body.default_role_id = roleVal;
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/tokens`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'failed');
+      this.issuedToken = await res.json();
+      // refresh list
+      this.tokens = null;
+      await this._loadTokens();
+    } catch (err) {
+      this.tokenError = err.message;
+    }
+  }
+
+  async _revokeToken(id) {
+    if (!confirm('Revoke this token? Agents using it will be locked out immediately.')) return;
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/tokens/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('failed');
+      this.tokens = null;
+      await this._loadTokens();
+    } catch (err) {
+      this.tokenError = err.message;
+    }
+  }
+
+  renderTokens() {
+    if (!this._isMember()) {
+      return html`
+        <div class="empty" style="padding:24px;text-align:center;color:#59636e;background:#fff;border:1px dashed #d0d7de;border-radius:8px">
+          Only project members can manage API tokens for this project.
+        </div>
+      `;
+    }
+    // Lazy-load on first paint of this tab.
+    if (this.tokens === null) {
+      this._loadTokens();
+      return html`<div class="muted">Loading tokens…</div>`;
+    }
+    return html`
+      <div class="tokens-header">
+        <p class="helper">
+          API tokens authenticate agents (MCP clients) against this project. Each token is scoped to this project only.
+        </p>
+        <div class="spacer"></div>
+        <button class="btn primary" @click=${() => this._openTokenDialog()}>New token</button>
+      </div>
+      ${this.tokenError ? html`<div class="error">${this.tokenError}</div>` : null}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Prefix</th>
+            <th>Created</th>
+            <th>Last used</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${this.tokens.length === 0
+            ? html`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No tokens yet.</td></tr>`
+            : this.tokens.map(t => html`
+              <tr>
+                <td>${t.Name}</td>
+                <td class="mono">${t.Prefix}…</td>
+                <td>${this._fmtDate(t.CreatedAt)}</td>
+                <td>${this._fmtDate(t.LastUsedAt)}</td>
+                <td>${t.RevokedAt
+                      ? html`<span class="status-revoked">revoked</span>`
+                      : html`<span class="status-active">active</span>`}</td>
+                <td class="row-actions">
+                  ${t.RevokedAt ? null : html`
+                    <button class="delete" title="Revoke token" aria-label="Revoke token"
+                            @click=${() => this._revokeToken(t.ID)}>✕</button>`}
+                </td>
+              </tr>
+            `)}
+        </tbody>
+      </table>
+      ${this.showIssueToken ? this._renderTokenDialog() : null}
+    `;
+  }
+
+  _renderTokenDialog() {
+    if (this.issuedToken) {
+      const secret = this.issuedToken.plaintext;
+      const snippet = `claude mcp add nottario http://localhost:8080/mcp \\
+  --transport http \\
+  --header "Authorization: Bearer ${secret}" \\
+  --scope local`;
+      return html`
+        <div class="dialog">
+          <div class="panel">
+            <h3>Token issued</h3>
+            <div class="secret-banner">
+              <strong>Copy this token now.</strong> It will not be shown again.
+            </div>
+            <div class="secret">${secret}</div>
+            <p class="helper" style="margin:14px 0 4px">Install in Claude Code:</p>
+            <div class="snippet">${snippet}</div>
+            <div class="actions-row" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn secondary"
+                      @click=${() => navigator.clipboard.writeText(secret)}>Copy token</button>
+              <button class="btn secondary"
+                      @click=${() => navigator.clipboard.writeText(snippet)}>Copy snippet</button>
+              <button class="btn primary" @click=${() => this._closeTokenDialog()}>Done</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    return html`
+      <div class="dialog">
+        <div class="panel">
+          <h3>New API token</h3>
+          ${this.tokenError ? html`<div class="error">${this.tokenError}</div>` : null}
+          <form @submit=${(e) => this._issueToken(e)}>
+            <nottario-field label="Name" hint="so you remember which agent uses it">
+              <input name="name" required autofocus placeholder="laptop, ci-runner, …">
+            </nottario-field>
+            <nottario-field label="Default role" hint="optional — used when the agent doesn't specify one">
+              <select name="default_role_id">
+                <option value="">(none)</option>
+                ${this.roles.map(r => html`<option value=${r.ID}>${r.Label}</option>`)}
+              </select>
+            </nottario-field>
+            <div class="actions-row" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+              <button type="button" class="btn secondary"
+                      @click=${() => this._closeTokenDialog()}>Cancel</button>
+              <button type="submit" class="btn primary">Issue</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
   }
 
   async removeMember(userID, roleID) {

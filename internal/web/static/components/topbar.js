@@ -397,7 +397,6 @@ class NottarioTopbar extends LitElement {
                     : ''}
                 </div>
                 <a class="item" role="menuitem" tabindex="0" href="/me" @click=${this._go('/me')}>Profile</a>
-                <a class="item" role="menuitem" tabindex="0" href="/tokens" @click=${this._go('/tokens')}>API tokens</a>
                 <div class="sep"></div>
                 <button class="item danger" role="menuitem" tabindex="0"
                         @click=${() => this._logout()}>Sign out</button>

@@ -43,7 +43,7 @@ func NewServer(d Deps) http.Handler {
 	// SPA catch-all: any GET that does not match a more specific route
 	// is served the embedded index.html so the client-side router can
 	// resolve the path (handles direct page loads and refreshes for
-	// /projects/<id>/board, /tokens, etc.). Unknown /api/* and /auth/*
+	// /projects/<id>/board, /projects/<id>/settings, etc.). Unknown /api/* and /auth/*
 	// paths short-circuit to 404 inside the handler.
 	mux.Handle("GET /", IndexHandler())
 

@@ -238,8 +238,8 @@ class NottarioProfilePage extends LitElement {
           <div class="row">
             <div class="label">API tokens</div>
             <div class="value">
-              <a class="tokens-link" href="/tokens"
-                 @click=${(e) => { e.preventDefault(); window.nottarioNavigate('/tokens'); }}>Manage your API tokens →</a>
+              <a class="tokens-link" href="/"
+                 @click=${(e) => { e.preventDefault(); window.nottarioNavigate('/'); }}>Manage tokens in a project's Settings →</a>
             </div>
           </div>
           <div class="row">
