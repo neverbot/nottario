@@ -74,7 +74,11 @@ artefacts written to disk must be in English regardless.
   `docker compose up -d --build nottario` so the user can verify
   immediately.
 - **Human identity:** GitHub OAuth from v1.
-- **Agent identity:** API tokens generated from the web UI.
+- **Agent identity:** API tokens generated per-project from the web
+  UI (open the project → Settings → Tokens). One token = one project;
+  an agent using a token issued for project A cannot read or write
+  anything in project B. Admin tokens are not exempt from project
+  scope.
 - **MCP:** served over HTTP+SSE from the same binary. No separate
   MCP binary.
 
