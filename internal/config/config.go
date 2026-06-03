@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -40,22 +41,29 @@ func LoadDotEnv() {
 func Load() (*Config, error) {
 	LoadDotEnv()
 
+	clientSecret, err := getSecret("GITHUB_OAUTH_CLIENT_SECRET")
+	if err != nil {
+		return nil, err
+	}
 	cfg := &Config{
 		HTTPAddr:           getenv("HTTP_ADDR", ":8080"),
 		PublicURL:          getenv("PUBLIC_URL", "http://localhost:8080"),
 		DatabaseURL:        os.Getenv("DATABASE_URL"),
 		GithubClientID:     os.Getenv("GITHUB_OAUTH_CLIENT_ID"),
-		GithubClientSecret: os.Getenv("GITHUB_OAUTH_CLIENT_SECRET"),
+		GithubClientSecret: clientSecret,
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, errors.New("DATABASE_URL is required")
 	}
 
-	rawKey := os.Getenv("SESSION_KEY")
+	rawKey, err := getSecret("SESSION_KEY")
+	if err != nil {
+		return nil, err
+	}
 	if rawKey == "" {
 		return nil, errors.New("SESSION_KEY is required (32 random bytes, base64-encoded)")
 	}
-	key, err := base64.StdEncoding.DecodeString(rawKey)
+	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rawKey))
 	if err != nil {
 		return nil, fmt.Errorf("SESSION_KEY is not valid base64: %w", err)
 	}
@@ -77,4 +85,21 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// getSecret reads a secret from a `<name>_FILE` env pointing at a file
+// (12-factor / Docker secrets convention) and falls back to the plain
+// `<name>` env. Trailing whitespace from the file is stripped — common
+// when secrets are written with `echo …` and end up with a newline.
+// `_FILE` takes precedence when both are set so an operator can wire a
+// secret-mount without touching the value var.
+func getSecret(name string) (string, error) {
+	if path := os.Getenv(name + "_FILE"); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read %s_FILE %q: %w", name, path, err)
+		}
+		return strings.TrimRight(string(b), "\r\n\t "), nil
+	}
+	return os.Getenv(name), nil
 }

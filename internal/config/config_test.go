@@ -2,6 +2,9 @@ package config
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -88,5 +91,69 @@ func TestLoad_HTTPAddrOverride(t *testing.T) {
 	}
 	if cfg.HTTPAddr != ":9999" {
 		t.Errorf("HTTPAddr override not applied: %q", cfg.HTTPAddr)
+	}
+}
+
+// writeSecretFile writes `content` to a fresh file under t.TempDir and
+// returns its path. The file is cleaned up automatically by t.Cleanup.
+func writeSecretFile(t *testing.T, name, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	return path
+}
+
+func TestLoad_SessionKeyFile_TakesPrecedence(t *testing.T) {
+	setRequired(t)
+	// Plain env points at a deliberately-invalid value; the FILE
+	// variant carries the real key. Loader must pick the FILE one.
+	t.Setenv("SESSION_KEY", "not_base64!!!")
+	t.Setenv("SESSION_KEY_FILE", writeSecretFile(t, "session_key", validKey))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want, _ := base64.StdEncoding.DecodeString(validKey)
+	if string(cfg.SessionKey) != string(want) {
+		t.Error("SESSION_KEY_FILE was not honoured (loader picked the plain env)")
+	}
+}
+
+func TestLoad_SessionKeyFile_StripsTrailingNewline(t *testing.T) {
+	setRequired(t)
+	t.Setenv("SESSION_KEY", "")
+	// Common when secrets are produced by `openssl rand -base64 32 >
+	// session_key` — the file ends in `\n`.
+	t.Setenv("SESSION_KEY_FILE", writeSecretFile(t, "session_key", validKey+"\n"))
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+}
+
+func TestLoad_SessionKeyFile_MissingFile(t *testing.T) {
+	setRequired(t)
+	t.Setenv("SESSION_KEY", "")
+	t.Setenv("SESSION_KEY_FILE", filepath.Join(t.TempDir(), "does-not-exist"))
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when SESSION_KEY_FILE points at a missing file")
+	}
+	if !strings.Contains(err.Error(), "SESSION_KEY_FILE") {
+		t.Errorf("error should mention SESSION_KEY_FILE for diagnosability, got: %v", err)
+	}
+}
+
+func TestLoad_GithubSecretFile_TakesPrecedence(t *testing.T) {
+	setRequired(t)
+	t.Setenv("GITHUB_OAUTH_CLIENT_SECRET", "stale-value")
+	t.Setenv("GITHUB_OAUTH_CLIENT_SECRET_FILE", writeSecretFile(t, "gh", "real-secret\n"))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.GithubClientSecret != "real-secret" {
+		t.Errorf("GithubClientSecret = %q, want %q", cfg.GithubClientSecret, "real-secret")
 	}
 }
