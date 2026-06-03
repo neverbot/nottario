@@ -214,7 +214,9 @@ func TestMCP_TokenProjectScope_Enforcement(t *testing.T) {
 		if len(out.Projects) != 1 {
 			t.Fatalf("expected exactly 1 project, got %d: %+v", len(out.Projects), out.Projects)
 		}
-		id, _ := out.Projects[0]["id"].(string)
+		// identity.Project has no json tags, so fields serialise with
+		// their Go names ("ID", not "id").
+		id, _ := out.Projects[0]["ID"].(string)
 		if id != f.projectA {
 			t.Fatalf("expected project A %s, got %s", f.projectA, id)
 		}
@@ -230,7 +232,9 @@ func TestMCP_TokenProjectScope_Enforcement(t *testing.T) {
 			t.Fatalf("expected at least one membership, got none")
 		}
 		for _, m := range out.Memberships {
-			pid, _ := m["project_id"].(string)
+			// identity.UserMembership has no json tags; field name in
+			// the marshalled payload is "ProjectID".
+			pid, _ := m["ProjectID"].(string)
 			if pid != f.projectA {
 				t.Fatalf("expected memberships filtered to %s, found %s", f.projectA, pid)
 			}

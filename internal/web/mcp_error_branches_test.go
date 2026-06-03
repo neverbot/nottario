@@ -552,8 +552,16 @@ func TestMCP_Tasks_NonMemberRejected(t *testing.T) {
 		t.Fatalf("expected an error for non-member access, got: %+v", res)
 	}
 	tc, _ := res.Content[0].(*sdk.TextContent)
-	if tc == nil || !strings.Contains(strings.ToLower(tc.Text), "member") {
-		t.Errorf("expected 'not a project member', got: %q", tc.Text)
+	// Either rejection path is acceptable: scope guard fires first
+	// when the token is project-scoped ("token scoped to project X");
+	// the membership check fires next when scope passes ("not a
+	// project member"). Both prove the non-member cannot reach data.
+	if tc == nil {
+		t.Fatalf("expected error text, got nil content")
+	}
+	low := strings.ToLower(tc.Text)
+	if !strings.Contains(low, "member") && !strings.Contains(low, "scoped") {
+		t.Errorf("expected rejection (member or scoped), got: %q", tc.Text)
 	}
 }
 

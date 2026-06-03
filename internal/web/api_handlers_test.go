@@ -89,10 +89,12 @@ func TestApiProjects_ListAndGet(t *testing.T) {
 		t.Errorf("get id mismatch: %+v", p)
 	}
 
-	// 404 on missing.
+	// Probing a random project id with a project-scoped token hits
+	// the scope guard before the not-found branch ever runs — the
+	// admin's token is bound to f.projectID, not the random uuid.
 	r = doRaw(t, "GET", f.ts.URL+"/api/projects/"+uuid.New().String(), f.authAdmin, nil)
-	if r.StatusCode != http.StatusNotFound {
-		t.Errorf("get missing: %d", r.StatusCode)
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("get random project (scope mismatch): got %d, want 403", r.StatusCode)
 	}
 
 	// 401 unauth on get.

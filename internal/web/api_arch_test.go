@@ -76,11 +76,15 @@ func TestApiArch_Unauthenticated(t *testing.T) {
 	}
 }
 
-func TestApiArch_OutsiderGets404(t *testing.T) {
+func TestApiArch_OutsiderRejected(t *testing.T) {
+	// The outsider's token is scoped to their OWN project, not the
+	// owner's. The scope guard on /api/projects/{id}/... rejects with
+	// 403 before any membership check fires. Per-project tokens make
+	// this the authoritative non-member rejection path.
 	f := setupArch(t)
 	r := doRaw(t, "GET", f.url("/kinds"), f.authOutsider, nil)
-	if r.StatusCode != http.StatusNotFound {
-		t.Errorf("kinds: got %d, want 404 for non-member", r.StatusCode)
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("kinds: got %d, want 403 for non-member (token scoped to other project)", r.StatusCode)
 	}
 }
 
@@ -113,10 +117,11 @@ func TestApiArch_AuthSweep(t *testing.T) {
 		if r.StatusCode != http.StatusUnauthorized {
 			t.Errorf("%s %s no-auth: got %d, want 401", c.method, c.path, r.StatusCode)
 		}
-		// 404: outsider (not a member, not admin).
+		// 403: outsider's token is scoped to their own project; the
+		// scope guard rejects before any membership check.
 		r = doRaw(t, c.method, f.url(c.path), f.authOutsider, c.body)
-		if r.StatusCode != http.StatusNotFound {
-			t.Errorf("%s %s outsider: got %d, want 404", c.method, c.path, r.StatusCode)
+		if r.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s outsider: got %d, want 403", c.method, c.path, r.StatusCode)
 		}
 	}
 

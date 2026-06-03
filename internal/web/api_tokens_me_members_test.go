@@ -261,11 +261,29 @@ func TestApiMembers_AddAndRemove(t *testing.T) {
 		t.Fatalf("add: %d %s", r.StatusCode, r.Body)
 	}
 
-	// Outsider is now a member, can list.
+	// Outsider is now a member, can list. The outsider's API token
+	// is scoped to their OWN project (not f.projectID), so the
+	// token-based call would hit the scope guard. The intent of this
+	// assertion is "members list works for a freshly-added member",
+	// which is a cookie-auth concern — sessions span every project
+	// the user is a member of. Use the outsider's cookie.
+	req, _ := http.NewRequest("GET", f.ts.URL+"/api/projects/"+f.projectID+"/members", nil)
+	req.AddCookie(f.cookieOutsider)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("members GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("members GET via cookie: %d %s", resp.StatusCode, body)
+	}
 	var listed struct {
 		Members []map[string]any `json:"members"`
 	}
-	doJSON(t, "GET", f.ts.URL+"/api/projects/"+f.projectID+"/members", f.authOutsider, nil, &listed)
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("members JSON: %v", err)
+	}
 	if len(listed.Members) == 0 {
 		t.Error("outsider should see members after being added")
 	}
