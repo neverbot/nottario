@@ -69,6 +69,158 @@ To keep state (the `db-data` volume) between runs:
 docker compose down
 ```
 
+## Self-hosting
+
+The same binary that runs locally is what ships to production. Below is
+the minimum needed to put it behind a real domain with TLS, a real
+Postgres, and a sensible secret hygiene story.
+
+### Behind a reverse proxy (Traefik example)
+
+Nottario does **not** terminate TLS. A reverse proxy in front of it
+handles certificates and forwards plain HTTP to `:8080`. Set
+`PUBLIC_URL=https://<your-domain>`; the binary detects the `https://`
+prefix and turns on the `Secure` flag for session cookies
+automatically. Anything else (cookies on `http`, mixed-content) is not
+supported.
+
+Minimal Traefik snippet — drop into the compose file that already runs
+Traefik on your host. No `ports:` block on Nottario; the proxy is the
+only thing the public reaches.
+
+```yaml
+services:
+  nottario:
+    image: ghcr.io/neverbot/nottario:latest
+    restart: unless-stopped
+    networks:
+      - <your-traefik-network>
+    depends_on:
+      - postgres
+    environment:
+      PUBLIC_URL: https://nottario.example.com
+      HTTP_ADDR: ":8080"
+      DATABASE_URL: postgres://nottario@postgres:5432/nottario?sslmode=disable
+      GITHUB_OAUTH_CLIENT_ID: <your client id>
+      GITHUB_OAUTH_CLIENT_SECRET_FILE: /run/secrets/nottario_github_secret
+      SESSION_KEY_FILE: /run/secrets/nottario_session_key
+    secrets:
+      - nottario_github_secret
+      - nottario_session_key
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nottario.rule=Host(`nottario.example.com`)
+      - traefik.http.routers.nottario.entrypoints=websecure
+      - traefik.http.routers.nottario.tls.certresolver=<your-resolver>
+      - traefik.http.services.nottario.loadbalancer.server.port=8080
+```
+
+For nginx or Caddy: forward `https://nottario.example.com → http://127.0.0.1:8080`
+preserving `Host` and `X-Forwarded-Proto`. Nothing else is required.
+
+### Required environment
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `PUBLIC_URL` | yes | `http://localhost:8080` | The base URL users reach. Must match the OAuth callback host and have `https://` in production for `Secure` cookies. |
+| `DATABASE_URL` | yes | — | pgx connection string. Migrations run automatically on startup. |
+| `GITHUB_OAUTH_CLIENT_ID` | yes | — | From the GitHub OAuth App. |
+| `GITHUB_OAUTH_CLIENT_SECRET` | yes | — | From the GitHub OAuth App. |
+| `SESSION_KEY` | yes | — | 32 random bytes, base64-encoded. Generate once and keep: `openssl rand -base64 32`. Rotating it logs everyone out. |
+| `HTTP_ADDR` | no | `:8080` | Listen address. Change only if you run multiple instances on one host. |
+
+Every secret variable also accepts a `_FILE` companion that points at
+a file on disk: `SESSION_KEY_FILE`, `GITHUB_OAUTH_CLIENT_SECRET_FILE`.
+The file's contents are read and trailing whitespace is stripped — so
+`openssl rand -base64 32 > /run/secrets/session_key` works without
+extra ceremony. The `_FILE` variant takes precedence when both are
+set; this is the recommended path under Docker secrets, Kubernetes
+mounted secrets, or any host where you'd rather not have secrets in
+the process environment.
+
+### GitHub OAuth App
+
+1. Sign in to GitHub and open **Settings → Developer settings → OAuth Apps → New OAuth App**.
+2. Fill in:
+   - **Application name**: anything (e.g. `nottario-yourorg`).
+   - **Homepage URL**: your `PUBLIC_URL`.
+   - **Authorization callback URL**: `${PUBLIC_URL}/auth/github/callback`.
+   - Leave Device Flow disabled and the webhook section empty.
+3. Save, then **Generate a new client secret**. Copy it once — GitHub
+   only shows it once.
+4. Put the Client ID and Client Secret into the environment of the
+   running container (see the table above).
+
+Required OAuth scopes: `read:user`. The MCP server never asks for
+elevated GitHub scopes.
+
+### First admin
+
+The very first user to complete the OAuth login flow on a fresh
+instance is promoted to **instance admin** automatically. After that,
+new logins are regular users until granted admin via project
+membership.
+
+Adding or revoking instance-admin on subsequent users currently
+requires direct SQL (`UPDATE users SET is_admin = true WHERE
+github_login = '…';`). A UI for this is on the roadmap; until then,
+keep that one human you trust as the first login.
+
+### Database
+
+Two supported setups:
+
+- **Bring your own Postgres** (production). Point `DATABASE_URL` at an
+  external Postgres 16+ instance you already operate. Nottario applies
+  its own migrations on first boot; no manual SQL needed. A dedicated
+  database and role for Nottario is recommended:
+
+  ```sql
+  CREATE ROLE nottario LOGIN PASSWORD '…';
+  CREATE DATABASE nottario OWNER nottario;
+  ```
+
+- **Embedded compose Postgres** (dev only). The `compose.yml` in this
+  repo ships a `db` service with a hardcoded `nottario:nottario`
+  password. Convenient for local development; do **not** run a
+  production instance against it.
+
+Migrations are written as goose files under `internal/db/migrations/`
+and are embedded into the binary. There is no separate migration
+command — booting the container is the migration.
+
+### Backups
+
+There is no built-in backup mechanism yet. Running real data without
+an external backup is **at your own risk**. Until the backup feature
+lands, a minimal cron from outside the container:
+
+```bash
+# /etc/cron.daily/nottario-backup
+docker exec <postgres-container> \
+  pg_dump -U nottario -Fc nottario > /backups/nottario-$(date +%F).dump
+find /backups -name 'nottario-*.dump' -mtime +14 -delete
+```
+
+Restore with `pg_restore -U nottario -d nottario /backups/<file>.dump`.
+
+### Upgrades
+
+```bash
+docker compose pull nottario
+docker compose up -d nottario
+```
+
+Migrations apply automatically on the new container's boot. A failed
+migration leaves the previous schema intact; the new container will
+exit non-zero and the proxy will fall back to whatever it was last
+serving — but the database state is consistent.
+
+Rolling **back** is not automatic: goose Down migrations are written
+defensively but data shape changes (e.g. dropped columns) cannot be
+reconstructed. Test upgrades on a copy of the production database
+before applying.
+
 ## Connect an AI agent
 
 Nottario exposes its full surface area to AI agents through an MCP
