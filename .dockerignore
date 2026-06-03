@@ -16,6 +16,7 @@ tmp/
 .github/
 .claude/
 .superpowers/
+.scratch/
 docs/
 
 # Editor and OS noise

@@ -39,3 +39,7 @@ node_modules/
 
 # Throwaway screenshots from chrome-devtools MCP sessions
 tmp-*.png
+
+# Scratch directory used by agents for ad-hoc screenshots, debug
+# dumps and similar throwaway artefacts. Never versioned.
+/.scratch/
