@@ -27,6 +27,17 @@ func registerWhoami(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError("list memberships: " + err.Error())
 		}
+		// Token-scoped callers only see memberships within their
+		// bound project — the rest are out of scope by definition.
+		if c.Source == identity.SourceToken {
+			filtered := memberships[:0]
+			for _, m := range memberships {
+				if m.ProjectID == c.ProjectID {
+					filtered = append(filtered, m)
+				}
+			}
+			memberships = filtered
+		}
 		return jsonResult(map[string]any{
 			"user_id":      user.ID,
 			"github_login": user.GithubLogin,

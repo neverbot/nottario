@@ -271,6 +271,9 @@ func resolveDocScope(ctx context.Context, d Deps, in docsScopeInput) (docs.Scope
 	if err != nil {
 		return "", nil, errors.New("project_id must be a uuid")
 	}
+	if err := identity.RequireProjectScope(c, pid); err != nil {
+		return "", nil, err
+	}
 	if !c.IsAdmin {
 		roles, err := identity.UserRoleIDs(ctx, d.Pool, c.UserID, pid)
 		if err != nil {

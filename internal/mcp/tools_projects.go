@@ -20,7 +20,7 @@ type GetProjectInput struct {
 func registerProjects(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.projects.list",
-		Description: "Lists projects visible to the caller. Admins see every project; other users see only the projects where they hold at least one role.",
+		Description: "Lists projects visible to the caller. Admins see every project; other users see only the projects where they hold at least one role. Token-scoped callers see only the single project their token is bound to (other projects are out of scope by definition).",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ ListProjectsInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -29,6 +29,17 @@ func registerProjects(server *sdk.Server, d Deps) {
 		projects, err := identity.ListProjects(ctx, d.Pool, c.UserID, c.IsAdmin)
 		if err != nil {
 			return toolError(err.Error())
+		}
+		// Token-scoped callers see only their bound project, even if
+		// the underlying user is a member of others.
+		if c.Source == identity.SourceToken {
+			filtered := projects[:0]
+			for _, p := range projects {
+				if p.ID == c.ProjectID {
+					filtered = append(filtered, p)
+				}
+			}
+			projects = filtered
 		}
 		return jsonResult(map[string]any{"projects": projects})
 	})
@@ -43,6 +54,9 @@ func registerProjects(server *sdk.Server, d Deps) {
 		p, err := identity.GetProject(ctx, d.Pool, in.ProjectID)
 		if err != nil {
 			return toolError("project not found: " + err.Error())
+		}
+		if err := enforceProjectScopeMCP(ctx, p.ID); err != nil {
+			return toolError(err.Error())
 		}
 		return jsonResult(p)
 	})
@@ -61,6 +75,9 @@ func registerProjects(server *sdk.Server, d Deps) {
 				return toolError("project not found: " + err.Error())
 			}
 			pid = p.ID
+		}
+		if err := enforceProjectScopeMCP(ctx, pid); err != nil {
+			return toolError(err.Error())
 		}
 		pr, err := identity.ListPriorities(ctx, d.Pool, pid)
 		if err != nil {
@@ -84,6 +101,9 @@ func registerProjects(server *sdk.Server, d Deps) {
 				return toolError("project not found: " + err.Error())
 			}
 			pid = p.ID
+		}
+		if err := enforceProjectScopeMCP(ctx, pid); err != nil {
+			return toolError(err.Error())
 		}
 		roles, err := identity.ListRoles(ctx, d.Pool, pid)
 		if err != nil {
@@ -110,6 +130,9 @@ func registerProjects(server *sdk.Server, d Deps) {
 				return toolError("project not found: " + err.Error())
 			}
 			pid = p.ID
+		}
+		if err := identity.RequireProjectScope(c, pid); err != nil {
+			return toolError(err.Error())
 		}
 		ids := make([]uuid.UUID, 0, len(in.RoleIDs))
 		for _, s := range in.RoleIDs {
@@ -148,6 +171,9 @@ func registerProjects(server *sdk.Server, d Deps) {
 			}
 			pid = p.ID
 		}
+		if err := identity.RequireProjectScope(c, pid); err != nil {
+			return toolError(err.Error())
+		}
 		newOwnerID, err := uuid.Parse(in.NewOwnerID)
 		if err != nil {
 			return toolError("new_owner_id must be a uuid")
@@ -161,6 +187,16 @@ func registerProjects(server *sdk.Server, d Deps) {
 		}
 		return jsonResult(p)
 	})
+}
+
+// enforceProjectScopeMCP returns a ProjectScopeError when the caller
+// authenticated with an API token bound to a different project.
+func enforceProjectScopeMCP(ctx context.Context, projectID uuid.UUID) error {
+	c, err := callerFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	return identity.RequireProjectScope(c, projectID)
 }
 
 // ReorderRolesInput is the input for nottario.projects.reorder_roles.

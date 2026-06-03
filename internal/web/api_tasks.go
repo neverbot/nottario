@@ -53,6 +53,9 @@ func taskIDFromPath(r *http.Request) (uuid.UUID, error) {
 // see it (admin or any membership). It returns 404 to avoid leaking
 // existence to outsiders.
 func (d TaskDeps) ensureProjectAccess(ctx context.Context, c identity.Caller, projectID uuid.UUID) error {
+	if err := identity.RequireProjectScope(c, projectID); err != nil {
+		return err
+	}
 	if c.IsAdmin {
 		return nil
 	}
@@ -80,7 +83,7 @@ func ListDependenciesHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		deps, err := tasks.ListAllDependencies(r.Context(), d.Pool, pid)
@@ -107,7 +110,7 @@ func ListInconsistenciesHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		items, err := tasks.ListInconsistencies(r.Context(), d.Pool, pid)
@@ -133,7 +136,7 @@ func ListTasksHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 
@@ -186,7 +189,7 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		tid, err := taskIDFromPath(r)
@@ -244,7 +247,7 @@ func CreateTaskHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		var req createTaskRequest
@@ -314,7 +317,7 @@ func UpdateTaskHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		tid, err := taskIDFromPath(r)
@@ -363,7 +366,7 @@ func SetTaskStateHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		tid, err := taskIDFromPath(r)
@@ -409,7 +412,7 @@ func DeleteTaskHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		tid, err := taskIDFromPath(r)
@@ -443,7 +446,7 @@ func NextTaskHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 
@@ -503,7 +506,7 @@ func AddDependencyHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		tid, err := taskIDFromPath(r)
@@ -542,7 +545,7 @@ func RemoveDependencyHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		tid, err := taskIDFromPath(r)
@@ -583,7 +586,7 @@ func LinkCommitHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		tid, err := taskIDFromPath(r)
@@ -622,7 +625,7 @@ func AddCommentHandler(d TaskDeps) http.Handler {
 			return
 		}
 		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		tid, err := taskIDFromPath(r)

@@ -25,6 +25,9 @@ func (d ArchDeps) caller(r *http.Request) (identity.Caller, bool) {
 }
 
 func (d ArchDeps) requireAccess(ctx context.Context, c identity.Caller, projectID uuid.UUID) error {
+	if err := identity.RequireProjectScope(c, projectID); err != nil {
+		return err
+	}
 	if c.IsAdmin {
 		return nil
 	}
@@ -56,7 +59,7 @@ func ListKindsHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		kinds, err := arch.ListKinds(r.Context(), d.Pool, pid)
@@ -90,7 +93,7 @@ func UpsertKindHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		var req kindUpsertRequest
@@ -123,7 +126,7 @@ func DeleteKindHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		key := r.PathValue("key")
@@ -165,7 +168,7 @@ func UpsertNodeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		var req nodeUpsertRequest
@@ -200,7 +203,7 @@ func ListNodesHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		q := r.URL.Query()
@@ -227,7 +230,7 @@ func GetNodeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		slug := r.PathValue("slug")
@@ -266,7 +269,7 @@ func RemoveNodeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		slug := r.PathValue("slug")
@@ -301,7 +304,7 @@ func MoveNodeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		slug := r.PathValue("slug")
@@ -341,7 +344,7 @@ func UpsertEdgeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		var req edgeUpsertRequest
@@ -375,7 +378,7 @@ func ListEdgesHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		q := r.URL.Query()
@@ -407,7 +410,7 @@ func RemoveEdgeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		eid, err := uuid.Parse(r.PathValue("edge_id"))
@@ -446,7 +449,7 @@ func LinkNodeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		slug := r.PathValue("slug")
@@ -488,7 +491,7 @@ func UnlinkNodeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 		slug := r.PathValue("slug")

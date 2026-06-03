@@ -521,9 +521,15 @@ func registerTasks(server *sdk.Server, d Deps) {
 }
 
 // requireProjectAccess returns an error when the caller cannot see the project.
+// It enforces, in this order: (1) per-token project scope — an API
+// token bound to project A is rejected when the request targets
+// project B; (2) instance-admin override; (3) project membership.
 func requireProjectAccess(ctx context.Context, d Deps, projectID uuid.UUID) error {
 	c, err := callerFromContext(ctx)
 	if err != nil {
+		return err
+	}
+	if err := identity.RequireProjectScope(c, projectID); err != nil {
 		return err
 	}
 	if c.IsAdmin {

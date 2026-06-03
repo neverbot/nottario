@@ -56,37 +56,38 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/users", ListUsersHandler(UsersDeps{Pool: d.Pool, Resolver: d.Resolver}))
 
 	proj := ProjectDeps{Pool: d.Pool, Resolver: d.Resolver}
+	guard := func(h http.Handler) http.Handler { return withProjectScopeGuard(d.Resolver, h) }
 	mux.Handle("GET /api/projects", ListProjectsHandler(proj))
 	mux.Handle("POST /api/projects", CreateProjectHandler(proj))
-	mux.Handle("GET /api/projects/{id}", GetProjectHandler(proj))
-	mux.Handle("PATCH /api/projects/{id}", UpdateProjectHandler(proj))
-	mux.Handle("PATCH /api/projects/{id}/mcp", UpdateProjectMCPHandler(proj))
-	mux.Handle("PATCH /api/projects/{id}/default_view", UpdateProjectDefaultViewHandler(proj))
-	mux.Handle("PATCH /api/projects/{id}/owner", SetOwnerHandler(proj))
-	mux.Handle("DELETE /api/projects/{id}", DeleteProjectHandler(proj))
+	mux.Handle("GET /api/projects/{id}", guard(GetProjectHandler(proj)))
+	mux.Handle("PATCH /api/projects/{id}", guard(UpdateProjectHandler(proj)))
+	mux.Handle("PATCH /api/projects/{id}/mcp", guard(UpdateProjectMCPHandler(proj)))
+	mux.Handle("PATCH /api/projects/{id}/default_view", guard(UpdateProjectDefaultViewHandler(proj)))
+	mux.Handle("PATCH /api/projects/{id}/owner", guard(SetOwnerHandler(proj)))
+	mux.Handle("DELETE /api/projects/{id}", guard(DeleteProjectHandler(proj)))
 
-	mux.Handle("GET /api/projects/{id}/cycles", ListCyclesHandler(proj))
-	mux.Handle("GET /api/projects/{id}/cycles/current", GetCurrentCycleHandler(proj))
-	mux.Handle("POST /api/projects/{id}/cycles/end", EndCycleHandler(proj))
+	mux.Handle("GET /api/projects/{id}/cycles", guard(ListCyclesHandler(proj)))
+	mux.Handle("GET /api/projects/{id}/cycles/current", guard(GetCurrentCycleHandler(proj)))
+	mux.Handle("POST /api/projects/{id}/cycles/end", guard(EndCycleHandler(proj)))
 
-	mux.Handle("GET /api/projects/{id}/roles", ListRolesHandler(proj))
-	mux.Handle("POST /api/projects/{id}/roles", CreateRoleHandler(proj))
-	mux.Handle("PATCH /api/projects/{id}/roles/{role_id}", UpdateRoleHandler(proj))
-	mux.Handle("DELETE /api/projects/{id}/roles/{role_id}", DeleteRoleHandler(proj))
-	mux.Handle("POST /api/projects/{id}/roles/reorder", ReorderRolesHandler(proj))
+	mux.Handle("GET /api/projects/{id}/roles", guard(ListRolesHandler(proj)))
+	mux.Handle("POST /api/projects/{id}/roles", guard(CreateRoleHandler(proj)))
+	mux.Handle("PATCH /api/projects/{id}/roles/{role_id}", guard(UpdateRoleHandler(proj)))
+	mux.Handle("DELETE /api/projects/{id}/roles/{role_id}", guard(DeleteRoleHandler(proj)))
+	mux.Handle("POST /api/projects/{id}/roles/reorder", guard(ReorderRolesHandler(proj)))
 
-	mux.Handle("GET /api/projects/{id}/priorities", ListPrioritiesHandler(proj))
-	mux.Handle("POST /api/projects/{id}/priorities", UpsertPriorityHandler(proj))
-	mux.Handle("DELETE /api/projects/{id}/priorities/{key}", RemovePriorityHandler(proj))
+	mux.Handle("GET /api/projects/{id}/priorities", guard(ListPrioritiesHandler(proj)))
+	mux.Handle("POST /api/projects/{id}/priorities", guard(UpsertPriorityHandler(proj)))
+	mux.Handle("DELETE /api/projects/{id}/priorities/{key}", guard(RemovePriorityHandler(proj)))
 
-	mux.Handle("GET /api/projects/{id}/members", ListMembersHandler(proj))
-	mux.Handle("POST /api/projects/{id}/members", AddMemberHandler(proj))
-	mux.Handle("DELETE /api/projects/{id}/members/{user_id}/{role_id}", RemoveMemberHandler(proj))
+	mux.Handle("GET /api/projects/{id}/members", guard(ListMembersHandler(proj)))
+	mux.Handle("POST /api/projects/{id}/members", guard(AddMemberHandler(proj)))
+	mux.Handle("DELETE /api/projects/{id}/members/{user_id}/{role_id}", guard(RemoveMemberHandler(proj)))
 
 	tok := TokenDeps{Pool: d.Pool, Resolver: d.Resolver}
-	mux.Handle("GET /api/projects/{project_id}/tokens", ListProjectTokensHandler(tok))
-	mux.Handle("POST /api/projects/{project_id}/tokens", IssueProjectTokenHandler(tok))
-	mux.Handle("DELETE /api/projects/{project_id}/tokens/{token_id}", RevokeProjectTokenHandler(tok))
+	mux.Handle("GET /api/projects/{project_id}/tokens", guard(ListProjectTokensHandler(tok)))
+	mux.Handle("POST /api/projects/{project_id}/tokens", guard(IssueProjectTokenHandler(tok)))
+	mux.Handle("DELETE /api/projects/{project_id}/tokens/{token_id}", guard(RevokeProjectTokenHandler(tok)))
 
 	// Skill bundle served unauthenticated so agents can preview the
 	// catalogue before authenticating. Per-organisation overrides
@@ -110,19 +111,19 @@ func NewServer(d Deps) http.Handler {
 	}
 
 	archDeps := ArchDeps{Pool: d.Pool, Resolver: d.Resolver}
-	mux.Handle("GET /api/projects/{id}/arch/kinds", ListKindsHandler(archDeps))
-	mux.Handle("POST /api/projects/{id}/arch/kinds", UpsertKindHandler(archDeps))
-	mux.Handle("DELETE /api/projects/{id}/arch/kinds/{key}", DeleteKindHandler(archDeps))
-	mux.Handle("GET /api/projects/{id}/arch/nodes", ListNodesHandler(archDeps))
-	mux.Handle("POST /api/projects/{id}/arch/nodes", UpsertNodeHandler(archDeps))
-	mux.Handle("GET /api/projects/{id}/arch/nodes/{slug}", GetNodeHandler(archDeps))
-	mux.Handle("DELETE /api/projects/{id}/arch/nodes/{slug}", RemoveNodeHandler(archDeps))
-	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/move", MoveNodeHandler(archDeps))
-	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/links", LinkNodeHandler(archDeps))
-	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/unlinks", UnlinkNodeHandler(archDeps))
-	mux.Handle("GET /api/projects/{id}/arch/edges", ListEdgesHandler(archDeps))
-	mux.Handle("POST /api/projects/{id}/arch/edges", UpsertEdgeHandler(archDeps))
-	mux.Handle("DELETE /api/projects/{id}/arch/edges/{edge_id}", RemoveEdgeHandler(archDeps))
+	mux.Handle("GET /api/projects/{id}/arch/kinds", guard(ListKindsHandler(archDeps)))
+	mux.Handle("POST /api/projects/{id}/arch/kinds", guard(UpsertKindHandler(archDeps)))
+	mux.Handle("DELETE /api/projects/{id}/arch/kinds/{key}", guard(DeleteKindHandler(archDeps)))
+	mux.Handle("GET /api/projects/{id}/arch/nodes", guard(ListNodesHandler(archDeps)))
+	mux.Handle("POST /api/projects/{id}/arch/nodes", guard(UpsertNodeHandler(archDeps)))
+	mux.Handle("GET /api/projects/{id}/arch/nodes/{slug}", guard(GetNodeHandler(archDeps)))
+	mux.Handle("DELETE /api/projects/{id}/arch/nodes/{slug}", guard(RemoveNodeHandler(archDeps)))
+	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/move", guard(MoveNodeHandler(archDeps)))
+	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/links", guard(LinkNodeHandler(archDeps)))
+	mux.Handle("POST /api/projects/{id}/arch/nodes/{slug}/unlinks", guard(UnlinkNodeHandler(archDeps)))
+	mux.Handle("GET /api/projects/{id}/arch/edges", guard(ListEdgesHandler(archDeps)))
+	mux.Handle("POST /api/projects/{id}/arch/edges", guard(UpsertEdgeHandler(archDeps)))
+	mux.Handle("DELETE /api/projects/{id}/arch/edges/{edge_id}", guard(RemoveEdgeHandler(archDeps)))
 
 	docsDeps := DocsDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/docs", ListDocsHandler(docsDeps))
@@ -140,19 +141,19 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/search", SearchHandler(searchDeps))
 
 	tasks := TaskDeps{Pool: d.Pool, Resolver: d.Resolver}
-	mux.Handle("GET /api/projects/{id}/tasks", ListTasksHandler(tasks))
-	mux.Handle("POST /api/projects/{id}/tasks", CreateTaskHandler(tasks))
-	mux.Handle("GET /api/projects/{id}/tasks/next", NextTaskHandler(tasks))
-	mux.Handle("GET /api/projects/{id}/tasks/dependencies", ListDependenciesHandler(tasks))
-	mux.Handle("GET /api/projects/{id}/tasks/inconsistencies", ListInconsistenciesHandler(tasks))
-	mux.Handle("GET /api/projects/{id}/tasks/{task_id}", GetTaskHandler(tasks))
-	mux.Handle("PATCH /api/projects/{id}/tasks/{task_id}", UpdateTaskHandler(tasks))
-	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}", DeleteTaskHandler(tasks))
-	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/state", SetTaskStateHandler(tasks))
-	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/dependencies", AddDependencyHandler(tasks))
-	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}/dependencies/{dep_id}", RemoveDependencyHandler(tasks))
-	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/commits", LinkCommitHandler(tasks))
-	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/comments", AddCommentHandler(tasks))
+	mux.Handle("GET /api/projects/{id}/tasks", guard(ListTasksHandler(tasks)))
+	mux.Handle("POST /api/projects/{id}/tasks", guard(CreateTaskHandler(tasks)))
+	mux.Handle("GET /api/projects/{id}/tasks/next", guard(NextTaskHandler(tasks)))
+	mux.Handle("GET /api/projects/{id}/tasks/dependencies", guard(ListDependenciesHandler(tasks)))
+	mux.Handle("GET /api/projects/{id}/tasks/inconsistencies", guard(ListInconsistenciesHandler(tasks)))
+	mux.Handle("GET /api/projects/{id}/tasks/{task_id}", guard(GetTaskHandler(tasks)))
+	mux.Handle("PATCH /api/projects/{id}/tasks/{task_id}", guard(UpdateTaskHandler(tasks)))
+	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}", guard(DeleteTaskHandler(tasks)))
+	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/state", guard(SetTaskStateHandler(tasks)))
+	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/dependencies", guard(AddDependencyHandler(tasks)))
+	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}/dependencies/{dep_id}", guard(RemoveDependencyHandler(tasks)))
+	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/commits", guard(LinkCommitHandler(tasks)))
+	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/comments", guard(AddCommentHandler(tasks)))
 
 	return mux
 }

@@ -29,6 +29,9 @@ func (d TokenDeps) caller(r *http.Request) (identity.Caller, bool) {
 // outsider gets the same 404 the rest of the per-project surface
 // returns so we don't leak project existence.
 func (d TokenDeps) isProjectMember(r *http.Request, c identity.Caller, projectID uuid.UUID) (bool, error) {
+	if err := identity.RequireProjectScope(c, projectID); err != nil {
+		return false, err
+	}
 	if c.IsAdmin {
 		return true, nil
 	}
@@ -59,7 +62,7 @@ func ListProjectTokensHandler(d TokenDeps) http.Handler {
 		}
 		ok, err = d.isProjectMember(r, c, pid)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeProjectAccessError(w, err)
 			return
 		}
 		if !ok {
@@ -101,7 +104,7 @@ func IssueProjectTokenHandler(d TokenDeps) http.Handler {
 		}
 		ok, err = d.isProjectMember(r, c, pid)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeProjectAccessError(w, err)
 			return
 		}
 		if !ok {
@@ -153,6 +156,10 @@ func RevokeProjectTokenHandler(d TokenDeps) http.Handler {
 		proj, err := identity.GetProject(r.Context(), d.Pool, pid.String())
 		if err != nil {
 			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		if err := identity.RequireProjectScope(c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		tok, err := identity.GetToken(r.Context(), d.Pool, tid)

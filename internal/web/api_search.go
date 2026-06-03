@@ -26,6 +26,9 @@ func (d SearchDeps) caller(r *http.Request) (identity.Caller, bool) {
 }
 
 func (d SearchDeps) requireAccess(ctx context.Context, c identity.Caller, projectID uuid.UUID) error {
+	if err := identity.RequireProjectScope(c, projectID); err != nil {
+		return err
+	}
 	if c.IsAdmin {
 		return nil
 	}
@@ -60,7 +63,7 @@ func SearchHandler(d SearchDeps) http.Handler {
 			return
 		}
 		if err := d.requireAccess(r.Context(), c, pid); err != nil {
-			writeError(w, http.StatusNotFound, "project not found")
+			writeProjectAccessError(w, err)
 			return
 		}
 
