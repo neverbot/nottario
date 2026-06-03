@@ -410,4 +410,4 @@ Tooling:
 
 ## License
 
-TBD.
+MIT — see [`license.md`](license.md).
