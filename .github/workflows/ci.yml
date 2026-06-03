@@ -1,14 +1,21 @@
-name: release
+name: ci
+
+# Single CI pipeline. The `test` job is the universal gate: every PR
+# and every push runs `make check` (gofmt + vet + lint + sqlc-check +
+# the full test suite against a fresh Postgres). The `publish-image`
+# job only runs after `test` succeeds, and only on pushes to master
+# or git tags `v*` — PRs never publish.
 
 on:
   push:
     branches: [master]
     tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
@@ -19,8 +26,48 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nottario
+          POSTGRES_PASSWORD: nottario
+          POSTGRES_DB: nottario
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://nottario:nottario@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: install dev tools (golangci-lint, sqlc)
+        run: make tools
+
+      - name: gate
+        # `make check` runs gofmt, go vet, golangci-lint (with our
+        # custom sqlcheck analyzer), sqlc diff, and `go test ./...`.
+        # The integration tests gate on TEST_DATABASE_URL above, so
+        # they fire here instead of being skipped.
+        run: make check
+
   publish-image:
     name: Build and publish container image
+    needs: test
+    # Publish only on real pushes (master or tags). PRs go through
+    # `test` for the gate and stop there.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
