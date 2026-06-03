@@ -35,13 +35,13 @@ func TestMCP_StreamableHTTPTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	plaintext, _, err := identity.IssueToken(ctx, pool, u.ID, "mcp-token", nil)
-	if err != nil {
-		t.Fatalf("IssueToken: %v", err)
-	}
 	proj, err := identity.CreateProject(ctx, pool, "MCPProj", "", "", "", u.ID, nil)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
+	}
+	plaintext, _, err := identity.IssueToken(ctx, pool, u.ID, proj.ID, "mcp-token", nil)
+	if err != nil {
+		t.Fatalf("IssueToken: %v", err)
 	}
 
 	// Stand up the real router; /mcp is mounted inside NewServer.

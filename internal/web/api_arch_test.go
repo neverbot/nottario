@@ -32,13 +32,20 @@ func setupArch(t *testing.T) *archFixture {
 	if err != nil {
 		t.Fatalf("owner: %v", err)
 	}
-	ownerToken, _, _ := identity.IssueToken(ctx, pool, owner.ID, "owner-token", nil)
-	outsider, _, _ := identity.UpsertFromGithub(ctx, pool, 13402, "arch-outsider", "Outsider", "")
-	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, "out-token", nil)
 	p, err := identity.CreateProject(ctx, pool, "Arch", "", "", "", owner.ID, nil)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
+	ownerToken, _, _ := identity.IssueToken(ctx, pool, owner.ID, p.ID, "owner-token", nil)
+	outsider, _, _ := identity.UpsertFromGithub(ctx, pool, 13402, "arch-outsider", "Outsider", "")
+	// Outsider's token lives in their own project — separate scope so
+	// it can never authenticate against the owner's project under
+	// per-project token semantics.
+	outProj, err := identity.CreateProject(ctx, pool, "Arch-Out", "", "", "", outsider.ID, nil)
+	if err != nil {
+		t.Fatalf("outsider project: %v", err)
+	}
+	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, outProj.ID, "out-token", nil)
 	srv := NewServer(Deps{
 		Pool:     pool,
 		Resolver: identity.NewResolver(pool, []byte("test-session-key"), false),

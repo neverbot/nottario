@@ -42,20 +42,21 @@ func setupWebFixture(t *testing.T) *webFixture {
 	if err != nil {
 		t.Fatalf("owner: %v", err)
 	}
-	ownerToken, _, err := identity.IssueToken(ctx, pool, owner.ID, "owner-token", nil)
-	if err != nil {
-		t.Fatalf("token: %v", err)
-	}
 	p, err := identity.CreateProject(ctx, pool, "TME", "", "", "", owner.ID, nil)
 	if err != nil {
 		t.Fatalf("project: %v", err)
+	}
+	ownerToken, _, err := identity.IssueToken(ctx, pool, owner.ID, p.ID, "owner-token", nil)
+	if err != nil {
+		t.Fatalf("token: %v", err)
 	}
 	roles, _ := identity.ListRoles(ctx, pool, p.ID)
 	if len(roles) == 0 {
 		t.Fatal("no roles seeded")
 	}
 	outsider, _, _ := identity.UpsertFromGithub(ctx, pool, 13202, "outsider-tme", "Out", "")
-	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, "out-token", nil)
+	outProj, _ := identity.CreateProject(ctx, pool, "TME-Out", "", "", "", outsider.ID, nil)
+	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, outProj.ID, "out-token", nil)
 
 	key := []byte("test-session-key")
 	ownerSess, _ := identity.NewSession(ctx, pool, owner.ID, "test", "127.0.0.1")
@@ -139,10 +140,11 @@ func TestApiMe_Authenticated(t *testing.T) {
 
 func TestApiTokens_Lifecycle(t *testing.T) {
 	f := setupWebFixture(t)
+	base := f.ts.URL + "/api/projects/" + f.projectID + "/tokens"
 
-	// Issue a token via REST (session-cookie-only endpoint).
+	// Issue a token via REST (session cookie auth).
 	body, _ := json.Marshal(map[string]any{"name": "via-rest"})
-	r := doWithCookie(t, "POST", f.ts.URL+"/api/tokens", f.cookieOwner, body)
+	r := doWithCookie(t, "POST", base, f.cookieOwner, body)
 	if r.StatusCode < 200 || r.StatusCode >= 300 {
 		t.Fatalf("issue: %d %s", r.StatusCode, r.Body)
 	}
@@ -161,7 +163,7 @@ func TestApiTokens_Lifecycle(t *testing.T) {
 	}
 
 	// List tokens.
-	r = doWithCookie(t, "GET", f.ts.URL+"/api/tokens", f.cookieOwner, nil)
+	r = doWithCookie(t, "GET", base, f.cookieOwner, nil)
 	if r.StatusCode != http.StatusOK {
 		t.Fatalf("list: %d %s", r.StatusCode, r.Body)
 	}
@@ -183,14 +185,14 @@ func TestApiTokens_Lifecycle(t *testing.T) {
 	}
 
 	// Revoke.
-	r = doWithCookie(t, "DELETE", f.ts.URL+"/api/tokens/"+id, f.cookieOwner, nil)
+	r = doWithCookie(t, "DELETE", base+"/"+id, f.cookieOwner, nil)
 	if r.StatusCode < 200 || r.StatusCode >= 300 {
 		t.Errorf("revoke status %d: %s", r.StatusCode, r.Body)
 	}
 
 	// After revoke, the token is still listed (revocation is soft,
 	// for audit) but `RevokedAt` is set.
-	r = doWithCookie(t, "GET", f.ts.URL+"/api/tokens", f.cookieOwner, nil)
+	r = doWithCookie(t, "GET", base, f.cookieOwner, nil)
 	_ = json.Unmarshal(r.Body, &list)
 	var revoked map[string]any
 	for _, tk := range list.Tokens {
@@ -210,7 +212,7 @@ func TestApiTokens_Lifecycle(t *testing.T) {
 func TestApiTokens_Unauthenticated(t *testing.T) {
 	f := setupWebFixture(t)
 	// No cookie at all → 401.
-	r := doRaw(t, "GET", f.ts.URL+"/api/tokens", "", nil)
+	r := doRaw(t, "GET", f.ts.URL+"/api/projects/"+f.projectID+"/tokens", "", nil)
 	if r.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status: got %d, want 401", r.StatusCode)
 	}

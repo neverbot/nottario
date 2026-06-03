@@ -70,10 +70,11 @@ func (rv *Resolver) ResolveToken(r *http.Request) (Caller, bool) {
 		return Caller{}, false
 	}
 	c := Caller{
-		UserID:  user.ID,
-		IsAdmin: user.IsAdmin,
-		Source:  SourceToken,
-		TokenID: token.ID,
+		UserID:    user.ID,
+		IsAdmin:   user.IsAdmin,
+		ProjectID: token.ProjectID,
+		Source:    SourceToken,
+		TokenID:   token.ID,
 	}
 	return c, true
 }

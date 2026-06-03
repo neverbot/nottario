@@ -12,15 +12,59 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getAPIToken = `-- name: GetAPIToken :one
+SELECT id, user_id, project_id, name, prefix, default_role_id,
+       created_at, last_used_at, revoked_at
+FROM api_tokens
+WHERE id = $1
+`
+
+type GetAPITokenRow struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	ProjectID     uuid.UUID
+	Name          string
+	Prefix        string
+	DefaultRoleID *uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	LastUsedAt    pgtype.Timestamptz
+	RevokedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow, error) {
+	row := q.db.QueryRow(ctx, getAPIToken, id)
+	var i GetAPITokenRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Prefix,
+		&i.DefaultRoleID,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const insertAPIToken = `-- name: InsertAPIToken :one
-INSERT INTO api_tokens (user_id, name, token_hash, prefix, default_role_id)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, name, prefix, default_role_id,
+INSERT INTO api_tokens (user_id, project_id, name, token_hash, prefix, default_role_id)
+VALUES (
+    $1::uuid,
+    $2::uuid,
+    $3::text,
+    $4::bytea,
+    $5::text,
+    $6::uuid
+)
+RETURNING id, user_id, project_id, name, prefix, default_role_id,
           created_at, last_used_at, revoked_at
 `
 
 type InsertAPITokenParams struct {
 	UserID        uuid.UUID
+	ProjectID     uuid.UUID
 	Name          string
 	TokenHash     []byte
 	Prefix        string
@@ -30,6 +74,7 @@ type InsertAPITokenParams struct {
 type InsertAPITokenRow struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID
+	ProjectID     uuid.UUID
 	Name          string
 	Prefix        string
 	DefaultRoleID *uuid.UUID
@@ -41,6 +86,7 @@ type InsertAPITokenRow struct {
 func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error) {
 	row := q.db.QueryRow(ctx, insertAPIToken,
 		arg.UserID,
+		arg.ProjectID,
 		arg.Name,
 		arg.TokenHash,
 		arg.Prefix,
@@ -50,6 +96,7 @@ func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) 
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.Prefix,
 		&i.DefaultRoleID,
@@ -60,17 +107,18 @@ func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) 
 	return i, err
 }
 
-const listUserTokens = `-- name: ListUserTokens :many
-SELECT id, user_id, name, prefix, default_role_id,
+const listProjectTokens = `-- name: ListProjectTokens :many
+SELECT id, user_id, project_id, name, prefix, default_role_id,
        created_at, last_used_at, revoked_at
 FROM api_tokens
-WHERE user_id = $1
+WHERE project_id = $1
 ORDER BY created_at DESC
 `
 
-type ListUserTokensRow struct {
+type ListProjectTokensRow struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID
+	ProjectID     uuid.UUID
 	Name          string
 	Prefix        string
 	DefaultRoleID *uuid.UUID
@@ -79,18 +127,19 @@ type ListUserTokensRow struct {
 	RevokedAt     pgtype.Timestamptz
 }
 
-func (q *Queries) ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error) {
-	rows, err := q.db.Query(ctx, listUserTokens, userID)
+func (q *Queries) ListProjectTokens(ctx context.Context, projectID uuid.UUID) ([]ListProjectTokensRow, error) {
+	rows, err := q.db.Query(ctx, listProjectTokens, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListUserTokensRow{}
+	items := []ListProjectTokensRow{}
 	for rows.Next() {
-		var i ListUserTokensRow
+		var i ListProjectTokensRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.ProjectID,
 			&i.Name,
 			&i.Prefix,
 			&i.DefaultRoleID,
@@ -109,7 +158,7 @@ func (q *Queries) ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListU
 }
 
 const lookupAPIToken = `-- name: LookupAPIToken :one
-SELECT t.id AS token_id, t.user_id, t.name AS token_name,
+SELECT t.id AS token_id, t.user_id, t.project_id, t.name AS token_name,
        t.prefix, t.default_role_id,
        t.created_at AS token_created_at,
        t.last_used_at, t.revoked_at,
@@ -124,6 +173,7 @@ WHERE t.token_hash = $1 AND t.revoked_at IS NULL
 type LookupAPITokenRow struct {
 	TokenID        uuid.UUID
 	UserID         uuid.UUID
+	ProjectID      uuid.UUID
 	TokenName      string
 	Prefix         string
 	DefaultRoleID  *uuid.UUID
@@ -146,6 +196,7 @@ func (q *Queries) LookupAPIToken(ctx context.Context, tokenHash []byte) (LookupA
 	err := row.Scan(
 		&i.TokenID,
 		&i.UserID,
+		&i.ProjectID,
 		&i.TokenName,
 		&i.Prefix,
 		&i.DefaultRoleID,

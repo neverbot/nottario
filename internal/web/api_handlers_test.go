@@ -41,10 +41,11 @@ func setupHandlersFixture(t *testing.T) *handlersFixture {
 	if err != nil {
 		t.Fatalf("admin: %v", err)
 	}
-	adminToken, _, _ := identity.IssueToken(ctx, pool, admin.ID, "admin", nil)
-	outsider, _, _ := identity.UpsertFromGithub(ctx, pool, 13502, "outsider-h", "Out", "")
-	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, "out", nil)
 	p, _ := identity.CreateProject(ctx, pool, "Handlers", "", "", "", admin.ID, nil)
+	adminToken, _, _ := identity.IssueToken(ctx, pool, admin.ID, p.ID, "admin", nil)
+	outsider, _, _ := identity.UpsertFromGithub(ctx, pool, 13502, "outsider-h", "Out", "")
+	outProj, _ := identity.CreateProject(ctx, pool, "Handlers-Out", "", "", "", outsider.ID, nil)
+	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, outProj.ID, "out", nil)
 
 	srv := NewServer(Deps{
 		Pool:     pool,
@@ -217,10 +218,13 @@ func TestApiUsers_AuthAndList(t *testing.T) {
 
 func TestApiTokens_RevokeMissing(t *testing.T) {
 	f := setupHandlersFixture(t)
-	// Token revoke uses session-cookie auth — issue a session.
+	// Token revoke uses session-cookie auth — issue a session for the
+	// admin who owns the fixture project so the membership check
+	// passes before we get to the "does this token exist?" branch.
 	ctx := t.Context()
 	pool := testutil.NewPool(t)
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 13503, "rev", "Rev", "")
+	p, _ := identity.CreateProject(ctx, pool, "Rev", "", "", "", u.ID, nil)
 	key := []byte("test-session-key")
 	sess, _ := identity.NewSession(ctx, pool, u.ID, "t", "127.0.0.1")
 	cookie := &http.Cookie{
@@ -233,8 +237,9 @@ func TestApiTokens_RevokeMissing(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	// Revoke a never-existed token. Behaviour: handler returns 404
-	// (or 200 idempotent — we accept either).
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/tokens/"+uuid.New().String(), nil)
+	// (the token row doesn't exist for this project).
+	url := ts.URL + "/api/projects/" + p.ID.String() + "/tokens/" + uuid.New().String()
+	req, _ := http.NewRequest(http.MethodDelete, url, nil)
 	req.AddCookie(cookie)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -102,6 +102,7 @@ type Membership struct {
 type APIToken struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID
+	ProjectID     uuid.UUID
 	Name          string
 	Prefix        string
 	DefaultRoleID *uuid.UUID

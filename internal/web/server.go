@@ -84,9 +84,9 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("DELETE /api/projects/{id}/members/{user_id}/{role_id}", RemoveMemberHandler(proj))
 
 	tok := TokenDeps{Pool: d.Pool, Resolver: d.Resolver}
-	mux.Handle("GET /api/tokens", ListTokensHandler(tok))
-	mux.Handle("POST /api/tokens", IssueTokenHandler(tok))
-	mux.Handle("DELETE /api/tokens/{id}", RevokeTokenHandler(tok))
+	mux.Handle("GET /api/projects/{project_id}/tokens", ListProjectTokensHandler(tok))
+	mux.Handle("POST /api/projects/{project_id}/tokens", IssueProjectTokenHandler(tok))
+	mux.Handle("DELETE /api/projects/{project_id}/tokens/{token_id}", RevokeProjectTokenHandler(tok))
 
 	// Skill bundle served unauthenticated so agents can preview the
 	// catalogue before authenticating. Per-organisation overrides

@@ -25,9 +25,11 @@ const TokenPrefix = "ntr_"
 // ErrTokenInvalid is returned by LookupToken for any non-match.
 var ErrTokenInvalid = errors.New("token invalid")
 
-// IssueToken creates a new API token for the user and returns the
-// plaintext exactly once.
-func IssueToken(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, name string, defaultRoleID *uuid.UUID) (plaintext string, token *APIToken, err error) {
+// IssueToken creates a new API token for the user inside the given
+// project and returns the plaintext exactly once. Tokens are
+// project-scoped: an agent presenting this token will only ever
+// authenticate against the project it was minted in.
+func IssueToken(ctx context.Context, pool *pgxpool.Pool, userID, projectID uuid.UUID, name string, defaultRoleID *uuid.UUID) (plaintext string, token *APIToken, err error) {
 	raw := make([]byte, 24) // 24 random bytes -> 32 base64 chars
 	if _, err = rand.Read(raw); err != nil {
 		return "", nil, fmt.Errorf("read random: %w", err)
@@ -39,6 +41,7 @@ func IssueToken(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, name 
 
 	row, err := dbq.New(pool).InsertAPIToken(ctx, dbq.InsertAPITokenParams{
 		UserID:        userID,
+		ProjectID:     projectID,
 		Name:          name,
 		TokenHash:     hash[:],
 		Prefix:        prefix,
@@ -66,6 +69,7 @@ func LookupToken(ctx context.Context, pool *pgxpool.Pool, plaintext string) (*AP
 	t := APIToken{
 		ID:            row.TokenID,
 		UserID:        row.UserID,
+		ProjectID:     row.ProjectID,
 		Name:          row.TokenName,
 		Prefix:        row.Prefix,
 		DefaultRoleID: row.DefaultRoleID,
@@ -86,9 +90,10 @@ func LookupToken(ctx context.Context, pool *pgxpool.Pool, plaintext string) (*AP
 	return &t, &u, nil
 }
 
-// ListTokens returns the tokens owned by a user.
-func ListTokens(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]APIToken, error) {
-	rows, err := dbq.New(pool).ListUserTokens(ctx, userID)
+// ListProjectTokens returns every token issued for a project, ordered
+// newest-first. Includes revoked tokens for audit display.
+func ListProjectTokens(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]APIToken, error) {
+	rows, err := dbq.New(pool).ListProjectTokens(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +102,7 @@ func ListTokens(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]AP
 		out = append(out, APIToken{
 			ID:            r.ID,
 			UserID:        r.UserID,
+			ProjectID:     r.ProjectID,
 			Name:          r.Name,
 			Prefix:        r.Prefix,
 			DefaultRoleID: r.DefaultRoleID,
@@ -106,6 +112,30 @@ func ListTokens(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]AP
 		})
 	}
 	return out, nil
+}
+
+// GetToken fetches a token by id. Returns ErrTokenInvalid if missing.
+// Used by the revoke handler to validate the token belongs to the
+// project in the URL before running the authz check.
+func GetToken(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*APIToken, error) {
+	row, err := dbq.New(pool).GetAPIToken(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrTokenInvalid
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &APIToken{
+		ID:            row.ID,
+		UserID:        row.UserID,
+		ProjectID:     row.ProjectID,
+		Name:          row.Name,
+		Prefix:        row.Prefix,
+		DefaultRoleID: row.DefaultRoleID,
+		CreatedAt:     row.CreatedAt.Time,
+		LastUsedAt:    timeOrNil(row.LastUsedAt),
+		RevokedAt:     timeOrNil(row.RevokedAt),
+	}, nil
 }
 
 // RevokeToken marks a token revoked. Only the owner or an admin may
@@ -130,6 +160,7 @@ func tokenFromInsertRow(r dbq.InsertAPITokenRow) *APIToken {
 	return &APIToken{
 		ID:            r.ID,
 		UserID:        r.UserID,
+		ProjectID:     r.ProjectID,
 		Name:          r.Name,
 		Prefix:        r.Prefix,
 		DefaultRoleID: r.DefaultRoleID,

@@ -516,7 +516,11 @@ func TestMCP_Tasks_NonMemberRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
-	tok, _, err := identity.IssueToken(ctx, pool, outsider.ID, "outsider", nil)
+	outProj, err := identity.CreateProject(ctx, pool, "OutProj", "", "", "", outsider.ID, nil)
+	if err != nil {
+		t.Fatalf("outsider project: %v", err)
+	}
+	tok, _, err := identity.IssueToken(ctx, pool, outsider.ID, outProj.ID, "outsider", nil)
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}

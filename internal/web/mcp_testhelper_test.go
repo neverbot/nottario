@@ -44,13 +44,13 @@ func newMCPFixture(t *testing.T, githubID int64, login string) *mcpFixture {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	token, _, err := identity.IssueToken(ctx, pool, u.ID, "mcp", nil)
-	if err != nil {
-		t.Fatalf("IssueToken: %v", err)
-	}
 	p, err := identity.CreateProject(ctx, pool, "MCP "+login, "", "", "", u.ID, nil)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
+	}
+	token, _, err := identity.IssueToken(ctx, pool, u.ID, p.ID, "mcp", nil)
+	if err != nil {
+		t.Fatalf("IssueToken: %v", err)
 	}
 
 	srv := NewServer(Deps{

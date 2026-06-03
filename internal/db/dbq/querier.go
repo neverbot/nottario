@@ -40,6 +40,7 @@ type Querier interface {
 	DeleteSessionByID(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
+	GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow, error)
 	GetActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
 	// Resolves an architecture node chip by slug.
@@ -115,6 +116,7 @@ type Querier interface {
 	ListProjectRepos(ctx context.Context, projectID uuid.UUID) ([]string, error)
 	ListProjectRoleIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
 	ListProjectRoles(ctx context.Context, projectID uuid.UUID) ([]ListProjectRolesRow, error)
+	ListProjectTokens(ctx context.Context, projectID uuid.UUID) ([]ListProjectTokensRow, error)
 	ListProjectsAdmin(ctx context.Context) ([]ListProjectsAdminRow, error)
 	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]ListProjectsForUserRow, error)
 	// Lists every global-scope skill document path. The skill bundle
@@ -135,7 +137,6 @@ type Querier interface {
 	ListTasksPaginated(ctx context.Context, arg ListTasksPaginatedParams) ([]ListTasksPaginatedRow, error)
 	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
 	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
-	ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
 	LockActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
