@@ -17,7 +17,11 @@ RUN CGO_ENABLED=0 GOOS=linux \
       -o /out/nottario ./cmd/nottario
 
 FROM alpine:3.21
-RUN apk add --no-cache postgresql16-client ca-certificates \
+# postgresql17-client matches the version used by self-hosters on
+# Postgres 17 servers (pg_dump refuses to dump a server newer than
+# itself). The pg17 client is backward-compatible with older servers,
+# so it also works against the Postgres 16 dev container.
+RUN apk add --no-cache postgresql17-client ca-certificates \
     && addgroup -S nonroot \
     && adduser -S -G nonroot -u 65532 -h /home/nonroot nonroot
 COPY --from=build /out/nottario /nottario
