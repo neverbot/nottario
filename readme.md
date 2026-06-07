@@ -208,12 +208,47 @@ command — booting the container is the migration.
 ### Backups
 
 Nottario can run periodic backups itself. Set `NOTTARIO_BACKUP_DIR`
-to a host-mounted path and the binary will fork a goroutine that runs
+to a host-mounted path and the binary forks a goroutine that runs
 `pg_dump --format=custom` once a day at `NOTTARIO_BACKUP_AT` (default
 03:00 local), naming files `nottario-YYYY-MM-DD-HHMM.dump`. Files
 older than `NOTTARIO_BACKUP_KEEP_DAYS` (default 7) are pruned after
-each successful dump. Restore with `scripts/restore.sh <file>
-[database_url]`. Backups are disabled when the env is unset.
+each successful dump. Backups are disabled when the env is unset.
+
+To enable on a self-hosted deployment:
+
+```bash
+# 1) Create the host directory and give it to the container's UID.
+sudo mkdir -p /var/backups/nottario
+sudo chown 65532 /var/backups/nottario
+```
+
+```yaml
+# 2) Wire env + volume in your compose service.
+services:
+  nottario:
+    environment:
+      NOTTARIO_BACKUP_DIR: /var/backups/nottario
+      NOTTARIO_BACKUP_AT: "03:00"
+      NOTTARIO_BACKUP_KEEP_DAYS: "7"
+    volumes:
+      - /var/backups/nottario:/var/backups/nottario
+```
+
+The `chown 65532` step is non-negotiable — the container runs as
+that fixed nonroot UID and will fail to write the dump otherwise.
+The dump files end up owned by UID 65532 on the host too; to copy
+them off the box use `sudo cp` or change ownership after.
+
+**Restore.** `scripts/restore.sh <dump-file> [database_url]` runs
+`pg_restore --clean --if-exists --no-owner --no-privileges`. The
+script prompts for confirmation before dropping data; pass `--yes`
+to skip it. The default `database_url` is the dev compose Postgres,
+so be explicit when targeting production.
+
+**Verify the first run.** The simplest smoke test is to point
+`NOTTARIO_BACKUP_AT` at "two minutes from now" before restarting,
+wait, then `ls -la /var/backups/nottario/` on the host. Reset the
+schedule afterwards.
 
 ### Upgrades
 
