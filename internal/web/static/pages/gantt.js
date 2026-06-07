@@ -456,6 +456,14 @@ class NottarioGantt extends LitElement {
       if (w && Math.abs(w - (this._stageWidth || 0)) > 1) {
         this._stageWidth = w;
       }
+      // If the initial centring never completed (e.g. the stage was
+      // still 0px wide when updated() last ran), retry as soon as the
+      // stage gains a real width. updated() won't fire again unless a
+      // reactive property changes, so the ResizeObserver is the only
+      // signal we get when layout finally settles after navigation.
+      if (!this._initialCenterDone && w && this.tasks && this.tasks.length) {
+        this._centerOnNow();
+      }
     };
     update();
     if (typeof ResizeObserver !== 'undefined') {
@@ -624,16 +632,37 @@ class NottarioGantt extends LitElement {
     // the same tick as render() returns stale zeroes — the sub-column
     // priority columns added enough X to push the now-line off-screen
     // before the layout pass had finished.
-    requestAnimationFrame(() => requestAnimationFrame(() => {
+    //
+    // If after two frames the stage still has no width (the topbar
+    // or sidebar is still settling after a navigation), retry on the
+    // next frame up to ~10 times before giving up. The ResizeObserver
+    // wired in _observeStageWidth() is the other safety net.
+    if (this._centerInFlight) return;
+    this._centerInFlight = true;
+    let attempts = 0;
+    const tryCenter = () => {
       const stage = this.shadowRoot?.querySelector('.stage');
       const nowLine = this.shadowRoot?.querySelector('.now-line');
-      if (!stage || !nowLine) return;
+      if (!stage || !nowLine) {
+        this._centerInFlight = false;
+        return;
+      }
+      if (!stage.clientWidth) {
+        attempts++;
+        if (attempts < 10) {
+          requestAnimationFrame(tryCenter);
+        } else {
+          this._centerInFlight = false;
+        }
+        return;
+      }
       const nowX = parseFloat(nowLine.getAttribute('x1') || '0');
-      if (!stage.clientWidth) return; // not visible yet — try again on next update
       const target = Math.max(0, nowX - stage.clientWidth / 2);
       stage.scrollLeft = target;
       this._initialCenterDone = true;
-    }));
+      this._centerInFlight = false;
+    };
+    requestAnimationFrame(() => requestAnimationFrame(tryCenter));
   }
 
   _subscribe() {
