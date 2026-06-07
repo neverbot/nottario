@@ -43,6 +43,21 @@ your agents at the resulting MCP endpoint with one `claude mcp add`
 per project, and the team — humans and agents both — stops losing
 track of who's doing what.
 
+Agents don't have to be onboarded with a long brief either: every
+Nottario instance ships an **embedded skill bundle** — a small set of
+markdown documents covering identity (call `whoami` first, the token
+scopes you to a single project), the carry-on loop (claim a task
+atomically, do the work, link the commits you produced, close), the
+task-discipline conventions (one task per role, file new work before
+doing it), and when to touch the architecture diagram. The first
+time an agent connects, it pulls the bundle via `nottario.skill.read`
+or `GET /skill.zip` and reads its conventions before touching
+anything. The bundle lives inside the binary, so it's always present
+and always matches the server's behaviour; instance admins can
+override or extend any file with a `kind=skill` document at the
+global scope, so a team can tighten the rules for their own project
+without recompiling.
+
 ## A tour, in four screens
 
 ![Kanban board with three columns (todo, doing, done), tasks tagged by type, priority bucket and role; cards in doing and done show the assignee's avatar in the bottom-right corner; sprint progress in the header](assets/screenshots/kanban-board.png)
