@@ -195,6 +195,11 @@ class NottarioGantt extends LitElement {
       position: absolute;
       z-index: 5;
       pointer-events: none;
+      /* Shadow DOM ignores global box-sizing rules (see claude.md).
+         Without this, max-width applies to the content area only,
+         and the actual offsetWidth = max-width + padding + border —
+         the card would render ~22px wider than the runtime cap. */
+      box-sizing: border-box;
       background: #fff;
       color: #1f2328;
       border: 1px solid #d0d7de;
@@ -205,6 +210,12 @@ class NottarioGantt extends LitElement {
       max-width: 320px;
       font-size: 12px;
       line-height: 1.4;
+      /* Safety: on extremely narrow stages the runtime max-width
+         override may still hit a min-content floor (a chip wider
+         than the box). Clip so the card never visibly overflows. */
+      overflow: hidden;
+      /* Title can be a long unbroken slug; break aggressively. */
+      overflow-wrap: anywhere;
     }
     .hover-card .title {
       font-size: 13px;
@@ -561,6 +572,19 @@ class NottarioGantt extends LitElement {
   // and reposition it. Content-driven width (220–320 in CSS) and
   // height mean the template's estimate can be off until we measure
   // — without this the left/up flip math opens an oversized gap.
+  //
+  // The positioning has three phases:
+  //   1. Cap the card's max-width / max-height to fit inside the
+  //      stage (with an 8px gutter). On a one-lane Gantt the stage
+  //      can be ~400px wide; the CSS default max-width: 320px would
+  //      otherwise produce a card too wide to flip into.
+  //   2. Pick a tentative position next to the cursor (right + below
+  //      preferred) and flip to the other side when the natural slot
+  //      doesn't fit.
+  //   3. Final clamp: force the card inside [scrollLeft+8,
+  //      scrollLeft+stageW-w-8] horizontally and analogously
+  //      vertically, so a near-edge cursor without a winning flip
+  //      can never leave the card hanging outside the stage.
   _repositionHoverCard() {
     const card = this.shadowRoot?.querySelector('.hover-card');
     if (!card || !this._hover) {
@@ -568,6 +592,21 @@ class NottarioGantt extends LitElement {
       this._lastCardH = null;
       return;
     }
+    const stage = this.shadowRoot.querySelector('.stage');
+    const scrollLeft = stage?.scrollLeft || 0;
+    const stageW = stage?.clientWidth || 800;
+    const scrollTop = stage?.scrollTop || 0;
+    const stageH = stage?.clientHeight || 600;
+    // Phase 1: constrain to the stage. The 8px gutter mirrors the
+    // minimum margin used elsewhere in this function.
+    const maxW = Math.max(120, stageW - 16);
+    const maxH = Math.max(80, stageH - 16);
+    card.style.maxWidth = `${maxW}px`;
+    card.style.maxHeight = `${maxH}px`;
+    // When the stage is narrower than the CSS min-width (220), lift
+    // that floor too so the card can actually shrink.
+    if (maxW < 220) card.style.minWidth = `${maxW}px`;
+    else card.style.minWidth = '';
     const measuredW = card.offsetWidth;
     const measuredH = card.offsetHeight;
     const dwOK = Math.abs((this._lastCardW || 0) - measuredW) < 1;
@@ -576,24 +615,26 @@ class NottarioGantt extends LitElement {
     this._lastCardW = measuredW;
     this._lastCardH = measuredH;
     const { barX, barY, cursor } = this._hover;
-    const stage = this.shadowRoot.querySelector('.stage');
-    const scrollLeft = stage?.scrollLeft || 0;
-    const stageW = stage?.clientWidth || 800;
-    const scrollTop = stage?.scrollTop || 0;
-    const stageH = stage?.clientHeight || 600;
     const anchorX = cursor ? cursor.x : barX;
     const anchorY = cursor ? cursor.y : barY;
     const offX = cursor ? 14 : 8;
     const offYBelow = cursor ? 16 : -8;
     const offYAbove = cursor ? 16 : 8;
+    // Phase 2: tentative slot.
     let left = anchorX + offX;
     if (left + measuredW > scrollLeft + stageW) {
-      left = Math.max(scrollLeft + 8, anchorX - measuredW - offX);
+      left = anchorX - measuredW - offX;
     }
-    let top = Math.max(8, anchorY + offYBelow);
+    let top = anchorY + offYBelow;
     if (top + measuredH > scrollTop + stageH) {
-      top = Math.max(scrollTop + 8, anchorY - measuredH - offYAbove);
+      top = anchorY - measuredH - offYAbove;
     }
+    // Phase 3: final clamp. If measuredW > stageW the right bound
+    // becomes < the left bound, in which case Math.min wins and we
+    // pin to the left gutter; the card can still overflow on the
+    // right but at least the title is visible.
+    left = Math.max(scrollLeft + 8, Math.min(left, scrollLeft + stageW - measuredW - 8));
+    top  = Math.max(scrollTop + 8,  Math.min(top,  scrollTop  + stageH - measuredH - 8));
     card.style.left = `${left}px`;
     card.style.top  = `${top}px`;
   }
