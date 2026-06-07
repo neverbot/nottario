@@ -29,9 +29,14 @@ The whole server is a single Go binary in one Docker container,
 talking to Postgres over the network — the `compose.yml` in the repo
 spins up a dev Postgres next to it for local hacking, and in
 production you point `DATABASE_URL` at whatever Postgres you already
-operate. Identity is GitHub OAuth, real-time updates ride Postgres
-`LISTEN/NOTIFY` over SSE, the frontend is vanilla Lit with no build
-step, and the binary runs its own daily `pg_dump` with N-day
+operate. Identity is GitHub OAuth. The web UI updates itself live as
+agents and humans make changes — close a task in your editor's MCP
+session and any browser sitting on the board sees the card jump
+columns within milliseconds, no refresh; merge a doc change and the
+docs tree refreshes in place. Internally that is Postgres
+`LISTEN/NOTIFY` fanned out to subscribed browsers as SSE. The
+frontend is vanilla Lit with no build step, and the binary runs its
+own daily `pg_dump` with N-day
 rotation so backups are not a separate piece of infrastructure to
 remember. Self-host it on a VPS behind your own reverse proxy, point
 your agents at the resulting MCP endpoint with one `claude mcp add`
