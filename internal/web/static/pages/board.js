@@ -430,21 +430,15 @@ class NottarioBoardPage extends LitElement {
     }
     .detail .state-control button.active:hover { background: #1a7f37; }
 
-    /* Compact priority number input. Width tuned to fit 3 digits + the
-       hidden-spinner chrome. */
-    .detail .meta input[type="number"] {
-      width: 56px;
-      padding: 2px 6px;
+    /* Priority dropdown — same chrome as the new-task dialog's
+       select, narrow enough not to dominate the meta row. */
+    .detail .meta select.priority {
+      padding: 2px 22px 2px 8px;
       border: 1px solid #d0d7de;
       border-radius: 4px;
       font: inherit;
       font-size: 12px;
-      font-variant-numeric: tabular-nums;
-      text-align: center;
-    }
-    .detail .meta input[type="number"]::-webkit-inner-spin-button,
-    .detail .meta input[type="number"]::-webkit-outer-spin-button {
-      -webkit-appearance: none; appearance: none; margin: 0;
+      background: #ffffff;
     }
 
     /* Body sections — description, deps, commits, comments. Eyebrow
@@ -724,6 +718,21 @@ class NottarioBoardPage extends LitElement {
     return `p${value}`;
   }
 
+  // Find the priority bucket whose Value is closest to `value`. Used
+  // to pre-select the dropdown when the stored priority happens to
+  // land between buckets (e.g. someone set a raw integer via SQL or
+  // the legacy number input).
+  _nearestBucketKey(value) {
+    if (!this.priorities || !this.priorities.length) return '';
+    let best = this.priorities[0];
+    let bestDiff = Math.abs(best.Value - value);
+    for (let i = 1; i < this.priorities.length; i++) {
+      const d = Math.abs(this.priorities[i].Value - value);
+      if (d < bestDiff) { best = this.priorities[i]; bestDiff = d; }
+    }
+    return best.Key;
+  }
+
   back() { window.nottarioNavigate('/'); }
 
   _emptyCopy(state) {
@@ -862,11 +871,16 @@ class NottarioBoardPage extends LitElement {
     if (r.ok) await this.loadDetail(taskID);
   }
 
-  async setPriority(taskID, value) {
+  // value is a priority bucket key (e.g. 'medium', 'high'). Resolve
+  // it to the integer value the REST API expects via the cached
+  // priorities catalogue.
+  async setPriority(taskID, key) {
+    const bucket = (this.priorities || []).find(p => p.Key === key);
+    if (!bucket) return;
     const r = await fetch(`/api/projects/${this.projectId}/tasks/${taskID}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ priority: parseInt(value, 10) }),
+      body: JSON.stringify({ priority: bucket.Value }),
     });
     if (r.ok) {
       await this.load();
@@ -1301,8 +1315,15 @@ class NottarioBoardPage extends LitElement {
 
               <div class="field-line">
                 <span class="lbl">Priority</span>
-                <input type="number" .value=${String(task.Priority)} min="0" max="100"
-                       @change=${(e) => this.setPriority(task.ID, e.target.value)}>
+                <select class="priority"
+                        @change=${(e) => this.setPriority(task.ID, e.target.value)}>
+                  ${[...this.priorities].sort((a, b) => b.Value - a.Value).map(p => html`
+                    <option value=${p.Key}
+                            ?selected=${p.Key === this._nearestBucketKey(task.Priority)}>
+                      ${p.Key} (${p.Value})
+                    </option>
+                  `)}
+                </select>
               </div>
 
               <div class="field-line">
