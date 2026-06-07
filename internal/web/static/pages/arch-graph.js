@@ -6,14 +6,9 @@ import '/static/components/task-chip.js';
 import '/static/components/search-input.js';
 
 // <nottario-arch-graph> renders the architecture diagram for a project.
-// Layout: hand-rolled SVG via <nottario-arch-canvas> (containment +
-// edge routing + focus mode). Detail panel lives on the right rail.
-//
-// Feature f9a7a488 (Arch redesign) shipped this surface across children
-// A-D; child E (this) retired the dagre dependency and the legacy
-// drill-down chrome. Browse history if you need the old code:
-// commit 5de5c4c had the dual ?next / legacy fork; commit 502c6ee
-// had the dagre version still active by default.
+// Layout is computed by elkjs; rendering, interaction and the right-
+// rail detail panel are this surface's job (delegated to
+// <nottario-arch-canvas> for the SVG canvas itself).
 
 class NottarioArchGraph extends LitElement {
   static properties = {
