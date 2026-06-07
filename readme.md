@@ -1,62 +1,37 @@
 # Nottario
 
 Open source, self-hosted coordinator for human developers and their
-AI agents. One instance turns the loose ground between "what's in
-flight," "what was decided" and "how it all fits together" into a
-single source of truth that humans browse in a web UI and agents
-drive through MCP. Three domains: a **task backlog** with cycles,
-named priority buckets, dependencies, atomic claim semantics, Kanban
-and Gantt views, and structured git-commit links per task; a
-**shared markdown context** with optimistic-concurrency versioning
-for skills, specs and team notes; and an **architecture diagram**
-of nested boxes and edges that agents maintain in textual form,
-laid out automatically with ELK and rendered in hand-rolled SVG.
+AI agents. One instance brings three things under a single source of
+truth: a **task backlog** with cycles, named priority buckets,
+dependencies and atomic claim semantics; a **versioned markdown
+store** for skills, specs and team notes; and an **architecture
+diagram** of services and their connections that agents maintain
+themselves. Humans browse it in a web UI; agents drive it through
+MCP.
 
-The fit with AI agents is the whole point. Each project issues its
-own bearer token; a token scoped to project A is rejected the second
-it touches project B, admin or not. Concurrency is multi-agent safe
-out of the box — `tasks.claim_next` is a single SQL transaction
-backed by `SELECT … FOR UPDATE SKIP LOCKED`, dependencies and cycle
-detection sit behind project-scoped advisory locks, and feature
-parents roll up to done automatically when every child closes. Drop
-the MCP into Claude Code, Cursor or any HTTP-MCP client and the
-agent can list work, claim a task, link the commits it produces,
-update the architecture diagram to reflect what it just shipped, and
-write the design note that explains why — without humans having to
-relay state by hand.
+Per-project bearer tokens make multi-agent work safe by
+construction: a token scoped to project A is rejected the moment it
+touches project B, admin or not, and `tasks.claim_next` hands a task
+to exactly one caller even when two agents race for it. Drop the
+MCP into Claude Code or Cursor and the agent can list, claim,
+deliver, link commits and update the architecture diagram without
+humans relaying state by hand.
 
-The whole server is a single Go binary in one Docker container,
-talking to Postgres over the network — the `compose.yml` in the repo
-spins up a dev Postgres next to it for local hacking, and in
-production you point `DATABASE_URL` at whatever Postgres you already
-operate. Identity is GitHub OAuth. The web UI updates itself live as
-agents and humans make changes — close a task in your editor's MCP
-session and any browser sitting on the board sees the card jump
-columns within milliseconds, no refresh; merge a doc change and the
-docs tree refreshes in place. Internally that is Postgres
-`LISTEN/NOTIFY` fanned out to subscribed browsers as SSE. The
-frontend is vanilla Lit with no build step, and the binary runs its
-own daily `pg_dump` with N-day
-rotation so backups are not a separate piece of infrastructure to
-remember. Self-host it on a VPS behind your own reverse proxy, point
-your agents at the resulting MCP endpoint with one `claude mcp add`
-per project, and the team — humans and agents both — stops losing
-track of who's doing what.
+The whole server is a single Go binary in one container, talking to
+whatever Postgres you already run. The web UI updates live as agents
+and humans work — no refresh — and the binary takes its own daily
+backups so that's not a separate piece of infrastructure to remember.
+Self-host on a VPS behind your reverse proxy, point your agents at
+the MCP endpoint with one `claude mcp add` per project, and the team
+stops losing track of who's doing what.
 
-Agents don't have to be onboarded with a long brief either: every
-Nottario instance ships an **embedded skill bundle** — a small set of
-markdown documents covering identity (call `whoami` first, the token
-scopes you to a single project), the carry-on loop (claim a task
-atomically, do the work, link the commits you produced, close), the
-task-discipline conventions (one task per role, file new work before
-doing it), and when to touch the architecture diagram. The first
-time an agent connects, it pulls the bundle via `nottario.skill.read`
-or `GET /skill.zip` and reads its conventions before touching
-anything. The bundle lives inside the binary, so it's always present
-and always matches the server's behaviour; instance admins can
-override or extend any file with a `kind=skill` document at the
-global scope, so a team can tighten the rules for their own project
-without recompiling.
+Agents don't need a manual brief: every instance ships an **embedded
+skill bundle** that teaches them the conventions — `whoami` first,
+the carry-on loop (claim → work → link commits → close), one task
+per role, when to touch the architecture diagram. They pull it on
+first connect, so the rules and the server's behaviour are always in
+sync. Instances can override any file to tighten the rules for a
+specific team.
 
 ## A tour, in four screens
 
