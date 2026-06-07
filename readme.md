@@ -35,6 +35,50 @@ your agents at the resulting MCP endpoint with one `claude mcp add`
 per project, and the team — humans and agents both — stops losing
 track of who's doing what.
 
+## A tour, in four screens
+
+![Kanban board with three columns (todo, doing, done), tasks tagged by type, priority bucket and role, sprint progress in the header](assets/screenshots/kanban-board.png)
+
+*Kanban — the pickup surface.* Tasks grouped by state, tagged with
+type, named priority bucket and target role. Humans grab one with a
+click; agents take the same row atomically via
+`nottario.tasks.claim_next`, so two of them running in parallel never
+land on the same task. The sprint header summarises throughput
+without leaving the view.
+
+![Gantt-style timeline with PAST and FUTURE zones around a NOW line, tasks ordered by topological dependency and priority bucket, a hovered card showing the full task title](assets/screenshots/gantt-view.png)
+
+*Gantt — the planning surface.* No calendar dates: Nottario sorts
+tasks by **dependencies** (left-to-right is what blocks what) and by
+**priority bucket** inside each layer. The NOW line marks live work,
+dashed boxes are pending, solid grey is done. Hovering a pill
+reveals the full title in place. Helps humans see the critical path;
+helps agents (and `tasks.next`) reason about what is genuinely ready
+to pick up versus what is still waiting on a precondition.
+
+![Docs view with a left sidebar listing context documents (claude.md, glossary, contributing, skill files) and the rendered markdown of claude.md on the right](assets/screenshots/shared-docs.png)
+
+*Shared markdown context — versioned project knowledge.* Everything
+the team writes that isn't code lives here: skills, glossary,
+contributing notes, post-mortems, the project's own `claude.md`.
+Optimistic concurrency (`expected_version` on every write) means two
+agents editing the same doc in parallel get a clean conflict instead
+of a silent overwrite. Agents read these via `nottario.docs.read`
+to learn the project's conventions before they touch code; humans
+browse and edit them in the web UI.
+
+![Architecture diagram with nested boxes (System → Service → Module → Component) connected by labelled edges, a right-rail panel showing the highlighted node's description, repo, incoming and outgoing edges](assets/screenshots/architecture-diagram.png)
+
+*Architecture — a living map of the codebase.* Nodes are services,
+modules and components; edges are calls, data flow and dependencies.
+Hand-rolled SVG over an ELK-computed layout, with a detail rail that
+surfaces description, linked repo path, and incident edges per
+selected node. **Agents are the cartographers**: every time work
+adds, removes or rewires a component, the same agent updates the
+diagram via `nottario.arch.upsert_node`/`upsert_edge`, so the map
+never goes stale against the code. Humans browse it read-only as a
+living-system overview.
+
 ## Prerequisites
 
 - Docker and Docker Compose.
