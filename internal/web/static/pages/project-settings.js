@@ -873,7 +873,12 @@ class NottarioProjectSettings extends LitElement {
   _renderTokenDialog() {
     if (this.issuedToken) {
       const secret = this.issuedToken.plaintext;
-      const snippet = `claude mcp add nottario http://localhost:8080/mcp \\
+      // Build the snippet from the URL the user is currently viewing
+      // this page on — that's the same origin they (and their agent)
+      // will use to reach the MCP. Works for localhost dev, VPN-only
+      // self-hosts and public Traefik deployments without per-instance
+      // config.
+      const snippet = `claude mcp add nottario ${window.location.origin}/mcp \\
   --transport http \\
   --header "Authorization: Bearer ${secret}" \\
   --scope local`;

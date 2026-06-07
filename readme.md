@@ -268,17 +268,22 @@ is still rejected against project B.
 
 **Claude Code:**
 
+`--scope local` stores the config in your `~/.claude.json` keyed by
+working directory. Run `claude mcp add` from **inside the repo** that
+will use this token — otherwise the entry is associated with the
+wrong directory and Claude Code won't see it when you open the repo.
+
 ```bash
+cd /path/to/your/repo
 claude mcp add nottario http://localhost:8080/mcp \
   --transport http \
   --header "Authorization: Bearer ntr_…" \
   --scope local
 ```
 
-`--scope local` stores the config per-project (still outside git) and
-is the recommended setup: each project gets its own token, so an
-agent working on project A can't accidentally touch project B.
-`--scope user` puts the same token in every project from
+`--scope local` is the recommended setup: each project gets its own
+token, so an agent working on project A can't accidentally touch
+project B. `--scope user` puts the same token in every project from
 `~/.claude.json` — only use it if you knowingly want one shared
 token. Avoid `--scope project` (it would commit the token into the
 repo).
@@ -324,6 +329,22 @@ Restart Claude Desktop after saving.
 For a remote deployment, swap `http://localhost:8080` for your public
 URL. The transport must stay `http` (Streamable HTTP); plain SSE is
 not supported.
+
+### Multiple projects, multiple tokens
+
+For each project tracked in Nottario, repeat the loop:
+
+1. Web UI → open that project → **Settings → Tokens → New token**.
+   Copy the secret.
+2. In a terminal: `cd` to the corresponding local repo and run the
+   `claude mcp add … --scope local` from step 2 with that token.
+
+A token issued for project A cannot be used against project B; the
+MCP server rejects every cross-project call with `token scoped to
+project X, request targets Y`. To switch the agent's focus, launch
+Claude Code from the repo whose `--scope local` config carries the
+right token — there is no "active project" toggle inside Claude
+Code itself.
 
 ### 3. Verify the connection
 
