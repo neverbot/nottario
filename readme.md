@@ -138,6 +138,17 @@ set; this is the recommended path under Docker secrets, Kubernetes
 mounted secrets, or any host where you'd rather not have secrets in
 the process environment.
 
+> **Secret file ownership.** The container runs as the distroless `nonroot`
+> user (**UID 65532**), so the `_FILE` targets must be **readable by that
+> UID**. With Docker Compose `file:` secrets the mounted file keeps the host
+> file's owner and mode, so a `root:root` `0600` secret yields `permission
+> denied` at startup (`read SESSION_KEY_FILE ...: permission denied`) and the
+> container crash-loops. Fix it by either `chown 65532 <secret-file>` on the
+> host, or setting `uid: "65532"` (and `mode: 0400`) in the compose `secrets`
+> long syntax. Kubernetes mounted secrets are world-readable by default, so
+> this only bites the plain-Docker path. `DATABASE_URL` is read from the
+> environment, not a file, so it is unaffected.
+
 ### GitHub OAuth App
 
 1. Sign in to GitHub and open **Settings → Developer settings → OAuth Apps → New OAuth App**.
