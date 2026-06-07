@@ -30,12 +30,19 @@ class NottarioArchCanvas extends LitElement {
   };
 
   // Layout constants. Centralised so siblings (toolbar) can read them.
-  static LEAF_W      = 160;
+  static LEAF_W      = 160;   // floor — leaves never go below this
+  static LEAF_W_MAX  = 280;   // ceiling — beyond this, the name wraps to 2 lines
+  static LEAF_PAD_H  = 12;    // horizontal padding inside the box (per side)
   static LEAF_H      = 72;
+  static LEAF_H_WRAP = 86;    // height when the name wraps to two lines
   static LABEL_STRIP = 28;
   static CORNER_R    = 4;
   static FOCUS_MS    = 220;
   static FOCUS_MARGIN = 20;
+  // Font specs MUST mirror the .name / .slug CSS rules below. Used
+  // for off-screen canvas measurement when sizing leaf boxes.
+  static NAME_FONT = '600 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+  static SLUG_FONT = '11px/1 ui-monospace, SFMono-Regular, monospace';
   // Grid used purely by the label-placement obstacle map.
   static GRID_CELL  = 8;
   static GRID_BUF   = 4;
@@ -324,7 +331,10 @@ class NottarioArchCanvas extends LitElement {
     // placeholder layout so the render shows "Laying out…" instead
     // of a different engine's positions.
     const key = JSON.stringify({
-      nodes: (this.nodes || []).map(n => n.ID + '|' + n.ParentID),
+      // Name + slug enter the key because they drive measured leaf
+      // sizes — a rename changes the box width, so the cached layout
+      // would no longer be valid.
+      nodes: (this.nodes || []).map(n => `${n.ID}|${n.ParentID}|${n.Name || ''}|${n.Slug || ''}`),
       edges: (this.edges || []).map(e => e.FromNodeID + '>' + e.ToNodeID),
       expanded: [...(this.expanded || [])].sort(),
     });
@@ -374,6 +384,59 @@ class NottarioArchCanvas extends LitElement {
     const last = points[points.length - 1];
     d += ` L ${last.x} ${last.y}`;
     return d;
+  }
+
+  // ----- Text measurement (canvas, off-screen) -----
+  //
+  // ELK cannot measure text; we feed it explicit pixel widths so a
+  // long node name like "GitHub Container Registry" gets a wider box
+  // instead of overflowing the default LEAF_W. The 2D canvas context
+  // is shared across all calls in the page lifecycle.
+
+  static _measureCtx() {
+    if (!this.__mctx) {
+      this.__mctx = document.createElement('canvas').getContext('2d');
+    }
+    return this.__mctx;
+  }
+
+  static _measureWidth(text, font) {
+    if (!text) return 0;
+    const ctx = this._measureCtx();
+    ctx.font = font;
+    return ctx.measureText(text).width;
+  }
+
+  // Returns either [singleLine] or [line1, line2] split at the
+  // best space character. If there is no good break (one long word
+  // wider than maxW), returns [text] and the caller can let it
+  // overflow — better than a midword chop.
+  static _wrapAtSpace(text, font, maxW) {
+    if (this._measureWidth(text, font) <= maxW) return [text];
+    let bestIdx = -1;
+    const ctx = this._measureCtx();
+    ctx.font = font;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === ' ' && ctx.measureText(text.slice(0, i)).width <= maxW) {
+        bestIdx = i;
+      }
+    }
+    if (bestIdx <= 0) return [text];
+    return [text.slice(0, bestIdx), text.slice(bestIdx + 1)];
+  }
+
+  // Compute (width, height) for a leaf box that fits its name and
+  // slug. Width is clamped between LEAF_W (floor) and LEAF_W_MAX
+  // (ceiling). When the name still overflows the ceiling, the box
+  // grows vertically and the renderer wraps the name onto two lines.
+  static _leafSize(name, slug) {
+    const nameW = this._measureWidth(name || '', this.NAME_FONT);
+    const slugW = this._measureWidth(slug || '', this.SLUG_FONT);
+    const desired = Math.max(nameW, slugW) + this.LEAF_PAD_H * 2;
+    const w = Math.min(Math.max(desired, this.LEAF_W), this.LEAF_W_MAX);
+    const innerW = w - this.LEAF_PAD_H * 2;
+    const h = nameW > innerW ? this.LEAF_H_WRAP : this.LEAF_H;
+    return { w, h };
   }
 
   // ----- ELK loader / driver -----
@@ -497,8 +560,9 @@ class NottarioArchCanvas extends LitElement {
         },
       };
       if (!hasKids || !expanded) {
-        node.width  = NottarioArchCanvas.LEAF_W;
-        node.height = NottarioArchCanvas.LEAF_H;
+        const sz = NottarioArchCanvas._leafSize(w.node.Name, w.node.Slug);
+        node.width  = sz.w;
+        node.height = sz.h;
       } else {
         node.children = w.children.map(c => elkNodeFor(c, depth + 1));
       }
@@ -1107,12 +1171,40 @@ class NottarioArchCanvas extends LitElement {
           <rect class="caret-hit" x=${w.w - 32} y="0" width="32" height="28"
                 @click=${(e) => this._onCaretClick(e, w)}></rect>
         ` : null}
-        <text class="name" x=${w.w / 2} y=${w.h / 2 - 2} text-anchor="middle">${n.Name}</text>
+        ${this._renderLeafName(n.Name, w.w, w.h, hint)}
+      </g>
+    `;
+  }
+
+  // Render the leaf's name and slug. If the name fits in the box's
+  // inner width, draw it on a single line (the original layout). If
+  // the name was measured wider than the cap, the box already grew
+  // vertically — split the name at the last good space and render
+  // two <text> lines, with the slug below.
+  _renderLeafName(name, w, h, hint) {
+    const innerW = w - NottarioArchCanvas.LEAF_PAD_H * 2;
+    const lines = NottarioArchCanvas._wrapAtSpace(
+      name || '', NottarioArchCanvas.NAME_FONT, innerW);
+    if (lines.length === 1) {
+      return svg`
+        <text class="name" x=${w / 2} y=${h / 2 - 2}
+              text-anchor="middle">${lines[0]}</text>
         ${hint ? svg`
-          <text class="slug" x=${w.w / 2} y=${w.h / 2 + 16}
+          <text class="slug" x=${w / 2} y=${h / 2 + 16}
                 text-anchor="middle">${hint}</text>
         ` : null}
-      </g>
+      `;
+    }
+    // Two lines: shift the name block up so the slug still fits.
+    return svg`
+      <text class="name" x=${w / 2} y=${h / 2 - 10}
+            text-anchor="middle">${lines[0]}</text>
+      <text class="name" x=${w / 2} y=${h / 2 + 6}
+            text-anchor="middle">${lines[1]}</text>
+      ${hint ? svg`
+        <text class="slug" x=${w / 2} y=${h / 2 + 22}
+              text-anchor="middle">${hint}</text>
+      ` : null}
     `;
   }
 
