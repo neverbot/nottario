@@ -3,9 +3,8 @@
 Project context and operating rules for Claude Code (and any other AI
 agent working on Nottario). Short and load-bearing; every working
 session keeps these invariants in mind from the start. Deeper detail
-lives in the project's own Nottario documents (`context` kind), in the
-skill bundle (`internal/skill/files/`), and historically in
-`docs/initial/` (pre-implementation phase, may be partially outdated).
+lives in the project's own Nottario documents (`context` kind) and in
+the skill bundle (`internal/skill/files/`).
 
 ## What Nottario is
 
@@ -18,8 +17,9 @@ humans):
    dates. Kanban and Gantt views. Agents query "what's next", claim
    tasks, file bugs, link commits.
 2. **Markdown context** — shared repository of skills, docs and
-   notes. Replaces loose `.md` files scattered across laptops. Doc
-   versioning with optimistic concurrency is on the roadmap.
+   notes. Replaces loose `.md` files scattered across laptops.
+   Documents are versioned with optimistic concurrency
+   (`expected_version` on every write).
 3. **Architecture** — navigable diagram of expandable boxes with
    arrows describing the product, maintained by agents in textual
    form.
@@ -35,20 +35,17 @@ artefacts written to disk must be in English regardless.
 
 ## Technical invariants
 
-- **Lightweight is a first-order goal.** Reference: [owl](../../owl).
-  Single Go binary with embedded assets, small Docker image, vanilla
-  frontend. Every dependency justifies its presence.
-- **Backend:** Go (owl pattern — `cmd/nottario` + `internal/...`,
-  embed.go). pgx/v5 against Postgres 16.
+- **Lightweight is a first-order goal.** Single Go binary with
+  embedded assets, small Docker image, vanilla frontend. Every
+  dependency justifies its presence.
+- **Backend:** Go (`cmd/nottario` + `internal/...`, embed.go).
+  pgx/v5 against Postgres 16.
 - **Frontend:** vanilla CSS + Lit (~5KB, ES modules, no build step).
-  No React/Vue/Svelte/Angular. Charts hand-rolled (style cue:
-  `internal/design/chart.js` in owl).
+  No React/Vue/Svelte/Angular. Charts hand-rolled SVG.
 - **No JS visualisation libraries.** Every chart in the app is
   hand-rolled SVG: Gantt (`pages/gantt.js`) and the architecture
-  diagram (`components/arch-canvas.js`). The dagre exception that
-  used to live here was retired in the arch redesign (feature
-  `f9a7a488`) once the hand-rolled containment canvas reached
-  feature parity.
+  diagram (`components/arch-canvas.js`, currently powered by the
+  vendored `elkjs` for compound layout but rendered with our own SVG).
 - **Database:** Postgres always. SQLite is off the table.
   The backend is fully on **sqlc**; all queries live in
   `internal/db/queries/*.sql` and the generated Go is committed at
@@ -90,10 +87,9 @@ artefacts written to disk must be in English regardless.
   doesn't sit naturally next to GitHub, pause and reconsider.
 - **Hand-drawn (Rough.js) is parked.** Revisit only after the
   architectural graph renderer is solid.
-- **No decorative animation.** Things appear where they belong. Owl
-  sets the bar. Motion is acceptable only when it's *functional*
-  (showing what just changed, scrolling somewhere). Respect
-  `prefers-reduced-motion`.
+- **No decorative animation.** Things appear where they belong.
+  Motion is acceptable only when it's *functional* (showing what just
+  changed, scrolling somewhere). Respect `prefers-reduced-motion`.
 - **Shadow DOM ignores global box-sizing.** Every Lit component's
   shadow styles need an explicit `box-sizing: border-box`. Global
   rules in `/static/styles.css` do not penetrate.
@@ -215,24 +211,26 @@ artefacts written to disk must be in English regardless.
   3. Commit locally, then `nottario.docs.write` with
      `expected_version = current_version`. On `version_conflict`,
      re-read + merge + retry.
-- This `claude.md` lives at `projects/<id>/context/claude.md` in
-  Nottario; keep it in sync.
+- This `claude.md` lives at path `context/claude.md` inside the
+  Nottario project (the project_id is the call argument, not part of
+  the path); keep it in sync.
 
-## Dev database is sacred — NEVER wipe it
+## Live databases are sacred — NEVER wipe them
 
-The dev Postgres container (`nottario-db-1`) and its named volume
-`nottario_db-data` hold the user's real working state: projects,
-tasks, comments, docs, arch nodes, API tokens, memberships. **Under
-no circumstances may an agent (or any human action proxied through
-an agent) execute commands that drop, wipe, or recreate that
-volume.** Specifically banned:
+Any Postgres database holding the user's working state (projects,
+tasks, comments, docs, arch nodes, API tokens, memberships) is
+off-limits to destructive operations. This applies to the local dev
+container (`nottario-db-1`, volume `nottario_db-data`) and to any
+self-hosted instance the user points the MCP at. **Under no
+circumstances may an agent execute commands that drop, wipe, or
+recreate that data.** Specifically banned:
 
 - `docker compose down -v` (the `-v` removes named volumes).
-- `docker volume rm nottario_db-data` (or any volume rm against it).
-- `DROP DATABASE nottario` from psql against the dev container.
-- `TRUNCATE` / `DELETE` against tables in the dev DB without an
+- `docker volume rm <volume-name>` against any nottario data volume.
+- `DROP DATABASE nottario` against any live instance.
+- `TRUNCATE` / `DELETE` against tables in a live DB without an
   explicit, in-this-session user request that names the rows.
-- "Reset DB to verify a migration" workflows that touch the dev
+- "Reset DB to verify a migration" workflows that touch any live
   container.
 
 If you need a clean DB to verify a migration, **use one of these
@@ -241,22 +239,16 @@ options instead**:
 1. The Go test helper `internal/testutil.NewPool(t)` creates a
    fresh, uniquely-named database (via `CREATE DATABASE`) inside
    the same Postgres instance, runs migrations, and drops it on
-   `t.Cleanup`. Never touches the `nottario` DB.
+   `t.Cleanup`. Never touches the live `nottario` DB.
 2. A separate ephemeral compose project for migration smoke
    (different `-p` name) so a different volume gets created.
 3. A scratch postgres container started by hand with no volume
    mount.
 
 If you cannot proceed without resetting the user's DB, **stop and
-ask the user first.** Wiping their backlog and history is
-catastrophic and unrecoverable without external backups, which we
-don't have by default.
-
-History: on 2026-05-26 the dev volume was wiped during the cycles
-feature implementation; the user lost ~60 tasks, every doc, every
-arch node, every comment, and all linked commits. The recovery
-required hand-reconstructing the backlog from `git log` and
-conversation memory. Do not let this happen twice.
+ask the user first.** Recovery from a wipe means restoring from an
+external `pg_dump` backup, which is not configured by default —
+losing the live state is effectively unrecoverable.
 
 ## Pre-commit gate
 
@@ -291,18 +283,14 @@ same as `go vet`.
 
 ## Project status
 
-Pre-alpha but dogfooding actively. Foundation, identity, tasks,
-docs, architecture, gantt, kanban, MCP server, skill bundle, search
-all in place. Currently working on:
+Approaching v0.1.0 beta. Released under MIT (`license.md`). The
+foundation is in place — identity (per-project tokens), tasks
+(cycles, priorities, dependencies, atomic claim), docs (versioned,
+optimistic concurrency), architecture (ELK-backed canvas), gantt,
+kanban, MCP server, skill bundle, search, full-text multi-language.
+CI publishes `ghcr.io/neverbot/nottario:latest` on every push to
+master.
 
-- SQL safety (Tier 1 lint guard landed; Tier 2 sqlc migration
-  complete across tasks, identity, docs, arch and search).
-- Documents optimistic concurrency + `claude.md` sync flow.
-- Concurrency primitives for multi-agent safety
-  (`claim_next`/`claim` atomic; `SetState` transactional;
-  `AddDependency` project-scoped lock; rollUp reconciler).
-- Backend test battery (testcontainers, real coverage target).
-- Gantt polish: feature folding, Features lane, role-coloured
-  dots, jump-to-now, arrow rendering across all fold states.
-
-License decision: MIT when M10 lands.
+The remaining work for v0.1.0 lives as tasks inside Nottario itself
+(see `nottario.tasks.list { state: 'todo' }`); the headline items
+are automated backups, UI design reviews and a few polish bugs.
