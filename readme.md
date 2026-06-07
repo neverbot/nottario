@@ -25,8 +25,11 @@ update the architecture diagram to reflect what it just shipped, and
 write the design note that explains why — without humans having to
 relay state by hand.
 
-The whole instance is one Go binary plus Postgres in a single Docker
-container. Identity is GitHub OAuth, real-time updates ride Postgres
+The whole server is a single Go binary in one Docker container,
+talking to Postgres over the network — the `compose.yml` in the repo
+spins up a dev Postgres next to it for local hacking, and in
+production you point `DATABASE_URL` at whatever Postgres you already
+operate. Identity is GitHub OAuth, real-time updates ride Postgres
 `LISTEN/NOTIFY` over SSE, the frontend is vanilla Lit with no build
 step, and the binary runs its own daily `pg_dump` with N-day
 rotation so backups are not a separate piece of infrastructure to
