@@ -14,6 +14,15 @@ import (
 	"syscall"
 	"time"
 
+	// Embed the zoneinfo database so `TZ=Europe/Madrid` (or any other
+	// named zone) resolves correctly inside minimal container images
+	// like the alpine base used by the Dockerfile, which do not ship
+	// tzdata by default. Without this, time.Local falls back to UTC
+	// and the backup goroutine fires at the wrong wall-clock hour.
+	// Adds ~450KB to the binary; canonical Go-side fix per the
+	// time/tzdata package docs.
+	_ "time/tzdata"
+
 	"github.com/neverbot/nottario/internal/backup"
 	"github.com/neverbot/nottario/internal/config"
 	"github.com/neverbot/nottario/internal/db"
