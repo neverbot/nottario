@@ -234,6 +234,7 @@ class NottarioBoardPage extends LitElement {
       font-weight: 500;
     }
     .card {
+      position: relative;
       background: #fff;
       border: 1px solid #d1d9e0;
       border-radius: 6px;
@@ -241,6 +242,16 @@ class NottarioBoardPage extends LitElement {
       margin-bottom: 8px;
       cursor: pointer;
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+    }
+    /* Assignee avatar: small, bottom-right corner, doesn't compete
+       with the meta chips. White ring for separation against the
+       role badge when it happens to sit next to it. */
+    .card .assignee {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px #fff;
     }
     .card:hover { border-color: #afb8c1; }
     /* DnD: the card the user is dragging fades; the column it's
@@ -904,9 +915,14 @@ class NottarioBoardPage extends LitElement {
 
   renderCard(t) {
     const role = t.TargetRoleID ? this.roleByID(t.TargetRoleID) : null;
+    const assignee = t.AssigneeUserID ? this._memberByID(t.AssigneeUserID) : null;
+    const assigneeName = assignee
+      ? (assignee.DisplayName || assignee.GithubLogin || '')
+      : '';
     const a11yLabel = `${t.Title}, ${t.Type}, ${t.State}` +
       (role ? `, role ${role.Label}` : '') +
-      `, priority ${this._priorityLabel(t.Priority)}`;
+      `, priority ${this._priorityLabel(t.Priority)}` +
+      (assigneeName ? `, assigned to ${assigneeName}` : '');
     const dragging = this._draggingID === t.ID;
     return html`
       <div class=${`card${dragging ? ' dragging' : ''}`}
@@ -929,6 +945,12 @@ class NottarioBoardPage extends LitElement {
           <span class="prio">${this._priorityLabel(t.Priority)}</span>
           ${role ? html`<span class="badge" style=${`background:${role.Color || '#eee'}1a; border-color:${role.Color || '#ddd'}`}>${role.Label}</span>` : ''}
         </div>
+        ${assignee ? html`
+          <nottario-avatar class="assignee" size="20"
+                          src=${assignee.AvatarURL || ''}
+                          name=${assigneeName}
+                          title=${assigneeName}></nottario-avatar>
+        ` : null}
       </div>
     `;
   }
