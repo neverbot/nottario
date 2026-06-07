@@ -1,11 +1,39 @@
 # Nottario
 
-Open source, self-hosted service that coordinates human developers
-and their AI agents.
+Open source, self-hosted coordinator for human developers and their
+AI agents. One instance turns the loose ground between "what's in
+flight," "what was decided" and "how it all fits together" into a
+single source of truth that humans browse in a web UI and agents
+drive through MCP. Three domains: a **task backlog** with cycles,
+named priority buckets, dependencies, atomic claim semantics, Kanban
+and Gantt views, and structured git-commit links per task; a
+**shared markdown context** with optimistic-concurrency versioning
+for skills, specs and team notes; and an **architecture diagram**
+of nested boxes and edges that agents maintain in textual form,
+laid out automatically with ELK and rendered in hand-rolled SVG.
 
-## Status
+The fit with AI agents is the whole point. Each project issues its
+own bearer token; a token scoped to project A is rejected the second
+it touches project B, admin or not. Concurrency is multi-agent safe
+out of the box — `tasks.claim_next` is a single SQL transaction
+backed by `SELECT … FOR UPDATE SKIP LOCKED`, dependencies and cycle
+detection sit behind project-scoped advisory locks, and feature
+parents roll up to done automatically when every child closes. Drop
+the MCP into Claude Code, Cursor or any HTTP-MCP client and the
+agent can list work, claim a task, link the commits it produces,
+update the architecture diagram to reflect what it just shipped, and
+write the design note that explains why — without humans having to
+relay state by hand.
 
-Pre-alpha. Foundation, identity and tasks milestones complete.
+The whole instance is one Go binary plus Postgres in a single Docker
+container. Identity is GitHub OAuth, real-time updates ride Postgres
+`LISTEN/NOTIFY` over SSE, the frontend is vanilla Lit with no build
+step, and the binary runs its own daily `pg_dump` with N-day
+rotation so backups are not a separate piece of infrastructure to
+remember. Self-host it on a VPS behind your own reverse proxy, point
+your agents at the resulting MCP endpoint with one `claude mcp add`
+per project, and the team — humans and agents both — stops losing
+track of who's doing what.
 
 ## Prerequisites
 
