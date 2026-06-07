@@ -24,6 +24,11 @@ class NottarioProjectsPage extends LitElement {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
       gap: 14px;
+      /* Each card sizes to its own content. Without this, grid's
+         default stretch forces every card in a row to the tallest
+         one, so an empty project ends up as a wall of whitespace
+         next to a populated card. */
+      align-items: start;
     }
     .card {
       position: relative;
@@ -134,7 +139,13 @@ class NottarioProjectsPage extends LitElement {
       color: #59636e;
       white-space: nowrap;
     }
-    .card .stats.empty { font-style: italic; opacity: 0.7; }
+    /* "empty" chip lives next to the dest-chip in the top row when
+       a project has no tasks yet. Quiet (no fill), so it doesn't
+       compete with the kanban/gantt chip. */
+    .card .dest-chip.empty-chip {
+      color: #8b949e;
+      background: transparent;
+    }
     .card .meta {
       display: flex;
       gap: 4px 6px;
@@ -283,6 +294,9 @@ class NottarioProjectsPage extends LitElement {
         <div class="top">
           <h3 title=${p.Name}>${p.Name}</h3>
           <span class="dest-chip" title="Default view">${destLabel}</span>
+          ${p.Stats && (p.Stats.TodoCount + p.Stats.DoingCount + p.Stats.DoneCount) === 0
+            ? html`<span class="dest-chip empty-chip" title="No tasks yet">empty</span>`
+            : null}
           ${this.me?.is_admin
             ? html`<button class="settings-link" title="Project settings"
                           aria-label="Settings"
@@ -305,9 +319,11 @@ class NottarioProjectsPage extends LitElement {
     const s = p.Stats;
     if (!s) return null;
     const total = s.TodoCount + s.DoingCount + s.DoneCount;
-    if (total === 0) {
-      return html`<div class="stats empty"><span>Empty backlog.</span></div>`;
-    }
+    // Empty backlog: render nothing. The "empty" chip in the top
+    // row already conveys the state, and skipping the stats line
+    // keeps the card honestly short instead of inflating it with
+    // a placeholder that grows the whole grid row.
+    if (total === 0) return null;
     return html`
       <div class="stats">
         <span class="stat"><span class="n">${s.TodoCount}</span> todo</span>
