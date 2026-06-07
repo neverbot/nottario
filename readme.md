@@ -139,8 +139,10 @@ mounted secrets, or any host where you'd rather not have secrets in
 the process environment.
 
 > **Secret file ownership.** The container runs as the distroless `nonroot`
-> user (**UID 65532**), so the `_FILE` targets must be **readable by that
-> UID**. With Docker Compose `file:` secrets the mounted file keeps the host
+> user (**UID 65532** — fixed by the image, the same on every host; it does
+> not come from the host's user database, and the host need not have a user
+> with that ID), so the `_FILE` targets must be **readable by that UID**.
+> With Docker Compose `file:` secrets the mounted file keeps the host
 > file's owner and mode, so a `root:root` `0600` secret yields `permission
 > denied` at startup (`read SESSION_KEY_FILE ...: permission denied`) and the
 > container crash-loops. Fix it by either `chown 65532 <secret-file>` on the
