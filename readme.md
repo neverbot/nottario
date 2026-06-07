@@ -45,14 +45,15 @@ track of who's doing what.
 
 ## A tour, in four screens
 
-![Kanban board with three columns (todo, doing, done), tasks tagged by type, priority bucket and role, sprint progress in the header](assets/screenshots/kanban-board.png)
+![Kanban board with three columns (todo, doing, done), tasks tagged by type, priority bucket and role; cards in doing and done show the assignee's avatar in the bottom-right corner; sprint progress in the header](assets/screenshots/kanban-board.png)
 
 *Kanban — the pickup surface.* Tasks grouped by state, tagged with
-type, named priority bucket and target role. Humans grab one with a
-click; agents take the same row atomically via
-`nottario.tasks.claim_next`, so two of them running in parallel never
-land on the same task. The sprint header summarises throughput
-without leaving the view.
+type, named priority bucket and target role. Cards that have an
+assignee show the owner's avatar in the bottom-right corner — at a
+glance you see who's holding what. Humans grab a card with a click;
+agents take the same row atomically via `nottario.tasks.claim_next`,
+so two of them running in parallel never land on the same task. The
+sprint header summarises throughput without leaving the view.
 
 ![Gantt-style timeline with PAST and FUTURE zones around a NOW line, tasks ordered by topological dependency and priority bucket, a hovered card showing the full task title](assets/screenshots/gantt-view.png)
 
