@@ -128,6 +128,9 @@ preserving `Host` and `X-Forwarded-Proto`. Nothing else is required.
 | `GITHUB_OAUTH_CLIENT_SECRET` | yes | — | From the GitHub OAuth App. |
 | `SESSION_KEY` | yes | — | 32 random bytes, base64-encoded. Generate once and keep: `openssl rand -base64 32`. Rotating it logs everyone out. |
 | `HTTP_ADDR` | no | `:8080` | Listen address. Change only if you run multiple instances on one host. |
+| `NOTTARIO_BACKUP_DIR` | no | (disabled) | Mount-friendly path where periodic `pg_dump` backups land. Empty = no backups. |
+| `NOTTARIO_BACKUP_AT` | no | `03:00` | Time of day for the daily backup, `HH:MM` 24h local time. |
+| `NOTTARIO_BACKUP_KEEP_DAYS` | no | `7` | Delete dumps older than this many days after each successful run. |
 
 Every secret variable also accepts a `_FILE` companion that points at
 a file on disk: `SESSION_KEY_FILE`, `GITHUB_OAUTH_CLIENT_SECRET_FILE`.
@@ -204,18 +207,13 @@ command — booting the container is the migration.
 
 ### Backups
 
-There is no built-in backup mechanism yet. Running real data without
-an external backup is **at your own risk**. Until the backup feature
-lands, a minimal cron from outside the container:
-
-```bash
-# /etc/cron.daily/nottario-backup
-docker exec <postgres-container> \
-  pg_dump -U nottario -Fc nottario > /backups/nottario-$(date +%F).dump
-find /backups -name 'nottario-*.dump' -mtime +14 -delete
-```
-
-Restore with `pg_restore -U nottario -d nottario /backups/<file>.dump`.
+Nottario can run periodic backups itself. Set `NOTTARIO_BACKUP_DIR`
+to a host-mounted path and the binary will fork a goroutine that runs
+`pg_dump --format=custom` once a day at `NOTTARIO_BACKUP_AT` (default
+03:00 local), naming files `nottario-YYYY-MM-DD-HHMM.dump`. Files
+older than `NOTTARIO_BACKUP_KEEP_DAYS` (default 7) are pruned after
+each successful dump. Restore with `scripts/restore.sh <file>
+[database_url]`. Backups are disabled when the env is unset.
 
 ### Upgrades
 

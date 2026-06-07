@@ -145,6 +145,55 @@ func TestLoad_SessionKeyFile_MissingFile(t *testing.T) {
 	}
 }
 
+func TestLoad_BackupDefaults(t *testing.T) {
+	setRequired(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.BackupDir != "" {
+		t.Errorf("BackupDir default = %q, want empty (disabled)", cfg.BackupDir)
+	}
+	if cfg.BackupAt != "03:00" {
+		t.Errorf("BackupAt default = %q, want 03:00", cfg.BackupAt)
+	}
+	if cfg.BackupKeepDays != 7 {
+		t.Errorf("BackupKeepDays default = %d, want 7", cfg.BackupKeepDays)
+	}
+}
+
+func TestLoad_BackupOverrides(t *testing.T) {
+	setRequired(t)
+	t.Setenv("NOTTARIO_BACKUP_DIR", "/var/backups/nottario")
+	t.Setenv("NOTTARIO_BACKUP_AT", "01:30")
+	t.Setenv("NOTTARIO_BACKUP_KEEP_DAYS", "14")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.BackupDir != "/var/backups/nottario" {
+		t.Errorf("BackupDir = %q", cfg.BackupDir)
+	}
+	if cfg.BackupAt != "01:30" {
+		t.Errorf("BackupAt = %q", cfg.BackupAt)
+	}
+	if cfg.BackupKeepDays != 14 {
+		t.Errorf("BackupKeepDays = %d", cfg.BackupKeepDays)
+	}
+}
+
+func TestLoad_BackupKeepDaysInvalid(t *testing.T) {
+	for _, v := range []string{"0", "-1", "not-a-number", "3.5"} {
+		t.Run(v, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv("NOTTARIO_BACKUP_KEEP_DAYS", v)
+			if _, err := Load(); err == nil {
+				t.Fatalf("expected error for NOTTARIO_BACKUP_KEEP_DAYS=%q", v)
+			}
+		})
+	}
+}
+
 func TestLoad_GithubSecretFile_TakesPrecedence(t *testing.T) {
 	setRequired(t)
 	t.Setenv("GITHUB_OAUTH_CLIENT_SECRET", "stale-value")

@@ -16,7 +16,10 @@ RUN CGO_ENABLED=0 GOOS=linux \
         -X github.com/neverbot/nottario/internal/version.Date=${DATE}" \
       -o /out/nottario ./cmd/nottario
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:3.21
+RUN apk add --no-cache postgresql16-client ca-certificates \
+    && addgroup -S nonroot \
+    && adduser -S -G nonroot -u 65532 -h /home/nonroot nonroot
 COPY --from=build /out/nottario /nottario
 EXPOSE 8080
 USER nonroot:nonroot

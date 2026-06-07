@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -27,6 +28,12 @@ type Config struct {
 	SessionKey         []byte
 	GithubClientID     string
 	GithubClientSecret string
+
+	// Backup configuration. BackupDir empty disables the in-process
+	// pg_dump goroutine entirely.
+	BackupDir      string
+	BackupAt       string // "HH:MM" 24h local time.
+	BackupKeepDays int
 }
 
 // LoadDotEnv reads a .env file from the working directory if it
@@ -76,6 +83,18 @@ func Load() (*Config, error) {
 	if !cfg.AuthEnabled {
 		return nil, errors.New("GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET are required")
 	}
+
+	cfg.BackupDir = os.Getenv("NOTTARIO_BACKUP_DIR")
+	cfg.BackupAt = getenv("NOTTARIO_BACKUP_AT", "03:00")
+	days := 7
+	if s := os.Getenv("NOTTARIO_BACKUP_KEEP_DAYS"); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("NOTTARIO_BACKUP_KEEP_DAYS must be a positive integer, got %q", s)
+		}
+		days = v
+	}
+	cfg.BackupKeepDays = days
 
 	return cfg, nil
 }

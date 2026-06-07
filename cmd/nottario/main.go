@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/neverbot/nottario/internal/backup"
 	"github.com/neverbot/nottario/internal/config"
 	"github.com/neverbot/nottario/internal/db"
 	"github.com/neverbot/nottario/internal/identity"
@@ -74,6 +75,18 @@ func main() {
 	go func() {
 		if err := reconciler.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("rollup reconciler stopped", "err", err)
+		}
+	}()
+
+	go func() {
+		if err := backup.Run(ctx, backup.Config{
+			Dir:         cfg.BackupDir,
+			DatabaseURL: cfg.DatabaseURL,
+			At:          cfg.BackupAt,
+			KeepDays:    cfg.BackupKeepDays,
+			Logger:      logger.With("subsystem", "backup"),
+		}); err != nil {
+			logger.Error("backup goroutine exited with error", "err", err)
 		}
 	}()
 
