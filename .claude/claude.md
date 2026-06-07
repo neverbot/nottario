@@ -53,6 +53,14 @@ artefacts written to disk must be in English regardless.
   never `fmt.Sprintf` or concatenation of runtime values into
   `Query`/`Exec`/`QueryRow` (CI blocks it via the custom
   `internal/tools/sqlcheck` analyzer).
+- **Postgres client in the container.** The Dockerfile installs
+  `postgresql<N>-client` so the in-process backup goroutine can
+  shell out to `pg_dump`. `pg_dump` refuses to dump a server newer
+  than itself, but works fine against older servers, so the bundled
+  client must always match the **newest** Postgres major a
+  self-hoster might run against. Bump `postgresql<N>-client` in the
+  Dockerfile whenever a new Postgres major ships and alpine has the
+  package; do not pin to the dev compose's version.
 - **Concurrency model (multi-agent safe):**
   - `nottario.tasks.claim_next` / `nottario.tasks.claim` are atomic
     (`SELECT … FOR UPDATE SKIP LOCKED` and per-row locks). Never use
