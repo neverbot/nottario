@@ -524,27 +524,33 @@ go test ./...
 Backend (Go):
 
 - [pgx/v5](https://github.com/jackc/pgx) — Postgres driver.
-- [sqlc](https://sqlc.dev) — type-safe Go from SQL.
-- [goose](https://github.com/pressly/goose) — schema migrations.
-- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — MCP server.
-- [golang.org/x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) — GitHub OAuth.
-- [google/uuid](https://github.com/google/uuid) — UUIDs.
-- [yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) — YAML parsing.
-- [joho/godotenv](https://github.com/joho/godotenv) — `.env` loader.
+- [sqlc](https://sqlc.dev) — type-safe Go generated from SQL.
+- [goose](https://github.com/pressly/goose) — embedded schema migrations.
+- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — MCP server transport.
+- [goldmark](https://github.com/yuin/goldmark) — CommonMark renderer for docs and task descriptions.
+- [bluemonday](https://github.com/microcosm-cc/bluemonday) — HTML sanitiser that runs after goldmark.
+- [golang.org/x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) — GitHub OAuth flow.
+- [google/uuid](https://github.com/google/uuid) — UUID generation and parsing.
+- [yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) — YAML frontmatter on skill bundle and shared docs.
+- [joho/godotenv](https://github.com/joho/godotenv) — `.env` loader for local dev.
 - [golang.org/x/tools](https://pkg.go.dev/golang.org/x/tools) — analyzer framework for the custom SQL-injection lint.
+- [`time/tzdata`](https://pkg.go.dev/time/tzdata) — embedded IANA zoneinfo so `TZ=…` resolves on the minimal alpine runtime image.
 
 Frontend (vanilla, no build step):
 
-- [Lit](https://lit.dev) — web-components framework.
+- [Lit](https://lit.dev) — web-components framework for the UI.
+- [elkjs](https://github.com/kieler/elkjs) — vendored layout engine that computes positions for the architecture diagram (we render the SVG ourselves).
+- [highlight.js](https://highlightjs.org) — vendored syntax highlighting inside rendered markdown.
 
 Infrastructure:
 
-- [Postgres](https://www.postgresql.org/) — primary datastore.
-- [Docker](https://www.docker.com/) / [Docker Compose](https://docs.docker.com/compose/) — local and deploy runtime.
+- [Postgres](https://www.postgresql.org/) — primary datastore. `pg_dump` and `pg_restore` from `postgresql17-client` ship inside the runtime image, used by the in-process backup goroutine and by `scripts/restore.sh`.
+- [Docker](https://www.docker.com/) / [Docker Compose](https://docs.docker.com/compose/) — local and deploy runtime; the runtime image is `alpine:3.21` + the binary.
 
 Tooling:
 
-- [gofmt](https://pkg.go.dev/cmd/gofmt), [go vet](https://pkg.go.dev/cmd/vet), [golangci-lint](https://golangci-lint.run) — lint stack.
+- [gofmt](https://pkg.go.dev/cmd/gofmt), [go vet](https://pkg.go.dev/cmd/vet), [golangci-lint](https://golangci-lint.run) — lint stack chained by `make check`.
+- `internal/tools/sqlcheck` — in-tree golangci-lint analyzer that flags any `fmt.Sprintf` or string concatenation of runtime values feeding `pgx`'s `Query`/`Exec`/`QueryRow`.
 
 ## License
 
