@@ -659,10 +659,22 @@ class NottarioBoardPage extends LitElement {
         if (this.selected) this.loadDetail(this.selected.task.ID);
       }
       // Cycle lifecycle: a new cycle opened or the active one closed.
-      // Refresh the cycle list AND tasks (the active cycle's id just
-      // changed; if we were following the active cycle we'll naturally
-      // land on the new one).
-      if (ev.type === 'cycle.created' || ev.type === 'cycle.closed') {
+      // If we were explicitly viewing the cycle that just closed, snap
+      // to the new active one — otherwise the view stays anchored on a
+      // now-closed sprint and the user sees no narrowing after End
+      // Sprint. replaceState avoids the hashchange recursion that a
+      // direct `location.hash = ''` would trigger.
+      if (ev.type === 'cycle.closed') {
+        if (this.cycleId && ev.cycle_id === this.cycleId) {
+          this.cycleId = null;
+          const h = new URLSearchParams(window.location.hash.slice(1));
+          h.delete('cycle');
+          const s = h.toString();
+          const url = s ? `#${s}` : window.location.pathname + window.location.search;
+          history.replaceState(null, '', url);
+        }
+        this.load();
+      } else if (ev.type === 'cycle.created') {
         this.load();
       }
     });
