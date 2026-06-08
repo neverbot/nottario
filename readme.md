@@ -461,12 +461,24 @@ revoked. A `"token scoped to project X, request targets Y"` error on a
 later tool call means the agent passed the wrong `project_id`; cache
 the value `whoami` returns and pass it on every subsequent call.
 
-### 4. Pull the skill bundle
+### 4. (Optional but recommended) Install the skill bundle locally
 
-Nottario ships a skill bundle that teaches agents how to use the
-tools (filing tasks, picking up work, writing docs, editing the
-architecture graph). Download and unzip it into your client's skills
-directory:
+The same skill files are reachable two ways:
+
+- **On demand, via MCP.** Any session can call `nottario.skill.list`
+  and `nottario.skill.read` to fetch a file. Always available, always
+  in sync with the server.
+- **Pre-loaded, as a local Claude Code skill.** Drop the bundle into
+  `~/.claude/skills/nottario/` and Claude Code will load it at
+  session start as an active skill, so the agent enters every
+  conversation already knowing the project's conventions (claim
+  before doing, link commits before closing, one task per role,
+  etc.) without you having to brief it in the prompt.
+
+The on-demand path covers correctness; the pre-loaded path covers
+ergonomics. For a Claude Code user picking up Nottario for the first
+time, install it locally so agents do not start each session from
+zero:
 
 ```bash
 curl -fsSL http://localhost:8080/skill.zip -o nottario-skill.zip
@@ -474,7 +486,9 @@ unzip nottario-skill.zip -d ~/.claude/skills/nottario
 ```
 
 The bundle is regenerated on every release; pull it again after an
-upgrade to get new conventions and the latest tool descriptions.
+upgrade to get the latest conventions and tool descriptions. Clients
+that do not support local skills (raw HTTP MCP clients, custom
+integrations) lean on the on-demand path instead.
 
 ### Troubleshooting
 
