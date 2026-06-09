@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/tasks"
 )
@@ -163,6 +164,25 @@ func ListTasksHandler(d TaskDeps) http.Handler {
 			id, err := uuid.Parse(v)
 			if err == nil {
 				f.ParentTaskID = &id
+			}
+		}
+		// cycle_id: same rule as the MCP path. Empty → default to the
+		// active cycle so the board/gantt narrow to the current sprint
+		// after End Sprint. "all" → no filter. Anything else → uuid.
+		// If the project has no active cycle for any reason, fall back
+		// to no filter rather than 500-ing the whole list.
+		switch v := r.URL.Query().Get("cycle_id"); v {
+		case "all":
+			// no filter
+		case "":
+			if active, err := cycles.ActiveCycle(r.Context(), d.Pool, pid); err == nil {
+				id := active.ID
+				f.CycleID = &id
+			}
+		default:
+			id, err := uuid.Parse(v)
+			if err == nil {
+				f.CycleID = &id
 			}
 		}
 
