@@ -1,14 +1,21 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 
 class NottarioLogin extends LitElement {
+  static properties = {
+    _error: { state: true },
+    _org: { state: true },
+  };
+
   static styles = css`
     :host {
+      box-sizing: border-box;
       display: flex;
       min-height: 70vh;
       align-items: center;
       justify-content: center;
     }
     .card {
+      box-sizing: border-box;
       padding: 32px;
       max-width: 380px;
       width: 100%;
@@ -20,6 +27,18 @@ class NottarioLogin extends LitElement {
     }
     h1 { margin: 0 0 8px 0; font-size: 24px; }
     p { margin: 0 0 24px 0; color: #59636e; }
+    .flash {
+      box-sizing: border-box;
+      margin: 0 0 20px 0;
+      padding: 10px 12px;
+      border: 1px solid #ffc1ba;
+      background: #ffebe9;
+      color: #82071e;
+      border-radius: 6px;
+      font-size: 13px;
+      text-align: left;
+    }
+    .flash strong { font-weight: 600; }
     a.gh {
       display: inline-flex;
       align-items: center;
@@ -34,11 +53,39 @@ class NottarioLogin extends LitElement {
     svg { width: 18px; height: 18px; fill: currentColor; }
   `;
 
+  constructor() {
+    super();
+    this._error = '';
+    this._org = '';
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    const q = new URLSearchParams(window.location.search);
+    this._error = q.get('error') || '';
+    this._org = q.get('org') || '';
+  }
+
+  _flash() {
+    if (this._error !== 'org_required') return null;
+    const org = this._org
+      ? html`<strong>${this._org}</strong>`
+      : html`a specific GitHub organisation`;
+    return html`
+      <div class="flash" role="alert">
+        This instance is restricted to members of ${org}. Sign in with a
+        GitHub account that belongs to the org, or ask the admin for
+        access.
+      </div>
+    `;
+  }
+
   render() {
     return html`
       <div class="card">
         <h1>Welcome to Nottario</h1>
         <p>Sign in with your GitHub account to continue.</p>
+        ${this._flash()}
         <a class="gh" href="/auth/github/start" aria-label="Sign in with GitHub">
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38

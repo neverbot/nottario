@@ -27,7 +27,17 @@ type OAuthConfig struct {
 	PublicURL    string
 	SessionKey   []byte
 	CookieSecure bool
+	// RequiredOrg, when non-empty, restricts logins to active members
+	// of this GitHub organisation. Empty disables the gate.
+	RequiredOrg string
 }
+
+// ErrOrgRequired is returned by HandleGithubCallback when the
+// authenticated GitHub user is not an active member of the
+// configured org. The HTTP layer turns this into a redirect to
+// /login?error=org_required so the user sees a flash, not a JSON
+// error blob.
+var ErrOrgRequired = errors.New("org membership required")
 
 // stateCookieName carries the random CSRF state across the OAuth
 // redirect.
@@ -50,12 +60,18 @@ func oauthEndpoint() oauth2.Endpoint {
 }
 
 func newOAuth2Config(c OAuthConfig) *oauth2.Config {
+	// read:org is only requested when the gate is on; otherwise we keep
+	// the consent screen as narrow as possible.
+	scopes := []string{"read:user", "user:email"}
+	if c.RequiredOrg != "" {
+		scopes = append(scopes, "read:org")
+	}
 	return &oauth2.Config{
 		ClientID:     c.ClientID,
 		ClientSecret: c.ClientSecret,
 		Endpoint:     oauthEndpoint(),
 		RedirectURL:  strings.TrimRight(c.PublicURL, "/") + "/auth/github/callback",
-		Scopes:       []string{"read:user", "user:email"},
+		Scopes:       scopes,
 	}
 }
 
@@ -121,6 +137,16 @@ func HandleGithubCallback(w http.ResponseWriter, r *http.Request, pool *pgxpool.
 		return nil, err
 	}
 
+	if c.RequiredOrg != "" {
+		ok, err := checkOrgMembership(ctx, client, c.RequiredOrg)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrOrgRequired
+		}
+	}
+
 	user, _, err := UpsertFromGithub(ctx, pool, profile.ID, profile.Login, displayNameOf(profile), profile.AvatarURL)
 	if err != nil {
 		return nil, err
@@ -164,6 +190,40 @@ func fetchGithubUser(ctx context.Context, client *http.Client) (*githubProfile, 
 		return nil, fmt.Errorf("decode github user: %w", err)
 	}
 	return &p, nil
+}
+
+// checkOrgMembership returns true when the authenticated user is an
+// active member of org. Uses GET /user/memberships/orgs/{org}, which
+// works on the caller's own membership and only requires the
+// `read:org` scope (which we ask for when RequiredOrg is set).
+// A 404 means the user is not a member; any state other than
+// "active" (e.g. "pending") also rejects. Other statuses surface as
+// an error so the operator can see what's wrong.
+func checkOrgMembership(ctx context.Context, client *http.Client, org string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubAPIBase+"/user/memberships/orgs/"+org, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("github membership: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("github membership status %d: %s", resp.StatusCode, string(body))
+	}
+	var m struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return false, fmt.Errorf("decode github membership: %w", err)
+	}
+	return m.State == "active", nil
 }
 
 func displayNameOf(p *githubProfile) string {

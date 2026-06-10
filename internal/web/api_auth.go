@@ -1,7 +1,9 @@
 package web
 
 import (
+	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neverbot/nottario/internal/identity"
@@ -25,6 +27,11 @@ func GithubStartHandler(deps AuthDeps) http.Handler {
 func GithubCallbackHandler(deps AuthDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := identity.HandleGithubCallback(w, r, deps.Pool, deps.OAuthConfig); err != nil {
+			if errors.Is(err, identity.ErrOrgRequired) {
+				q := url.Values{"error": {"org_required"}, "org": {deps.OAuthConfig.RequiredOrg}}
+				http.Redirect(w, r, "/login?"+q.Encode(), http.StatusFound)
+				return
+			}
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

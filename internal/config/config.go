@@ -29,6 +29,11 @@ type Config struct {
 	GithubClientID     string
 	GithubClientSecret string
 
+	// GithubOrg, when set, restricts OAuth logins to members of this
+	// GitHub organisation. Empty disables the gate (anyone with a
+	// GitHub account can sign in). API tokens are unaffected.
+	GithubOrg string
+
 	// Backup configuration. BackupDir empty disables the in-process
 	// pg_dump goroutine entirely.
 	BackupDir      string
@@ -58,6 +63,7 @@ func Load() (*Config, error) {
 		DatabaseURL:        os.Getenv("DATABASE_URL"),
 		GithubClientID:     os.Getenv("GITHUB_OAUTH_CLIENT_ID"),
 		GithubClientSecret: clientSecret,
+		GithubOrg:          strings.TrimSpace(os.Getenv("GITHUB_OAUTH_ORG")),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, errors.New("DATABASE_URL is required")

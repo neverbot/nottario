@@ -67,6 +67,7 @@ func main() {
 		PublicURL:    cfg.PublicURL,
 		SessionKey:   cfg.SessionKey,
 		CookieSecure: cookieSecure,
+		RequiredOrg:  cfg.GithubOrg,
 	}
 
 	hub := realtime.New(logger)

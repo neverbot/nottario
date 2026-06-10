@@ -198,6 +198,7 @@ preserving `Host` and `X-Forwarded-Proto`. Nothing else is required.
 | `GITHUB_OAUTH_CLIENT_ID` | yes | — | From the GitHub OAuth App. |
 | `GITHUB_OAUTH_CLIENT_SECRET` | yes | — | From the GitHub OAuth App. |
 | `SESSION_KEY` | yes | — | 32 random bytes, base64-encoded. Generate once and keep: `openssl rand -base64 32`. Rotating it logs everyone out. |
+| `GITHUB_OAUTH_ORG` | no | (disabled) | When set to an org slug, OAuth logins are restricted to active members of that GitHub organisation. Non-members land on `/login` with a flash. The consent screen will additionally request the `read:org` scope. API tokens are unaffected. |
 | `HTTP_ADDR` | no | `:8080` | Listen address. Change only if you run multiple instances on one host. |
 | `NOTTARIO_BACKUP_DIR` | no | (disabled) | Mount-friendly path where periodic `pg_dump` backups land. Empty = no backups. |
 | `NOTTARIO_BACKUP_AT` | no | `03:00` | Time of day for the daily backup, `HH:MM` 24h local time. |
