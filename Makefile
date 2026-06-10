@@ -21,7 +21,7 @@ SQLC_VERSION          ?= v1.31.1
 # Where 'go install' drops binaries (works inside and outside CI).
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
 
-.PHONY: help build test run tidy docker lint check tools sqlc
+.PHONY: help build test run tidy docker lint check tools sqlc docs-build docs-serve docs-check
 
 help:
 	@echo "Targets:"
@@ -83,7 +83,22 @@ check:
 	$(GO) vet ./...
 	$(MAKE) lint
 	$(MAKE) sqlc-check
+	$(MAKE) docs-check
 	$(GO) test ./...
+
+# Documentation site (cmd/nottario-docs + docs/site/content).
+# `docs-build` produces a working static site under docs/site/dist.
+# `docs-serve` runs a local HTTP server over it for previewing.
+# `docs-check` validates the markdown corpus and runs in CI as part
+# of `make check`.
+docs-build:
+	$(GO) run ./cmd/nottario-docs --in docs/site/content --out docs/site/dist
+
+docs-serve: docs-build
+	@python3 -m http.server -d docs/site/dist 8000
+
+docs-check:
+	$(GO) run ./cmd/nottario-docs --check --in docs/site/content
 
 run: build
 	./bin/nottario

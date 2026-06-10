@@ -1,6 +1,9 @@
 # Exploratory analysis (not versioned)
 docs/initial/
 
+# Generated docs site (built by `make docs-build`, deployed by CI).
+docs/site/dist/
+
 # Visual companion from the brainstorming process
 .superpowers/
 

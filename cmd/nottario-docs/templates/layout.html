@@ -1,0 +1,23 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}} · Nottario docs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="nottario-docs-base" content="{{.BaseURL}}">
+<link rel="stylesheet" href="{{base "/static/docs.css"}}">
+</head>
+<body>
+{{template "topbar" .}}
+<div class="docs">
+  {{template "sidenav" .}}
+  <main class="docs__main">
+    <article class="docs__article">
+      {{.BodyHTML}}
+    </article>
+  </main>
+</div>
+<script src="{{base "/static/search.js"}}" defer></script>
+</body>
+</html>
+{{end}}

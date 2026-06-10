@@ -1,0 +1,58 @@
+name: docs
+
+# Builds the static documentation site (cmd/nottario-docs) and
+# deploys docs/site/dist/ to GitHub Pages. Runs on every push to
+# master; PRs only build (no deploy) so a broken markdown corpus
+# fails the gate without publishing.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build docs site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Validate corpus
+        run: make docs-check
+
+      - name: Build site
+        # The deployed site lives at https://neverbot.github.io/nottario/,
+        # so internal absolute paths need the /nottario prefix.
+        run: go run ./cmd/nottario-docs --base-url /nottario --in docs/site/content --out docs/site/dist
+
+      - name: Upload artifact
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,266 @@
+/* Nottario docs site styles. GitHub-like product aesthetic: neutral
+ * palette, system sans, thin borders, medium density. */
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #1f2328;
+  background: #fff;
+}
+
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* --- Topbar --- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 56px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid #d1d9e0;
+}
+.topbar__brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: #1f2328;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.topbar__brand:hover { text-decoration: none; }
+.topbar__suffix {
+  color: #59636e;
+  font-weight: 400;
+  font-size: 14px;
+}
+.topbar__crumbs {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #59636e;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.topbar__crumbs .current { color: #1f2328; }
+.topbar__crumbs .sep { color: #d0d7de; }
+.topbar__github {
+  display: inline-flex;
+  color: #59636e;
+  padding: 6px;
+  border-radius: 6px;
+}
+.topbar__github:hover { background: #f3f4f6; color: #1f2328; }
+
+/* --- Search --- */
+
+.search {
+  position: relative;
+  width: 280px;
+  max-width: 40vw;
+}
+.search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13px;
+  color: #1f2328;
+  background: #f6f8fa;
+  border: 1px solid #d1d9e0;
+  border-radius: 6px;
+}
+.search input:focus {
+  outline: none;
+  border-color: #0969da;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.12);
+}
+.search__results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #d1d9e0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+  padding: 4px;
+}
+.search__results .hit {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #1f2328;
+  font-size: 13px;
+}
+.search__results .hit:hover {
+  background: #f3f4f6;
+  text-decoration: none;
+}
+.search__results .hit .hit__title { font-weight: 600; }
+.search__results .hit .hit__excerpt { color: #59636e; margin-top: 2px; }
+.search__results .hit mark { background: #fff8c5; color: inherit; padding: 0; }
+
+/* --- Layout: side nav + main --- */
+
+.docs {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 0;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.docs__nav {
+  position: sticky;
+  top: 56px;
+  align-self: start;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  padding: 24px 12px 24px 20px;
+  border-right: 1px solid #d1d9e0;
+}
+.docs__nav-section + .docs__nav-section { margin-top: 20px; }
+.docs__nav-heading {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #59636e;
+}
+.docs__nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.docs__nav-link {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #1f2328;
+  font-size: 13px;
+}
+.docs__nav-link:hover {
+  background: #f3f4f6;
+  text-decoration: none;
+}
+.docs__nav-link--current {
+  background: #ddf4ff;
+  color: #0550ae;
+  font-weight: 600;
+}
+.docs__nav-link--current:hover { background: #ddf4ff; }
+
+.docs__main {
+  min-width: 0;
+  padding: 32px 40px 64px 32px;
+}
+.docs__article {
+  max-width: 760px;
+}
+.docs__article h1 {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #d1d9e0;
+}
+.docs__article h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 32px 0 12px 0;
+}
+.docs__article h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 24px 0 8px 0;
+}
+.docs__article p,
+.docs__article ul,
+.docs__article ol { margin: 0 0 14px 0; }
+.docs__article ul,
+.docs__article ol { padding-left: 24px; }
+.docs__article li { margin: 4px 0; }
+.docs__article code {
+  background: #f6f8fa;
+  border: 1px solid #d1d9e0;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+.docs__article pre {
+  background: #f6f8fa;
+  border: 1px solid #d1d9e0;
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.docs__article pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+}
+.docs__article blockquote {
+  margin: 0 0 14px 0;
+  padding: 0 14px;
+  border-left: 3px solid #d1d9e0;
+  color: #59636e;
+}
+.docs__article table {
+  border-collapse: collapse;
+  margin: 0 0 14px 0;
+  width: 100%;
+  font-size: 13px;
+}
+.docs__article th,
+.docs__article td {
+  border: 1px solid #d1d9e0;
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.docs__article th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
+.docs__article img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #d1d9e0;
+  border-radius: 6px;
+}
+
+@media (max-width: 800px) {
+  .docs { grid-template-columns: 1fr; }
+  .docs__nav {
+    position: static;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid #d1d9e0;
+    padding: 16px 20px;
+  }
+  .docs__main { padding: 24px 20px 48px 20px; }
+  .topbar__crumbs { display: none; }
+  .search { width: 180px; }
+}
