@@ -111,11 +111,15 @@ artefacts written to disk must be in English regardless.
   entry to `docs/site/content/whats-new.md` before the closing
   commit. Small bug fixes, internal refactors, dependency bumps and
   docs typos do not need an entry; they live in `git log`.
-- The page is grouped by version: one `## vX.Y.Z — YYYY-MM-DD`
-  heading per release. While work is happening between releases,
-  append bullets under an `## Unreleased` heading at the top; on
-  tag day, rename `Unreleased` to the version + date and start a
-  new `Unreleased` block.
+- Headings are **dates**, not versions: `## YYYY-MM-DD`, newest
+  first. Every push to master ships to `:latest` immediately, so
+  there is no "Unreleased" stage — the moment your commit lands,
+  it is released. When a `vX.Y.Z` tag is cut on top of a day's
+  bullets, fold the version into the heading as
+  `## vX.Y.Z — YYYY-MM-DD`; otherwise leave the heading as just the
+  date.
+- If today already has a heading, append under it; otherwise create
+  a new `## YYYY-MM-DD` block at the top.
 - Each bullet is one sentence in the past tense, user-facing
   (mention the knob name, the config default, the UI change), with
   a link to a deeper page when relevant. Avoid implementation

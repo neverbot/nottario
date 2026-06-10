@@ -12,7 +12,7 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
-## Unreleased
+## 2026-06-10
 
 - **Realtime: comments now propagate live.** Adding, editing or
   deleting a task comment fires a `task.comment.*` event so the open
