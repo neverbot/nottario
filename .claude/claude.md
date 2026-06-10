@@ -104,6 +104,27 @@ artefacts written to disk must be in English regardless.
 
 ## Operational rules
 
+### Public changelog (`whats-new.md`)
+- Any **important** task — a new feature, a backwards-incompatible
+  change, a security or data-handling change, a new env var or
+  config knob, a default-behaviour change, a removal — must add an
+  entry to `docs/site/content/whats-new.md` before the closing
+  commit. Small bug fixes, internal refactors, dependency bumps and
+  docs typos do not need an entry; they live in `git log`.
+- The page is grouped by version: one `## vX.Y.Z — YYYY-MM-DD`
+  heading per release. While work is happening between releases,
+  append bullets under an `## Unreleased` heading at the top; on
+  tag day, rename `Unreleased` to the version + date and start a
+  new `Unreleased` block.
+- Each bullet is one sentence in the past tense, user-facing
+  (mention the knob name, the config default, the UI change), with
+  a link to a deeper page when relevant. Avoid implementation
+  details — those belong in commit messages, not the changelog.
+- The CI gate (`make docs-check`) does not enforce this yet; the
+  discipline is on the agent closing the task. The site is rebuilt
+  on every push to master, so a missed entry is visible publicly
+  within minutes.
+
 ### File naming
 - Markdown filenames are always lowercase (`readme.md`, `claude.md`,
   etc.), even when tools traditionally use uppercase. Use a symlink
