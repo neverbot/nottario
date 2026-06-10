@@ -56,6 +56,12 @@ jobs:
         with:
           go-version: '1.26'
           cache: true
+      # Node is needed by `make js-check`, which runs `node --check`
+      # over every frontend .js file as a syntax gate. No deps are
+      # installed; we just need the binary on PATH.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
 
       - name: install dev tools (golangci-lint, sqlc)
         run: make tools

@@ -371,8 +371,8 @@ class NottarioBoardPage extends LitElement {
     /* Role badge: a flat-coloured pill whose hue follows the role's
        configured colour. Uses color-mix so the tint stays robust
        across short hex (#abc), long hex (#aabbcc) or named colours,
-       which the previous string-concatenation `${role.Color}1a`
-       silently broke on. */
+       which the previous string-concatenation approach silently
+       broke on. */
     .card .role-badge,
     .upnext .role-badge {
       display: inline-flex;

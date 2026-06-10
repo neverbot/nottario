@@ -21,7 +21,7 @@ SQLC_VERSION          ?= v1.31.1
 # Where 'go install' drops binaries (works inside and outside CI).
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
 
-.PHONY: help build test run tidy docker lint check tools sqlc docs-build docs-serve docs-check
+.PHONY: help build test run tidy docker lint check tools sqlc docs-build docs-serve docs-check js-check
 
 help:
 	@echo "Targets:"
@@ -84,7 +84,20 @@ check:
 	$(MAKE) lint
 	$(MAKE) sqlc-check
 	$(MAKE) docs-check
+	$(MAKE) js-check
 	$(GO) test ./...
+
+# Frontend syntax gate. The project ships vanilla JS / Lit without a
+# build step, so a stray backtick inside a `css\`...\`` comment or any
+# similar typo otherwise surfaces only at runtime in the browser. We
+# run `node --check` (parse-only, no execution, no deps installed)
+# over every `.js` under internal/web/static so the same class of bug
+# fails the gate locally and in CI. The neighbouring package.json
+# declares `"type": "module"` so Node parses each file as ESM.
+js-check:
+	@command -v node >/dev/null 2>&1 || { echo "node is required for js-check (install Node 20+)"; exit 1; }
+	@find internal/web/static -name '*.js' -not -path '*/vendor/*' -print0 \
+		| xargs -0 -I{} node --check {}
 
 # Documentation site (cmd/nottario-docs + docs/site/content).
 # `docs-build` produces a working static site under docs/site/dist.

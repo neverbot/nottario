@@ -311,8 +311,17 @@ If any of these fail, fix the underlying issue. Never bypass with
 in the Makefile; `make tools` installs them.
 
 Frontend assets (`internal/web/static/**`) are vanilla JS without a
-build step. If a Lit/JS linter is added in the future, treat it the
-same as `go vet`.
+build step. The `make js-check` step in the gate runs `node --check`
+(parse-only) over every `.js` under that tree so syntax errors fail
+locally and in CI instead of only surfacing at runtime in a browser.
+A `package.json` at the static root declares `"type": "module"` so
+Node parses each file as ESM.
+
+The same gate catches a class of bug we've already hit twice:
+**backticks inside comments within a `` css`…` `` or `` html`…` ``
+tagged template literal terminate the template early and silently
+break the stylesheet/markup**. Avoid backticks in comments inside
+those blocks; the gate now enforces it.
 
 ## Project status
 

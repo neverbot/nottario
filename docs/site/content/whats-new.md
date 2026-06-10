@@ -27,15 +27,6 @@ feature shows up here.
   confirm dialog was replaced with an in-app one. The `feature`
   type stays hidden behind an Advanced checkbox in the new-task
   dialog so it isn't picked by accident.
-- **MCP / REST: `docs.write` field rename.** The markdown body field
-  on `nottario.docs.write` and the REST `POST /api/projects/{id}/docs`
-  is now `content` instead of `content_md`. Same for the markdown
-  preview endpoint `POST /api/markdown/render`. The `_md` suffix
-  was redundant (Nottario is markdown-only) and inconsistent with
-  the sibling fields `description` (tasks, arch) and `body` (task
-  comments). Update any agent calling the old name before pulling
-  the next image; the old key is no longer accepted.
-
 - **Realtime: comments now propagate live.** Adding, editing or
   deleting a task comment fires a `task.comment.*` event so the open
   task-detail dialog refreshes its comment thread without a manual
