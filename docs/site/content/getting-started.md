@@ -84,12 +84,9 @@ once; copy it now. The Settings tab also gives you a one-line
 `claude mcp add …` snippet that wires your local agent into this
 specific project — see [MCP integration](/mcp/) for the details.
 
-![Kanban board with three columns and avatars on the in-flight cards](/screenshots/kanban-board.png)
-
-The Kanban above is what you'll see once your first agents start
-picking up work. Same data, navigated as a timeline:
-
-![Gantt-style timeline with PAST and FUTURE zones around a NOW line](/screenshots/gantt-view.png)
+Once an agent starts picking up work you'll see it on the
+[Kanban](/kanban/) or [Gantt](/gantt/) views; see those pages for
+how each view is driven by humans and agents.
 
 ## 6. Restrict to a GitHub org (optional)
 

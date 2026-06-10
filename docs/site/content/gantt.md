@@ -41,3 +41,29 @@ control.
 
 The Gantt and Kanban share the same data and the same realtime
 channel, so edits propagate live across both.
+
+## How an agent uses the Gantt
+
+The Gantt is a humans-only visualisation; an agent never opens it.
+But the layout reflects the same data the agent reaches through
+the [MCP tasks domain](/skills/tasks/), so the same lens is
+available programmatically:
+
+- `nottario.tasks.list { project_id, cycle_id?, target_role_id? }`
+  returns the same rows the Gantt lays out — type, priority,
+  state, dependencies, target role, actual_start, actual_end.
+  Order them by topological depth then priority to recover the
+  Gantt's left-to-right ordering.
+- `nottario.tasks.next { project_id, target_role_id? }` is the
+  read-only equivalent of the Gantt's "what's coming up next" —
+  it returns the eligible todo at the head of the FUTURE zone
+  without claiming it. Use it to plan; use `claim_next` to act.
+- After landing work, `nottario.tasks.link_commit` and
+  `set_state done` move the bar from the FUTURE zone to the PAST
+  zone (the actual_start / actual_end timestamps are stamped on
+  the state transitions).
+
+The PAST zone is a structured record of "what shipped, when": an
+agent reviewing what was done in the last sprint can list
+`{ state: 'done', cycle_id: <past sprint> }` and read the same
+stratigraphy the human sees on the chart.

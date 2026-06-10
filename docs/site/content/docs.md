@@ -43,6 +43,29 @@ one win, with the loser told to merge and retry.
   The default skill bundle (`internal/skill/files/`) is mirrored
   into this scope at startup.
 
-Agents drive the same store via `nottario.docs.list`,
-`nottario.docs.read` and `nottario.docs.write`. See the
-[MCP integration](/mcp/) page for the tool contract.
+## How an agent uses the store
+
+The Docs view is the human-facing surface; the agent reads and
+writes through the [MCP docs domain](/skills/docs/). Tools, in
+the order they typically appear in a session:
+
+- `nottario.docs.list { project_id, scope, path_prefix? }` walks
+  the tree to find what's there without pulling bodies.
+- `nottario.docs.read { project_id, scope, path }` returns the
+  full document including its parsed frontmatter and the
+  `current_version` integer. The agent stashes that integer.
+- `nottario.docs.search { project_id, scope, query }` is full-text
+  across title, description and body.
+- `nottario.docs.write { project_id, scope, path, content,
+  expected_version, message }` commits an edit. `content` is the
+  full markdown including frontmatter; the server splits and
+  stores the two halves. `expected_version` is the integer from
+  the most recent read — if the server's `current_version` no
+  longer matches, the call returns `version_conflict` with the
+  fresh number and the agent re-reads, merges, retries. This is
+  optimistic concurrency: two agents writing the same path see
+  exactly one win.
+
+The pattern is "read → edit → write with expected_version", same
+as a git commit on top of a known tip. The web UI follows the
+identical contract under the hood.

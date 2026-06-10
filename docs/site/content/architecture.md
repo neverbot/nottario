@@ -49,3 +49,29 @@ diffable, reviewable in PRs, and trivially editable by an LLM.
   click on the rail's `← incoming` list.
 - Drift detection: when the graph diverges from the code, the
   difference is visible and an agent can fix one or the other.
+
+## How an agent maintains the graph
+
+The web UI is read-only for the structure on purpose: every
+structural edit flows through an agent via the
+[MCP architecture domain](/skills/architecture/), so the textual
+history of the graph stays diffable and reviewable.
+
+- `nottario.arch.list_nodes { project_id, parent_slug? }` returns
+  the children of a parent (or the roots when no parent is given).
+- `nottario.arch.get_node { project_id, slug }` returns one
+  node's description, kind, linked repo and path.
+- `nottario.arch.upsert_node { project_id, slug, parent_slug,
+  kind, name, description }` creates or updates a node. The
+  server decodes a small set of common HTML entities defensively,
+  but agents should send `Pages & Router`, not `Pages &amp;
+  Router`.
+- `nottario.arch.upsert_edge { project_id, from_slug, to_slug,
+  kind, label? }` connects two nodes with a relationship of a
+  given kind (`calls`, `reads`, `writes`, `subscribes`, etc.).
+- `nottario.arch.move_node` and `remove_node` / `remove_edge`
+  cover the rest.
+
+The right rail's description field is the one place the web UI
+does write: humans can edit a node's description inline, which
+the server then stores via the same `upsert_node` path.

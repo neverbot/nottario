@@ -44,3 +44,29 @@ Both kanban and gantt are wired to `LISTEN/NOTIFY` over SSE: when a
 human or an agent edits a task elsewhere, the card updates in
 place within a second. No reload needed. Comment edits in the open
 detail dialog refresh the same way.
+
+## How an agent drives the board
+
+The kanban is the human-facing surface; the agent works the same
+backlog through the [MCP tasks domain](/skills/tasks/). A typical
+loop:
+
+1. `nottario.tasks.claim_next { project_id, target_role_id? }` —
+   atomically picks the highest-priority eligible todo and stamps
+   `state=doing` + `assignee_user_id=<caller>` in a single query.
+   The card visibly moves into the **doing** column on every
+   connected browser within a second.
+2. The agent does the work, then for each commit it produced calls
+   `nottario.tasks.link_commit { task_id, repo, sha }` so the
+   Commits panel of the detail dialog can render the diff link.
+3. `nottario.tasks.add_comment { task_id, body }` captures a
+   short closing note for the human reading the row later.
+4. `nottario.tasks.set_state { task_id, state: "done" }` — the
+   card moves to **done**, dependents become eligible, and a
+   feature parent rolls up to done automatically when all its
+   children are done.
+
+Filing new work as the agent discovers it (a side bug spotted, a
+follow-up task) is `nottario.tasks.create` with the right
+`target_role_id` so it shows up in the right swimlane next time a
+matching agent runs `claim_next`.
