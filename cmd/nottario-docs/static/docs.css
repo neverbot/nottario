@@ -29,19 +29,20 @@ a:hover { text-decoration: underline; }
   padding: 0 20px;
   background: #fff;
   border-bottom: 1px solid #d1d9e0;
-  /* A uniform line-height across every direct child so the visible
-   * glyphs (not just bounding boxes) line up. Without this, mixing a
-   * 13px crumb against an 18px brand and a 14px suffix renders three
-   * different ascender heights even when their flex centers agree. */
-  line-height: 24px;
+  /* Uniform line-height so the visible glyphs of every child sit at
+   * the same baseline even though the font sizes differ slightly
+   * (15 / 14 / 13). Combined with `align-items: center` on the flex
+   * container, this keeps every word optically centered in the
+   * 56px topbar without ascender/descender drift. */
+  line-height: 20px;
 }
-.topbar > * {
-  display: flex;
-  align-items: center;
-}
+.topbar > * { display: flex; align-items: center; }
 .topbar__brand {
+  /* 15px (matches body font) keeps the brand visually closer to the
+   * crumb (13px) and search input (13px) than the original 18px did,
+   * so all four words sit on the same optical line. */
   font-weight: 700;
-  font-size: 18px;
+  font-size: 15px;
   color: #1f2328;
   gap: 4px;
 }
