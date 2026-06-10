@@ -85,3 +85,59 @@ func TestTasks_CreateSetStateAndDependencyCycle(t *testing.T) {
 		t.Fatalf("RemoveDependency: %v", err)
 	}
 }
+
+// TestTasks_HTMLEntitiesDecodedAtBoundary mirrors the architecture
+// equivalent: agents that hand us entity-encoded title or description
+// payloads (a `Build &amp; deploy` style string the Lit renderer
+// would otherwise surface as literal `&amp;`) get the entities
+// decoded so the row holds plain UTF-8 from then on.
+func TestTasks_HTMLEntitiesDecodedAtBoundary(t *testing.T) {
+	pool := testutil.NewPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	u, _, err := identity.UpsertFromGithub(ctx, pool, 9100, "decoder", "Decoder", "")
+	if err != nil {
+		t.Fatalf("UpsertFromGithub: %v", err)
+	}
+	p, err := identity.CreateProject(ctx, pool, "DecodeProj", "", "", "", u.ID, nil)
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	roles, _ := identity.ListRoles(ctx, pool, p.ID)
+	roleID := roles[0].ID
+
+	by := tasks.Authorship{UserID: &u.ID}
+	created, err := tasks.Create(ctx, pool, tasks.CreateParams{
+		ProjectID:     p.ID,
+		Type:          tasks.TypeTask,
+		Title:         "Build &amp; deploy: GHCR &lt;img&gt; tags",
+		DescriptionMD: "Run &quot;docker push&quot; &amp; verify.",
+		TargetRoleID:  &roleID,
+	}, by)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.Title != "Build & deploy: GHCR <img> tags" {
+		t.Errorf("Create title not decoded: %q", created.Title)
+	}
+	if created.DescriptionMD != `Run "docker push" & verify.` {
+		t.Errorf("Create description not decoded: %q", created.DescriptionMD)
+	}
+
+	newTitle := "Build &amp; ship v2"
+	newDesc := "Switch &lt;flag&gt;."
+	updated, err := tasks.Update(ctx, pool, created.ID, tasks.UpdateParams{
+		Title:         &newTitle,
+		DescriptionMD: &newDesc,
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.Title != "Build & ship v2" {
+		t.Errorf("Update title not decoded: %q", updated.Title)
+	}
+	if updated.DescriptionMD != "Switch <flag>." {
+		t.Errorf("Update description not decoded: %q", updated.DescriptionMD)
+	}
+}

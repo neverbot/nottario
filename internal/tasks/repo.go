@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,6 +44,8 @@ type CreateParams struct {
 // Create inserts a new task. State defaults to 'todo'. Implemented
 // via sqlc-generated dbq.InsertTask.
 func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorship) (*Task, error) {
+	p.Title = html.UnescapeString(p.Title)
+	p.DescriptionMD = html.UnescapeString(p.DescriptionMD)
 	if p.Title == "" {
 		return nil, errors.New("title is required")
 	}
@@ -349,6 +352,14 @@ type UpdateParams struct {
 
 // Update mutates the fields enumerated in p.
 func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParams) (*Task, error) {
+	if p.Title != nil {
+		t := html.UnescapeString(*p.Title)
+		p.Title = &t
+	}
+	if p.DescriptionMD != nil {
+		d := html.UnescapeString(*p.DescriptionMD)
+		p.DescriptionMD = &d
+	}
 	if p.Type != nil && !ValidType(*p.Type) {
 		return nil, fmt.Errorf("invalid type: %q", *p.Type)
 	}

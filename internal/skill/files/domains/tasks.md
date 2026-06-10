@@ -150,6 +150,15 @@ different cycle, create it first, then move it with `tasks.update`
 (and reparent the whole feature if the target is a leaf under a
 feature parent — see the cascade note under `tasks.update`).
 
+**Send `title` and `description` as plain UTF-8.** Do not HTML-encode
+ampersands, angle brackets or quotes — `Build & deploy`, not
+`Build &amp; deploy`. The kanban, gantt and detail dialog escape
+these for display, so an encoded payload renders to the user as the
+literal `&amp;`. The server now decodes a small set of common
+entities defensively when it receives them, but the cleanest fix is
+to never encode in the first place. The same rule applies to
+`tasks.update`.
+
 #### One task per role
 
 When a unit of work spans multiple roles (e.g. backend migration +
