@@ -23,9 +23,12 @@ feature shows up here.
   state.** Results are now grouped by source (Tasks, Documents,
   Architecture) with section headers. The top hit is auto-selected;
   Up / Down move the highlight, Enter opens, Escape closes. Network
-  failures surface as a visible "Search failed. Retry." row instead
-  of silently rendering "No matches." The empty state now tells you
-  what scope it searched in and what to try next.
+  failures surface as a visible "Search failed." row with a Retry
+  button instead of silently rendering "No matches." A small `/`
+  hint inside the empty input advertises the global shortcut. Meta
+  lines dropped the internal column prefixes (`state:`, `type:`,
+  `path:`, `slug:`) so a row reads `done · task` instead of
+  `state: done · type: task`.
 
 ## v0.1.0 — 2026-06-08
 

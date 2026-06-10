@@ -50,6 +50,27 @@ class NottarioSearchBox extends LitElement {
       border-color: #0969da;
     }
     input:focus::placeholder { color: #59636e; }
+    /* Discoverable shortcut: a tiny kbd hint floats inside the input
+       when it is unfocused and empty, telling the user how to reach
+       this search from anywhere via the global "/" handler. Hidden
+       on focus (the input's own caret takes over) and when there is
+       any query content (the hint would overlap typed text). */
+    .kbd-hint {
+      position: absolute;
+      right: 9px;
+      top: 50%;
+      transform: translateY(-50%);
+      padding: 1px 5px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.7);
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      line-height: 1;
+      pointer-events: none;
+    }
+    :host(:focus-within) .kbd-hint { display: none; }
     .panel {
       position: absolute;
       top: calc(100% + 4px);
@@ -154,11 +175,29 @@ class NottarioSearchBox extends LitElement {
       color: #8b949e;
     }
     .error {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
       background: #ffebe9;
       color: #82071e;
       border-bottom: 1px solid #ffc1ba;
       text-align: left;
     }
+    .retry-btn {
+      flex: 0 0 auto;
+      background: #fff;
+      border: 1px solid #ffc1ba;
+      color: #82071e;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .retry-btn:hover { background: #ffebe9; }
   `;
 
   constructor() {
@@ -255,7 +294,7 @@ class NottarioSearchBox extends LitElement {
       // first attempt) and set error. Without this branch a 500 / a
       // revoked token / a network drop all render as "No matches.",
       // a UX-vs-trust collision the user has no way to disambiguate.
-      this.error = 'Search failed. Retry.';
+      this.error = 'Search failed.';
     } finally {
       this.loading = false;
     }
@@ -345,10 +384,17 @@ class NottarioSearchBox extends LitElement {
              @keydown=${this.onKeyDown}
              @focus=${this.onFocus}
              @blur=${this.onBlur}>
+      ${this.projectId && !this.query ? html`<kbd class="kbd-hint">/</kbd>` : null}
       ${this.open && this.query ? html`
         <div class="panel" id="search-listbox" role="listbox">
           ${this.error
-            ? html`<div class="error" role="alert">${this.error}</div>`
+            ? html`
+                <div class="error" role="alert">
+                  <span>${this.error}</span>
+                  <button type="button" class="retry-btn"
+                          @mousedown=${(e) => e.preventDefault()}
+                          @click=${() => this.runSearch()}>Retry</button>
+                </div>`
             : null}
           ${this.loading && this.hits === null && !this.error
             ? html`<div class="hint">Searching…</div>`
@@ -384,9 +430,9 @@ class NottarioSearchBox extends LitElement {
                       ? html`<div class="desc" data-html-idx=${`d${flatIndex}`}>${hit.description || ''}</div>`
                       : null}
                     <div class="meta">
-                      ${hit.kind === 'task' ? html`state: ${hit.task_state} · type: ${hit.task_type}` : null}
-                      ${hit.kind === 'document' ? html`path: ${hit.doc_path}` : null}
-                      ${hit.kind === 'arch_node' ? html`slug: ${hit.node_slug} · kind: ${hit.node_kind}` : null}
+                      ${hit.kind === 'task' ? html`${hit.task_state} · ${hit.task_type}` : null}
+                      ${hit.kind === 'document' ? html`${hit.doc_path}` : null}
+                      ${hit.kind === 'arch_node' ? html`${hit.node_kind} · ${hit.node_slug}` : null}
                     </div>
                   </div>
                 `;
