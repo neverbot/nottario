@@ -267,6 +267,65 @@ func TestHub_TaskClaimedEventReachesSubscribers(t *testing.T) {
 	}
 }
 
+// TestHub_TaskCommentCreatedEventReachesSubscribers exercises the
+// `task_comments_notify_insert` DB trigger added in migration 00002.
+// Without it an open task-detail dialog cannot learn about a comment
+// posted by a different client and stays stale until the user
+// reloads the page.
+func TestHub_TaskCommentCreatedEventReachesSubscribers(t *testing.T) {
+	hub := realtime.New(silentLogger())
+	_, pool, stop := runHubInBackground(t, hub)
+	defer stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	u, _, err := identity.UpsertFromGithub(ctx, pool, 5600, "commenter", "Commenter", "")
+	if err != nil {
+		t.Fatalf("user: %v", err)
+	}
+	p, err := identity.CreateProject(ctx, pool, "CommentRT", "", "", "", u.ID, nil)
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	roles, _ := identity.ListRoles(ctx, pool, p.ID)
+	roleID := roles[0].ID
+
+	by := tasks.Authorship{UserID: &u.ID}
+	tk, err := tasks.Create(ctx, pool, tasks.CreateParams{
+		ProjectID: p.ID, Type: tasks.TypeTask, Title: "Comment me", TargetRoleID: &roleID,
+	}, by)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	ch, cancelSub := hub.Subscribe(p.ID)
+	defer cancelSub()
+
+	if _, err := tasks.AddComment(ctx, pool, tk.ID, "first post", by); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case ev := <-ch:
+			if ev.Type != "task.comment.created" {
+				continue
+			}
+			if ev.TaskID == nil || *ev.TaskID != tk.ID {
+				t.Errorf("task.comment.created task_id mismatch: %+v", ev)
+			}
+			if ev.ProjectID == nil || *ev.ProjectID != p.ID {
+				t.Errorf("task.comment.created project_id mismatch: %+v", ev)
+			}
+			return
+		case <-deadline:
+			t.Fatal("timeout waiting for task.comment.created event")
+		}
+	}
+}
+
 func TestHub_CycleClosedEventReachesSubscribers(t *testing.T) {
 	hub := realtime.New(silentLogger())
 	_, pool, stop := runHubInBackground(t, hub)

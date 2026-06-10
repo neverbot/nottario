@@ -654,7 +654,13 @@ class NottarioBoardPage extends LitElement {
       if (!ev.type) return;
       // 'realtime.reconnected' fires after EventSource recovers from a
       // disconnect — any events during the gap were lost, so reload.
-      if (ev.type === 'realtime.reconnected' || ev.type.startsWith('task.')) {
+      // task.comment.* affect only the open detail dialog; refreshing
+      // the whole kanban for every comment edit would be wasteful.
+      if (ev.type.startsWith('task.comment.')) {
+        if (this.selected && ev.task_id === this.selected.task.ID) {
+          this.loadDetail(this.selected.task.ID);
+        }
+      } else if (ev.type === 'realtime.reconnected' || ev.type.startsWith('task.')) {
         this.load();
         if (this.selected) this.loadDetail(this.selected.task.ID);
       }

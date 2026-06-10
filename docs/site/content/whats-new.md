@@ -12,6 +12,14 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## Unreleased
+
+- **Realtime: comments now propagate live.** Adding, editing or
+  deleting a task comment fires a `task.comment.*` event so the open
+  task-detail dialog refreshes its comment thread without a manual
+  reload. The kanban and Gantt views keep refreshing on every
+  `task.*` event as before.
+
 ## v0.1.0 — 2026-06-08
 
 First public release, published as `ghcr.io/neverbot/nottario:0.1.0`
