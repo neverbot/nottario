@@ -29,13 +29,20 @@ a:hover { text-decoration: underline; }
   padding: 0 20px;
   background: #fff;
   border-bottom: 1px solid #d1d9e0;
+  /* A uniform line-height across every direct child so the visible
+   * glyphs (not just bounding boxes) line up. Without this, mixing a
+   * 13px crumb against an 18px brand and a 14px suffix renders three
+   * different ascender heights even when their flex centers agree. */
+  line-height: 24px;
+}
+.topbar > * {
+  display: flex;
+  align-items: center;
 }
 .topbar__brand {
   font-weight: 700;
   font-size: 18px;
   color: #1f2328;
-  display: inline-flex;
-  align-items: baseline;
   gap: 4px;
 }
 .topbar__brand:hover { text-decoration: none; }
@@ -46,8 +53,6 @@ a:hover { text-decoration: underline; }
 }
 .topbar__crumbs {
   flex: 1;
-  display: flex;
-  align-items: center;
   gap: 6px;
   font-size: 13px;
   color: #59636e;
@@ -58,7 +63,6 @@ a:hover { text-decoration: underline; }
 .topbar__crumbs .current { color: #1f2328; }
 .topbar__crumbs .sep { color: #d0d7de; }
 .topbar__github {
-  display: inline-flex;
   color: #59636e;
   padding: 6px;
   border-radius: 6px;
