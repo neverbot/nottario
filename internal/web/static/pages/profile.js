@@ -11,7 +11,12 @@ class NottarioProfilePage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, surfaceStyles, tableStyles, badgeStyles, css`
+  static styles = [
+    buttonStyles,
+    surfaceStyles,
+    tableStyles,
+    badgeStyles,
+    css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -116,7 +121,8 @@ class NottarioProfilePage extends LitElement {
       border-radius: 8px;
     }
     .error { color: #cf222e; margin-bottom: 12px; font-size: 13px; }
-  `];
+  `,
+  ];
 
   constructor() {
     super();
@@ -141,10 +147,12 @@ class NottarioProfilePage extends LitElement {
         Position: m.RolePosition,
       });
     }
-    return Array.from(byProject.values()).map(p => {
-      p.roles.sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
-      return p;
-    }).sort((a, b) => a.ProjectName.localeCompare(b.ProjectName));
+    return Array.from(byProject.values())
+      .map((p) => {
+        p.roles.sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
+        return p;
+      })
+      .sort((a, b) => a.ProjectName.localeCompare(b.ProjectName));
   }
 
   async _logout() {
@@ -159,8 +167,11 @@ class NottarioProfilePage extends LitElement {
     const me = this.me;
     const memberships = this._groupedMemberships();
     const memberSince = me.created_at
-      ? new Date(me.created_at).toLocaleDateString(undefined,
-          { year: 'numeric', month: 'long', day: 'numeric' })
+      ? new Date(me.created_at).toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
       : null;
     return html`
       <div class="wrap">
@@ -182,40 +193,47 @@ class NottarioProfilePage extends LitElement {
               ${me.is_admin ? html`<span class="badge admin">admin</span>` : ''}
             </div>
             <div class="login">@${me.github_login}</div>
-            ${memberSince
-              ? html`<div class="meta-line">Member since ${memberSince}</div>`
-              : null}
+            ${memberSince ? html`<div class="meta-line">Member since ${memberSince}</div>` : null}
           </div>
         </div>
 
         <h2>Project memberships</h2>
-        ${memberships.length === 0
-          ? html`<div class="empty">You don't belong to any project yet.</div>`
-          : html`
+        ${
+          memberships.length === 0
+            ? html`<div class="empty">You don't belong to any project yet.</div>`
+            : html`
             <table class="data-table memberships">
               <thead>
                 <tr><th>Project</th><th>Roles</th></tr>
               </thead>
               <tbody>
-                ${memberships.map(p => html`
+                ${memberships.map(
+                  (p) => html`
                   <tr>
                     <td>
                       <a class="project-link" href=${`/projects/${p.ProjectID}`}
-                         @click=${(e) => { e.preventDefault(); window.nottarioNavigate(`/projects/${p.ProjectID}`); }}>${p.ProjectName}</a>
+                         @click=${(e) => {
+                           e.preventDefault();
+                           window.nottarioNavigate(`/projects/${p.ProjectID}`);
+                         }}>${p.ProjectName}</a>
                     </td>
                     <td>
                       <div class="roles">
-                        ${p.roles.map(r => html`
+                        ${p.roles.map(
+                          (r) => html`
                           <span class="role"
                                 style=${r.Color ? `border-color:${r.Color}; color:${r.Color}` : ''}>${r.Label}</span>
-                        `)}
+                        `,
+                        )}
                       </div>
                     </td>
                   </tr>
-                `)}
+                `,
+                )}
               </tbody>
             </table>
-          `}
+          `
+        }
 
         <h2>Settings</h2>
         <div class="settings-list">
@@ -239,7 +257,10 @@ class NottarioProfilePage extends LitElement {
             <div class="label">API tokens</div>
             <div class="value">
               <a class="tokens-link" href="/"
-                 @click=${(e) => { e.preventDefault(); window.nottarioNavigate('/'); }}>Manage tokens in a project's Settings →</a>
+                 @click=${(e) => {
+                   e.preventDefault();
+                   window.nottarioNavigate('/');
+                 }}>Manage tokens in a project's Settings →</a>
             </div>
           </div>
           <div class="row">

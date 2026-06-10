@@ -14,7 +14,12 @@ class NottarioUsersPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, surfaceStyles, tableStyles, badgeStyles, css`
+  static styles = [
+    buttonStyles,
+    surfaceStyles,
+    tableStyles,
+    badgeStyles,
+    css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
     .spacer { flex: 1; }
@@ -27,7 +32,8 @@ class NottarioUsersPage extends LitElement {
     .login { color: #59636e; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
     .muted { color: #59636e; }
     .error { color: #cf222e; font-size: 13px; margin-bottom: 8px; }
-  `];
+  `,
+  ];
 
   constructor() {
     super();
@@ -55,11 +61,12 @@ class NottarioUsersPage extends LitElement {
   _filtered() {
     if (!this.filter) return this.users;
     const q = this.filter.toLowerCase();
-    return this.users.filter(u =>
-      (u.DisplayName || '').toLowerCase().includes(q) ||
-      (u.GithubLogin || '').toLowerCase().includes(q));
+    return this.users.filter(
+      (u) =>
+        (u.DisplayName || '').toLowerCase().includes(q) ||
+        (u.GithubLogin || '').toLowerCase().includes(q),
+    );
   }
-
 
   render() {
     if (this.users === null) {
@@ -73,13 +80,14 @@ class NottarioUsersPage extends LitElement {
         <nottario-search-input slot="actions"
             placeholder="Filter by name or login…"
             .value=${this.filter}
-            @input=${(e) => this.filter = e.detail.value}
-            @clear=${() => this.filter = ''}></nottario-search-input>
+            @input=${(e) => (this.filter = e.detail.value)}
+            @clear=${() => (this.filter = '')}></nottario-search-input>
       </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
-      ${rows.length === 0
-        ? html`<div class="empty">No users match the filter.</div>`
-        : html`
+      ${
+        rows.length === 0
+          ? html`<div class="empty">No users match the filter.</div>`
+          : html`
           <table class="data-table">
             <thead>
               <tr>
@@ -90,7 +98,8 @@ class NottarioUsersPage extends LitElement {
               </tr>
             </thead>
             <tbody>
-              ${rows.map(u => html`
+              ${rows.map(
+                (u) => html`
                 <tr>
                   <td>
                     <div class="user-cell">
@@ -108,10 +117,12 @@ class NottarioUsersPage extends LitElement {
                   <td>${u.ProjectCount}</td>
                   <td>${u.IsAdmin ? html`<span class="badge admin">admin</span>` : ''}</td>
                 </tr>
-              `)}
+              `,
+              )}
             </tbody>
           </table>
-        `}
+        `
+      }
     `;
   }
 }

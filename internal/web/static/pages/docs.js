@@ -28,7 +28,11 @@ class NottarioDocsPage extends LitElement {
     viewingVersion: { state: true },
   };
 
-  static styles = [buttonStyles, formStyles, badgeStyles, css`
+  static styles = [
+    buttonStyles,
+    formStyles,
+    badgeStyles,
+    css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -371,7 +375,8 @@ class NottarioDocsPage extends LitElement {
     }
     .status.error { color: #cf222e; background: #ffebe9; border: 1px solid rgba(207, 34, 46, 0.4); }
     .status.info  { color: #1a7f37; background: #dafbe1; border: 1px solid rgba(31, 136, 61, 0.4); }
-  `];
+  `,
+  ];
 
   constructor() {
     super();
@@ -449,11 +454,31 @@ class NottarioDocsPage extends LitElement {
     const isFormFocus = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
     if (e.key === 'Escape') {
-      if (this.historyOpen) { this.historyOpen = false; e.preventDefault(); return; }
-      if (this.viewingVersion) { this._returnToCurrent(); e.preventDefault(); return; }
-      if (this.editing) { this.editing = false; e.preventDefault(); return; }
-      if (this.creating) { this.cancelCreate(); e.preventDefault(); return; }
-      if (this.search) { this._clearSearch(); e.preventDefault(); return; }
+      if (this.historyOpen) {
+        this.historyOpen = false;
+        e.preventDefault();
+        return;
+      }
+      if (this.viewingVersion) {
+        this._returnToCurrent();
+        e.preventDefault();
+        return;
+      }
+      if (this.editing) {
+        this.editing = false;
+        e.preventDefault();
+        return;
+      }
+      if (this.creating) {
+        this.cancelCreate();
+        e.preventDefault();
+        return;
+      }
+      if (this.search) {
+        this._clearSearch();
+        e.preventDefault();
+        return;
+      }
       return;
     }
 
@@ -473,7 +498,7 @@ class NottarioDocsPage extends LitElement {
       if (this._cursorIdx < 0) {
         this._cursorIdx = e.key === 'ArrowDown' ? 0 : visible.length - 1;
       } else {
-        this._cursorIdx += (e.key === 'ArrowDown' ? 1 : -1);
+        this._cursorIdx += e.key === 'ArrowDown' ? 1 : -1;
         if (this._cursorIdx < 0) this._cursorIdx = visible.length - 1;
         if (this._cursorIdx >= visible.length) this._cursorIdx = 0;
       }
@@ -501,8 +526,11 @@ class NottarioDocsPage extends LitElement {
     if (!this.historyOpen) return;
     // Close history when clicking anywhere outside it.
     const path = e.composedPath?.() || [];
-    if (!path.some(n => n?.classList?.contains?.('history-pop') ||
-                        n?.classList?.contains?.('version-btn'))) {
+    if (
+      !path.some(
+        (n) => n?.classList?.contains?.('history-pop') || n?.classList?.contains?.('version-btn'),
+      )
+    ) {
       this.historyOpen = false;
     }
   }
@@ -529,7 +557,7 @@ class NottarioDocsPage extends LitElement {
     this.viewingVersion = null;
     try {
       const r = await fetch(
-        `/api/docs/read?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(path)}`
+        `/api/docs/read?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(path)}`,
       );
       if (!r.ok) throw new Error('read failed');
       this.selected = await r.json();
@@ -561,7 +589,10 @@ class NottarioDocsPage extends LitElement {
 
   async saveNew() {
     const path = this.newPath.trim();
-    if (!path) { this.error = 'path required'; return; }
+    if (!path) {
+      this.error = 'path required';
+      return;
+    }
     try {
       const r = await fetch('/api/docs/write', {
         method: 'POST',
@@ -580,7 +611,9 @@ class NottarioDocsPage extends LitElement {
       this.info = `Created ${doc.Path}`;
       await this.load();
       await this.open(doc.Path);
-    } catch (e) { this.error = e.message; }
+    } catch (e) {
+      this.error = e.message;
+    }
   }
 
   startEdit() {
@@ -592,7 +625,7 @@ class NottarioDocsPage extends LitElement {
       const lines = ['---'];
       for (const [k, v] of Object.entries(fm)) {
         if (Array.isArray(v)) {
-          lines.push(`${k}: [${v.map(x => JSON.stringify(x)).join(', ')}]`);
+          lines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`);
         } else if (typeof v === 'string') {
           lines.push(`${k}: ${v}`);
         } else {
@@ -629,7 +662,9 @@ class NottarioDocsPage extends LitElement {
       this.editing = false;
       this.selected = doc;
       await this.load();
-    } catch (e) { this.error = e.message; }
+    } catch (e) {
+      this.error = e.message;
+    }
   }
 
   async del() {
@@ -649,7 +684,9 @@ class NottarioDocsPage extends LitElement {
       this.info = `Deleted ${this.selected.Path}`;
       this.selected = null;
       await this.load();
-    } catch (e) { this.error = e.message; }
+    } catch (e) {
+      this.error = e.message;
+    }
   }
 
   async runSearch() {
@@ -659,7 +696,7 @@ class NottarioDocsPage extends LitElement {
     }
     try {
       const r = await fetch(
-        `/api/docs/search?scope=project&project_id=${this.projectId}&q=${encodeURIComponent(this.search)}`
+        `/api/docs/search?scope=project&project_id=${this.projectId}&q=${encodeURIComponent(this.search)}`,
       );
       if (!r.ok) throw new Error((await r.json()).error || 'failed');
       this.hits = (await r.json()).hits || [];
@@ -677,14 +714,16 @@ class NottarioDocsPage extends LitElement {
   // History popover: load once per open, keep result cached on the
   // selected doc until the doc changes.
   async toggleHistory() {
-    if (this.historyOpen) { this.historyOpen = false; return; }
+    if (this.historyOpen) {
+      this.historyOpen = false;
+      return;
+    }
     if (!this.selected) return;
     this.historyOpen = true;
-    if (this.historyVersions === null ||
-        this._historyPath !== this.selected.Path) {
+    if (this.historyVersions === null || this._historyPath !== this.selected.Path) {
       try {
         const r = await fetch(
-          `/api/docs/history?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(this.selected.Path)}`
+          `/api/docs/history?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(this.selected.Path)}`,
         );
         if (!r.ok) throw new Error('history failed');
         const j = await r.json();
@@ -706,11 +745,13 @@ class NottarioDocsPage extends LitElement {
     try {
       const r = await fetch(
         `/api/docs/read-version?scope=project&project_id=${this.projectId}` +
-        `&path=${encodeURIComponent(this.selected.Path)}&version=${v}`
+          `&path=${encodeURIComponent(this.selected.Path)}&version=${v}`,
       );
       if (!r.ok) throw new Error('version read failed');
       this.viewingVersion = await r.json();
-    } catch (e) { this.error = e.message; }
+    } catch (e) {
+      this.error = e.message;
+    }
   }
 
   _returnToCurrent() {
@@ -745,7 +786,9 @@ class NottarioDocsPage extends LitElement {
       this.historyVersions = null;
       this.info = `Restored v${v} (now v${doc.CurrentVersion})`;
       await this.load();
-    } catch (e) { this.error = e.message; }
+    } catch (e) {
+      this.error = e.message;
+    }
   }
 
   groupByKind() {
@@ -768,8 +811,7 @@ class NottarioDocsPage extends LitElement {
   _matchesSearch(s) {
     if (!this.search.trim()) return true;
     const q = this.search.trim().toLowerCase();
-    return (s.Title || '').toLowerCase().includes(q) ||
-           (s.Path  || '').toLowerCase().includes(q);
+    return (s.Title || '').toLowerCase().includes(q) || (s.Path || '').toLowerCase().includes(q);
   }
 
   _renderTitleWithMark(title) {
@@ -804,7 +846,10 @@ class NottarioDocsPage extends LitElement {
         <nottario-search-input class="rail-search"
             placeholder="Filter or search..."
             .value=${this.search}
-            @input=${(e) => { this.search = e.detail.value; this._cursorIdx = -1; }}
+            @input=${(e) => {
+              this.search = e.detail.value;
+              this._cursorIdx = -1;
+            }}
             @clear=${() => this._clearSearch()}
             @enter=${() => this.runSearch()}>
           <span slot="hint">
@@ -812,15 +857,18 @@ class NottarioDocsPage extends LitElement {
           </span>
         </nottario-search-input>
 
-        ${this.hits !== null ? this.renderHits() : html`
-          ${order.map(kind => {
+        ${
+          this.hits !== null
+            ? this.renderHits()
+            : html`
+          ${order.map((kind) => {
             const items = groups[kind];
             if (!items || !items.length) return null;
             return html`
               <div class="group">
                 <div class="group-eyebrow">${kind}</div>
                 <ul class="tree">
-                  ${items.map(s => {
+                  ${items.map((s) => {
                     const match = this._matchesSearch(s);
                     const cursorIdx = visible.indexOf(s);
                     const isCursor = cursorIdx === this._cursorIdx;
@@ -828,7 +876,9 @@ class NottarioDocsPage extends LitElement {
                       this.selected?.Path === s.Path ? 'active' : '',
                       !match ? 'dim' : '',
                       isCursor ? 'keyboard-cursor' : '',
-                    ].filter(Boolean).join(' ');
+                    ]
+                      .filter(Boolean)
+                      .join(' ');
                     return html`
                       <li class=${cls} @click=${() => this.open(s.Path)} title=${s.Path}>
                         ${this._renderTitleWithMark(s.Title || s.Path)}
@@ -839,12 +889,17 @@ class NottarioDocsPage extends LitElement {
               </div>
             `;
           })}
-          ${!this.summaries.length ? html`
+          ${
+            !this.summaries.length
+              ? html`
             <p style="color:#59636e;font-size:13px;padding:0 6px">
               No documents yet. Use <strong>New document</strong> below to create one.
             </p>
-          ` : null}
-        `}
+          `
+              : null
+          }
+        `
+        }
 
         <div class="rail-footer">
           <button class="btn secondary" @click=${() => this.startCreate()}>+ New document</button>
@@ -854,7 +909,8 @@ class NottarioDocsPage extends LitElement {
   }
 
   renderHits() {
-    if (!this.hits.length) return html`
+    if (!this.hits.length)
+      return html`
       <p style="color:#59636e;font-size:13px;padding:0 6px">
         No matches in the project documents.
       </p>
@@ -863,13 +919,15 @@ class NottarioDocsPage extends LitElement {
       <div class="group">
         <div class="group-eyebrow">Search results</div>
         <ul class="tree">
-          ${this.hits.map(h => html`
+          ${this.hits.map(
+            (h) => html`
             <li class=${this.selected?.Path === h.Path ? 'active' : ''}
                 @click=${() => this.open(h.Path)}
                 title=${h.Path}>
               ${this._renderTitleWithMark(h.Title || h.Path)}
             </li>
-          `)}
+          `,
+          )}
         </ul>
       </div>
     `;
@@ -921,9 +979,13 @@ class NottarioDocsPage extends LitElement {
           <span class=${`badge ${s.Kind}`}>${s.Kind}</span>
           <div class="spacer"></div>
           <div class="actions">
-            ${viewing ? null : html`
+            ${
+              viewing
+                ? null
+                : html`
               <button class="btn ghost" @click=${() => this.startEdit()}>Edit</button>
-            `}
+            `
+            }
             <div class="pop-anchor">
               <button class=${`btn ghost version-btn ${this.historyOpen ? 'open' : ''}`}
                       @click=${() => this.toggleHistory()}>
@@ -931,14 +993,18 @@ class NottarioDocsPage extends LitElement {
               </button>
               ${this.historyOpen ? this.renderHistoryPop() : null}
             </div>
-            ${viewing ? null : html`
+            ${
+              viewing
+                ? null
+                : html`
               <button class="delete" title="Delete document" aria-label="Delete document" @click=${() => this.del()}>
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M6 2.5h4M3 4.5h10M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2M6.8 7v4M9.2 7v4"
                         stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
-            `}
+            `
+            }
           </div>
         </div>
         <div class="reader-meta">
@@ -949,7 +1015,9 @@ class NottarioDocsPage extends LitElement {
                   @click=${() => this.toggleHistory()}>v${s.CurrentVersion}</button>
         </div>
 
-        ${viewing ? html`
+        ${
+          viewing
+            ? html`
           <div class="version-banner">
             <span>Viewing version <strong>v${viewing.Version}</strong> read-only.
               ${viewing.Message ? html`Message: "${viewing.Message}"` : null}</span>
@@ -957,11 +1025,15 @@ class NottarioDocsPage extends LitElement {
             <button @click=${() => this.restoreVersion()}>Restore this version</button>
             <button @click=${() => this._returnToCurrent()}>Back to current (v${s.CurrentVersion})</button>
           </div>
-        ` : null}
+        `
+            : null
+        }
 
-        ${(viewing ? viewing.Description : s.Description)
-          ? html`<p class="description">${viewing ? viewing.Description : s.Description}</p>`
-          : null}
+        ${
+          (viewing ? viewing.Description : s.Description)
+            ? html`<p class="description">${viewing ? viewing.Description : s.Description}</p>`
+            : null
+        }
         <nottario-markdown
           project-id=${this.projectId}
           .html=${(viewing ? viewing.ContentHTML : s.ContentHTML) || ''}>
@@ -981,14 +1053,16 @@ class NottarioDocsPage extends LitElement {
     return html`
       <div class="history-pop">
         <ul>
-          ${this.historyVersions.map(v => html`
+          ${this.historyVersions.map(
+            (v) => html`
             <li class=${v.Version === current ? 'current' : ''}
                 @click=${() => this.openVersion(v.Version)}>
               <span class="vn">v${v.Version}</span>
               <span class=${v.Message ? 'msg' : 'msg empty-msg'}>${v.Message || 'no message'}</span>
               <span class="when">${this._relTime(v.CreatedAt)}</span>
             </li>
-          `)}
+          `,
+          )}
         </ul>
       </div>
     `;
@@ -1019,13 +1093,17 @@ class NottarioDocsPage extends LitElement {
         <div class="editor-form">
           <nottario-field label="Path"
             hint=${`e.g. projects/${this.projectId}/context/glossary.md`}>
-            <input .value=${this.newPath} @input=${(e) => { this.newPath = e.target.value; }}
+            <input .value=${this.newPath} @input=${(e) => {
+              this.newPath = e.target.value;
+            }}
                    placeholder="projects/${this.projectId}/context/your-doc.md">
           </nottario-field>
           <nottario-field label="Markdown (with optional frontmatter)">
             <textarea aria-label="Markdown content"
                       .value=${this.draft}
-                      @input=${(e) => { this.draft = e.target.value; }}></textarea>
+                      @input=${(e) => {
+                        this.draft = e.target.value;
+                      }}></textarea>
           </nottario-field>
         </div>
       </div>
@@ -1043,7 +1121,9 @@ class NottarioDocsPage extends LitElement {
           <span class="badge ${s.Kind}">${s.Kind}</span>
           <div class="spacer"></div>
           <div class="actions">
-            <button class="btn ghost" @click=${() => { this.editing = false; }}>Cancel</button>
+            <button class="btn ghost" @click=${() => {
+              this.editing = false;
+            }}>Cancel</button>
             <button class="btn primary" @click=${() => this.saveEdit()}>Save changes</button>
           </div>
         </div>
@@ -1054,7 +1134,9 @@ class NottarioDocsPage extends LitElement {
           <span>editing v${s.CurrentVersion}</span>
         </div>
         <div class="editor-form">
-          <textarea .value=${this.draft} @input=${(e) => { this.draft = e.target.value; }}></textarea>
+          <textarea .value=${this.draft} @input=${(e) => {
+            this.draft = e.target.value;
+          }}></textarea>
         </div>
       </div>
     `;

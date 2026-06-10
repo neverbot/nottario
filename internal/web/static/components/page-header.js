@@ -102,21 +102,26 @@ class NottarioPageHeader extends LitElement {
       return html`<span class="current">${c.label}</span>`;
     }
     return html`<a href=${c.href}
-                  @click=${(e) => { e.preventDefault(); window.nottarioNavigate(c.href); }}>${c.label}</a>`;
+                  @click=${(e) => {
+                    e.preventDefault();
+                    window.nottarioNavigate(c.href);
+                  }}>${c.label}</a>`;
   }
 
   render() {
     const crumbs = this.crumbs || [];
     return html`
-      ${crumbs.length
-        ? html`<div class="crumbs">
+      ${
+        crumbs.length
+          ? html`<div class="crumbs">
             ${crumbs.flatMap((c, i) => {
               const last = i === crumbs.length - 1;
               const node = this._renderCrumb(c, last);
               return i === 0 ? [node] : [html`<span class="sep">/</span>`, node];
             })}
           </div>`
-        : null}
+          : null
+      }
       <div class="row">
         <div class="titles">
           <h1>${this.title}</h1>

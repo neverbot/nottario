@@ -28,7 +28,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 class NottarioField extends LitElement {
   static properties = {
     label: { type: String },
-    hint:  { type: String },
+    hint: { type: String },
   };
 
   static styles = css`

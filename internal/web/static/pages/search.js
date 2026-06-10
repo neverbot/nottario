@@ -281,7 +281,7 @@ class NottarioSearchBox extends LitElement {
     this.error = null;
     try {
       const r = await fetch(
-        `/api/search?project_id=${encodeURIComponent(this.projectId)}&q=${encodeURIComponent(this.query)}`
+        `/api/search?project_id=${encodeURIComponent(this.projectId)}&q=${encodeURIComponent(this.query)}`,
       );
       if (!r.ok) throw new Error('search failed');
       this.hits = (await r.json()).hits || [];
@@ -300,8 +300,14 @@ class NottarioSearchBox extends LitElement {
     }
   }
 
-  onFocus() { if (this.query) this.open = true; }
-  onBlur() { setTimeout(() => { this.open = false; }, 150); }
+  onFocus() {
+    if (this.query) this.open = true;
+  }
+  onBlur() {
+    setTimeout(() => {
+      this.open = false;
+    }, 150);
+  }
 
   // After the hits change, paint the highlighted snippets into the
   // matching elements. The server already escaped everything except
@@ -361,14 +367,12 @@ class NottarioSearchBox extends LitElement {
     });
     const labels = { task: 'Tasks', document: 'Documents', arch_node: 'Architecture' };
     return ['task', 'document', 'arch_node']
-      .filter(k => buckets[k].length)
-      .map(k => ({ kind: k, label: labels[k], items: buckets[k] }));
+      .filter((k) => buckets[k].length)
+      .map((k) => ({ kind: k, label: labels[k], items: buckets[k] }));
   }
 
   render() {
-    const placeholder = this.projectId
-      ? 'Search this project…'
-      : 'Open a project to search';
+    const placeholder = this.projectId ? 'Search this project…' : 'Open a project to search';
     return html`
       <input type="search"
              role="combobox"
@@ -385,29 +389,38 @@ class NottarioSearchBox extends LitElement {
              @focus=${this.onFocus}
              @blur=${this.onBlur}>
       ${this.projectId && !this.query ? html`<kbd class="kbd-hint">/</kbd>` : null}
-      ${this.open && this.query ? html`
+      ${
+        this.open && this.query
+          ? html`
         <div class="panel" id="search-listbox" role="listbox">
-          ${this.error
-            ? html`
+          ${
+            this.error
+              ? html`
                 <div class="error" role="alert">
                   <span>${this.error}</span>
                   <button type="button" class="retry-btn"
                           @mousedown=${(e) => e.preventDefault()}
                           @click=${() => this.runSearch()}>Retry</button>
                 </div>`
-            : null}
-          ${this.loading && this.hits === null && !this.error
-            ? html`<div class="hint">Searching…</div>`
-            : null}
-          ${this.hits && this.hits.length === 0 && !this.error
-            ? html`<div class="empty">
+              : null
+          }
+          ${
+            this.loading && this.hits === null && !this.error
+              ? html`<div class="hint">Searching…</div>`
+              : null
+          }
+          ${
+            this.hits && this.hits.length === 0 && !this.error
+              ? html`<div class="empty">
                 No matches for <strong>${this.query}</strong> in this project.
                 <span class="hint-sub">
                   Try a shorter term, or check spelling. Search is scoped to the current project.
                 </span>
               </div>`
-            : null}
-          ${this._groupedHits().map(group => html`
+              : null
+          }
+          ${this._groupedHits().map(
+            (group) => html`
             <section class="group">
               <div class="group-header">
                 <span>${group.label}</span>
@@ -420,15 +433,22 @@ class NottarioSearchBox extends LitElement {
                        id=${`hit-${flatIndex}`}
                        role="option"
                        aria-selected=${sel ? 'true' : 'false'}
-                       @mouseenter=${() => { this.selectedIndex = flatIndex; }}
-                       @mousedown=${(e) => { e.preventDefault(); this.goto(hit); }}>
+                       @mouseenter=${() => {
+                         this.selectedIndex = flatIndex;
+                       }}
+                       @mousedown=${(e) => {
+                         e.preventDefault();
+                         this.goto(hit);
+                       }}>
                     <div>
                       <span class=${`kind-pill ${hit.kind}`}>${hit.kind.replace('_', ' ')}</span>
                       <span class="title" data-html-idx=${`t${flatIndex}`}>${hit.title || '(untitled)'}</span>
                     </div>
-                    ${hit.description || hit.description_html
-                      ? html`<div class="desc" data-html-idx=${`d${flatIndex}`}>${hit.description || ''}</div>`
-                      : null}
+                    ${
+                      hit.description || hit.description_html
+                        ? html`<div class="desc" data-html-idx=${`d${flatIndex}`}>${hit.description || ''}</div>`
+                        : null
+                    }
                     <div class="meta">
                       ${hit.kind === 'task' ? html`${hit.task_state} · ${hit.task_type}` : null}
                       ${hit.kind === 'document' ? html`${hit.doc_path}` : null}
@@ -438,9 +458,12 @@ class NottarioSearchBox extends LitElement {
                 `;
               })}
             </section>
-          `)}
+          `,
+          )}
         </div>
-      ` : null}
+      `
+          : null
+      }
     `;
   }
 }

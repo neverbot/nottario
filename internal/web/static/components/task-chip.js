@@ -16,7 +16,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 // `_applyHash` handler.
 class NottarioTaskChip extends LitElement {
   static properties = {
-    task:      { type: Object },
+    task: { type: Object },
     projectId: { type: String, attribute: 'project-id' },
   };
 
@@ -90,8 +90,7 @@ class NottarioTaskChip extends LitElement {
     const t = this.task;
     const short = (t.ID || '').slice(0, 7);
     const href = `/projects/${this.projectId}/board/kanban#task=${t.ID}`;
-    const a11yLabel = `Task ${short}: ${t.Title || t.ID}` +
-      (t.State ? `, state ${t.State}` : '');
+    const a11yLabel = `Task ${short}: ${t.Title || t.ID}` + (t.State ? `, state ${t.State}` : '');
     return html`
       <a href=${href}
          title=${t.Title || t.ID}

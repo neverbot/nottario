@@ -16,7 +16,9 @@ class NottarioTopbar extends LitElement {
     _projectName: { state: true }, // cached name of the active project
   };
 
-  static styles = [badgeStyles, css`
+  static styles = [
+    badgeStyles,
+    css`
     :host {
       box-sizing: border-box;
       display: block;
@@ -220,7 +222,8 @@ class NottarioTopbar extends LitElement {
     .menu .item.danger:hover,
     .menu .item.danger:focus-visible { background: #ffebe9; }
     .menu .sep { height: 1px; background: #eaeef2; margin: 4px 2px; }
-  `];
+  `,
+  ];
 
   constructor() {
     super();
@@ -267,9 +270,13 @@ class NottarioTopbar extends LitElement {
         this._projectNameFor = pid;
         this._projectName = '';
         fetch(`/api/projects/${pid}`)
-          .then(r => r.ok ? r.json() : null)
-          .then(p => { if (p && this._projectNameFor === pid) this._projectName = p.Name; })
-          .catch(() => { /* ignore */ });
+          .then((r) => (r.ok ? r.json() : null))
+          .then((p) => {
+            if (p && this._projectNameFor === pid) this._projectName = p.Name;
+          })
+          .catch(() => {
+            /* ignore */
+          });
       } else if (!pid) {
         this._projectNameFor = '';
         this._projectName = '';
@@ -281,7 +288,11 @@ class NottarioTopbar extends LitElement {
     return (e) => {
       e.preventDefault();
       this.open = false;
-      window.nottarioNavigate ? window.nottarioNavigate(path) : (window.location.href = path);
+      if (window.nottarioNavigate) {
+        window.nottarioNavigate(path);
+      } else {
+        window.location.href = path;
+      }
     };
   }
 
@@ -338,17 +349,20 @@ class NottarioTopbar extends LitElement {
     const r = this.route || '';
     const match = (prefix) => r === prefix || r.startsWith(prefix + '/');
     const items = [
-      { label: 'Board',        href: `${base}/board/kanban`, active: match(`${base}/board/kanban`) },
-      { label: 'Gantt',        href: `${base}/board/gantt`,  active: match(`${base}/board/gantt`)  },
-      { label: 'Docs',         href: `${base}/docs`,         active: match(`${base}/docs`) },
+      { label: 'Board', href: `${base}/board/kanban`, active: match(`${base}/board/kanban`) },
+      { label: 'Gantt', href: `${base}/board/gantt`, active: match(`${base}/board/gantt`) },
+      { label: 'Docs', href: `${base}/docs`, active: match(`${base}/docs`) },
       { label: 'Architecture', href: `${base}/arch/diagram`, active: match(`${base}/arch`) },
     ];
     if (this.me?.is_admin) {
-      items.push({ label: 'Settings', href: `${base}/settings`, active: match(`${base}/settings`) });
+      items.push({
+        label: 'Settings',
+        href: `${base}/settings`,
+        active: match(`${base}/settings`),
+      });
     }
     return items;
   }
-
 
   render() {
     if (!this.me) return null;
@@ -387,40 +401,50 @@ class NottarioTopbar extends LitElement {
               <span class="name">${this.me.display_name || this.me.github_login}</span>
               <span class="chevron"></span>
             </button>
-            ${this.open ? html`
+            ${
+              this.open
+                ? html`
               <div class="menu" role="menu" @keydown=${this._onMenuKey}>
                 <div class="who">
                   <div class="display">${this.me.display_name || this.me.github_login}</div>
                   ${this.me.github_login ? html`<div class="login">@${this.me.github_login}</div>` : ''}
-                  ${this.me.is_admin
-                    ? html`<div class="badges"><span class="badge admin">admin</span></div>`
-                    : ''}
+                  ${
+                    this.me.is_admin
+                      ? html`<div class="badges"><span class="badge admin">admin</span></div>`
+                      : ''
+                  }
                 </div>
                 <a class="item" role="menuitem" tabindex="0" href="/me" @click=${this._go('/me')}>Profile</a>
                 <div class="sep"></div>
                 <button class="item danger" role="menuitem" tabindex="0"
                         @click=${() => this._logout()}>Sign out</button>
               </div>
-            ` : null}
+            `
+                : null
+            }
           </div>
         </div>
       </div>
-        ${projectItems ? html`
+        ${
+          projectItems
+            ? html`
           <div class="project-row">
             <div class="inner">
-              ${this._projectName
-                ? html`<span class="pname">${this._projectName}</span>`
-                : null}
+              ${this._projectName ? html`<span class="pname">${this._projectName}</span>` : null}
               <nav class="project" aria-label="Project navigation">
-                ${projectItems.map(it => html`
+                ${projectItems.map(
+                  (it) => html`
                   <a href=${it.href}
                      class=${it.active ? 'active' : ''}
                      aria-current=${it.active ? 'page' : 'false'}
                      @click=${this._go(it.href)}>${it.label}</a>
-                `)}
+                `,
+                )}
               </nav>
             </div>
-          </div>` : null}
+          </div>`
+            : null
+        }
       </header>
     `;
   }

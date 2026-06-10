@@ -183,20 +183,30 @@ artefacts written to disk must be in English regardless.
 - **Default priority is bucket `medium` per project.** Prefer
   `priority_key` over raw integers; the buckets live in
   `nottario.projects.list_priorities`.
-- **File new work BEFORE doing it.** When the user mentions a
-  task / bug / feature that is *not* what you're currently working
-  on (a side comment, a "we should also…", a bug they spotted), the
-  first action is `nottario.tasks.create` to record it — with the
-  right `target_role`, an honest description, dependencies linked
-  if relevant, and split into role children when multi-role. Only
-  then decide whether to keep going with the original task or pivot.
-  Verbatim quotes from the user (the bug repro, the half-formed
-  idea) belong in the description: future-you will not remember
-  them. The bar is "if I had to leave the session right now, would
-  someone else be able to pick this up?" — if not, file more
-  context. Doing the work without filing the row leaves the
-  backlog incoherent and other agents can't see the work in
-  flight.
+- **File new work BEFORE doing it.** Two shapes of "new work" both
+  go through `nottario.tasks.create` *before* you write any code,
+  open any editor, or run any command:
+  1. **Side-channel requests / bugs spotted in passing.** "Ah, y
+     también deberíamos…", "this is broken: …", "we noticed X".
+     File the row, decide whether to pivot or stay on the current
+     task. Verbatim quotes from the user (the bug repro, the
+     half-formed idea) belong in the description — future-you will
+     not remember them.
+  2. **Substantive new work the user explicitly asks you to do.**
+     "Let's add Biome", "do the design review of the Kanban",
+     "rename `content_md` to `content`". Even when the user is
+     telling you to *act*, the act starts with `tasks.create` →
+     `claim` → work. Skipping the row because "the request is
+     obviously the task" leaves the backlog blind: the work has no
+     handle for tracking, no audit trail, no link to the resulting
+     commits. The exception is conversational tweaks that fit in a
+     single small commit and need no follow-up (a typo fix in a
+     doc, a one-line CSS adjustment) — those can land directly.
+  Both shapes need the right `target_role`, an honest description,
+  dependencies linked if relevant, and a split into role children
+  when multi-role. The bar is "if I had to leave the session right
+  now, would someone else be able to pick this up?" — if not, file
+  more context.
 
 ### SQL conventions (sqlc workflow)
 - **All new queries land in `internal/db/queries/<domain>.sql`.** One
@@ -311,13 +321,20 @@ If any of these fail, fix the underlying issue. Never bypass with
 in the Makefile; `make tools` installs them.
 
 Frontend assets (`internal/web/static/**`) are vanilla JS without a
-build step. The `make js-check` step in the gate runs `node --check`
-(parse-only) over every `.js` under that tree so syntax errors fail
-locally and in CI instead of only surfacing at runtime in a browser.
-A `package.json` at the static root declares `"type": "module"` so
-Node parses each file as ESM.
+build step. The gate covers them in two layers:
 
-The same gate catches a class of bug we've already hit twice:
+1. `make js-check` runs `node --check` (parse-only) over every `.js`.
+   Catches structural breakage like unbalanced brackets or template
+   literals — fast, no deps, no false positives. A `package.json` at
+   the static root declares `"type": "module"` so Node parses ESM.
+2. `make frontend-check` runs Biome (lint + format check) via
+   `npx --yes @biomejs/biome` against `internal/web/static/`. Config
+   lives in `biome.json` at the repo root. The Rust binary caches
+   under `~/.npm/_npx/`, so no `node_modules` in the repo and no
+   global install on dev machines. `make frontend-format` rewrites
+   files in place.
+
+Together the two layers catch a class of bug we've already hit twice:
 **backticks inside comments within a `` css`…` `` or `` html`…` ``
 tagged template literal terminate the template early and silently
 break the stylesheet/markup**. Avoid backticks in comments inside

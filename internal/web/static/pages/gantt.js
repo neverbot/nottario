@@ -285,15 +285,16 @@ class NottarioGantt extends LitElement {
     this.members = [];
     this.error = '';
     this.now = new Date();
-    this.foldedFeatures = new Set();      // feature IDs currently collapsed
-    this._knownFeatureIDs = new Set();    // features we've ever seen
+    this.foldedFeatures = new Set(); // feature IDs currently collapsed
+    this._knownFeatureIDs = new Set(); // features we've ever seen
     // Hover-popup state. null when nothing is hovered/focused.
     // Carries the source task plus the anchor pixel coords relative
     // to the stage's content (so we can flip when overflowing).
     this._hover = null;
-    this._reducedMotion = (typeof window !== 'undefined' && window.matchMedia)
-      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      : false;
+    this._reducedMotion =
+      typeof window !== 'undefined' && window.matchMedia
+        ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        : false;
     // Selection: the anchor is the task the user actually clicked
     // first; the set is anchor + every task transitively reachable
     // via incoming/outgoing dependency edges (undirected BFS over
@@ -318,7 +319,7 @@ class NottarioGantt extends LitElement {
       if (!adj.has(a)) adj.set(a, new Set());
       adj.get(a).add(b);
     };
-    for (const d of (this.deps || [])) {
+    for (const d of this.deps || []) {
       add(d.TaskID, d.DependsOnID);
       add(d.DependsOnID, d.TaskID);
     }
@@ -326,8 +327,11 @@ class NottarioGantt extends LitElement {
     const stack = [taskID];
     while (stack.length) {
       const id = stack.pop();
-      for (const n of (adj.get(id) || [])) {
-        if (!out.has(n)) { out.add(n); stack.push(n); }
+      for (const n of adj.get(id) || []) {
+        if (!out.has(n)) {
+          out.add(n);
+          stack.push(n);
+        }
       }
     }
     return out;
@@ -379,7 +383,8 @@ class NottarioGantt extends LitElement {
     }
     // Forget features that no longer exist.
     for (const id of [...next]) if (!seen.has(id)) next.delete(id);
-    for (const id of [...this._knownFeatureIDs]) if (!seen.has(id)) this._knownFeatureIDs.delete(id);
+    for (const id of [...this._knownFeatureIDs])
+      if (!seen.has(id)) this._knownFeatureIDs.delete(id);
     this.foldedFeatures = next;
   }
 
@@ -399,8 +404,8 @@ class NottarioGantt extends LitElement {
       // Refold has no motion — we intentionally only animate the
       // open direction (design call, see task `5245b74c`).
       const children = (this.tasks || [])
-        .filter(t => t.ParentTaskID === featureID)
-        .map(t => t.ID);
+        .filter((t) => t.ParentTaskID === featureID)
+        .map((t) => t.ID);
       this._justAppeared = new Set(children);
       this._pendingUnfoldScroll = true;
       // Drop the class after the animation has had time to finish
@@ -417,14 +422,14 @@ class NottarioGantt extends LitElement {
       // came in" unmistakable. The highlight auto-clears after a few
       // seconds so it doesn't sit there forever.
       const childrenByParent = new Map();
-      for (const t of (this.tasks || [])) {
+      for (const t of this.tasks || []) {
         if (!t.ParentTaskID) continue;
         if (!childrenByParent.has(t.ParentTaskID)) childrenByParent.set(t.ParentTaskID, []);
         childrenByParent.get(t.ParentTaskID).push(t.ID);
       }
       const sub = new Set([featureID]);
       const walk = (id) => {
-        for (const c of (childrenByParent.get(id) || [])) {
+        for (const c of childrenByParent.get(id) || []) {
           if (sub.has(c)) continue;
           sub.add(c);
           walk(c);
@@ -444,7 +449,9 @@ class NottarioGantt extends LitElement {
     this.load();
     this._subscribe();
     // Keep the "now" line live; once per minute is enough for the UI.
-    this._tick = setInterval(() => { this.now = new Date(); }, 60 * 1000);
+    this._tick = setInterval(() => {
+      this.now = new Date();
+    }, 60 * 1000);
   }
 
   disconnectedCallback() {
@@ -517,21 +524,23 @@ class NottarioGantt extends LitElement {
     // Read every just-appeared task's bounding box in stage-content
     // coords (its DOM position relative to .stage padding box, plus
     // current scroll). Pick the leftmost.
-    const rects = [...this._justAppeared].map(id => {
-      const el = this.shadowRoot.querySelector(`[data-task-id="${CSS.escape(id)}"]`);
-      if (!el) return null;
-      const br = el.getBoundingClientRect();
-      const sr = stage.getBoundingClientRect();
-      return {
-        left: (br.left - sr.left) + stage.scrollLeft,
-        top:  (br.top  - sr.top)  + stage.scrollTop,
-        height: br.height,
-      };
-    }).filter(Boolean);
+    const rects = [...this._justAppeared]
+      .map((id) => {
+        const el = this.shadowRoot.querySelector(`[data-task-id="${CSS.escape(id)}"]`);
+        if (!el) return null;
+        const br = el.getBoundingClientRect();
+        const sr = stage.getBoundingClientRect();
+        return {
+          left: br.left - sr.left + stage.scrollLeft,
+          top: br.top - sr.top + stage.scrollTop,
+          height: br.height,
+        };
+      })
+      .filter(Boolean);
     if (!rects.length) return;
     rects.sort((a, b) => a.left - b.left);
     const left = rects[0].left;
-    const top  = rects[0].top;
+    const top = rects[0].top;
     const stageW = stage.clientWidth;
     const stageH = stage.clientHeight;
     // 32px gutter from the left edge so the bar isn't flush.
@@ -549,11 +558,13 @@ class NottarioGantt extends LitElement {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (reduce) {
       stage.scrollLeft = targetLeft;
-      stage.scrollTop  = targetTop;
+      stage.scrollTop = targetTop;
       return;
     }
-    const startL = stage.scrollLeft, deltaL = targetLeft - startL;
-    const startT = stage.scrollTop,  deltaT = targetTop  - startT;
+    const startL = stage.scrollLeft,
+      deltaL = targetLeft - startL;
+    const startT = stage.scrollTop,
+      deltaT = targetTop - startT;
     if (Math.abs(deltaL) < 1 && Math.abs(deltaT) < 1) return;
     const t0 = performance.now();
     const duration = 220;
@@ -562,7 +573,7 @@ class NottarioGantt extends LitElement {
       const t = Math.min(1, (now - t0) / duration);
       const k = ease(t);
       stage.scrollLeft = startL + deltaL * k;
-      stage.scrollTop  = startT + deltaT * k;
+      stage.scrollTop = startT + deltaT * k;
       if (t < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
@@ -634,9 +645,9 @@ class NottarioGantt extends LitElement {
     // pin to the left gutter; the card can still overflow on the
     // right but at least the title is visible.
     left = Math.max(scrollLeft + 8, Math.min(left, scrollLeft + stageW - measuredW - 8));
-    top  = Math.max(scrollTop + 8,  Math.min(top,  scrollTop  + stageH - measuredH - 8));
+    top = Math.max(scrollTop + 8, Math.min(top, scrollTop + stageH - measuredH - 8));
     card.style.left = `${left}px`;
-    card.style.top  = `${top}px`;
+    card.style.top = `${top}px`;
   }
 
   // Public: called from the board page's "↻ Now" button. Same target
@@ -651,7 +662,10 @@ class NottarioGantt extends LitElement {
     if (!stage.clientWidth) return;
     const target = Math.max(0, nowX - stage.clientWidth / 2);
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) { stage.scrollLeft = target; return; }
+    if (reduce) {
+      stage.scrollLeft = target;
+      return;
+    }
     const start = stage.scrollLeft;
     const delta = target - start;
     if (Math.abs(delta) < 1) return;
@@ -713,21 +727,24 @@ class NottarioGantt extends LitElement {
       // Tasks and dependencies are what the gantt draws; reload on
       // any related event. 'realtime.reconnected' catches events that
       // happened while EventSource was reconnecting.
-      if (ev.type === 'realtime.reconnected'
-          || ev.type?.startsWith('task.')
-          || ev.type?.startsWith('cycle.')) this.load();
+      if (
+        ev.type === 'realtime.reconnected' ||
+        ev.type?.startsWith('task.') ||
+        ev.type?.startsWith('cycle.')
+      )
+        this.load();
     });
   }
 
   _roleLabel(id) {
-    const r = (this.roles || []).find(x => x.ID === id);
+    const r = (this.roles || []).find((x) => x.ID === id);
     return r ? r.Label : '';
   }
 
   _featureRoles(featureID) {
     // List the distinct roles of the feature's non-feature descendants,
     // separated by commas, in the project's role order.
-    const taskByID = new Map((this.tasks || []).map(t => [t.ID, t]));
+    const taskByID = new Map((this.tasks || []).map((t) => [t.ID, t]));
     const childrenByParent = new Map();
     for (const t of this.tasks || []) {
       if (!t.ParentTaskID) continue;
@@ -748,16 +765,16 @@ class NottarioGantt extends LitElement {
       const t = taskByID.get(id);
       if (t && t.Type !== 'feature' && t.TargetRoleID) roleIDs.add(t.TargetRoleID);
     }
-    const sortedRoles = [...this.roles || []]
-      .filter(r => roleIDs.has(r.ID))
+    const sortedRoles = [...(this.roles || [])]
+      .filter((r) => roleIDs.has(r.ID))
       .sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0))
-      .map(r => r.Label.toLowerCase());
+      .map((r) => r.Label.toLowerCase());
     return sortedRoles.length ? sortedRoles.join(', ') : 'no roles';
   }
 
   _priorityLabel(value) {
     if (this.priorities && this.priorities.length) {
-      const exact = this.priorities.find(p => p.Value === value);
+      const exact = this.priorities.find((p) => p.Value === value);
       if (exact) return exact.Key;
     }
     return `p${value}`;
@@ -790,15 +807,15 @@ class NottarioGantt extends LitElement {
   bands() {
     const order = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
     const general = { ID: '__general__', Key: 'general', Label: 'General', Color: '#59636e' };
-    const result = order.map(r => ({ role: r, tasks: [] }));
+    const result = order.map((r) => ({ role: r, tasks: [] }));
     result.push({ role: general, tasks: [] });
-    const byID = new Map(order.map(r => [r.ID, result.find(b => b.role.ID === r.ID)]));
+    const byID = new Map(order.map((r) => [r.ID, result.find((b) => b.role.ID === r.ID)]));
     for (const t of this.tasks || []) {
       const band = t.TargetRoleID ? byID.get(t.TargetRoleID) : result[result.length - 1];
       (band || result[result.length - 1]).tasks.push(t);
     }
     // Drop bands with no tasks except the general one if it has any.
-    return result.filter(b => b.tasks.length > 0);
+    return result.filter((b) => b.tasks.length > 0);
   }
 
   // Compute topological depth across ALL todo tasks in the project,
@@ -809,7 +826,7 @@ class NottarioGantt extends LitElement {
   // Depth = 0 when the task has no `todo`/`doing` predecessors;
   // otherwise = max(predecessor.depth) + 1.
   computeTopoDepths(tasks) {
-    const taskByID = new Map(tasks.map(t => [t.ID, t]));
+    const taskByID = new Map(tasks.map((t) => [t.ID, t]));
     const incoming = new Map();
     for (const t of tasks) incoming.set(t.ID, []);
     for (const d of this.deps) {
@@ -851,9 +868,9 @@ class NottarioGantt extends LitElement {
     const avatarPad = 5;
     const laneGap = 6;
     const laneHeight = taskHeight + laneGap;
-    const bandPad = 8;            // vertical padding inside a band
+    const bandPad = 8; // vertical padding inside a band
     const labelWidth = 120;
-    const pastSlotW = minBarWidth + 6;     // 146 — one done task per ordinal slot
+    const pastSlotW = minBarWidth + 6; // 146 — one done task per ordinal slot
     const futureColumnWidth = minBarWidth + 16;
     const headerH = 28;
 
@@ -883,7 +900,7 @@ class NottarioGantt extends LitElement {
     // arrow geometry.
     const depTouched = new Set();
     for (const d of this.deps) {
-      if (doneByID.has(d.TaskID))      depTouched.add(d.TaskID);
+      if (doneByID.has(d.TaskID)) depTouched.add(d.TaskID);
       if (doneByID.has(d.DependsOnID)) depTouched.add(d.DependsOnID);
     }
     // A done task whose ANCESTOR feature touches a dep edge inherits
@@ -896,7 +913,10 @@ class NottarioGantt extends LitElement {
       if (!doneByID.has(t.ID)) continue;
       let p = taskByIDForSucc.get(t.ParentTaskID);
       while (p) {
-        if (depTouched.has(p.ID)) { depTouched.add(t.ID); break; }
+        if (depTouched.has(p.ID)) {
+          depTouched.add(t.ID);
+          break;
+        }
         p = taskByIDForSucc.get(p.ParentTaskID);
       }
     }
@@ -910,7 +930,7 @@ class NottarioGantt extends LitElement {
     // Past packing then reuses THIS lane count — it doesn't define a new
     // one. Bands with no future/present pressure cap at 1 lane (which
     // means past tasks keep their natural one-per-column layout).
-    const futureLanesPerBand = bands.map(b => {
+    const futureLanesPerBand = bands.map((b) => {
       const cellCounts = new Map();
       let doingCount = 0;
       for (const t of b.tasks) {
@@ -964,7 +984,7 @@ class NottarioGantt extends LitElement {
     const bandSuccessor = new Map();
     for (const b of bands) {
       const anchoredChronoSorted = b.tasks
-        .filter(t => t.State === 'done' && t.ActualEnd && depTouched.has(t.ID))
+        .filter((t) => t.State === 'done' && t.ActualEnd && depTouched.has(t.ID))
         .sort((x, y) => new Date(x.ActualEnd).getTime() - new Date(y.ActualEnd).getTime());
       for (let i = 0; i < anchoredChronoSorted.length - 1; i++) {
         bandSuccessor.set(anchoredChronoSorted[i].ID, anchoredChronoSorted[i + 1].ID);
@@ -976,7 +996,8 @@ class NottarioGantt extends LitElement {
     const childrenByParentForSucc = new Map();
     for (const t of this.tasks || []) {
       if (!t.ParentTaskID) continue;
-      if (!childrenByParentForSucc.has(t.ParentTaskID)) childrenByParentForSucc.set(t.ParentTaskID, []);
+      if (!childrenByParentForSucc.has(t.ParentTaskID))
+        childrenByParentForSucc.set(t.ParentTaskID, []);
       childrenByParentForSucc.get(t.ParentTaskID).push(t.ID);
     }
     const succession = new Map();
@@ -998,7 +1019,7 @@ class NottarioGantt extends LitElement {
       // precondition of the feature ends up between the feature's
       // children and the feature itself, producing backward arrows
       // when the feature is rendered unfolded.
-      for (const c of (childrenByParentForSucc.get(id) || [])) {
+      for (const c of childrenByParentForSucc.get(id) || []) {
         s = Math.max(s, computeSucc(c));
       }
       visiting.delete(id);
@@ -1006,9 +1027,7 @@ class NottarioGantt extends LitElement {
       return s;
     };
     for (const id of doneByID.keys()) computeSucc(id);
-    const maxPastSlots = doneByID.size
-      ? Math.max(0, ...succession.values()) + 1
-      : 0;
+    const maxPastSlots = doneByID.size ? Math.max(0, ...succession.values()) + 1 : 0;
     // Initial slot = K-1-succession (right-pack newest tasks flush
     // against NOW). Anchored tasks stay here; free tasks may move.
     const globalPastSlot = new Map();
@@ -1039,7 +1058,7 @@ class NottarioGantt extends LitElement {
       // Newest free first: closer-to-NOW priority gets the rightmost
       // available slot.
       const freeSorted = b.tasks
-        .filter(t => t.State === 'done' && t.ActualEnd && !depTouched.has(t.ID))
+        .filter((t) => t.State === 'done' && t.ActualEnd && !depTouched.has(t.ID))
         .sort((x, y) => new Date(y.ActualEnd).getTime() - new Date(x.ActualEnd).getTime());
       for (const t of freeSorted) {
         let bestSlot = null;
@@ -1082,7 +1101,9 @@ class NottarioGantt extends LitElement {
       }
       const usedSlots = [...visibleSlots].sort((a, b) => a - b);
       const remap = new Map();
-      usedSlots.forEach((s, i) => remap.set(s, i));
+      usedSlots.forEach((s, i) => {
+        remap.set(s, i);
+      });
       for (const [id, s] of globalPastSlot) {
         if (remap.has(s)) {
           globalPastSlot.set(id, remap.get(s));
@@ -1093,7 +1114,8 @@ class NottarioGantt extends LitElement {
         // on the same column as its folded parent aggregate.
         let target = -1;
         for (const us of usedSlots) {
-          if (us <= s) target = us; else break;
+          if (us <= s) target = us;
+          else break;
         }
         globalPastSlot.set(id, target >= 0 ? remap.get(target) : 0);
       }
@@ -1103,7 +1125,7 @@ class NottarioGantt extends LitElement {
       for (const s of globalPastSlot.values()) if (s > m) m = s;
       return m + 1;
     })();
-    const pastSlotPerBand = bands.map(b => {
+    const pastSlotPerBand = bands.map((b) => {
       const m = new Map();
       for (const t of b.tasks) {
         if (globalPastSlot.has(t.ID)) m.set(t.ID, globalPastSlot.get(t.ID));
@@ -1133,7 +1155,7 @@ class NottarioGantt extends LitElement {
     // priority means leftmost sub-column. The "next" eligible task is
     // therefore in the leftmost sub-column at depth 0.
     const futureSubColumnX = new Map(); // taskID -> x offset
-    const futurePriorityBuckets = [];   // [{ depth, priority, x }] for labels
+    const futurePriorityBuckets = []; // [{ depth, priority, x }] for labels
     {
       // tasksByDepth: depth -> [task]
       //
@@ -1165,8 +1187,9 @@ class NottarioGantt extends LitElement {
       let cursor = futureStartX;
       for (const d of depthsSorted) {
         const ts = tasksByDepth.get(d);
-        const distinctPriorities = Array.from(new Set(ts.map(t => t.Priority)))
-          .sort((a, b) => b - a); // DESC
+        const distinctPriorities = Array.from(new Set(ts.map((t) => t.Priority))).sort(
+          (a, b) => b - a,
+        ); // DESC
         for (let i = 0; i < distinctPriorities.length; i++) {
           const p = distinctPriorities[i];
           const x = cursor + i * futureColumnWidth + 12;
@@ -1194,7 +1217,7 @@ class NottarioGantt extends LitElement {
     //   • the set of tasks hidden because a feature ancestor is folded
     //   • a per-feature aggregate position when folded (envelope of its
     //     non-feature descendants).
-    const taskByID = new Map((this.tasks || []).map(t => [t.ID, t]));
+    const taskByID = new Map((this.tasks || []).map((t) => [t.ID, t]));
     const childrenByParent = new Map();
     for (const t of this.tasks || []) {
       if (!t.ParentTaskID) continue;
@@ -1228,12 +1251,20 @@ class NottarioGantt extends LitElement {
       const depths = futureDepthsPerBand[bi];
       const slots = pastSlotPerBand[bi];
       for (const t of b.tasks) {
-        const pastSlot = (t.State === 'done') ? (slots.get(t.ID) ?? null) : null;
-        const futureX = (t.State === 'todo') ? futureSubColumnX.get(t.ID) : undefined;
+        const pastSlot = t.State === 'done' ? (slots.get(t.ID) ?? null) : null;
+        const futureX = t.State === 'todo' ? futureSubColumnX.get(t.ID) : undefined;
         const x = this.taskX({
-          t, labelWidth, pastSlotW, pastSlot,
-          presentX, presentWidth, futureStartX, futureColumnWidth,
-          futureX, depths, minBarWidth,
+          t,
+          labelWidth,
+          pastSlotW,
+          pastSlot,
+          presentX,
+          presentWidth,
+          futureStartX,
+          futureColumnWidth,
+          futureX,
+          depths,
+          minBarWidth,
         });
         if (!x) continue;
         rawPositions.set(t.ID, { from: x.from, to: x.to, bi });
@@ -1261,8 +1292,8 @@ class NottarioGantt extends LitElement {
       // descendants so the role-dot stack and crossRole flag stay
       // correct.
       const pFeat = rawPositions.get(fid);
-      let lo = pFeat?.from ?? Infinity;
-      let hi = pFeat?.to   ?? -Infinity;
+      const lo = pFeat?.from ?? Infinity;
+      const hi = pFeat?.to ?? -Infinity;
       const bandsSeen = new Set();
       const bandVotes = new Map();
       for (const did of desc) {
@@ -1279,15 +1310,20 @@ class NottarioGantt extends LitElement {
       // target_role if set, else the band with the most descendants.
       let naturalBi = bandIndexByTaskID.get(fid);
       if (naturalBi == null) {
-        let best = -1, max = -1;
-        for (const [k, v] of bandVotes) if (v > max) { max = v; best = k; }
+        let best = -1,
+          max = -1;
+        for (const [k, v] of bandVotes)
+          if (v > max) {
+            max = v;
+            best = k;
+          }
         naturalBi = best >= 0 ? best : 0;
       }
       // Capture the role colours of the involved bands, ordered by the
       // band's display position so the dots read top→bottom by role.
       const roleColors = [...bandsSeen]
         .sort((a, b) => a - b)
-        .map(bi => bands[bi].role.Color || '#8c959f');
+        .map((bi) => bands[bi].role.Color || '#8c959f');
       featureAggregates.set(fid, { from: lo, to: hi, bi: naturalBi, crossRole, roleColors });
     }
 
@@ -1296,9 +1332,13 @@ class NottarioGantt extends LitElement {
     // into a synthetic lane at the top of the chart. The display order
     // of bands becomes [Features?, ...roleBands]; everything keyed by
     // band index is shifted by the offset.
-    const featuresBand = featureAggregates.size > 0
-      ? { role: { ID: '__features__', Key: 'features', Label: 'Features', Color: '#6e7781' }, tasks: [] }
-      : null;
+    const featuresBand =
+      featureAggregates.size > 0
+        ? {
+            role: { ID: '__features__', Key: 'features', Label: 'Features', Color: '#6e7781' },
+            tasks: [],
+          }
+        : null;
     const displayBands = featuresBand ? [featuresBand, ...bands] : bands;
     const bandOffset = featuresBand ? 1 : 0;
 
@@ -1310,16 +1350,30 @@ class NottarioGantt extends LitElement {
         if (this.foldedFeatures.has(t.ID) && featureAggregates.has(t.ID)) {
           const agg = featureAggregates.get(t.ID);
           const targetBi = 0;
-          visiblePerBand[targetBi].push({ task: t, from: agg.from, to: agg.to, kind: 'feature-agg', crossRole: agg.crossRole, roleColors: agg.roleColors });
+          visiblePerBand[targetBi].push({
+            task: t,
+            from: agg.from,
+            to: agg.to,
+            kind: 'feature-agg',
+            crossRole: agg.crossRole,
+            roleColors: agg.roleColors,
+          });
         } else if (!childrenByParent.has(t.ID)) {
           const p = rawPositions.get(t.ID);
-          if (p) visiblePerBand[p.bi + bandOffset].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
+          if (p)
+            visiblePerBand[p.bi + bandOffset].push({
+              task: t,
+              from: p.from,
+              to: p.to,
+              kind: 'normal',
+            });
         }
         // unfolded feature with children: feature itself hidden, kids show through
         continue;
       }
       const p = rawPositions.get(t.ID);
-      if (p) visiblePerBand[p.bi + bandOffset].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
+      if (p)
+        visiblePerBand[p.bi + bandOffset].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
     }
 
     // ---- Lane assignment per band (greedy) ----
@@ -1331,11 +1385,26 @@ class NottarioGantt extends LitElement {
       for (const e of entries) {
         let placed = -1;
         for (let li = 0; li < laneEnds.length; li++) {
-          if (laneEnds[li] + overlapGap <= e.from) { placed = li; break; }
+          if (laneEnds[li] + overlapGap <= e.from) {
+            placed = li;
+            break;
+          }
         }
-        if (placed < 0) { placed = laneEnds.length; laneEnds.push(e.to); }
-        else { laneEnds[placed] = e.to; }
-        positions.push({ task: e.task, bi, lane: placed, from: e.from, to: e.to, kind: e.kind, roleColors: e.roleColors });
+        if (placed < 0) {
+          placed = laneEnds.length;
+          laneEnds.push(e.to);
+        } else {
+          laneEnds[placed] = e.to;
+        }
+        positions.push({
+          task: e.task,
+          bi,
+          lane: placed,
+          from: e.from,
+          to: e.to,
+          kind: e.kind,
+          roleColors: e.roleColors,
+        });
       }
       lanesPerBand[bi] = Math.max(1, laneEnds.length);
     });
@@ -1351,7 +1420,7 @@ class NottarioGantt extends LitElement {
       for (let bi = 0; bi < displayBands.length; bi++) {
         bandTops.push(cursor);
         const isEmpty = visiblePerBand[bi].length === 0;
-        const h = isEmpty ? 0 : (lanesPerBand[bi] * laneHeight + bandPad * 2 - laneGap);
+        const h = isEmpty ? 0 : lanesPerBand[bi] * laneHeight + bandPad * 2 - laneGap;
         bandHeights.push(h);
         cursor += h;
       }
@@ -1371,11 +1440,12 @@ class NottarioGantt extends LitElement {
     // stage's visible width (measured after first paint) so the
     // band-bg stripes never end before the right edge of the viewport
     // when the backlog is sparse.
-    const intrinsicWidth = Math.max(futureStartX + futureColumnWidth, this._futureEndX || futureStartX) + 16;
+    const intrinsicWidth =
+      Math.max(futureStartX + futureColumnWidth, this._futureEndX || futureStartX) + 16;
     const width = Math.max(intrinsicWidth, this._stageWidth || 0);
 
     // Build an index for dependency arrows.
-    const posByTaskID = new Map(positions.map(p => [p.task.ID, p]));
+    const posByTaskID = new Map(positions.map((p) => [p.task.ID, p]));
 
     // When a dep endpoint is a feature that the user expanded, the
     // feature itself has no position (it disappears in favour of its
@@ -1388,10 +1458,13 @@ class NottarioGantt extends LitElement {
       const out = [];
       const visit = (nid) => {
         const direct = posByTaskID.get(nid);
-        if (direct) { out.push(direct); return; }
-        for (const cid of (childrenByParent.get(nid) || [])) visit(cid);
+        if (direct) {
+          out.push(direct);
+          return;
+        }
+        for (const cid of childrenByParent.get(nid) || []) visit(cid);
       };
-      for (const cid of (childrenByParent.get(id) || [])) visit(cid);
+      for (const cid of childrenByParent.get(id) || []) visit(cid);
       return out;
     };
     const resolveSourceEndpoint = (id) => {
@@ -1413,7 +1486,7 @@ class NottarioGantt extends LitElement {
     // depends on them is already 'done'. That's a logical
     // inconsistency: the dependent completed before its precondition.
     // We surface it on the bar with a solid red border.
-    const stateByID = new Map((this.tasks || []).map(t => [t.ID, t.State]));
+    const stateByID = new Map((this.tasks || []).map((t) => [t.ID, t.State]));
     const dependentsByID = new Map();
     for (const d of this.deps) {
       // d.TaskID depends on d.DependsOnID — so d.TaskID is a dependent
@@ -1450,7 +1523,7 @@ class NottarioGantt extends LitElement {
     // solid against the lane background instead of letting arrows
     // show through a transparent fill.
     let visIdx = 0;
-    const bandFill = displayBands.map(b => {
+    const bandFill = displayBands.map((b) => {
       if (b.role.ID === '__features__') return '#f0f2f5';
       const c = visIdx % 2 ? '#fff' : '#f6f8fa';
       visIdx++;
@@ -1471,7 +1544,7 @@ class NottarioGantt extends LitElement {
         ${this._renderHoverCard()}
         <svg width=${width} height=${totalHeight}
              role="img"
-             aria-label=${`Gantt chart with ${(this.tasks||[]).length} tasks`}>
+             aria-label=${`Gantt chart with ${(this.tasks || []).length} tasks`}>
           <defs>
             <marker id="dep-arrowhead" viewBox="0 0 10 10" refX="0" refY="5"
                     markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -1488,16 +1561,21 @@ class NottarioGantt extends LitElement {
           <text class="zone-label" x=${futureStartX + 4} y="14">FUTURE · topological + priority</text>
 
           <!-- Priority labels at the top of each future sub-column -->
-          ${futurePriorityBuckets.map(b => svg`
+          ${futurePriorityBuckets.map(
+            (b) => svg`
             <text class="priority-label" x=${b.x + 4} y=${headerH - 4}>${this._priorityLabel(b.priority)}</text>
-          `)}
+          `,
+          )}
 
           <!-- Band rows (empty bands collapse to height 0 and skip render).
                The alternation counter is independent of the displayBands
                index so that hidden bands (height 0) don't break the
                stripe pattern of the bands that DO render. Features has
                its own class and is excluded from the count. -->
-          ${(() => { this._visibleBandIdx = 0; return null; })()}
+          ${(() => {
+            this._visibleBandIdx = 0;
+            return null;
+          })()}
           ${displayBands.map((b, bi) => {
             if (bandHeights[bi] === 0) return null;
             const isFeatures = b.role.ID === '__features__';
@@ -1543,13 +1621,20 @@ class NottarioGantt extends LitElement {
                edges are deliberately SKIPPED here and re-rendered after
                the bars (promoted pass) so they read above any rect they
                cross. -->
-          ${this.deps.map(d => {
+          ${this.deps.map((d) => {
             if (isPromotedEdge(d)) return null;
-            return this._renderArrowPath(d, resolveSourceEndpoint, resolveTargetEndpoint, taskCenterY, taskHeight, hasSelection);
+            return this._renderArrowPath(
+              d,
+              resolveSourceEndpoint,
+              resolveTargetEndpoint,
+              taskCenterY,
+              taskHeight,
+              hasSelection,
+            );
           })}
 
           <!-- Tasks placed in their lane -->
-          ${positions.map(p => {
+          ${positions.map((p) => {
             const t = p.task;
             const color = displayBands[p.bi].role.Color || '#59636e';
             const y = taskY(p.bi, p.lane);
@@ -1581,7 +1666,10 @@ class NottarioGantt extends LitElement {
                       stroke=${color}
                       stroke-dasharray="6 3"
                       style="cursor:pointer"
-                      @click=${(e) => { e.stopPropagation(); this._toggleFold(t.ID); }}
+                      @click=${(e) => {
+                        e.stopPropagation();
+                        this._toggleFold(t.ID);
+                      }}
                       @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
                       @mousemove=${(e) => this._onBarMove(e, t, p.from, y)}
                       @mouseleave=${() => this._onBarLeave()}
@@ -1593,14 +1681,16 @@ class NottarioGantt extends LitElement {
                       style="pointer-events:none">
                   ▸ ${this._truncate(t.Title, labelRoom)}
                 </text>
-                ${dots.map((c, i) => svg`
+                ${dots.map(
+                  (c, i) => svg`
                   <circle cx=${dotsStartX + i * (dotR * 2 + dotGap)}
                           cy=${y + taskHeight / 2}
                           r=${dotR}
                           fill=${c}
                           stroke="rgba(0,0,0,0.18)" stroke-width="0.5"
                           style="pointer-events:none"></circle>
-                `)}
+                `,
+                )}
               `;
             }
             const isFeatureUnfolded = t.Type === 'feature' && !this.foldedFeatures.has(t.ID);
@@ -1614,10 +1704,16 @@ class NottarioGantt extends LitElement {
                     x=${p.from} y=${y}
                     width=${w} height=${taskHeight}
                     rx="6" ry="6"
-                    fill=${t.State === 'done' ? '#d1d9e0' : (t.State === 'doing' ? color : todoFill)}
+                    fill=${t.State === 'done' ? '#d1d9e0' : t.State === 'doing' ? color : todoFill}
                     stroke=${color}
-                    @click=${(e) => { e.stopPropagation(); this._onTaskClick(t); }}
-                    @dblclick=${(e) => { e.stopPropagation(); this._emitSelect(t); }}
+                    @click=${(e) => {
+                      e.stopPropagation();
+                      this._onTaskClick(t);
+                    }}
+                    @dblclick=${(e) => {
+                      e.stopPropagation();
+                      this._emitSelect(t);
+                    }}
                     @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
                     @mousemove=${(e) => this._onBarMove(e, t, p.from, y)}
                     @mouseleave=${() => this._onBarLeave()}
@@ -1625,7 +1721,9 @@ class NottarioGantt extends LitElement {
                     @blur=${() => this._onBarBlur()}
                     tabindex="0">
               </rect>
-              ${user && user.AvatarURL ? svg`
+              ${
+                user && user.AvatarURL
+                  ? svg`
                 <g transform=${`translate(${avatarX}, ${avatarY})`} style="pointer-events:none">
                   <image href=${user.AvatarURL}
                          width=${avatarSize} height=${avatarSize}
@@ -1633,7 +1731,9 @@ class NottarioGantt extends LitElement {
                   <circle cx=${avatarSize / 2} cy=${avatarSize / 2} r=${avatarSize / 2}
                           fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="1"></circle>
                 </g>
-              ` : null}
+              `
+                  : null
+              }
               <text class=${`task-label ${t.State === 'doing' ? 'on-dark' : ''}`}
                     x=${labelX} y=${y + taskHeight / 2 + 4}
                     style="pointer-events:none">
@@ -1645,9 +1745,16 @@ class NottarioGantt extends LitElement {
           <!-- Dependency arrows, SECOND PASS: only the arrows incident
                to the currently-selected subgraph, rendered after the
                task rects so they sit on top of every box they cross. -->
-          ${this.deps.map(d => {
+          ${this.deps.map((d) => {
             if (!isPromotedEdge(d)) return null;
-            return this._renderArrowPath(d, resolveSourceEndpoint, resolveTargetEndpoint, taskCenterY, taskHeight, hasSelection);
+            return this._renderArrowPath(
+              d,
+              resolveSourceEndpoint,
+              resolveTargetEndpoint,
+              taskCenterY,
+              taskHeight,
+              hasSelection,
+            );
           })}
         </svg>
       </div>
@@ -1668,7 +1775,19 @@ class NottarioGantt extends LitElement {
   // Doing tasks are anchored to a fixed slot in the present zone.
   // Todo tasks are placed by their topological depth in the future
   // zone. Returns null when the task cannot be placed.
-  taskX({ t, labelWidth, pastSlotW, pastSlot, presentX, presentWidth, futureStartX, futureColumnWidth, futureX, depths, minBarWidth }) {
+  taskX({
+    t,
+    labelWidth,
+    pastSlotW,
+    pastSlot,
+    presentX,
+    presentWidth,
+    futureStartX,
+    futureColumnWidth,
+    futureX,
+    depths,
+    minBarWidth,
+  }) {
     if (t.State === 'done') {
       if (pastSlot == null) return null; // no actual_end ⇒ not on past axis
       const from = labelWidth + pastSlot * pastSlotW + 6;
@@ -1697,11 +1816,14 @@ class NottarioGantt extends LitElement {
     const to = resolveTarget(d.TaskID);
     if (!from || !to) return null;
     const markerW = 8;
-    const promoted = hasSelection &&
-      (this._selectedSet.has(d.TaskID) || this._selectedSet.has(d.DependsOnID));
+    const promoted =
+      hasSelection && (this._selectedSet.has(d.TaskID) || this._selectedSet.has(d.DependsOnID));
     const dimmed = hasSelection && !promoted;
     const cls = `arrow${promoted ? ' promoted' : ''}${dimmed ? ' dim' : ''}`;
-    const onClick = (e) => { e.stopPropagation(); this._onArrowClick(d.DependsOnID); };
+    const onClick = (e) => {
+      e.stopPropagation();
+      this._onArrowClick(d.DependsOnID);
+    };
     const sourceRight = from.to;
     const targetLeft = to.from;
     const x1 = sourceRight;
@@ -1721,19 +1843,21 @@ class NottarioGantt extends LitElement {
     const xMid = (x1 + x2) / 2;
     return svg`<path class=${cls}
                      d=${
-      `M ${x1} ${y1} ` +
-      `C ${x1 + bow} ${y1} ${x1 + bow} ${yMid} ${xMid} ${yMid} ` +
-      `S ${x2 - bow} ${y2} ${x2} ${y2}`
-    }
+                       `M ${x1} ${y1} ` +
+                       `C ${x1 + bow} ${y1} ${x1 + bow} ${yMid} ${xMid} ${yMid} ` +
+                       `S ${x2 - bow} ${y2} ${x2} ${y2}`
+}
                      @click=${onClick}></path>`;
   }
 
   _emitSelect(t) {
-    this.dispatchEvent(new CustomEvent('task-selected', {
-      detail: { task: t },
-      bubbles: true,
-      composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent('task-selected', {
+        detail: { task: t },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   _truncate(s, n) {
@@ -1750,7 +1874,7 @@ class NottarioGantt extends LitElement {
   // just because the rect received keyboard focus.
   _onBarHover(_e, task, barX, barY) {
     const prior = this._hover;
-    const cursor = (prior && prior.task && prior.task.ID === task.ID) ? prior.cursor : null;
+    const cursor = prior && prior.task && prior.task.ID === task.ID ? prior.cursor : null;
     this._hover = { task, barX, barY, cursor };
     this._pointerBarID = task.ID;
   }
@@ -1762,8 +1886,8 @@ class NottarioGantt extends LitElement {
     if (!stage) return;
     const r = stage.getBoundingClientRect();
     const cursor = {
-      x: (e.clientX - r.left) + stage.scrollLeft,
-      y: (e.clientY - r.top)  + stage.scrollTop,
+      x: e.clientX - r.left + stage.scrollLeft,
+      y: e.clientY - r.top + stage.scrollTop,
     };
     this._hover = { task, barX, barY, cursor };
     this._pointerBarID = task.ID;
@@ -1838,13 +1962,11 @@ class NottarioGantt extends LitElement {
       top = Math.max(scrollTop + 8, anchorY - cardH - (cursor ? 16 : 8));
     }
 
-    const role = t.TargetRoleID ? this.roles.find(r => r.ID === t.TargetRoleID) : null;
-    const user = t.AssigneeUserID
-      ? this.members.find(m => m.UserID === t.AssigneeUserID)
-      : null;
+    const role = t.TargetRoleID ? this.roles.find((r) => r.ID === t.TargetRoleID) : null;
+    const user = t.AssigneeUserID ? this.members.find((m) => m.UserID === t.AssigneeUserID) : null;
     const isFolded = t.Type === 'feature' && this.foldedFeatures.has(t.ID);
     const childCount = isFolded
-      ? (this.tasks || []).filter(x => x.ParentTaskID === t.ID).length
+      ? (this.tasks || []).filter((x) => x.ParentTaskID === t.ID).length
       : 0;
 
     // Single template for every bar — features and tasks share the
@@ -1858,25 +1980,39 @@ class NottarioGantt extends LitElement {
         <div class="title">${t.Title}</div>
         <div class="row">
           <span class=${`chip state-${t.State}`}>${t.State}</span>
-          ${t.Type === 'bug'
-            ? html`<span class="chip type-bug">bug</span>`
-            : t.Type !== 'task'
-              ? html`<span class="chip">${t.Type}</span>`
-              : null}
+          ${
+            t.Type === 'bug'
+              ? html`<span class="chip type-bug">bug</span>`
+              : t.Type !== 'task'
+                ? html`<span class="chip">${t.Type}</span>`
+                : null
+          }
           <span class="chip">${this._priorityLabel(t.Priority)}</span>
-          ${role ? html`
+          ${
+            role
+              ? html`
             <span class="chip role" style=${`background:${role.Color || '#59636e'}`}>${role.Label}</span>
-          ` : null}
+          `
+              : null
+          }
         </div>
-        ${user ? html`
+        ${
+          user
+            ? html`
           <div class="assignee">
             ${user.AvatarURL ? html`<img src=${user.AvatarURL} alt="">` : null}
             <span>${user.DisplayName || user.GithubLogin}</span>
           </div>
-        ` : null}
-        ${isFolded ? html`
+        `
+            : null
+        }
+        ${
+          isFolded
+            ? html`
           <div class="meta">${childCount} task${childCount === 1 ? '' : 's'} · ${this._featureRoles(t.ID)}</div>
-        ` : null}
+        `
+            : null
+        }
         <div class="meta hint">${isFolded ? 'Click to expand' : 'Double-click to open'}</div>
       </div>
     `;

@@ -288,6 +288,33 @@ token. Comments are append-only; there is no edit or delete from
 the agent surface (a human can purge data directly in Postgres if
 needed).
 
+## When to file a task before doing the work
+
+Two shapes of "new work" both go through `nottario.tasks.create`
+**before** you write any code, open any editor, or run any command:
+
+1. **Side-channel requests / bugs spotted in passing.** "Ah, and we
+   should also…", "this is broken: …", "I noticed X". File the row,
+   decide whether to pivot or stay on the current task. Verbatim
+   quotes from the user (the bug repro, the half-formed idea) belong
+   in the description — future-you will not remember them.
+2. **Substantive new work the user explicitly asks you to do.**
+   "Let's add Biome", "do the design review of the Kanban", "rename
+   `content_md` to `content`". Even when the user is telling you to
+   *act*, the act starts with `tasks.create` → `claim` → work.
+   Skipping the row because "the request is obviously the task"
+   leaves the backlog blind: the work has no handle for tracking, no
+   audit trail, no link to the resulting commits. The exception is
+   conversational tweaks that fit in a single small commit and need
+   no follow-up (a typo fix in a doc, a one-line CSS adjustment) —
+   those can land directly.
+
+Both shapes need the right `target_role`, an honest description,
+dependencies linked if relevant, and a split into role children when
+multi-role. The bar is: if I had to leave the session right now,
+would someone else be able to pick this up? If not, file more
+context.
+
 ## Idiomatic patterns
 
 ### "Carry on" — the loop

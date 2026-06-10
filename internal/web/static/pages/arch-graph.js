@@ -12,17 +12,17 @@ import '/static/components/search-input.js';
 
 class NottarioArchGraph extends LitElement {
   static properties = {
-    projectId:        { type: String },
-    kinds:            { state: true },
-    allNodes:         { state: true }, // slug-keyed map
-    allEdges:         { state: true },
-    selectedSlug:     { state: true },
-    selectedDetail:   { state: true },
-    error:            { state: true },
+    projectId: { type: String },
+    kinds: { state: true },
+    allNodes: { state: true }, // slug-keyed map
+    allEdges: { state: true },
+    selectedSlug: { state: true },
+    selectedDetail: { state: true },
+    error: { state: true },
 
     _expanded: { state: true }, // Set<id>
-    _focus:    { state: true }, // id
-    _query:    { state: true }, // string
+    _focus: { state: true }, // id
+    _query: { state: true }, // string
     _hoveredEdgeID: { state: true }, // edge id, drives canvas highlight
   };
 
@@ -300,7 +300,9 @@ class NottarioArchGraph extends LitElement {
 
   async loadDetail(slug) {
     try {
-      const r = await fetch(`/api/projects/${this.projectId}/arch/nodes/${encodeURIComponent(slug)}`);
+      const r = await fetch(
+        `/api/projects/${this.projectId}/arch/nodes/${encodeURIComponent(slug)}`,
+      );
       if (!r.ok) throw new Error('failed to load node');
       this.selectedDetail = await r.json();
     } catch (e) {
@@ -315,7 +317,7 @@ class NottarioArchGraph extends LitElement {
   }
   _nodeByID(id) {
     if (!this.allNodes) return null;
-    return Object.values(this.allNodes).find(n => n.ID === id) || null;
+    return Object.values(this.allNodes).find((n) => n.ID === id) || null;
   }
   _selectedID() {
     if (!this.selectedSlug || !this.allNodes) return '';
@@ -337,13 +339,20 @@ class NottarioArchGraph extends LitElement {
 
   _kindColor(k) {
     switch ((k || '').toLowerCase()) {
-      case 'system':   return '#0969da';
-      case 'service':  return '#1f883d';
-      case 'module':   return '#8250df';
-      case 'external': return '#bc4c00';
-      case 'data':     return '#9a6700';
-      case 'queue':    return '#cf222e';
-      default:         return '#59636e';
+      case 'system':
+        return '#0969da';
+      case 'service':
+        return '#1f883d';
+      case 'module':
+        return '#8250df';
+      case 'external':
+        return '#bc4c00';
+      case 'data':
+        return '#9a6700';
+      case 'queue':
+        return '#cf222e';
+      default:
+        return '#59636e';
     }
   }
 
@@ -352,7 +361,11 @@ class NottarioArchGraph extends LitElement {
   _onCanvasSelect(e) {
     const id = e.detail.id;
     const n = this._nodeByID(id);
-    if (!n) { this.selectedSlug = null; this._writeHash(); return; }
+    if (!n) {
+      this.selectedSlug = null;
+      this._writeHash();
+      return;
+    }
     this.selectedSlug = n.Slug;
     this.loadDetail(n.Slug);
     this._writeHash();
@@ -372,8 +385,8 @@ class NottarioArchGraph extends LitElement {
     if (this.allNodes === null) return html`<p>Loading…</p>`;
     const selID = this._selectedID();
     const sel = selID ? this._nodeByID(selID) : null;
-    const inEdges = sel ? (this.allEdges || []).filter(e => e.ToNodeID === sel.ID) : [];
-    const outEdges = sel ? (this.allEdges || []).filter(e => e.FromNodeID === sel.ID) : [];
+    const inEdges = sel ? (this.allEdges || []).filter((e) => e.ToNodeID === sel.ID) : [];
+    const outEdges = sel ? (this.allEdges || []).filter((e) => e.FromNodeID === sel.ID) : [];
     const ancestors = sel ? this._ancestorChain(sel.ID) : [];
 
     return html`
@@ -384,8 +397,12 @@ class NottarioArchGraph extends LitElement {
         <nottario-search-input
           placeholder="Filter nodes…"
           .value=${this._query}
-          @input=${(e) => { this._query = e.detail.value; }}
-          @clear=${() => { this._query = ''; }}
+          @input=${(e) => {
+            this._query = e.detail.value;
+          }}
+          @clear=${() => {
+            this._query = '';
+          }}
           style="width:240px"></nottario-search-input>
         <button class="btn" @click=${() => this._archCanvas()?.fit()}>Fit</button>
       </div>
@@ -432,71 +449,103 @@ class NottarioArchGraph extends LitElement {
           <h2>${sel.Name}</h2>
         </header>
         <div class="crumb">
-          ${ancestors.map((a, i) => html`
+          ${ancestors.map(
+            (a, i) => html`
             ${i > 0 ? html`<span class="sep">/</span>` : null}
             <a @click=${() => this._onCanvasSelect({ detail: { id: a.ID } })}>${a.Slug}</a>
-          `)}
+          `,
+          )}
         </div>
-        ${sel.LinkedRepo ? html`
+        ${
+          sel.LinkedRepo
+            ? html`
           <div class="meta-row">
             <span class="lbl">repo</span>
             <code>${sel.LinkedRepo}${sel.LinkedPath ? '/' + sel.LinkedPath : ''}</code>
           </div>
-        ` : null}
-        ${sel.DescriptionMD ? html`
+        `
+            : null
+        }
+        ${
+          sel.DescriptionMD
+            ? html`
           <section class="section">
             <nottario-markdown
               project-id=${this.projectId}
               .source=${sel.DescriptionMD}></nottario-markdown>
           </section>
-        ` : null}
+        `
+            : null
+        }
 
         <section class="section">
           <h4 class="eyebrow">Incoming edges</h4>
-          ${inEdges.length === 0
-            ? html`<p class="empty">No incoming edges.</p>`
-            : html`<div class="edges">
-                ${inEdges.map(e => html`
+          ${
+            inEdges.length === 0
+              ? html`<p class="empty">No incoming edges.</p>`
+              : html`<div class="edges">
+                ${inEdges.map(
+                  (e) => html`
                   <a class="edge-chip"
                      @click=${() => this._onCanvasSelect({ detail: { id: e.FromNodeID } })}
-                     @mouseenter=${() => { this._hoveredEdgeID = e.ID; }}
-                     @mouseleave=${() => { this._hoveredEdgeID = ''; }}>
+                     @mouseenter=${() => {
+                       this._hoveredEdgeID = e.ID;
+                     }}
+                     @mouseleave=${() => {
+                       this._hoveredEdgeID = '';
+                     }}>
                     <span class="lbl">${e.Label || e.Kind || 'connects'}</span>
                     <span class="from">← ${this._nodeByID(e.FromNodeID)?.Name || '?'}</span>
                   </a>
-                `)}
-              </div>`}
+                `,
+                )}
+              </div>`
+          }
         </section>
 
         <section class="section">
           <h4 class="eyebrow">Outgoing edges</h4>
-          ${outEdges.length === 0
-            ? html`<p class="empty">No outgoing edges.</p>`
-            : html`<div class="edges">
-                ${outEdges.map(e => html`
+          ${
+            outEdges.length === 0
+              ? html`<p class="empty">No outgoing edges.</p>`
+              : html`<div class="edges">
+                ${outEdges.map(
+                  (e) => html`
                   <a class="edge-chip"
                      @click=${() => this._onCanvasSelect({ detail: { id: e.ToNodeID } })}
-                     @mouseenter=${() => { this._hoveredEdgeID = e.ID; }}
-                     @mouseleave=${() => { this._hoveredEdgeID = ''; }}>
+                     @mouseenter=${() => {
+                       this._hoveredEdgeID = e.ID;
+                     }}
+                     @mouseleave=${() => {
+                       this._hoveredEdgeID = '';
+                     }}>
                     <span class="lbl">${e.Label || e.Kind || 'connects'}</span>
                     <span class="to">→ ${this._nodeByID(e.ToNodeID)?.Name || '?'}</span>
                   </a>
-                `)}
-              </div>`}
+                `,
+                )}
+              </div>`
+          }
         </section>
 
-        ${detail?.LinkedTasks?.length ? html`
+        ${
+          detail?.LinkedTasks?.length
+            ? html`
           <section class="section">
             <h4 class="eyebrow">Linked tasks</h4>
             <div class="tasks">
-              ${detail.LinkedTasks.map(t => html`
+              ${detail.LinkedTasks.map(
+                (t) => html`
                 <nottario-task-chip
                   project-id=${this.projectId}
                   .task=${t}></nottario-task-chip>
-              `)}
+              `,
+              )}
             </div>
           </section>
-        ` : null}
+        `
+            : null
+        }
       </aside>
     `;
   }

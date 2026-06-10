@@ -21,7 +21,7 @@ SQLC_VERSION          ?= v1.31.1
 # Where 'go install' drops binaries (works inside and outside CI).
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
 
-.PHONY: help build test run tidy docker lint check tools sqlc docs-build docs-serve docs-check js-check
+.PHONY: help build test run tidy docker lint check tools sqlc docs-build docs-serve docs-check js-check frontend-check frontend-format
 
 help:
 	@echo "Targets:"
@@ -85,6 +85,7 @@ check:
 	$(MAKE) sqlc-check
 	$(MAKE) docs-check
 	$(MAKE) js-check
+	$(MAKE) frontend-check
 	$(GO) test ./...
 
 # Frontend syntax gate. The project ships vanilla JS / Lit without a
@@ -98,6 +99,19 @@ js-check:
 	@command -v node >/dev/null 2>&1 || { echo "node is required for js-check (install Node 20+)"; exit 1; }
 	@find internal/web/static -name '*.js' -not -path '*/vendor/*' -print0 \
 		| xargs -0 -I{} node --check {}
+
+# Frontend lint + format gate via Biome. The Rust binary is cached
+# under `~/.npm/_npx/` after the first invocation, so no global
+# install is needed and the repo carries no `node_modules`. The check
+# variant fails on lint errors; warnings stay visible but do not
+# block the gate. The format variant rewrites files in place.
+frontend-check:
+	@command -v npx >/dev/null 2>&1 || { echo "npx is required for frontend-check (install Node 20+)"; exit 1; }
+	npx --yes @biomejs/biome check internal/web/static
+
+frontend-format:
+	@command -v npx >/dev/null 2>&1 || { echo "npx is required for frontend-format (install Node 20+)"; exit 1; }
+	npx --yes @biomejs/biome check --write internal/web/static
 
 # Documentation site (cmd/nottario-docs + docs/site/content).
 # `docs-build` produces a working static site under docs/site/dist.

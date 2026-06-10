@@ -52,7 +52,7 @@ export const PROJECT_VIEWS = [
 // entry when the key is unknown (defensive: a project row could carry
 // a stale key after a registry rename).
 export function viewByKey(key) {
-  return PROJECT_VIEWS.find(v => v.key === key) || PROJECT_VIEWS[0];
+  return PROJECT_VIEWS.find((v) => v.key === key) || PROJECT_VIEWS[0];
 }
 
 // defaultPathFor returns the URL of a project's chosen default view,

@@ -17,7 +17,12 @@ class NottarioProjectsPage extends LitElement {
     error: { state: true },
   };
 
-  static styles = [buttonStyles, surfaceStyles, dialogStyles, formStyles, css`
+  static styles = [
+    buttonStyles,
+    surfaceStyles,
+    dialogStyles,
+    formStyles,
+    css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
     .grid {
@@ -201,7 +206,8 @@ class NottarioProjectsPage extends LitElement {
       font-size: 13px;
       margin-bottom: 8px;
     }
-  `];
+  `,
+  ];
 
   constructor() {
     super();
@@ -210,7 +216,10 @@ class NottarioProjectsPage extends LitElement {
     this.creating = false;
     this.error = '';
     new EscController(this, (e) => {
-      if (this.showCreate) { this.closeCreate(); e.stopPropagation(); }
+      if (this.showCreate) {
+        this.closeCreate();
+        e.stopPropagation();
+      }
     });
   }
 
@@ -250,7 +259,10 @@ class NottarioProjectsPage extends LitElement {
       description: form.description.value.trim(),
       primary_language: form.primary_language.value.trim(),
       project_type: form.project_type.value.trim(),
-      repos: form.repos.value.split(/\s*,\s*|\n+/).map(s => s.trim()).filter(Boolean),
+      repos: form.repos.value
+        .split(/\s*,\s*|\n+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
     };
     try {
       const res = await fetch('/api/projects', {
@@ -278,31 +290,46 @@ class NottarioProjectsPage extends LitElement {
   _renderCard(p) {
     const dest = defaultPathFor(p);
     const destLabel = viewByKey(p.DefaultView || 'board/kanban').label;
-    const stop = (e, path) => { e.stopPropagation(); this.goto(path); };
-    const stopOnly = (e) => { e.stopPropagation(); };
+    const stop = (e, path) => {
+      e.stopPropagation();
+      this.goto(path);
+    };
+    const stopOnly = (e) => {
+      e.stopPropagation();
+    };
 
     const meta = [];
     if (p.PrimaryLanguage) meta.push(html`<span class="lang">${p.PrimaryLanguage}</span>`);
     if (p.ProjectType) meta.push(html`<span class="ptype">${p.ProjectType}</span>`);
     const metaWithSeps = meta.flatMap((node, i) =>
-      i === 0 ? [node] : [html`<span class="sep">·</span>`, node]);
+      i === 0 ? [node] : [html`<span class="sep">·</span>`, node],
+    );
 
     return html`
       <div class="card" role="link" tabindex="0"
            @click=${() => this.goto(dest)}
-           @keydown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.goto(dest); } }}>
+           @keydown=${(e) => {
+             if (e.key === 'Enter' || e.key === ' ') {
+               e.preventDefault();
+               this.goto(dest);
+             }
+           }}>
         <div class="top">
           <h3 title=${p.Name}>${p.Name}</h3>
           <span class="dest-chip" title="Default view">${destLabel}</span>
-          ${p.Stats && (p.Stats.TodoCount + p.Stats.DoingCount + p.Stats.DoneCount) === 0
-            ? html`<span class="dest-chip empty-chip" title="No tasks yet">empty</span>`
-            : null}
-          ${this.me?.is_admin
-            ? html`<button class="settings-link" title="Project settings"
+          ${
+            p.Stats && p.Stats.TodoCount + p.Stats.DoingCount + p.Stats.DoneCount === 0
+              ? html`<span class="dest-chip empty-chip" title="No tasks yet">empty</span>`
+              : null
+          }
+          ${
+            this.me?.is_admin
+              ? html`<button class="settings-link" title="Project settings"
                           aria-label="Settings"
                           @click=${(e) => stop(e, `/projects/${p.ID}/settings`)}
                           @keydown=${stopOnly}>⚙</button>`
-            : null}
+              : null
+          }
         </div>
         <div class=${p.Description ? 'desc' : 'desc placeholder'} title=${p.Description || ''}>
           ${p.Description || 'No description'}
@@ -329,11 +356,13 @@ class NottarioProjectsPage extends LitElement {
         <span class="stat"><span class="n">${s.TodoCount}</span> todo</span>
         <span class="stat doing"><span class="n">${s.DoingCount}</span> doing</span>
         <span class="stat"><span class="n">${s.DoneCount}</span> done</span>
-        ${s.LastActivityAt
-          ? html`<span class="activity" title=${new Date(s.LastActivityAt).toLocaleString()}>
+        ${
+          s.LastActivityAt
+            ? html`<span class="activity" title=${new Date(s.LastActivityAt).toLocaleString()}>
                    ${this._relativeTime(s.LastActivityAt)}
                  </span>`
-          : null}
+            : null
+        }
       </div>
     `;
   }
@@ -345,7 +374,7 @@ class NottarioProjectsPage extends LitElement {
     const extra = repos.length - shown.length;
     return html`
       <div class="repos">
-        ${shown.map(r => html`<span>${r}</span>`)}
+        ${shown.map((r) => html`<span>${r}</span>`)}
         ${extra > 0 ? html`<span class="more">+${extra} more</span>` : null}
       </div>
     `;
@@ -359,12 +388,14 @@ class NottarioProjectsPage extends LitElement {
     return html`
       <div class="footer">
         <div class="avatars">
-          ${shown.map(m => html`
+          ${shown.map(
+            (m) => html`
             <nottario-avatar
               .src=${m.AvatarURL || ''}
               .name=${m.DisplayName || m.GithubLogin || ''}
               .size=${22}
-              title=${m.DisplayName || m.GithubLogin}></nottario-avatar>`)}
+              title=${m.DisplayName || m.GithubLogin}></nottario-avatar>`,
+          )}
           ${extra > 0 ? html`<span class="more">+${extra}</span>` : null}
         </div>
         <div class="spacer"></div>
@@ -395,23 +426,29 @@ class NottarioProjectsPage extends LitElement {
     }
     return html`
       <nottario-page-header title="Projects">
-        ${this.me?.is_admin
-          ? html`<button slot="actions" class="btn primary"
+        ${
+          this.me?.is_admin
+            ? html`<button slot="actions" class="btn primary"
                          @click=${() => this.openCreate()}>New project</button>`
-          : null}
+            : null
+        }
       </nottario-page-header>
-      ${this.projects.length === 0
-        ? html`<div class="empty">
+      ${
+        this.projects.length === 0
+          ? html`<div class="empty">
             <strong>No projects yet.</strong>
-            ${this.me?.is_admin
-              ? html`Click <strong>New project</strong> to seed one with default roles, priorities and an empty backlog.`
-              : html`Ask an admin to add you to one, or to create the first project.`}
+            ${
+              this.me?.is_admin
+                ? html`Click <strong>New project</strong> to seed one with default roles, priorities and an empty backlog.`
+                : html`Ask an admin to add you to one, or to create the first project.`
+            }
           </div>`
-        : html`
+          : html`
           <div class="grid">
-            ${this.projects.map(p => this._renderCard(p))}
+            ${this.projects.map((p) => this._renderCard(p))}
           </div>
-        `}
+        `
+      }
       ${this.showCreate ? this.renderCreateDialog() : null}
     `;
   }

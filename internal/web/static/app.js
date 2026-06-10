@@ -97,7 +97,10 @@ class NottarioShell extends LitElement {
     this._resolvingPid = pid;
     try {
       const r = await fetch(`/api/projects/${pid}`);
-      if (!r.ok) { this.navigate('/'); return; }
+      if (!r.ok) {
+        this.navigate('/');
+        return;
+      }
       const p = await r.json();
       this.navigate(defaultPathFor(p));
     } catch (_) {

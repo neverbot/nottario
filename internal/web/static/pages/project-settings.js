@@ -27,7 +27,13 @@ class NottarioProjectSettings extends LitElement {
     tokenError: { state: true },
   };
 
-  static styles = [buttonStyles, tableStyles, dialogStyles, formStyles, badgeStyles, css`
+  static styles = [
+    buttonStyles,
+    tableStyles,
+    dialogStyles,
+    formStyles,
+    badgeStyles,
+    css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
 
@@ -189,7 +195,8 @@ class NottarioProjectSettings extends LitElement {
     .muted { color: #59636e; }
     .status-active { color: #1f883d; font-weight: 500; }
     .status-revoked { color: #59636e; }
-  `];
+  `,
+  ];
 
   constructor() {
     super();
@@ -205,7 +212,10 @@ class NottarioProjectSettings extends LitElement {
     this.issuedToken = null;
     this.tokenError = '';
     new EscController(this, (e) => {
-      if (this.showIssueToken) { this._closeTokenDialog(); e.stopPropagation(); }
+      if (this.showIssueToken) {
+        this._closeTokenDialog();
+        e.stopPropagation();
+      }
     });
   }
 
@@ -233,7 +243,7 @@ class NottarioProjectSettings extends LitElement {
       this.roles = (await rr.json()).roles || [];
       this.members = (await mr.json()).members || [];
       this.priorities = (await qr.json()).priorities || [];
-      this.users = ur.ok ? ((await ur.json()).users || []) : [];
+      this.users = ur.ok ? (await ur.json()).users || [] : [];
     } catch (e) {
       this.error = e.message;
     }
@@ -256,7 +266,9 @@ class NottarioProjectSettings extends LitElement {
       if (!res.ok) throw new Error((await res.json()).error || 'failed');
       form.reset();
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
 
   async deleteRole(id) {
@@ -267,7 +279,9 @@ class NottarioProjectSettings extends LitElement {
       });
       if (!res.ok) throw new Error('delete failed');
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
 
   async upsertPriority(key, value, position) {
@@ -279,7 +293,9 @@ class NottarioProjectSettings extends LitElement {
       });
       if (!res.ok) throw new Error((await res.json()).error || 'failed');
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
 
   async addPriority(e) {
@@ -293,38 +309,45 @@ class NottarioProjectSettings extends LitElement {
   async deletePriority(key) {
     if (!confirm(`Delete priority bucket "${key}"?`)) return;
     try {
-      const res = await fetch(`/api/projects/${this.projectId}/priorities/${encodeURIComponent(key)}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        `/api/projects/${this.projectId}/priorities/${encodeURIComponent(key)}`,
+        {
+          method: 'DELETE',
+        },
+      );
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'delete failed');
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
 
-  back() { window.nottarioNavigate('/'); }
+  back() {
+    window.nottarioNavigate('/');
+  }
 
   render() {
     if (!this.project) {
       return html`<div>Loading…${this.error ? html`<div class="error">${this.error}</div>` : ''}</div>`;
     }
     const tabs = [
-      { id: 'general',    label: 'General',    body: () => this.renderGeneral() },
-      { id: 'roles',      label: 'Roles',      body: () => this.renderRoles() },
+      { id: 'general', label: 'General', body: () => this.renderGeneral() },
+      { id: 'roles', label: 'Roles', body: () => this.renderRoles() },
       { id: 'priorities', label: 'Priorities', body: () => this.renderPriorities() },
-      { id: 'members',    label: 'Members',    body: () => this.renderMembers() },
-      { id: 'tokens',     label: 'Tokens',     body: () => this.renderTokens() },
-      { id: 'mcp',        label: 'MCP',        body: () => this.renderMCP() },
+      { id: 'members', label: 'Members', body: () => this.renderMembers() },
+      { id: 'tokens', label: 'Tokens', body: () => this.renderTokens() },
+      { id: 'mcp', label: 'MCP', body: () => this.renderMCP() },
     ];
-    const active = tabs.find(t => t.id === this.activeTab) || tabs[0];
+    const active = tabs.find((t) => t.id === this.activeTab) || tabs[0];
     return html`
       <nottario-page-header
         title="Settings"
         .subtitle=${this.project.Slug}>
       </nottario-page-header>
       <nottario-tabs
-        .options=${tabs.map(t => ({ id: t.id, label: t.label }))}
+        .options=${tabs.map((t) => ({ id: t.id, label: t.label }))}
         .value=${active.id}
-        @change=${(e) => this.activeTab = e.detail.value}>
+        @change=${(e) => (this.activeTab = e.detail.value)}>
       </nottario-tabs>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
       ${active.body()}
@@ -345,9 +368,11 @@ class NottarioProjectSettings extends LitElement {
           <dt><strong>Default view</strong></dt><dd>${currentView.label}</dd>
           <dt><strong>Cycle label</strong></dt><dd>${p.CycleLabel || 'sprint'}</dd>
           <dt><strong>Repositories</strong></dt>
-          <dd>${p.Repos && p.Repos.length
-                ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map(r => html`<li>${r}</li>`)}</ul>`
-                : html`<span class="muted">none</span>`}</dd>
+          <dd>${
+            p.Repos && p.Repos.length
+              ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map((r) => html`<li>${r}</li>`)}</ul>`
+              : html`<span class="muted">none</span>`
+          }</dd>
         </dl>
       `;
     }
@@ -372,9 +397,11 @@ class NottarioProjectSettings extends LitElement {
         </div>
         <nottario-field label="Default view" hint="where a project card on the home page navigates">
           <select name="default_view" style="max-width:260px">
-            ${PROJECT_VIEWS.map(v => html`
+            ${PROJECT_VIEWS.map(
+              (v) => html`
               <option value=${v.key} ?selected=${v.key === currentView.key}>${v.label}</option>
-            `)}
+            `,
+            )}
           </select>
         </nottario-field>
         <nottario-field label="Cycle label" hint="e.g. sprint, iteration, milestone — used when auto-naming new cycles">
@@ -397,19 +424,21 @@ class NottarioProjectSettings extends LitElement {
       <p class="helper" style="margin:0 0 12px">
         Settings that affect how this project is exposed over the MCP server.
       </p>
-      ${admin
-        ? html`
+      ${
+        admin
+          ? html`
           <nottario-field label="Default page size for tasks.list" hint="tasks per page" style="max-width:320px">
             <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
                    @change=${(e) => this.saveMCPPageSize(e.target.value)}
                    style="width:96px;font-variant-numeric:tabular-nums">
           </nottario-field>`
-        : html`
+          : html`
           <p style="margin:0 0 12px">
             <strong>Default page size for tasks.list:</strong>
             ${p.MCPPageSize || 50} tasks per page
             <span class="muted">(admin only)</span>
-          </p>`}
+          </p>`
+      }
       <p class="helper" style="margin-top:8px">
         Agents that call <code>nottario.tasks.list</code> without an explicit
         <code>limit</code> get this many tasks per page. Hard range: 1–500.
@@ -427,7 +456,10 @@ class NottarioProjectSettings extends LitElement {
       project_type: f.project_type.value.trim(),
       default_view: f.default_view.value,
       cycle_label: f.cycle_label.value.trim(),
-      repos: f.repos.value.split(/\s*,\s*|\n+/).map(s => s.trim()).filter(Boolean),
+      repos: f.repos.value
+        .split(/\s*,\s*|\n+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
     };
     try {
       const res = await fetch(`/api/projects/${this.projectId}`, {
@@ -437,7 +469,9 @@ class NottarioProjectSettings extends LitElement {
       });
       if (!res.ok) throw new Error((await res.json()).error || 'failed');
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
 
   renderRoles() {
@@ -453,7 +487,8 @@ class NottarioProjectSettings extends LitElement {
           </tr>
         </thead>
         <tbody>
-          ${sorted.map(r => html`
+          ${sorted.map(
+            (r) => html`
             <tr draggable=${canDrag ? 'true' : 'false'}
                 data-id=${r.ID}
                 @dragstart=${(e) => this._dragStart(e, r.ID)}
@@ -464,18 +499,27 @@ class NottarioProjectSettings extends LitElement {
               ${canDrag ? html`<td class="drag-handle" title="Drag to reorder">⋮⋮</td>` : null}
               <td class="mono">${r.Key}</td>
               <td>${r.Label}</td>
-              <td>${r.Color
-                    ? html`<span class="color-dot" style=${`background:${r.Color}`}></span><span class="mono" style="font-size:11px">${r.Color}</span>`
-                    : html`<span class="muted">—</span>`}</td>
+              <td>${
+                r.Color
+                  ? html`<span class="color-dot" style=${`background:${r.Color}`}></span><span class="mono" style="font-size:11px">${r.Color}</span>`
+                  : html`<span class="muted">—</span>`
+              }</td>
               <td class="row-actions">
-                ${canDrag ? html`<button class="delete" title="Delete role" aria-label="Delete role"
-                                          @click=${() => this.deleteRole(r.ID)}>✕</button>` : null}
+                ${
+                  canDrag
+                    ? html`<button class="delete" title="Delete role" aria-label="Delete role"
+                                          @click=${() => this.deleteRole(r.ID)}>✕</button>`
+                    : null
+                }
               </td>
             </tr>
-          `)}
+          `,
+          )}
         </tbody>
       </table>
-      ${canDrag ? html`
+      ${
+        canDrag
+          ? html`
         <form class="add-row" @submit=${(e) => this.addRole(e)}>
           <nottario-field label="Key">
             <input name="key" placeholder="backend" required>
@@ -490,7 +534,9 @@ class NottarioProjectSettings extends LitElement {
             <button type="submit" class="btn primary">Add role</button>
           </div>
         </form>
-      ` : null}
+      `
+          : null
+      }
     `;
   }
 
@@ -502,13 +548,17 @@ class NottarioProjectSettings extends LitElement {
   }
   _dragEnd(e) {
     e.currentTarget.classList.remove('dragging');
-    this.shadowRoot.querySelectorAll('tr.drag-over').forEach(el => el.classList.remove('drag-over'));
+    this.shadowRoot.querySelectorAll('tr.drag-over').forEach((el) => {
+      el.classList.remove('drag-over');
+    });
   }
   _dragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const row = e.currentTarget;
-    this.shadowRoot.querySelectorAll('tr.drag-over').forEach(el => el !== row && el.classList.remove('drag-over'));
+    this.shadowRoot.querySelectorAll('tr.drag-over').forEach((el) => {
+      if (el !== row) el.classList.remove('drag-over');
+    });
     row.classList.add('drag-over');
   }
   _dragLeave(e) {
@@ -520,11 +570,11 @@ class NottarioProjectSettings extends LitElement {
     const sourceId = this._dragId;
     if (!sourceId || sourceId === targetId) return;
     const sorted = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
-    const without = sorted.filter(r => r.ID !== sourceId);
-    const targetIdx = without.findIndex(r => r.ID === targetId);
-    const sourceRole = sorted.find(r => r.ID === sourceId);
+    const without = sorted.filter((r) => r.ID !== sourceId);
+    const targetIdx = without.findIndex((r) => r.ID === targetId);
+    const sourceRole = sorted.find((r) => r.ID === sourceId);
     without.splice(targetIdx, 0, sourceRole);
-    const ids = without.map(r => r.ID);
+    const ids = without.map((r) => r.ID);
     // Optimistic local update.
     this.roles = without.map((r, i) => ({ ...r, Position: i }));
     try {
@@ -541,7 +591,9 @@ class NottarioProjectSettings extends LitElement {
   }
 
   renderPriorities() {
-    const sorted = [...this.priorities].sort((a, b) => (a.Position - b.Position) || (b.Value - a.Value));
+    const sorted = [...this.priorities].sort(
+      (a, b) => a.Position - b.Position || b.Value - a.Value,
+    );
     return html`
       <p class="helper" style="margin:0 0 12px">
         Named priority buckets. Tasks store the numeric value; agents pick by key
@@ -552,27 +604,35 @@ class NottarioProjectSettings extends LitElement {
           <tr><th>Key</th><th style="width:140px">Value</th><th style="width:60px"></th></tr>
         </thead>
         <tbody>
-          ${sorted.map(p => html`
+          ${sorted.map(
+            (p) => html`
             <tr>
               <td class="mono">${p.Key}</td>
               <td>
-                ${this.me?.is_admin
-                  ? html`<input type="number" min="0" max="100" .value=${String(p.Value)}
+                ${
+                  this.me?.is_admin
+                    ? html`<input type="number" min="0" max="100" .value=${String(p.Value)}
                           @change=${(e) => this.upsertPriority(p.Key, e.target.value, p.Position)}
                           class="inline-num">`
-                  : p.Value}
+                    : p.Value
+                }
               </td>
               <td class="row-actions">
-                ${this.me?.is_admin
-                  ? html`<button class="delete" title="Delete priority" aria-label="Delete priority"
+                ${
+                  this.me?.is_admin
+                    ? html`<button class="delete" title="Delete priority" aria-label="Delete priority"
                                   @click=${() => this.deletePriority(p.Key)}>✕</button>`
-                  : null}
+                    : null
+                }
               </td>
             </tr>
-          `)}
+          `,
+          )}
         </tbody>
       </table>
-      ${this.me?.is_admin ? html`
+      ${
+        this.me?.is_admin
+          ? html`
         <form class="add-row" @submit=${(e) => this.addPriority(e)}>
           <nottario-field label="Key">
             <input name="key" placeholder="urgent" required>
@@ -584,13 +644,18 @@ class NottarioProjectSettings extends LitElement {
             <button type="submit" class="btn primary">Add bucket</button>
           </div>
         </form>
-      ` : null}
+      `
+          : null
+      }
     `;
   }
 
   async saveMCPPageSize(value) {
     const n = parseInt(value, 10);
-    if (!n || n < 1 || n > 500) { this.error = 'page size must be between 1 and 500'; return; }
+    if (!n || n < 1 || n > 500) {
+      this.error = 'page size must be between 1 and 500';
+      return;
+    }
     try {
       const res = await fetch(`/api/projects/${this.projectId}/mcp`, {
         method: 'PATCH',
@@ -599,16 +664,18 @@ class NottarioProjectSettings extends LitElement {
       });
       if (!res.ok) throw new Error((await res.json()).error || 'failed');
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
 
   _uniqueMembers() {
-    return [...new Map((this.members || []).map(m => [m.UserID, m])).values()];
+    return [...new Map((this.members || []).map((m) => [m.UserID, m])).values()];
   }
 
   _memberByID(uid) {
     if (!uid) return null;
-    return this._uniqueMembers().find(m => m.UserID === uid) || null;
+    return this._uniqueMembers().find((m) => m.UserID === uid) || null;
   }
 
   async _setOwner(userID) {
@@ -625,7 +692,9 @@ class NottarioProjectSettings extends LitElement {
         return;
       }
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
 
   renderMembers() {
@@ -633,23 +702,29 @@ class NottarioProjectSettings extends LitElement {
     const colCount = admin ? 3 : 2;
     const owner = this._memberByID(this.project.OwnerUserID);
     return html`
-      ${admin ? html`
+      ${
+        admin
+          ? html`
         <div class="owner-row">
           <span class="lbl">Owner</span>
           <select @change=${(e) => this._setOwner(e.target.value)}>
-            ${this._uniqueMembers().map(m => html`
+            ${this._uniqueMembers().map(
+              (m) => html`
               <option value=${m.UserID} ?selected=${m.UserID === this.project.OwnerUserID}>
                 ${m.DisplayName || m.GithubLogin}
               </option>
-            `)}
+            `,
+            )}
           </select>
         </div>
-      ` : html`
+      `
+          : html`
         <div class="owner-row">
           <span class="lbl">Owner</span>
-          <span>${owner ? (owner.DisplayName || owner.GithubLogin) : html`<span class="muted">—</span>`}</span>
+          <span>${owner ? owner.DisplayName || owner.GithubLogin : html`<span class="muted">—</span>`}</span>
         </div>
-      `}
+      `
+      }
       <table class="data-table">
         <thead>
           <tr>
@@ -659,9 +734,11 @@ class NottarioProjectSettings extends LitElement {
           </tr>
         </thead>
         <tbody>
-          ${this.members.length === 0
-            ? html`<tr><td colspan=${colCount} class="muted" style="text-align:center;padding:16px">No members yet.</td></tr>`
-            : this.members.map(m => html`
+          ${
+            this.members.length === 0
+              ? html`<tr><td colspan=${colCount} class="muted" style="text-align:center;padding:16px">No members yet.</td></tr>`
+              : this.members.map(
+                  (m) => html`
               <tr>
                 <td>
                   <div class="user-cell">
@@ -681,31 +758,41 @@ class NottarioProjectSettings extends LitElement {
                   ${m.RoleColor ? html`<span class="color-dot" style=${`background:${m.RoleColor}`}></span>` : ''}
                   ${m.RoleLabel}
                 </td>
-                ${admin ? html`
+                ${
+                  admin
+                    ? html`
                   <td class="row-actions">
                     <button class="delete"
                             title="Remove this role from ${m.DisplayName || m.GithubLogin}"
                             @click=${() => this.removeMember(m.UserID, m.RoleID)}>×</button>
                   </td>
-                ` : null}
+                `
+                    : null
+                }
               </tr>
-            `)}
+            `,
+                )
+          }
         </tbody>
       </table>
-      ${admin ? html`
+      ${
+        admin
+          ? html`
         <form class="add-row" @submit=${(e) => this.addMember(e)}>
           <nottario-field label="User">
             <select name="user_id" required>
               <option value="" disabled selected>Pick a user…</option>
-              ${this.users.map(u => html`
+              ${this.users.map(
+                (u) => html`
                 <option value=${u.ID}>${u.DisplayName || u.GithubLogin} (@${u.GithubLogin})</option>
-              `)}
+              `,
+              )}
             </select>
           </nottario-field>
           <nottario-field label="Role" class="narrow" style="flex:0 0 180px;min-width:180px">
             <select name="role_id" required>
               <option value="" disabled selected>Pick a role…</option>
-              ${this.roles.map(r => html`<option value=${r.ID}>${r.Label}</option>`)}
+              ${this.roles.map((r) => html`<option value=${r.ID}>${r.Label}</option>`)}
             </select>
           </nottario-field>
           <div class="add-action">
@@ -715,9 +802,11 @@ class NottarioProjectSettings extends LitElement {
         <p class="helper" style="margin-top:12px">
           A user can hold multiple roles in a project — add the same user with a different role to grant both. Removing the last role of a user takes them out of the project entirely.
         </p>
-      ` : html`
+      `
+          : html`
         <p class="helper" style="margin-top:12px">Only admins can add or remove members.</p>
-      `}
+      `
+      }
     `;
   }
 
@@ -736,7 +825,9 @@ class NottarioProjectSettings extends LitElement {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'failed');
       form.reset();
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
 
   // ---- Tokens tab ----
@@ -744,7 +835,7 @@ class NottarioProjectSettings extends LitElement {
   _isMember() {
     if (this.me?.is_admin) return true;
     const ms = this.me?.memberships || [];
-    return ms.some(m => m.ProjectID === this.projectId);
+    return ms.some((m) => m.ProjectID === this.projectId);
   }
 
   _fmtDate(d) {
@@ -846,24 +937,34 @@ class NottarioProjectSettings extends LitElement {
           </tr>
         </thead>
         <tbody>
-          ${this.tokens.length === 0
-            ? html`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No tokens yet.</td></tr>`
-            : this.tokens.map(t => html`
+          ${
+            this.tokens.length === 0
+              ? html`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No tokens yet.</td></tr>`
+              : this.tokens.map(
+                  (t) => html`
               <tr>
                 <td>${t.Name}</td>
                 <td class="mono">${t.Prefix}…</td>
                 <td>${this._fmtDate(t.CreatedAt)}</td>
                 <td>${this._fmtDate(t.LastUsedAt)}</td>
-                <td>${t.RevokedAt
-                      ? html`<span class="status-revoked">revoked</span>`
-                      : html`<span class="status-active">active</span>`}</td>
+                <td>${
+                  t.RevokedAt
+                    ? html`<span class="status-revoked">revoked</span>`
+                    : html`<span class="status-active">active</span>`
+                }</td>
                 <td class="row-actions">
-                  ${t.RevokedAt ? null : html`
+                  ${
+                    t.RevokedAt
+                      ? null
+                      : html`
                     <button class="delete" title="Revoke token" aria-label="Revoke token"
-                            @click=${() => this._revokeToken(t.ID)}>✕</button>`}
+                            @click=${() => this._revokeToken(t.ID)}>✕</button>`
+                  }
                 </td>
               </tr>
-            `)}
+            `,
+                )
+          }
         </tbody>
       </table>
       ${this.showIssueToken ? this._renderTokenDialog() : null}
@@ -915,7 +1016,7 @@ class NottarioProjectSettings extends LitElement {
             <nottario-field label="Default role" hint="optional — used when the agent doesn't specify one">
               <select name="default_role_id">
                 <option value="">(none)</option>
-                ${this.roles.map(r => html`<option value=${r.ID}>${r.Label}</option>`)}
+                ${this.roles.map((r) => html`<option value=${r.ID}>${r.Label}</option>`)}
               </select>
             </nottario-field>
             <div class="actions-row" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
@@ -937,9 +1038,10 @@ class NottarioProjectSettings extends LitElement {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'remove failed');
       await this.load();
-    } catch (err) { this.error = err.message; }
+    } catch (err) {
+      this.error = err.message;
+    }
   }
-
 }
 
 customElements.define('nottario-project-settings', NottarioProjectSettings);

@@ -30,14 +30,14 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 // blocks only. Documents without code blocks pay no JS cost.
 class NottarioMarkdown extends LitElement {
   static properties = {
-    html:      { type: String },
-    source:    { type: String },
+    html: { type: String },
+    source: { type: String },
     projectId: { type: String, attribute: 'project-id' },
-    wide:      { type: Boolean },
+    wide: { type: Boolean },
 
     _resolvedHTML: { state: true },
-    _loading:      { state: true },
-    _error:        { state: true },
+    _loading: { state: true },
+    _error: { state: true },
   };
 
   static styles = css`
@@ -313,8 +313,12 @@ class NottarioMarkdown extends LitElement {
     try {
       const mod = await import('/static/vendor/highlight/highlight.js');
       const hljs = mod.default || mod.hljs || mod;
-      blocks.forEach(b => {
-        try { hljs.highlightElement(b); } catch (_) { /* skip bad block */ }
+      blocks.forEach((b) => {
+        try {
+          hljs.highlightElement(b);
+        } catch (_) {
+          /* skip bad block */
+        }
       });
     } catch (_) {
       // highlight.js failed to load: plain code blocks remain.

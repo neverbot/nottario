@@ -62,7 +62,7 @@ class NottarioAvatar extends LitElement {
   static initials(name) {
     if (!name) return '?';
     const parts = name.trim().split(/\s+/).slice(0, 2);
-    return parts.map(p => p.charAt(0)).join('');
+    return parts.map((p) => p.charAt(0)).join('');
   }
 
   updated(changed) {

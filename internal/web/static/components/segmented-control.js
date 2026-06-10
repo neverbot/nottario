@@ -65,20 +65,26 @@ class NottarioSegmentedControl extends LitElement {
 
   _pick(v) {
     if (v === this.value) return;
-    this.dispatchEvent(new CustomEvent('change', {
-      detail: { value: v }, bubbles: true, composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent('change', {
+        detail: { value: v },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   render() {
     return html`
       <div class="group" role="radiogroup">
-        ${(this.options || []).map(o => html`
+        ${(this.options || []).map(
+          (o) => html`
           <button role="radio"
                   aria-checked=${this.value === o.value ? 'true' : 'false'}
                   title=${o.title || o.label}
                   @click=${() => this._pick(o.value)}>${o.label}</button>
-        `)}
+        `,
+        )}
       </div>
     `;
   }

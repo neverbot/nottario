@@ -577,8 +577,9 @@ Infrastructure:
 
 Tooling:
 
-- [gofmt](https://pkg.go.dev/cmd/gofmt), [go vet](https://pkg.go.dev/cmd/vet), [golangci-lint](https://golangci-lint.run) — lint stack chained by `make check`.
+- [gofmt](https://pkg.go.dev/cmd/gofmt), [go vet](https://pkg.go.dev/cmd/vet), [golangci-lint](https://golangci-lint.run) — Go lint stack chained by `make check`.
 - `internal/tools/sqlcheck` — in-tree golangci-lint analyzer that flags any `fmt.Sprintf` or string concatenation of runtime values feeding `pgx`'s `Query`/`Exec`/`QueryRow`.
+- [Biome](https://biomejs.dev) — JavaScript format + lint gate for `internal/web/static/`. Runs via `npx --yes @biomejs/biome` so there is no `node_modules` in the repo; the Rust binary is cached under `~/.npm/_npx/` after first use.
 
 ## License
 

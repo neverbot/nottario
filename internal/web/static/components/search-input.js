@@ -29,9 +29,9 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 // hand-rolled inputs.
 class NottarioSearchInput extends LitElement {
   static properties = {
-    value:       { type: String },
+    value: { type: String },
     placeholder: { type: String },
-    autofocus:   { type: Boolean },
+    autofocus: { type: Boolean },
   };
 
   static styles = css`
@@ -124,30 +124,42 @@ class NottarioSearchInput extends LitElement {
     // the host.
     e.stopPropagation();
     this.value = e.target.value;
-    this.dispatchEvent(new CustomEvent('input', {
-      detail: { value: this.value },
-      bubbles: true, composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent('input', {
+        detail: { value: this.value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   _onKey(e) {
     if (e.key === 'Enter') {
-      this.dispatchEvent(new CustomEvent('enter', {
-        detail: { value: this.value },
-        bubbles: true, composed: true,
-      }));
+      this.dispatchEvent(
+        new CustomEvent('enter', {
+          detail: { value: this.value },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     }
   }
 
   _clear() {
     this.value = '';
-    this.dispatchEvent(new CustomEvent('clear', {
-      bubbles: true, composed: true,
-    }));
-    this.dispatchEvent(new CustomEvent('input', {
-      detail: { value: '' },
-      bubbles: true, composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent('clear', {
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    this.dispatchEvent(
+      new CustomEvent('input', {
+        detail: { value: '' },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     this.focus();
   }
 
@@ -162,7 +174,9 @@ class NottarioSearchInput extends LitElement {
           ?autofocus=${this.autofocus}
           @input=${this._onInput}
           @keydown=${this._onKey}>
-        ${this.value ? html`
+        ${
+          this.value
+            ? html`
           <button class="clear" title="Clear (Esc)" aria-label="Clear search"
                   @click=${this._clear}>
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
@@ -170,7 +184,9 @@ class NottarioSearchInput extends LitElement {
                     stroke-width="1.6" stroke-linecap="round"/>
             </svg>
           </button>
-        ` : null}
+        `
+            : null
+        }
       </div>
       <slot name="hint"></slot>
     `;

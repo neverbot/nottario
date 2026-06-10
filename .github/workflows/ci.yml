@@ -31,8 +31,25 @@ permissions:
   id-token: write
 
 jobs:
+  # Frontend gate. Runs before `test` so a JS / CSS regression fails
+  # in seconds, before the Go test job spins up Postgres and runs the
+  # full integration suite. `npx --yes @biomejs/biome` downloads the
+  # Biome binary into the runner's npm cache on first use; we don't
+  # carry node_modules in the repo.
+  frontend:
+    name: Frontend gate (Biome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Lint + format check
+        run: make frontend-check
+
   test:
     name: Test
+    needs: frontend
     runs-on: ubuntu-latest
     services:
       postgres:
