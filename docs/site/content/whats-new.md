@@ -19,6 +19,13 @@ feature shows up here.
   task-detail dialog refreshes its comment thread without a manual
   reload. The kanban and Gantt views keep refreshing on every
   `task.*` event as before.
+- **Search dropdown: keyboard navigation, grouping and honest error
+  state.** Results are now grouped by source (Tasks, Documents,
+  Architecture) with section headers. The top hit is auto-selected;
+  Up / Down move the highlight, Enter opens, Escape closes. Network
+  failures surface as a visible "Search failed. Retry." row instead
+  of silently rendering "No matches." The empty state now tells you
+  what scope it searched in and what to try next.
 
 ## v0.1.0 — 2026-06-08
 
