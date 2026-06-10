@@ -22,11 +22,20 @@ First public release, published as `ghcr.io/neverbot/nottario:0.1.0`
   project-scoped advisory lock, cascading "done" rollup on feature
   parents, bug-recovery reconciler. Cycles ("sprints") with rollover
   of in-flight work. Kanban and hand-rolled-SVG Gantt views.
+
+  ![Kanban view](/screenshots/kanban-board.png)
+  ![Gantt view](/screenshots/gantt-view.png)
+
 - **Documents.** Versioned markdown store with optimistic concurrency
   (`expected_version` on every write). Full history per path.
+
+  ![Shared docs view](/screenshots/shared-docs.png)
+
 - **Architecture.** Compound-layout diagram backed by ELK, rendered
   with our own SVG. Editable from the web UI; agent-friendly textual
   representation.
+
+  ![Architecture diagram](/screenshots/architecture-diagram.png)
 - **Identity.** GitHub OAuth for humans; per-project API tokens for
   agents. Admin tokens are not exempt from project scope.
 - **MCP server.** Streamable HTTP transport with Bearer-token auth.

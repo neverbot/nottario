@@ -57,7 +57,9 @@ var markdownLinkRE = regexp.MustCompile(`\]\(([^)\s]+)\)|href="([^"]+)"`)
 
 // internalLinks returns every site-internal absolute URL referenced
 // from the page body. Site-internal means it starts with "/" (and is
-// not protocol-relative "//cdn").
+// not protocol-relative "//cdn"). Asset paths (anything whose last
+// segment looks like `name.ext`) are filtered out — they're served
+// from copied directories, not from the page corpus.
 func internalLinks(body string) []string {
 	var out []string
 	for _, m := range markdownLinkRE.FindAllStringSubmatch(body, -1) {
@@ -65,11 +67,29 @@ func internalLinks(body string) []string {
 		if url == "" {
 			url = m[2]
 		}
-		if strings.HasPrefix(url, "/") && !strings.HasPrefix(url, "//") {
-			out = append(out, url)
+		if !strings.HasPrefix(url, "/") || strings.HasPrefix(url, "//") {
+			continue
 		}
+		if isAssetURL(url) {
+			continue
+		}
+		out = append(out, url)
 	}
 	return out
+}
+
+// isAssetURL reports whether the URL points at a static asset (PNG,
+// SVG, JSON …) rather than a generated page. The page map only knows
+// about generated pages, so checking asset URLs would yield false
+// positives. The heuristic: any URL whose last path segment contains
+// a `.` is an asset.
+func isAssetURL(u string) bool {
+	clean := stripFragment(u)
+	last := clean
+	if i := strings.LastIndex(clean, "/"); i >= 0 {
+		last = clean[i+1:]
+	}
+	return strings.Contains(last, ".")
 }
 
 func stripFragment(s string) string {

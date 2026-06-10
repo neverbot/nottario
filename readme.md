@@ -1,5 +1,7 @@
 # Nottario
 
+**Full documentation: [neverbot.github.io/nottario](https://neverbot.github.io/nottario/).**
+
 Open source, self-hosted coordinator for human developers and their
 AI agents. One instance brings three things under a single source of
 truth: a **task backlog** with cycles, named priority buckets,

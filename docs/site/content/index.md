@@ -10,6 +10,8 @@ developers and their AI agents. It speaks the same language to both: a
 human-friendly web UI for people, an MCP server for agents, on the
 same project and the same data.
 
+![Kanban board with three columns — todo, doing, done — and avatars on the cards in flight](/screenshots/kanban-board.png)
+
 Three domains, all in one binary:
 
 - **Tasks.** A backlog with dependencies and atomic claim, no calendar
