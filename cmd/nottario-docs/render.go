@@ -215,7 +215,7 @@ func renderAll(inDir, outDir string) error {
 
 // sectionOrder is the order in which sections appear in the side nav.
 // Sections not in this list go last in alphabetical order.
-var sectionOrder = []string{"Start", "Reference", "Skills", "Operating", "Updates"}
+var sectionOrder = []string{"Start", "Views", "Reference", "Skills", "Operating", "Updates"}
 
 func buildNav(pages []*Page) []NavSection {
 	const misc = "Misc"

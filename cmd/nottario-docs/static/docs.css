@@ -252,8 +252,6 @@ a:hover { text-decoration: underline; }
 .docs__article img {
   max-width: 100%;
   height: auto;
-  border: 1px solid #d1d9e0;
-  border-radius: 6px;
 }
 
 @media (max-width: 800px) {

@@ -26,7 +26,13 @@ Three domains, all in one binary:
 ## Start here
 
 - [Getting started](/getting-started/) — five-minute self-host.
+- [Kanban](/kanban/), [Gantt](/gantt/), [Docs](/docs/),
+  [Architecture](/architecture/) — what each view looks like and how
+  to drive it.
 - [Self-hosting reference](/self-hosting/) — every env var, every
   secret, every backup knob.
 - [MCP integration](/mcp/) — wire an agent in one command.
-- [What's new](/whats-new/) — release notes by version and date.
+- [Agent skills](/skills/) — what the skill bundle is and how to
+  install it.
+- [What's new](/whats-new/) — changes shipped to `:latest`, newest
+  first.
