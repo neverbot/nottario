@@ -35,6 +35,22 @@ class NottarioBoardPage extends LitElement {
     cycles: { state: true },
     cycleId: { state: true },
     _cycleDropdownOpen: { state: true },
+    // Filter chips above the columns. _filters.{mine, roles, types}.
+    // roles/types are arrays so they survive Lit dirty-checks across
+    // hash updates. Filter dropdowns track their own open state.
+    _filters: { state: true },
+    _filterOpen: { state: true },
+    // Transient bottom toast slot used by the drag-drop undo and any
+    // future "you just did X, undo?" path.
+    _toast: { state: true },
+    // Set when the user picks Advanced in the new-task dialog: only
+    // then is the `feature` type selectable (features have different
+    // semantics — parent roll-up — and the modal shouldn't expose
+    // them as a casual option).
+    _newTaskAdvanced: { state: true },
+    // Confirmation dialog state for the in-app delete flow (replaces
+    // the browser-native confirm()).
+    _confirmDeleteID: { state: true },
     _endSprintOpen: { state: true },
   };
 
@@ -115,6 +131,85 @@ class NottarioBoardPage extends LitElement {
       line-height: 1.6;
     }
     .end-sprint-dialog ul li { margin-bottom: 2px; }
+
+    /* Universal box-sizing — the project rule requires shadow roots
+       to set this explicitly because the global reset does not
+       penetrate the shadow boundary. */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* ---- Filter row ---- */
+
+    .filters {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .filter-chip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      color: #1f2328;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .filter-chip:hover { border-color: #afb8c1; }
+    .filter-chip.active {
+      background: #ddf4ff;
+      border-color: #0969da;
+      color: #0550ae;
+    }
+    .filter-chip .count {
+      background: #0969da;
+      color: #fff;
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .filter-chip svg { width: 10px; height: 10px; }
+    .filter-clear {
+      background: transparent;
+      border: 0;
+      color: #59636e;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 4px 6px;
+    }
+    .filter-clear:hover { color: #1f2328; text-decoration: underline; }
+    .filter-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      min-width: 180px;
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      box-shadow: 0 6px 16px rgba(31, 35, 40, 0.12);
+      padding: 4px;
+      z-index: 30;
+    }
+    .filter-menu label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 400;
+    }
+    .filter-menu label:hover { background: #f3f4f6; }
+    .filter-menu input[type="checkbox"] { margin: 0; }
 
     .columns {
       display: grid;
@@ -273,7 +368,81 @@ class NottarioBoardPage extends LitElement {
       font-size: 12px;
       color: #59636e;
     }
-    .prio { font-family: ui-monospace, SFMono-Regular, monospace; }
+    /* Role badge: a flat-coloured pill whose hue follows the role's
+       configured colour. Uses color-mix so the tint stays robust
+       across short hex (#abc), long hex (#aabbcc) or named colours,
+       which the previous string-concatenation `${role.Color}1a`
+       silently broke on. */
+    .card .role-badge,
+    .upnext .role-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--role-color, #d0d7de);
+      background: color-mix(in srgb, var(--role-color, #d0d7de) 10%, #fff);
+      font-size: 11px;
+      font-weight: 500;
+      color: #1f2328;
+    }
+
+    /* Priority is encoded as a coloured dot so it's the first thing
+       the eye reads on a card — high → red, medium → amber, low →
+       neutral. The bucket label sits next to the dot in muted text.
+       Three tints reflect the three priority bands; max collapses
+       into high, min into low. */
+    .prio {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: inherit;
+    }
+    .prio .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #afb8c1;
+    }
+    .prio.high .dot { background: #cf222e; }
+    .prio.medium .dot { background: #bf8700; }
+    .prio.low .dot { background: #8b949e; }
+
+    /* ---- Bottom toast (undo affordance) ---- */
+    .toast {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #1f2328;
+      color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.24);
+      font-size: 13px;
+      z-index: 40;
+    }
+    .toast button {
+      background: transparent;
+      border: 0;
+      color: #79c0ff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+    }
+    .toast button:hover { text-decoration: underline; }
+
+    /* Compact confirm dialog (replaces the browser-native confirm()). */
+    .confirm-dialog .panel {
+      width: 360px;
+      padding: 18px 20px;
+    }
+    .confirm-dialog .panel h3 { margin: 0 0 8px; font-size: 15px; }
+    .confirm-dialog .panel p { margin: 0 0 16px; color: #59636e; font-size: 13px; }
+
     .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
 
     /* ---- Task-detail dialog ---- */
@@ -562,6 +731,11 @@ class NottarioBoardPage extends LitElement {
     this.cycleId = null;
     this._cycleDropdownOpen = false;
     this._endSprintOpen = false;
+    this._filters = { mine: false, roles: [], types: [] };
+    this._filterOpen = null;
+    this._toast = null;
+    this._newTaskAdvanced = false;
+    this._confirmDeleteID = null;
     new EscController(this, (e) => this._onEsc(e));
   }
 
@@ -596,7 +770,7 @@ class NottarioBoardPage extends LitElement {
     if (!id) return;
     const task = this.tasks.find(x => x.ID === id);
     if (!task || task.State === state) return;
-    await this.setState(id, state);
+    this._moveStateWithUndo(id, state, task.State);
   }
 
   _onEsc(e) {
@@ -641,10 +815,55 @@ class NottarioBoardPage extends LitElement {
       // Don't await — keep the UI snappy; subsequent updates re-render.
       this.load();
     }
+    // Filter chips are mirrored to the hash so deep links carry the
+    // viewed slice. Comma-separated lists for multi-value chips
+    // (role / type) and a "1" flag for mine.
+    this._filters = {
+      mine: h.get('mine') === '1',
+      roles: (h.get('role') || '').split(',').filter(Boolean),
+      types: (h.get('type') || '').split(',').filter(Boolean),
+    };
     const taskId = h.get('task');
     if (!taskId) return;
     const t = (this.tasks || []).find(x => x.ID === taskId);
     if (t) this.open(t);
+  }
+
+  // Write the current filter state back to the URL hash so reloads
+  // and deep links preserve the view. Keeps existing keys (cycle,
+  // task) intact.
+  _persistFilters() {
+    const h = new URLSearchParams(window.location.hash.slice(1));
+    const f = this._filters || {};
+    if (f.mine) h.set('mine', '1'); else h.delete('mine');
+    if (f.roles?.length) h.set('role', f.roles.join(',')); else h.delete('role');
+    if (f.types?.length) h.set('type', f.types.join(',')); else h.delete('type');
+    const s = h.toString();
+    const url = s ? `#${s}` : window.location.pathname + window.location.search;
+    history.replaceState(null, '', url);
+  }
+
+  _toggleFilterMenu(kind) {
+    this._filterOpen = this._filterOpen === kind ? null : kind;
+  }
+
+  _toggleMine() {
+    this._filters = { ...this._filters, mine: !this._filters.mine };
+    this._persistFilters();
+  }
+
+  _toggleFilterValue(kind, value) {
+    const list = (this._filters[kind] || []).slice();
+    const i = list.indexOf(value);
+    if (i >= 0) list.splice(i, 1); else list.push(value);
+    this._filters = { ...this._filters, [kind]: list };
+    this._persistFilters();
+  }
+
+  _clearFilters() {
+    this._filters = { mine: false, roles: [], types: [] };
+    this._filterOpen = null;
+    this._persistFilters();
   }
 
   _subscribe() {
@@ -792,10 +1011,12 @@ class NottarioBoardPage extends LitElement {
           <div class="eyebrow">Up next</div>
           <div class="title">${next.Title}</div>
           <div class="meta">
-            <span class="badge ${next.Type}">${next.Type}</span>
-            <span class="prio">${this._priorityLabel(next.Priority)}</span>
-            ${role ? html`<span class="badge"
-              style=${`background:${role.Color || '#eee'}1a; border-color:${role.Color || '#ddd'}`}>${role.Label}</span>` : ''}
+            <span class=${`prio ${this._priorityBucket(next.Priority)}`}>
+              <span class="dot"></span>
+              ${this._priorityLabel(next.Priority)}
+            </span>
+            ${role ? html`<span class="role-badge"
+              style=${`--role-color:${role.Color || '#d0d7de'}`}>${role.Label}</span>` : ''}
           </div>
           <div class="row">
             <button class="btn primary" @click=${() => this.setState(next.ID, 'doing')}>Start</button>
@@ -809,7 +1030,8 @@ class NottarioBoardPage extends LitElement {
   }
 
   byState(s) {
-    const items = this.tasks.filter(t => t.State === s);
+    let items = this.tasks.filter(t => t.State === s);
+    items = this._applyFilters(items);
     if (s === 'done') {
       // Most recently finished at the top — fall back to UpdatedAt
       // when ActualEnd is null (legacy rows / manual edits).
@@ -820,6 +1042,41 @@ class NottarioBoardPage extends LitElement {
       });
     }
     return items;
+  }
+
+  // Filter pipeline: mine → role any-of → type any-of. Centralised so
+  // byState, the Up-next picker and any future column variant share
+  // the exact same set.
+  _applyFilters(items) {
+    const f = this._filters || {};
+    if (f.mine && this.me) {
+      items = items.filter(t => t.AssigneeUserID === this.me.id);
+    }
+    if (f.roles && f.roles.length) {
+      const set = new Set(f.roles);
+      items = items.filter(t => set.has(t.TargetRoleID));
+    }
+    if (f.types && f.types.length) {
+      const set = new Set(f.types);
+      items = items.filter(t => set.has(t.Type));
+    }
+    return items;
+  }
+
+  _filterCount() {
+    const f = this._filters || {};
+    return (f.mine ? 1 : 0) + (f.roles?.length || 0) + (f.types?.length || 0);
+  }
+
+  // Map a numeric priority to a coarse bucket (high / medium / low)
+  // used for the card's coloured dot. The exact cutoffs follow the
+  // default priority catalogue: max(100)/high(75)→high; medium(50)→
+  // medium; low(25)/min(0)→low. Tasks created via SQL with off-bucket
+  // values still land in the closest band.
+  _priorityBucket(value) {
+    if (value >= 65) return 'high';
+    if (value >= 35) return 'medium';
+    return 'low';
   }
 
   open(t) {
@@ -857,7 +1114,6 @@ class NottarioBoardPage extends LitElement {
   }
 
   async deleteTask(id) {
-    if (!confirm('Delete this task?')) return;
     const r = await fetch(`/api/projects/${this.projectId}/tasks/${id}`, { method: 'DELETE' });
     if (r.ok) {
       this.selected = null;
@@ -959,9 +1215,12 @@ class NottarioBoardPage extends LitElement {
            }}>
         <div class="title">${t.Title}</div>
         <div class="meta">
-          <span class="badge ${t.Type}">${t.Type}</span>
-          <span class="prio">${this._priorityLabel(t.Priority)}</span>
-          ${role ? html`<span class="badge" style=${`background:${role.Color || '#eee'}1a; border-color:${role.Color || '#ddd'}`}>${role.Label}</span>` : ''}
+          <span class=${`prio ${this._priorityBucket(t.Priority)}`}>
+            <span class="dot"></span>
+            ${this._priorityLabel(t.Priority)}
+          </span>
+          ${role ? html`<span class="role-badge"
+            style=${`--role-color:${role.Color || '#d0d7de'}`}>${role.Label}</span>` : ''}
         </div>
         ${assignee ? html`
           <nottario-avatar class="assignee" size="20"
@@ -1159,18 +1418,13 @@ class NottarioBoardPage extends LitElement {
 
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
-    const doingCount = this.byState('doing').length;
-    const hideDoing = this.view === 'kanban' && doingCount === 0 && !this.expandDoing;
     const current = this._currentCycle();
     const viewingActive = current && !current.ClosedAt;
+    const stateLabels = { todo: 'To do', doing: 'In progress', done: 'Done' };
     return html`
       <nottario-page-header
         .title=${this.view === 'gantt' ? 'Gantt' : 'Board'}>
         ${this.renderCycleSwitcher()}
-        ${hideDoing
-          ? html`<button slot="actions" class="btn ghost" title="Show the doing column"
-                         @click=${() => this.expandDoing = true}>· 0 doing</button>`
-          : null}
         ${this.view === 'gantt'
           ? html`<button slot="actions" class="btn ghost"
                          title="Scroll the Gantt back to the now line"
@@ -1185,30 +1439,28 @@ class NottarioBoardPage extends LitElement {
                 @click=${() => this.showCreate = true}>New task</button>
       </nottario-page-header>
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
+      ${this.view === 'kanban' ? this._renderFilters() : null}
       ${this.view === 'gantt'
         ? html`<nottario-gantt
                   .projectId=${this.projectId}
                   .cycleId=${this.cycleId || ''}
                   @task-selected=${(e) => this.open(e.detail.task)}></nottario-gantt>`
         : html`
-          <div class=${hideDoing ? 'columns two' : 'columns'}>
-            ${(hideDoing ? ['todo', 'done'] : ['todo', 'doing', 'done']).map(s => {
+          <div class="columns">
+            ${['todo', 'doing', 'done'].map(s => {
               const items = this.byState(s);
               const isEmpty = items.length === 0;
               const dragOver = this._dragOverState === s && this._draggingID;
               const draggingFromThis = this._draggingID && this.tasks.find(x => x.ID === this._draggingID)?.State === s;
-              const baseCls = isEmpty
-                ? (s === 'doing' ? 'col empty doing' : 'col empty')
-                : 'col';
-              const cls = `${baseCls}${dragOver && !draggingFromThis ? ' drag-over' : ''}`;
+              const cls = `col${isEmpty ? ' empty' : ''}${dragOver && !draggingFromThis ? ' drag-over' : ''}`;
               return html`
                 <section class=${cls}
                          role="region"
-                         aria-label=${`${s} (${items.length})`}
+                         aria-label=${`${stateLabels[s]} (${items.length})`}
                          @dragover=${(e) => this._onColDragOver(e, s)}
                          @dragleave=${(e) => this._onColDragLeave(e, s)}
                          @drop=${(e) => this._onColDrop(e, s)}>
-                  <h3>${s} <span class="count">${items.length}</span></h3>
+                  <h3>${stateLabels[s]} <span class="count">${items.length}</span></h3>
                   ${isEmpty
                     ? this._renderEmptyBody(s)
                     : items.map(t => this.renderCard(t))}
@@ -1220,7 +1472,123 @@ class NottarioBoardPage extends LitElement {
       ${this.showCreate ? this.renderCreate() : null}
       ${this.selected ? this.renderDetail() : null}
       ${this.renderEndSprintDialog()}
+      ${this._toast ? this._renderToast() : null}
+      ${this._confirmDeleteID ? this._renderConfirmDelete() : null}
     `;
+  }
+
+  _renderFilters() {
+    const f = this._filters || {};
+    const total = this._filterCount();
+    return html`
+      <div class="filters" @click=${(e) => e.stopPropagation()}>
+        ${this.me ? html`
+          <button class=${`filter-chip${f.mine ? ' active' : ''}`}
+                  @click=${() => this._toggleMine()}>Mine</button>
+        ` : null}
+        <div style="position:relative">
+          <button class=${`filter-chip${f.roles?.length ? ' active' : ''}`}
+                  @click=${() => this._toggleFilterMenu('roles')}>
+            Role
+            ${f.roles?.length ? html`<span class="count">${f.roles.length}</span>` : null}
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          ${this._filterOpen === 'roles' ? html`
+            <div class="filter-menu">
+              ${this.roles.map(r => html`
+                <label>
+                  <input type="checkbox"
+                         ?checked=${f.roles?.includes(r.ID)}
+                         @change=${() => this._toggleFilterValue('roles', r.ID)}>
+                  ${r.Label}
+                </label>
+              `)}
+            </div>
+          ` : null}
+        </div>
+        <div style="position:relative">
+          <button class=${`filter-chip${f.types?.length ? ' active' : ''}`}
+                  @click=${() => this._toggleFilterMenu('types')}>
+            Type
+            ${f.types?.length ? html`<span class="count">${f.types.length}</span>` : null}
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          ${this._filterOpen === 'types' ? html`
+            <div class="filter-menu">
+              ${['task', 'bug', 'chore', 'spike', 'feature'].map(t => html`
+                <label>
+                  <input type="checkbox"
+                         ?checked=${f.types?.includes(t)}
+                         @change=${() => this._toggleFilterValue('types', t)}>
+                  ${t}
+                </label>
+              `)}
+            </div>
+          ` : null}
+        </div>
+        ${total > 0 ? html`
+          <button class="filter-clear" @click=${() => this._clearFilters()}>Clear</button>
+        ` : null}
+      </div>
+    `;
+  }
+
+  _renderToast() {
+    return html`
+      <div class="toast" role="status">
+        <span>${this._toast.message}</span>
+        ${this._toast.undo
+          ? html`<button @click=${() => this._toast.undo()}>Undo</button>`
+          : null}
+      </div>
+    `;
+  }
+
+  _renderConfirmDelete() {
+    return html`
+      <div class="dialog confirm-dialog"
+           role="alertdialog"
+           aria-modal="true"
+           @click=${(e) => e.target.classList.contains('dialog') && (this._confirmDeleteID = null)}
+           @keydown=${(e) => { if (e.key === 'Escape') this._confirmDeleteID = null; }}>
+        <div class="panel">
+          <h3>Delete this task?</h3>
+          <p>The card and all of its comments will be removed. This cannot be undone.</p>
+          <div class="actions-row">
+            <button type="button" class="btn secondary"
+                    @click=${() => this._confirmDeleteID = null}>Cancel</button>
+            <button type="button" class="btn danger"
+                    @click=${() => this._confirmDeleteRun()}>Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _confirmDeleteRun() {
+    const id = this._confirmDeleteID;
+    this._confirmDeleteID = null;
+    if (id) this.deleteTask(id);
+  }
+
+  // Drop a task to a new state with a transient toast that lets the
+  // user undo within 6 seconds. The toast replaces the immediate
+  // mutation-without-recovery that the old drag-drop had.
+  _moveStateWithUndo(taskID, newState, oldState) {
+    const t = this.tasks.find(x => x.ID === taskID);
+    const label = t ? `"${t.Title.slice(0, 32)}${t.Title.length > 32 ? '…' : ''}"` : 'task';
+    this.setState(taskID, newState);
+    if (this._toast?.timer) clearTimeout(this._toast.timer);
+    const labels = { todo: 'To do', doing: 'In progress', done: 'Done' };
+    this._toast = {
+      message: `Moved ${label} to ${labels[newState] || newState}`,
+      undo: () => {
+        this.setState(taskID, oldState);
+        clearTimeout(this._toast.timer);
+        this._toast = null;
+      },
+      timer: setTimeout(() => { this._toast = null; }, 6000),
+    };
   }
 
   renderCreate() {
@@ -1247,7 +1615,9 @@ class NottarioBoardPage extends LitElement {
                   <option value="bug">bug</option>
                   <option value="chore">chore</option>
                   <option value="spike">spike</option>
-                  <option value="feature">feature</option>
+                  ${this._newTaskAdvanced
+                    ? html`<option value="feature">feature</option>`
+                    : null}
                 </select>
               </nottario-field>
               <nottario-field label="Priority" style="flex:1">
@@ -1271,6 +1641,12 @@ class NottarioBoardPage extends LitElement {
               </select>
             </nottario-field>
             <div class="actions-row">
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#59636e;cursor:pointer;margin-right:auto">
+                <input type="checkbox"
+                       ?checked=${this._newTaskAdvanced}
+                       @change=${(e) => this._newTaskAdvanced = e.target.checked}>
+                Advanced (enables feature type)
+              </label>
               <button type="button" class="btn secondary" @click=${() => this.showCreate = false}>Cancel</button>
               <button type="submit" class="btn primary">Create</button>
             </div>
@@ -1320,7 +1696,7 @@ class NottarioBoardPage extends LitElement {
               <h3 id="task-dialog-title">${task.Title}</h3>
               <div class="title-actions">
                 <button class="icon-btn danger" title="Delete task" aria-label="Delete task"
-                        @click=${() => this.deleteTask(task.ID)}>
+                        @click=${() => this._confirmDeleteID = task.ID}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M6 2.5h4M3 4.5h10M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2M6.8 7v4M9.2 7v4"
                           stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>

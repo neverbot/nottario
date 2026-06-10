@@ -14,6 +14,19 @@ feature shows up here.
 
 ## 2026-06-10
 
+- **Kanban: filter row, priority dots and column rename.** Three
+  filter chips above the columns let you scope the board to your
+  own work, one or more roles, and one or more task types; the
+  selection is mirrored to the URL hash so deep-links work. Cards
+  now encode priority as a small coloured dot (red / amber / grey)
+  beside the bucket name instead of a monospace `p3` token, so the
+  urgency is the first thing the eye reads. Columns renamed from
+  the internal `todo` / `doing` / `done` enums to **To do**, **In
+  progress**, **Done**. Drag-drop across columns now shows a
+  toast with **Undo** for 6 seconds. The browser-native delete
+  confirm dialog was replaced with an in-app one. The `feature`
+  type stays hidden behind an Advanced checkbox in the new-task
+  dialog so it isn't picked by accident.
 - **MCP / REST: `docs.write` field rename.** The markdown body field
   on `nottario.docs.write` and the REST `POST /api/projects/{id}/docs`
   is now `content` instead of `content_md`. Same for the markdown
