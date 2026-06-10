@@ -145,8 +145,8 @@ type writeDocBody struct {
 }
 
 type docResp struct {
-	ID             string `json:"ID"`
-	CurrentVersion int    `json:"CurrentVersion"`
+	ID             string `json:"id"`
+	CurrentVersion int    `json:"current_version"`
 }
 
 type rawResp struct {

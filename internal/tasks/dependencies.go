@@ -94,8 +94,8 @@ func RemoveDependency(ctx context.Context, pool *pgxpool.Pool, taskID, dependsOn
 
 // ProjectDependency is one edge from the project-wide list.
 type ProjectDependency struct {
-	TaskID      uuid.UUID
-	DependsOnID uuid.UUID
+	TaskID      uuid.UUID `json:"task_id"`
+	DependsOnID uuid.UUID `json:"depends_on_id"`
 }
 
 // ListAllDependencies returns every dependency edge of a project,

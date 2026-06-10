@@ -41,7 +41,7 @@ func TestMCP_Arch_NodesAndEdgesFullCycle(t *testing.T) {
 		"project_id": f.projectID,
 		"slug":       "sys", "kind": "system", "name": "Sys",
 	}, &root)
-	if root["Slug"] != "sys" {
+	if root["slug"] != "sys" {
 		t.Fatalf("upsert root: %+v", root)
 	}
 	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
@@ -58,7 +58,7 @@ func TestMCP_Arch_NodesAndEdgesFullCycle(t *testing.T) {
 		"project_id": f.projectID,
 		"root_only":  true,
 	}, &listed)
-	if len(listed.Nodes) != 1 || listed.Nodes[0]["Slug"] != "sys" {
+	if len(listed.Nodes) != 1 || listed.Nodes[0]["slug"] != "sys" {
 		t.Errorf("list_nodes root_only: %+v", listed.Nodes)
 	}
 
@@ -70,7 +70,7 @@ func TestMCP_Arch_NodesAndEdgesFullCycle(t *testing.T) {
 		"project_id": f.projectID,
 		"slug":       "sys.api",
 	}, &getNode)
-	if getNode.Node["Slug"] != "sys.api" {
+	if getNode.Node["slug"] != "sys.api" {
 		t.Errorf("get_node: %+v", getNode.Node)
 	}
 
@@ -92,7 +92,7 @@ func TestMCP_Arch_NodesAndEdgesFullCycle(t *testing.T) {
 		"project_id": f.projectID,
 		"from_slug":  "sys.api", "to_slug": "sys.db", "kind": "uses",
 	}, &edge)
-	edgeID, _ := edge["ID"].(string)
+	edgeID, _ := edge["id"].(string)
 	if edgeID == "" {
 		t.Fatalf("upsert_edge: missing ID: %+v", edge)
 	}
@@ -135,7 +135,7 @@ func TestMCP_Arch_NodesAndEdgesFullCycle(t *testing.T) {
 	f.callJSON(t, "nottario.arch.list_nodes", map[string]any{
 		"project_id": f.projectID,
 	}, &afterRemove)
-	if len(afterRemove.Nodes) != 1 || afterRemove.Nodes[0]["Slug"] != "sys.db" {
+	if len(afterRemove.Nodes) != 1 || afterRemove.Nodes[0]["slug"] != "sys.db" {
 		t.Errorf("expected only sys.db remaining, got %+v", afterRemove.Nodes)
 	}
 }

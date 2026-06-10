@@ -86,10 +86,10 @@ func RemoveEdge(ctx context.Context, pool *pgxpool.Pool, projectID, edgeID uuid.
 // EdgeView is the shape returned by ListEdges.
 type EdgeView struct {
 	Edge
-	FromSlug string
-	FromName string
-	ToSlug   string
-	ToName   string
+	FromSlug string `json:"from_slug"`
+	FromName string `json:"from_name"`
+	ToSlug   string `json:"to_slug"`
+	ToName   string `json:"to_name"`
 }
 
 // EdgeFilter narrows ListEdges.

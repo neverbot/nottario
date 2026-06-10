@@ -31,7 +31,7 @@ var (
 // continue to match, while exposing the actual current_version so
 // API layers can return a structured 409 payload.
 type VersionConflictError struct {
-	CurrentVersion int
+	CurrentVersion int `json:"current_version"`
 }
 
 func (e *VersionConflictError) Error() string {
@@ -224,17 +224,17 @@ type ListFilter struct {
 
 // Summary is a lightweight document view returned by List.
 type Summary struct {
-	ID               uuid.UUID
-	Scope            Scope
-	ProjectID        *uuid.UUID
-	Path             string
-	Kind             Kind
-	Title            string
-	Description      string
-	CurrentVersion   int
-	UpdatedByUserID  *uuid.UUID
-	UpdatedByTokenID *uuid.UUID
-	UpdatedAt        time.Time
+	ID               uuid.UUID  `json:"id"`
+	Scope            Scope      `json:"scope"`
+	ProjectID        *uuid.UUID `json:"project_id"`
+	Path             string     `json:"path"`
+	Kind             Kind       `json:"kind"`
+	Title            string     `json:"title"`
+	Description      string     `json:"description"`
+	CurrentVersion   int        `json:"current_version"`
+	UpdatedByUserID  *uuid.UUID `json:"updated_by_user_id"`
+	UpdatedByTokenID *uuid.UUID `json:"updated_by_token_id"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // List returns lightweight document summaries.
@@ -288,7 +288,7 @@ type SearchFilter struct {
 // SearchHit is a search result with its rank.
 type SearchHit struct {
 	Summary
-	Rank float32
+	Rank float32 `json:"rank"`
 }
 
 // Search returns documents matching the FTS query, ordered by rank.
@@ -336,12 +336,12 @@ func Search(ctx context.Context, pool *pgxpool.Pool, query string, f SearchFilte
 
 // VersionSummary is one version row without its body.
 type VersionSummary struct {
-	Version       int
-	Title         string
-	Message       string
-	AuthorUserID  *uuid.UUID
-	AuthorTokenID *uuid.UUID
-	CreatedAt     time.Time
+	Version       int        `json:"version"`
+	Title         string     `json:"title"`
+	Message       string     `json:"message"`
+	AuthorUserID  *uuid.UUID `json:"author_user_id"`
+	AuthorTokenID *uuid.UUID `json:"author_token_id"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 // History returns the version metadata for a document, newest first.

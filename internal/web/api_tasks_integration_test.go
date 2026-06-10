@@ -93,10 +93,10 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 		"type":           "task",
 		"target_role_id": roleID.String(),
 	})
-	if created["State"] != "todo" {
-		t.Fatalf("created state=%v want todo", created["State"])
+	if created["state"] != "todo" {
+		t.Fatalf("created state=%v want todo", created["state"])
 	}
-	taskID := created["ID"].(string)
+	taskID := created["id"].(string)
 
 	// --- POST create: 400 missing title. ---
 	{
@@ -113,7 +113,7 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 			Tasks []map[string]any `json:"tasks"`
 		}
 		doJSON(t, "GET", ts.URL+"/api/projects/"+pid+"/tasks", authOwner, nil, &lst)
-		if len(lst.Tasks) != 1 || lst.Tasks[0]["ID"] != taskID {
+		if len(lst.Tasks) != 1 || lst.Tasks[0]["id"] != taskID {
 			t.Fatalf("list mismatch: %+v", lst.Tasks)
 		}
 	}
@@ -125,7 +125,7 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 			Comments []map[string]any `json:"comments"`
 		}
 		doJSON(t, "GET", ts.URL+"/api/projects/"+pid+"/tasks/"+taskID, authOwner, nil, &got)
-		if got.Task["Title"] != "First" {
+		if got.Task["title"] != "First" {
 			t.Fatalf("get mismatch: %+v", got.Task)
 		}
 		resp := doRaw(t, "GET", ts.URL+"/api/projects/"+pid+"/tasks/"+uuid.Nil.String(), authOwner, nil)
@@ -139,10 +139,10 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 		var updated map[string]any
 		doJSON(t, "PATCH", ts.URL+"/api/projects/"+pid+"/tasks/"+taskID, authOwner,
 			[]byte(`{"title":"First (renamed)","priority":75}`), &updated)
-		if updated["Title"] != "First (renamed)" {
+		if updated["title"] != "First (renamed)" {
 			t.Fatalf("patch title: %+v", updated)
 		}
-		if int(updated["Priority"].(float64)) != 75 {
+		if int(updated["priority"].(float64)) != 75 {
 			t.Fatalf("patch priority: %+v", updated)
 		}
 	}
@@ -152,22 +152,22 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 		var doing map[string]any
 		doJSON(t, "POST", ts.URL+"/api/projects/"+pid+"/tasks/"+taskID+"/state", authOwner,
 			[]byte(`{"state":"doing"}`), &doing)
-		if doing["State"] != "doing" {
+		if doing["state"] != "doing" {
 			t.Fatalf("set doing: %+v", doing)
 		}
 		var done map[string]any
 		doJSON(t, "POST", ts.URL+"/api/projects/"+pid+"/tasks/"+taskID+"/state", authOwner,
 			[]byte(`{"state":"done"}`), &done)
-		if done["State"] != "done" {
+		if done["state"] != "done" {
 			t.Fatalf("set done: %+v", done)
 		}
 	}
 
 	// --- Dependency cycle: 409 on the closing edge. ---
 	// A → B → C, then C depends_on A should fail.
-	a := createTaskJSON(t, ts, authOwner, pid, map[string]any{"title": "A", "type": "task", "target_role_id": roleID.String()})["ID"].(string)
-	b := createTaskJSON(t, ts, authOwner, pid, map[string]any{"title": "B", "type": "task", "target_role_id": roleID.String()})["ID"].(string)
-	c := createTaskJSON(t, ts, authOwner, pid, map[string]any{"title": "C", "type": "task", "target_role_id": roleID.String()})["ID"].(string)
+	a := createTaskJSON(t, ts, authOwner, pid, map[string]any{"title": "A", "type": "task", "target_role_id": roleID.String()})["id"].(string)
+	b := createTaskJSON(t, ts, authOwner, pid, map[string]any{"title": "B", "type": "task", "target_role_id": roleID.String()})["id"].(string)
+	c := createTaskJSON(t, ts, authOwner, pid, map[string]any{"title": "C", "type": "task", "target_role_id": roleID.String()})["id"].(string)
 	{
 		addDep := func(taskID, depID string) *rawResp {
 			body, _ := json.Marshal(map[string]string{"depends_on_id": depID})
@@ -209,7 +209,7 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 			Comments []map[string]any `json:"comments"`
 		}
 		doJSON(t, "GET", ts.URL+"/api/projects/"+pid+"/tasks/"+taskID, authOwner, nil, &got)
-		if len(got.Comments) != 1 || got.Comments[0]["BodyMD"] != "hello from QA" {
+		if len(got.Comments) != 1 || got.Comments[0]["body"] != "hello from QA" {
 			t.Fatalf("comment missing: %+v", got)
 		}
 	}
@@ -261,18 +261,18 @@ func TestApiRolesPriorities_HTTPCRUD(t *testing.T) {
 	var newRole map[string]any
 	doJSON(t, "POST", ts.URL+"/api/projects/"+pid+"/roles", auth,
 		[]byte(`{"key":"sre","label":"SRE","color":"#888"}`), &newRole)
-	if newRole["Label"] != "SRE" {
+	if newRole["label"] != "SRE" {
 		t.Fatalf("create role: %+v", newRole)
 	}
 	// Patch its label.
 	var patched map[string]any
-	doJSON(t, "PATCH", ts.URL+"/api/projects/"+pid+"/roles/"+newRole["ID"].(string), auth,
+	doJSON(t, "PATCH", ts.URL+"/api/projects/"+pid+"/roles/"+newRole["id"].(string), auth,
 		[]byte(`{"label":"Site Reliability"}`), &patched)
-	if patched["Label"] != "Site Reliability" {
+	if patched["label"] != "Site Reliability" {
 		t.Fatalf("patch role: %+v", patched)
 	}
 	// Delete it; second delete must 404.
-	if r := doRaw(t, "DELETE", ts.URL+"/api/projects/"+pid+"/roles/"+newRole["ID"].(string), auth, nil); r.StatusCode != http.StatusOK && r.StatusCode != http.StatusNoContent {
+	if r := doRaw(t, "DELETE", ts.URL+"/api/projects/"+pid+"/roles/"+newRole["id"].(string), auth, nil); r.StatusCode != http.StatusOK && r.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete role: %d %s", r.StatusCode, r.Body)
 	}
 
@@ -290,7 +290,7 @@ func TestApiRolesPriorities_HTTPCRUD(t *testing.T) {
 	var bucket map[string]any
 	doJSON(t, "POST", ts.URL+"/api/projects/"+pid+"/priorities", auth,
 		[]byte(`{"key":"urgent","value":95}`), &bucket)
-	if int(bucket["Value"].(float64)) != 95 {
+	if int(bucket["value"].(float64)) != 95 {
 		t.Fatalf("upsert priority: %+v", bucket)
 	}
 	// Remove it.

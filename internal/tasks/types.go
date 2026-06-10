@@ -32,48 +32,48 @@ const (
 
 // Task is the central entity of the work domain.
 type Task struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	ParentTaskID     *uuid.UUID
-	Type             Type
-	Title            string
-	DescriptionMD    string
-	State            State
-	Priority         int
-	AssigneeUserID   *uuid.UUID
-	TargetRoleID     *uuid.UUID
-	ActualStart      *time.Time
-	ActualEnd        *time.Time
-	CreatedByUserID  *uuid.UUID
-	CreatedByTokenID *uuid.UUID
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	CycleID          uuid.UUID
+	ID               uuid.UUID  `json:"id"`
+	ProjectID        uuid.UUID  `json:"project_id"`
+	ParentTaskID     *uuid.UUID `json:"parent_task_id"`
+	Type             Type       `json:"type"`
+	Title            string     `json:"title"`
+	DescriptionMD    string     `json:"description"`
+	State            State      `json:"state"`
+	Priority         int        `json:"priority"`
+	AssigneeUserID   *uuid.UUID `json:"assignee_user_id"`
+	TargetRoleID     *uuid.UUID `json:"target_role_id"`
+	ActualStart      *time.Time `json:"actual_start"`
+	ActualEnd        *time.Time `json:"actual_end"`
+	CreatedByUserID  *uuid.UUID `json:"created_by_user_id"`
+	CreatedByTokenID *uuid.UUID `json:"created_by_token_id"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	CycleID          uuid.UUID  `json:"cycle_id"`
 }
 
 // Dependency is the directed relation "task depends on another task".
 type Dependency struct {
-	TaskID      uuid.UUID
-	DependsOnID uuid.UUID
+	TaskID      uuid.UUID `json:"task_id"`
+	DependsOnID uuid.UUID `json:"depends_on_id"`
 }
 
 // CommitLink ties a task to one or more git commits.
 type CommitLink struct {
-	TaskID  uuid.UUID
-	Repo    string
-	SHA     string
-	Message string
-	AddedAt time.Time
+	TaskID  uuid.UUID `json:"task_id"`
+	Repo    string    `json:"repo"`
+	SHA     string    `json:"sha"`
+	Message string    `json:"message"`
+	AddedAt time.Time `json:"added_at"`
 }
 
 // Comment is a markdown note attached to a task.
 type Comment struct {
-	ID            uuid.UUID
-	TaskID        uuid.UUID
-	AuthorUserID  *uuid.UUID
-	AuthorTokenID *uuid.UUID
-	BodyMD        string
-	CreatedAt     time.Time
+	ID            uuid.UUID  `json:"id"`
+	TaskID        uuid.UUID  `json:"task_id"`
+	AuthorUserID  *uuid.UUID `json:"author_user_id"`
+	AuthorTokenID *uuid.UUID `json:"author_token_id"`
+	BodyMD        string     `json:"body"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 // ValidType returns true when t is one of the recognised type values.

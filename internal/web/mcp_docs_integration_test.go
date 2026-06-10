@@ -20,8 +20,8 @@ func TestMCP_Docs_WriteReadVersionDelete(t *testing.T) {
 		"expected_version": 0,
 		"message":          "init",
 	}, &v1)
-	if v1["CurrentVersion"].(float64) != 1 {
-		t.Fatalf("expected CurrentVersion=1, got %v", v1["CurrentVersion"])
+	if v1["current_version"].(float64) != 1 {
+		t.Fatalf("expected CurrentVersion=1, got %v", v1["current_version"])
 	}
 
 	// Read back.
@@ -30,7 +30,7 @@ func TestMCP_Docs_WriteReadVersionDelete(t *testing.T) {
 		"project_id": f.projectID,
 		"path":       path,
 	}, &read)
-	if !strings.Contains(read["ContentMD"].(string), "first") {
+	if !strings.Contains(read["content"].(string), "first") {
 		t.Errorf("read content unexpected: %+v", read)
 	}
 
@@ -77,7 +77,7 @@ func TestMCP_Docs_WriteReadVersionDelete(t *testing.T) {
 		"path":       path,
 		"version":    1,
 	}, &v1read)
-	if !strings.Contains(v1read["ContentMD"].(string), "first") {
+	if !strings.Contains(v1read["content"].(string), "first") {
 		t.Errorf("read_version v1: %+v", v1read)
 	}
 

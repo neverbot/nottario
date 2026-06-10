@@ -11,14 +11,14 @@ import (
 
 // Cycle is one execution batch in a project's history.
 type Cycle struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	Name            string
-	Position        int
-	OpenedAt        time.Time
-	ClosedAt        *time.Time
-	ClosedByUserID  *uuid.UUID
-	ClosedByTokenID *uuid.UUID
+	ID              uuid.UUID  `json:"id"`
+	ProjectID       uuid.UUID  `json:"project_id"`
+	Name            string     `json:"name"`
+	Position        int        `json:"position"`
+	OpenedAt        time.Time  `json:"opened_at"`
+	ClosedAt        *time.Time `json:"closed_at"`
+	ClosedByUserID  *uuid.UUID `json:"closed_by_user_id"`
+	ClosedByTokenID *uuid.UUID `json:"closed_by_token_id"`
 }
 
 // Authorship attributes a mutation. Mirrors the same struct in

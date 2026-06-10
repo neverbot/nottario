@@ -21,57 +21,57 @@ import (
 // component, external dependency, or any custom kind defined per
 // project.
 type Node struct {
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
-	Slug          string
-	ParentID      *uuid.UUID
-	Kind          string
-	Name          string
-	DescriptionMD string
-	Metadata      map[string]any
-	LinkedRepo    *string
-	LinkedPath    *string
-	Position      int
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID            uuid.UUID      `json:"id"`
+	ProjectID     uuid.UUID      `json:"project_id"`
+	Slug          string         `json:"slug"`
+	ParentID      *uuid.UUID     `json:"parent_id"`
+	Kind          string         `json:"kind"`
+	Name          string         `json:"name"`
+	DescriptionMD string         `json:"description"`
+	Metadata      map[string]any `json:"metadata"`
+	LinkedRepo    *string        `json:"linked_repo"`
+	LinkedPath    *string        `json:"linked_path"`
+	Position      int            `json:"position"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 // Edge is a directed relationship between two nodes (possibly across
 // different levels of the tree).
 type Edge struct {
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
-	FromNodeID    uuid.UUID
-	ToNodeID      uuid.UUID
-	Kind          string
-	Label         string
-	DescriptionMD string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID            uuid.UUID `json:"id"`
+	ProjectID     uuid.UUID `json:"project_id"`
+	FromNodeID    uuid.UUID `json:"from_node_id"`
+	ToNodeID      uuid.UUID `json:"to_node_id"`
+	Kind          string    `json:"kind"`
+	Label         string    `json:"label"`
+	DescriptionMD string    `json:"description"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // Kind labels a node type. Projects start with a seeded default
 // catalogue (system, service, module, component, external) and may
 // add custom kinds.
 type Kind struct {
-	ProjectID   uuid.UUID
-	Key         string
-	Label       string
-	Icon        string
-	Color       string
-	Description string
-	IsDefault   bool
-	CreatedAt   time.Time
+	ProjectID   uuid.UUID `json:"project_id"`
+	Key         string    `json:"key"`
+	Label       string    `json:"label"`
+	Icon        string    `json:"icon"`
+	Color       string    `json:"color"`
+	Description string    `json:"description"`
+	IsDefault   bool      `json:"is_default"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // NodeLink attaches a markdown document (by path) or a task (by
 // uuid) to a node.
 type NodeLink struct {
-	ProjectID uuid.UUID
-	NodeID    uuid.UUID
-	LinkType  string // "doc" or "task"
-	TargetID  string
-	CreatedAt time.Time
+	ProjectID uuid.UUID `json:"project_id"`
+	NodeID    uuid.UUID `json:"node_id"`
+	LinkType  string    `json:"link_type"` // "doc" or "task"
+	TargetID  string    `json:"target_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // DefaultKinds is the seed catalogue inserted into a project the

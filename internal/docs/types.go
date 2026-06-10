@@ -35,46 +35,46 @@ const (
 // frontmatter front block — agents and humans see only the body. The
 // raw frontmatter sits in Frontmatter.
 type Document struct {
-	ID               uuid.UUID
-	Scope            Scope
-	ProjectID        *uuid.UUID
-	Path             string
-	Kind             Kind
-	Title            string
-	Description      string
-	ContentMD        string
-	Frontmatter      map[string]any
-	CurrentVersion   int
-	DeletedAt        *time.Time
-	CreatedByUserID  *uuid.UUID
-	CreatedByTokenID *uuid.UUID
-	UpdatedByUserID  *uuid.UUID
-	UpdatedByTokenID *uuid.UUID
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID               uuid.UUID      `json:"id"`
+	Scope            Scope          `json:"scope"`
+	ProjectID        *uuid.UUID     `json:"project_id"`
+	Path             string         `json:"path"`
+	Kind             Kind           `json:"kind"`
+	Title            string         `json:"title"`
+	Description      string         `json:"description"`
+	ContentMD        string         `json:"content"`
+	Frontmatter      map[string]any `json:"frontmatter"`
+	CurrentVersion   int            `json:"current_version"`
+	DeletedAt        *time.Time     `json:"deleted_at"`
+	CreatedByUserID  *uuid.UUID     `json:"created_by_user_id"`
+	CreatedByTokenID *uuid.UUID     `json:"created_by_token_id"`
+	UpdatedByUserID  *uuid.UUID     `json:"updated_by_user_id"`
+	UpdatedByTokenID *uuid.UUID     `json:"updated_by_token_id"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
 	// ContentHTML is filled by the web layer before serialization
 	// (see ReadDocHandler / ReadDocVersionHandler). It is never
 	// persisted and never set by the docs repo. Empty when the
 	// caller did not request HTML.
-	ContentHTML string `json:",omitempty"`
+	ContentHTML string `json:"content_html,omitempty"`
 }
 
 // Version is one entry in `document_versions`.
 type Version struct {
-	ID            uuid.UUID
-	DocumentID    uuid.UUID
-	Version       int
-	Title         string
-	Description   string
-	ContentMD     string
-	Frontmatter   map[string]any
-	Message       string
-	AuthorUserID  *uuid.UUID
-	AuthorTokenID *uuid.UUID
-	CreatedAt     time.Time
+	ID            uuid.UUID      `json:"id"`
+	DocumentID    uuid.UUID      `json:"document_id"`
+	Version       int            `json:"version"`
+	Title         string         `json:"title"`
+	Description   string         `json:"description"`
+	ContentMD     string         `json:"content"`
+	Frontmatter   map[string]any `json:"frontmatter"`
+	Message       string         `json:"message"`
+	AuthorUserID  *uuid.UUID     `json:"author_user_id"`
+	AuthorTokenID *uuid.UUID     `json:"author_token_id"`
+	CreatedAt     time.Time      `json:"created_at"`
 	// ContentHTML is filled by the web layer before serialization;
 	// see the comment on Document.ContentHTML.
-	ContentHTML string `json:",omitempty"`
+	ContentHTML string `json:"content_html,omitempty"`
 }
 
 // ValidScope reports whether s is a recognised scope.

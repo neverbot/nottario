@@ -14,11 +14,11 @@ import (
 
 // Priority is one bucket in the project's priority vocabulary.
 type Priority struct {
-	ProjectID uuid.UUID
-	Key       string
-	Value     int
-	Position  int
-	IsDefault bool
+	ProjectID uuid.UUID `json:"project_id"`
+	Key       string    `json:"key"`
+	Value     int       `json:"value"`
+	Position  int       `json:"position"`
+	IsDefault bool      `json:"is_default"`
 }
 
 // DefaultPriorities is the seed catalogue inserted on project creation.

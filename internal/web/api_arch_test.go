@@ -216,13 +216,13 @@ func TestApiArch_Nodes(t *testing.T) {
 		Nodes []map[string]any `json:"nodes"`
 	}
 	doJSON(t, "GET", f.url("/nodes")+"?root_only=true", f.authOwner, nil, &list)
-	if len(list.Nodes) != 1 || list.Nodes[0]["Slug"] != "sys" {
+	if len(list.Nodes) != 1 || list.Nodes[0]["slug"] != "sys" {
 		t.Errorf("list roots: %+v", list.Nodes)
 	}
 
 	// List by parent.
 	doJSON(t, "GET", f.url("/nodes")+"?parent_slug=sys", f.authOwner, nil, &list)
-	if len(list.Nodes) != 1 || list.Nodes[0]["Slug"] != "sys.api" {
+	if len(list.Nodes) != 1 || list.Nodes[0]["slug"] != "sys.api" {
 		t.Errorf("list by parent: %+v", list.Nodes)
 	}
 
@@ -230,7 +230,7 @@ func TestApiArch_Nodes(t *testing.T) {
 	var get map[string]any
 	doJSON(t, "GET", f.url("/nodes/sys.api"), f.authOwner, nil, &get)
 	node, _ := get["node"].(map[string]any)
-	if node["Slug"] != "sys.api" || node["Kind"] != "service" {
+	if node["slug"] != "sys.api" || node["kind"] != "service" {
 		t.Errorf("get node: %+v", node)
 	}
 
@@ -300,7 +300,7 @@ func TestApiArch_Edges(t *testing.T) {
 	doJSON(t, "POST", f.url("/edges"), f.authOwner, mustJSON(map[string]any{
 		"from_slug": "a", "to_slug": "b", "kind": "calls",
 	}), &ab)
-	abID, _ := ab["ID"].(string)
+	abID, _ := ab["id"].(string)
 	doJSON(t, "POST", f.url("/edges"), f.authOwner, mustJSON(map[string]any{
 		"from_slug": "b", "to_slug": "c", "kind": "uses",
 	}), nil)
@@ -316,7 +316,7 @@ func TestApiArch_Edges(t *testing.T) {
 
 	// Filter by node + direction.
 	doJSON(t, "GET", f.url("/edges")+"?node_slug=b&direction=in", f.authOwner, nil, &list)
-	if len(list.Edges) != 1 || list.Edges[0]["FromSlug"] != "a" {
+	if len(list.Edges) != 1 || list.Edges[0]["from_slug"] != "a" {
 		t.Errorf("filter in b: %+v", list.Edges)
 	}
 
@@ -418,15 +418,15 @@ func TestApiArch_NodeJSONShape(t *testing.T) {
 	if r.StatusCode != http.StatusOK {
 		t.Fatalf("get root: %d %s", r.StatusCode, r.Body)
 	}
-	if !strings.Contains(string(r.Body), `"ParentID":null`) {
-		t.Errorf("expected ParentID:null in body: %s", r.Body)
+	if !strings.Contains(string(r.Body), `"parent_id":null`) {
+		t.Errorf("expected parent_id:null in body: %s", r.Body)
 	}
-	if !strings.Contains(string(r.Body), `"LinkedRepo":null`) {
-		t.Errorf("expected LinkedRepo:null in body: %s", r.Body)
+	if !strings.Contains(string(r.Body), `"linked_repo":null`) {
+		t.Errorf("expected linked_repo:null in body: %s", r.Body)
 	}
-	// Metadata defaults to an empty object, not omitted.
-	if !strings.Contains(string(r.Body), `"Metadata":{}`) {
-		t.Errorf("expected empty Metadata object: %s", r.Body)
+	// metadata defaults to an empty object, not omitted.
+	if !strings.Contains(string(r.Body), `"metadata":{}`) {
+		t.Errorf("expected empty metadata object: %s", r.Body)
 	}
 }
 

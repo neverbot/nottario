@@ -19,7 +19,7 @@ func TestMCP_Projects_ListAndGet(t *testing.T) {
 	}
 	found := false
 	for _, p := range listOut.Projects {
-		if p["ID"] == f.projectID {
+		if p["id"] == f.projectID {
 			found = true
 			break
 		}
@@ -33,7 +33,7 @@ func TestMCP_Projects_ListAndGet(t *testing.T) {
 	f.callJSON(t, "nottario.projects.get", map[string]any{
 		"project_id": f.projectID,
 	}, &getOut)
-	if getOut["ID"] != f.projectID {
+	if getOut["id"] != f.projectID {
 		t.Errorf("projects.get ID mismatch: %+v", getOut)
 	}
 }
@@ -49,7 +49,7 @@ func TestMCP_Projects_PrioritiesAndRoles(t *testing.T) {
 	}, &pri)
 	keys := map[string]bool{}
 	for _, p := range pri.Priorities {
-		keys[p["Key"].(string)] = true
+		keys[p["key"].(string)] = true
 	}
 	for _, want := range []string{"low", "medium", "high", "critical"} {
 		if !keys[want] {
@@ -69,7 +69,7 @@ func TestMCP_Projects_PrioritiesAndRoles(t *testing.T) {
 	// Reorder: take the role IDs in reverse order and feed them back.
 	ids := make([]any, 0, len(roles.Roles))
 	for i := len(roles.Roles) - 1; i >= 0; i-- {
-		ids = append(ids, roles.Roles[i]["ID"])
+		ids = append(ids, roles.Roles[i]["id"])
 	}
 	f.callJSON(t, "nottario.projects.reorder_roles", map[string]any{
 		"project_id": f.projectID,
@@ -83,8 +83,8 @@ func TestMCP_Projects_PrioritiesAndRoles(t *testing.T) {
 	f.callJSON(t, "nottario.projects.list_roles", map[string]any{
 		"project_id": f.projectID,
 	}, &rolesAfter)
-	if rolesAfter.Roles[0]["ID"] != ids[0] {
-		t.Errorf("reorder did not stick: first role %v, expected %v", rolesAfter.Roles[0]["ID"], ids[0])
+	if rolesAfter.Roles[0]["id"] != ids[0] {
+		t.Errorf("reorder did not stick: first role %v, expected %v", rolesAfter.Roles[0]["id"], ids[0])
 	}
 }
 

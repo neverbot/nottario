@@ -37,8 +37,8 @@ type EndCycleParams struct {
 
 // EndCycleResult is what the caller gets back.
 type EndCycleResult struct {
-	Closed Cycle
-	Next   Cycle
+	Closed Cycle `json:"closed"`
+	Next   Cycle `json:"next"`
 }
 
 // EndCycle atomically closes the project's active cycle and opens

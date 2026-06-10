@@ -257,7 +257,7 @@ func TestMCP_Arch_LinksAndMove(t *testing.T) {
 	f.callJSON(t, "nottario.tasks.create", map[string]any{
 		"project_id": f.projectID, "title": "linked",
 	}, &task)
-	taskID, _ := task["ID"].(string)
+	taskID, _ := task["id"].(string)
 	f.callJSON(t, "nottario.arch.link_task", map[string]any{
 		"project_id": f.projectID, "slug": "child", "task_id": taskID,
 	}, nil)
@@ -296,7 +296,7 @@ func TestMCP_Tasks_NextWithFilters(t *testing.T) {
 	if len(roles.Roles) == 0 {
 		t.Fatal("expected default roles")
 	}
-	roleID, _ := roles.Roles[0]["ID"].(string)
+	roleID, _ := roles.Roles[0]["id"].(string)
 
 	// Create a task scoped to that role.
 	var task map[string]any
@@ -311,7 +311,7 @@ func TestMCP_Tasks_NextWithFilters(t *testing.T) {
 	f.callJSON(t, "nottario.tasks.next", map[string]any{
 		"project_id": f.projectID, "role_id": roleID,
 	}, &next)
-	if t1, ok := next["task"].(map[string]any); !ok || t1["ID"] != task["ID"] {
+	if t1, ok := next["task"].(map[string]any); !ok || t1["id"] != task["id"] {
 		t.Errorf("expected the role-targeted task back, got %+v", next)
 	}
 
@@ -321,7 +321,7 @@ func TestMCP_Tasks_NextWithFilters(t *testing.T) {
 		"project_id": f.projectID, "role_id": roleID,
 	}, &claimed)
 	tk, _ := claimed["task"].(map[string]any)
-	if tk == nil || tk["State"] != "doing" {
+	if tk == nil || tk["state"] != "doing" {
 		t.Errorf("claim_next did not move to doing: %+v", claimed)
 	}
 }
@@ -357,7 +357,7 @@ func TestMCP_Arch_EdgesAndUpdates(t *testing.T) {
 	f.callJSON(t, "nottario.arch.upsert_edge", map[string]any{
 		"project_id": f.projectID, "from_slug": "a", "to_slug": "b", "kind": "calls",
 	}, &edge)
-	eid, _ := edge["ID"].(string)
+	eid, _ := edge["id"].(string)
 	// list_edges with direction filter.
 	f.callJSON(t, "nottario.arch.list_edges", map[string]any{
 		"project_id": f.projectID, "node_slug": "a", "direction": "out",
@@ -393,7 +393,7 @@ func TestMCP_Tasks_ClaimConflict(t *testing.T) {
 	f.callJSON(t, "nottario.tasks.create", map[string]any{
 		"project_id": f.projectID, "title": "ship-it",
 	}, &task)
-	id, _ := task["ID"].(string)
+	id, _ := task["id"].(string)
 	f.callJSON(t, "nottario.tasks.set_state", map[string]any{
 		"project_id": f.projectID, "task_id": id, "state": "doing",
 	}, nil)
@@ -428,7 +428,7 @@ func TestMCP_Tasks_CreateWithPriorityAndAssignee(t *testing.T) {
 		Roles []map[string]any `json:"roles"`
 	}
 	f.callJSON(t, "nottario.projects.list_roles", map[string]any{"project_id": f.projectID}, &roles)
-	roleID, _ := roles.Roles[0]["ID"].(string)
+	roleID, _ := roles.Roles[0]["id"].(string)
 
 	var task map[string]any
 	f.callJSON(t, "nottario.tasks.create", map[string]any{
@@ -440,7 +440,7 @@ func TestMCP_Tasks_CreateWithPriorityAndAssignee(t *testing.T) {
 		"assignee_user_id": f.userID,
 		"target_role_id":   roleID,
 	}, &task)
-	if task["AssigneeUserID"] != f.userID {
+	if task["assignee_user_id"] != f.userID {
 		t.Errorf("expected assignee on create: %+v", task)
 	}
 
@@ -465,7 +465,7 @@ func TestMCP_Tasks_CreateWithPriorityAndAssignee(t *testing.T) {
 	f.callJSON(t, "nottario.tasks.create", map[string]any{
 		"project_id": f.projectID, "title": "parent", "type": "feature",
 	}, &feature)
-	parentID, _ := feature["ID"].(string)
+	parentID, _ := feature["id"].(string)
 	f.callJSON(t, "nottario.tasks.create", map[string]any{
 		"project_id": f.projectID, "title": "child", "parent_task_id": parentID,
 	}, nil)
@@ -475,7 +475,7 @@ func TestMCP_Tasks_CreateWithPriorityAndAssignee(t *testing.T) {
 	}, &list)
 
 	// update with priority_key (separate code path than create).
-	id, _ := task["ID"].(string)
+	id, _ := task["id"].(string)
 	f.callJSON(t, "nottario.tasks.update", map[string]any{
 		"project_id":   f.projectID,
 		"task_id":      id,

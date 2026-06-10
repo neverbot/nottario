@@ -177,9 +177,9 @@ type Cursor struct {
 // Page wraps a paginated slice of tasks plus the cursor for the next
 // page (nil when this was the last page).
 type Page struct {
-	Tasks      []Task
-	NextCursor *Cursor
-	HasMore    bool
+	Tasks      []Task  `json:"tasks"`
+	NextCursor *Cursor `json:"next_cursor,omitempty"`
+	HasMore    bool    `json:"has_more"`
 }
 
 // EncodeCursor base64-encodes an opaque cursor so clients can pass it

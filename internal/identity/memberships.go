@@ -13,15 +13,15 @@ import (
 // flattens the user, role and timestamps so the UI can render a
 // table in a single pass.
 type MemberRow struct {
-	UserID      uuid.UUID
-	GithubLogin string
-	DisplayName string
-	AvatarURL   string
-	IsAdmin     bool
-	RoleID      uuid.UUID
-	RoleKey     string
-	RoleLabel   string
-	RoleColor   string
+	UserID      uuid.UUID `json:"user_id"`
+	GithubLogin string    `json:"github_login"`
+	DisplayName string    `json:"display_name"`
+	AvatarURL   string    `json:"avatar_url"`
+	IsAdmin     bool      `json:"is_admin"`
+	RoleID      uuid.UUID `json:"role_id"`
+	RoleKey     string    `json:"role_key"`
+	RoleLabel   string    `json:"role_label"`
+	RoleColor   string    `json:"role_color"`
 }
 
 // AddMembership grants role to user within project.
@@ -65,14 +65,14 @@ func ListMembers(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) (
 // from a user's perspective — used by whoami so an agent can decide
 // which roles to filter `tasks.next` by, in which projects.
 type UserMembership struct {
-	ProjectID    uuid.UUID
-	ProjectSlug  string
-	ProjectName  string
-	RoleID       uuid.UUID
-	RoleKey      string
-	RoleLabel    string
-	RoleColor    string
-	RolePosition int
+	ProjectID    uuid.UUID `json:"project_id"`
+	ProjectSlug  string    `json:"project_slug"`
+	ProjectName  string    `json:"project_name"`
+	RoleID       uuid.UUID `json:"role_id"`
+	RoleKey      string    `json:"role_key"`
+	RoleLabel    string    `json:"role_label"`
+	RoleColor    string    `json:"role_color"`
+	RolePosition int       `json:"role_position"`
 }
 
 // ListUserMemberships returns every (project, role) tuple the user

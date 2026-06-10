@@ -18,8 +18,8 @@ func TestMCP_Tasks_CreateGetUpdateState(t *testing.T) {
 		"project_id": f.projectID,
 		"title":      "first",
 	}, &task)
-	id, _ := task["ID"].(string)
-	if id == "" || task["State"] != "todo" {
+	id, _ := task["id"].(string)
+	if id == "" || task["state"] != "todo" {
 		t.Fatalf("create: %+v", task)
 	}
 
@@ -30,7 +30,7 @@ func TestMCP_Tasks_CreateGetUpdateState(t *testing.T) {
 		"task_id":    id,
 	}, &got)
 	if g, ok := got["task"]; ok {
-		if m, ok := g.(map[string]any); ok && m["ID"] != id {
+		if m, ok := g.(map[string]any); ok && m["id"] != id {
 			t.Errorf("get task ID mismatch: %+v", m)
 		}
 	}
@@ -57,7 +57,7 @@ func TestMCP_Tasks_CreateGetUpdateState(t *testing.T) {
 		"project_id": f.projectID,
 		"state":      "doing",
 	}, &list)
-	if len(list.Tasks) != 1 || list.Tasks[0]["ID"] != id {
+	if len(list.Tasks) != 1 || list.Tasks[0]["id"] != id {
 		t.Errorf("list doing: %+v", list.Tasks)
 	}
 }
@@ -71,7 +71,7 @@ func TestMCP_Tasks_DependenciesAndClaim(t *testing.T) {
 		f.callJSON(t, "nottario.tasks.create", map[string]any{
 			"project_id": f.projectID, "title": title,
 		}, &tk)
-		return tk["ID"].(string)
+		return tk["id"].(string)
 	}
 	a := mk("A")
 	b := mk("B")
@@ -98,7 +98,7 @@ func TestMCP_Tasks_DependenciesAndClaim(t *testing.T) {
 	f.callJSON(t, "nottario.tasks.next", map[string]any{
 		"project_id": f.projectID,
 	}, &nxt)
-	if tk, ok := nxt["task"].(map[string]any); !ok || tk["ID"] != a {
+	if tk, ok := nxt["task"].(map[string]any); !ok || tk["id"] != a {
 		t.Errorf("next preview expected A: %+v", nxt)
 	}
 
@@ -107,7 +107,7 @@ func TestMCP_Tasks_DependenciesAndClaim(t *testing.T) {
 	f.callJSON(t, "nottario.tasks.claim_next", map[string]any{
 		"project_id": f.projectID,
 	}, &claimed)
-	if ct, ok := claimed["task"].(map[string]any); !ok || ct["ID"] != a {
+	if ct, ok := claimed["task"].(map[string]any); !ok || ct["id"] != a {
 		t.Errorf("claim_next expected A: %+v", claimed)
 	}
 
@@ -124,7 +124,7 @@ func TestMCP_Tasks_LinkCommitAndComment(t *testing.T) {
 	f.callJSON(t, "nottario.tasks.create", map[string]any{
 		"project_id": f.projectID, "title": "meta",
 	}, &tk)
-	id := tk["ID"].(string)
+	id := tk["id"].(string)
 
 	f.callJSON(t, "nottario.tasks.link_commit", map[string]any{
 		"project_id": f.projectID, "task_id": id,

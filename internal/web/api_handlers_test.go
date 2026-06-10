@@ -85,7 +85,7 @@ func TestApiProjects_ListAndGet(t *testing.T) {
 	// Get by id.
 	var p map[string]any
 	doJSON(t, "GET", f.ts.URL+"/api/projects/"+f.projectID, f.authAdmin, nil, &p)
-	if p["ID"] != f.projectID {
+	if p["id"] != f.projectID {
 		t.Errorf("get id mismatch: %+v", p)
 	}
 
@@ -144,7 +144,7 @@ func TestApiProjects_CreateAdminOnly(t *testing.T) {
 	if err := json.Unmarshal(r.Body, &p); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if p["Name"] != "FromTest" {
+	if p["name"] != "FromTest" {
 		t.Errorf("name mismatch: %+v", p)
 	}
 }

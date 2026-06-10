@@ -154,7 +154,7 @@ func TestApiTokens_Lifecycle(t *testing.T) {
 	}
 	plaintext, _ := issued["plaintext"].(string)
 	tok, _ := issued["token"].(map[string]any)
-	id, _ := tok["ID"].(string)
+	id, _ := tok["id"].(string)
 	if plaintext == "" || !strings.HasPrefix(plaintext, "ntr_") {
 		t.Errorf("plaintext missing or unprefixed: %+v", issued)
 	}
@@ -173,7 +173,7 @@ func TestApiTokens_Lifecycle(t *testing.T) {
 	_ = json.Unmarshal(r.Body, &list)
 	found := false
 	for _, tk := range list.Tokens {
-		if tk["ID"] == id {
+		if tk["id"] == id {
 			found = true
 			if _, hasSecret := tk["plaintext"]; hasSecret {
 				t.Errorf("list leaked plaintext: %+v", tk)
@@ -196,7 +196,7 @@ func TestApiTokens_Lifecycle(t *testing.T) {
 	_ = json.Unmarshal(r.Body, &list)
 	var revoked map[string]any
 	for _, tk := range list.Tokens {
-		if tk["ID"] == id {
+		if tk["id"] == id {
 			revoked = tk
 			break
 		}
@@ -204,7 +204,7 @@ func TestApiTokens_Lifecycle(t *testing.T) {
 	if revoked == nil {
 		t.Fatalf("revoked token disappeared from list: %+v", list.Tokens)
 	}
-	if revoked["RevokedAt"] == nil {
+	if revoked["revoked_at"] == nil {
 		t.Errorf("expected RevokedAt to be set: %+v", revoked)
 	}
 }

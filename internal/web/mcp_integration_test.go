@@ -146,11 +146,11 @@ func TestMCP_StreamableHTTPTransport(t *testing.T) {
 	if err := json.Unmarshal([]byte(createdText.Text), &createdTask); err != nil {
 		t.Fatalf("decode created task: %v body=%s", err, createdText.Text)
 	}
-	if createdTask["Title"] != "via MCP integration test" {
+	if createdTask["title"] != "via MCP integration test" {
 		t.Fatalf("created title mismatch: %+v", createdTask)
 	}
-	if createdTask["State"] != "todo" {
-		t.Fatalf("created state=%v want todo", createdTask["State"])
+	if createdTask["state"] != "todo" {
+		t.Fatalf("created state=%v want todo", createdTask["state"])
 	}
 }
 

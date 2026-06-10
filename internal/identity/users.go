@@ -90,7 +90,7 @@ func TouchUserSeen(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error 
 // global Users directory.
 type UserSummary struct {
 	User
-	ProjectCount int
+	ProjectCount int `json:"project_count"`
 }
 
 // ListAllUsers returns every user on the instance plus how many
