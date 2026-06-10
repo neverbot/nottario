@@ -46,3 +46,6 @@ tmp-*.png
 # Scratch directory used by agents for ad-hoc screenshots, debug
 # dumps and similar throwaway artefacts. Never versioned.
 /.scratch/
+
+# /impeccable critique snapshots — local-only design review trail.
+.impeccable/
