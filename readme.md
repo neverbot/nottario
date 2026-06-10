@@ -466,27 +466,38 @@ the value `whoami` returns and pass it on every subsequent call.
 
 ### 4. (Optional but recommended) Install the skill bundle locally
 
-The same skill files are reachable two ways:
+The same skill files are reachable three ways, in order of
+preference:
 
-- **On demand, via MCP.** Any session can call `nottario.skill.list`
-  and `nottario.skill.read` to fetch a file. Always available, always
-  in sync with the server.
-- **Pre-loaded, as a local Claude Code skill.** Drop the bundle into
-  `~/.claude/skills/nottario/` and Claude Code will load it at
-  session start as an active skill, so the agent enters every
-  conversation already knowing the project's conventions (claim
-  before doing, link commits before closing, one task per role,
-  etc.) without you having to brief it in the prompt.
+- **On demand, via MCP** *(recommended default)*. Any session can
+  call `nottario.skill.list` and `nottario.skill.read` to fetch a
+  file. Always available, always in sync with the server.
+- **Workspace-scoped pre-load** *(when you want the skill loaded at
+  session start and you have the tracked repo checked out)*. Drop
+  the bundle into `<repo>/.claude/skills/nottario/` and commit it.
+  Claude Code loads the skill whenever the workspace is opened,
+  scoped to that repo, so it stays out of unrelated sessions. Every
+  contributor who clones gets the rules for free.
+- **Home-scoped pre-load** *(fallback)*. Drop the bundle into
+  `~/.claude/skills/nottario/` instead. The skill loads in every
+  Claude Code session regardless of cwd — convenient for multi-repo
+  work or when you don't want to version the bundle, at the cost of
+  surfacing in sessions on repos that have nothing to do with
+  Nottario.
 
-The on-demand path covers correctness; the pre-loaded path covers
+The on-demand path covers correctness; the pre-loaded paths cover
 ergonomics. For a Claude Code user picking up Nottario for the first
 time, install it locally so agents do not start each session from
-zero:
+zero. From a checkout of the tracked repo:
 
 ```bash
 curl -fsSL http://localhost:8080/skill.zip -o nottario-skill.zip
-unzip nottario-skill.zip -d ~/.claude/skills/nottario
+unzip nottario-skill.zip -d .claude/skills/nottario
+git add .claude/skills/nottario && git commit -m "chore: vendor nottario skill bundle"
 ```
+
+Or, for the home-scoped install, the same `unzip` into
+`~/.claude/skills/nottario` instead.
 
 The bundle is regenerated on every release; pull it again after an
 upgrade to get the latest conventions and tool descriptions. Clients

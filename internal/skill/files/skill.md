@@ -187,5 +187,14 @@ absent files (`by-language/go.md`, `by-role/security.md`,
 `recipes/deploying-to-our-k8s.md`).
 
 A snapshot of the current bundle (overrides applied) is available as a
-zip at `GET /skill.zip` — useful to mirror the skill into
-`~/.claude/skills/nottario/` or back up.
+zip at `GET /skill.zip` — useful to mirror the skill into a local
+install or back up.
+
+For pre-loaded installs, prefer the workspace path
+`<repo>/.claude/skills/nottario/` (commit it; every contributor who
+clones the repo gets the rules for free, scoped to that repo). Fall
+back to `~/.claude/skills/nottario/` only when you work on the
+project across multiple unrelated checkouts or do not want to version
+the bundle in any specific repo. The on-demand path you are reading
+right now (`nottario.skill.read`) is always available too and stays
+in sync with the server.

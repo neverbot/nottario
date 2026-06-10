@@ -22,27 +22,40 @@ copies the markdown from disk every time the site is rebuilt.
 
 ## How an agent uses them
 
-Two paths, equivalent in content; pick by ergonomics:
+Three paths, equivalent in content. The first is the recommended
+default; the next two are options when you want the bundle
+pre-loaded into the session.
 
-**1. On-demand via MCP.** Once an agent is wired through the
-[MCP integration](/mcp/), it can call `nottario.skill.list` to see
-what's available and `nottario.skill.read` to pull a specific file
-into its context. The agent doesn't need anything installed
-locally — the skill bundle travels with the server. Updates ship
-the moment a new container is pulled.
+**1. On-demand via MCP** *(recommended)*. Once an agent is wired
+through the [MCP integration](/mcp/), it can call
+`nottario.skill.list` to see what's available and
+`nottario.skill.read` to pull a specific file into its context.
+The agent doesn't need anything installed locally — the bundle
+travels with the server. Updates ship the moment a new container
+is pulled. This keeps the agent's context lean: it only pulls the
+domain it needs (tasks, cycles, docs, architecture) for the work
+in front of it.
 
-**2. Pre-loaded into Claude Code.** The repo's
-`internal/skill/files/` tree can be dropped into
-`~/.claude/skills/nottario/` (or installed via the same MCP
-server's helper) so the skill is visible to the agent at session
-start without any tool call. Useful when the agent's first action
-should already be informed by Nottario conventions, or when the
-MCP server might not be reachable.
+**2. Workspace-scoped install** *(when you're checked into the
+tracked repo)*. Drop the contents of `internal/skill/files/` into
+`<repo>/.claude/skills/nottario/` and commit them. Claude Code
+loads the skill whenever the workspace is opened, scoped to that
+repo. Every contributor who clones gets the same rules without
+manual setup. Prefer this over the home install whenever the
+project is a real checkout — it keeps the rules where the work
+lives.
 
-The on-demand path is the recommended one for self-hosters: it
-keeps the agent's context lean by default, and the agent pulls
-only the domain it needs (tasks, cycles, docs, architecture) for
-the work in front of it.
+**3. Home install** *(fallback)*. The same tree can go into
+`~/.claude/skills/nottario/` instead. The skill loads on every
+Claude Code session regardless of the current directory, which is
+convenient if you work on the project across multiple unrelated
+checkouts or you don't want to version the bundle in any specific
+repo. The trade-off is that the skill also loads in sessions on
+repos that have nothing to do with Nottario.
+
+Both pre-loaded paths are snapshots: re-copy the files when you
+upgrade the server. The MCP path is the only one that stays in
+sync automatically.
 
 ## Anatomy of a skill
 

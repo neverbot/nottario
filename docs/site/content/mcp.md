@@ -52,20 +52,32 @@ claim — prefer `claim_next` to avoid races.
 ## Skills: on-demand vs pre-loaded
 
 Nottario ships a skill bundle aimed at agents (operating rules,
-task discipline, sqlc conventions). It is available two ways:
+task discipline, sqlc conventions). Three install paths, in order of
+preference:
 
-1. **On-demand via MCP.** Once the agent is wired up, it can call
-   `nottario.skill.list` to see what's available and
-   `nottario.skill.read` to pull a specific file. No local install
-   needed.
-2. **Pre-loaded into Claude Code.** Drop `internal/skill/files/`
-   into `~/.claude/skills/` (or run the installer in the repo).
-   This makes the skill visible at session start without any tool
-   call.
+1. **On-demand via MCP** *(recommended default)*. Once the agent is
+   wired up, it can call `nottario.skill.list` to see what's
+   available and `nottario.skill.read` to pull a specific file. No
+   local install needed and the bundle is always the version the
+   server is running.
+2. **Workspace-scoped install** *(when you want pre-load and you're
+   working in a checkout of the tracked repo)*. Drop the contents of
+   `internal/skill/files/` into `<repo>/.claude/skills/nottario/`,
+   commit it, and Claude Code picks it up automatically whenever the
+   workspace is opened. The skill stays scoped to that repo so it
+   does not pollute unrelated sessions, and every contributor who
+   clones gets the rules for free.
+3. **Home install** *(fallback for multi-repo workflows or when you
+   don't want to version the bundle)*. Drop the same contents into
+   `~/.claude/skills/nottario/`. The skill loads on every Claude
+   Code session regardless of cwd, which is convenient but loud
+   when you also work on repos that have nothing to do with
+   Nottario.
 
-The two paths are equivalent in content; pick on-demand if you want
-the bundle to update with the server, pre-loaded if you want it
-available without the MCP being reachable.
+The three paths are equivalent in content. The MCP path is the only
+one that auto-updates with the server; the other two are snapshots.
+Pick workspace over home whenever the repo is a real checkout,
+because the scope matches the work.
 
 ## Authentication
 
