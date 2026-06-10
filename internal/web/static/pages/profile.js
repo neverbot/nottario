@@ -133,26 +133,26 @@ class NottarioProfilePage extends LitElement {
     const memberships = this.me?.memberships || [];
     const byProject = new Map();
     for (const m of memberships) {
-      if (!byProject.has(m.ProjectID)) {
-        byProject.set(m.ProjectID, {
-          ProjectID: m.ProjectID,
-          ProjectSlug: m.ProjectSlug,
-          ProjectName: m.ProjectName,
+      if (!byProject.has(m.project_id)) {
+        byProject.set(m.project_id, {
+          ProjectID: m.project_id,
+          ProjectSlug: m.project_slug,
+          ProjectName: m.project_name,
           roles: [],
         });
       }
-      byProject.get(m.ProjectID).roles.push({
-        Label: m.RoleLabel,
-        Color: m.RoleColor,
-        Position: m.RolePosition,
+      byProject.get(m.project_id).roles.push({
+        Label: m.role_label,
+        Color: m.role_color,
+        Position: m.role_position,
       });
     }
     return Array.from(byProject.values())
       .map((p) => {
-        p.roles.sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
+        p.roles.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
         return p;
       })
-      .sort((a, b) => a.ProjectName.localeCompare(b.ProjectName));
+      .sort((a, b) => a.project_name.localeCompare(b.project_name));
   }
 
   async _logout() {
@@ -211,18 +211,18 @@ class NottarioProfilePage extends LitElement {
                   (p) => html`
                   <tr>
                     <td>
-                      <a class="project-link" href=${`/projects/${p.ProjectID}`}
+                      <a class="project-link" href=${`/projects/${p.project_id}`}
                          @click=${(e) => {
                            e.preventDefault();
-                           window.nottarioNavigate(`/projects/${p.ProjectID}`);
-                         }}>${p.ProjectName}</a>
+                           window.nottarioNavigate(`/projects/${p.project_id}`);
+                         }}>${p.project_name}</a>
                     </td>
                     <td>
                       <div class="roles">
                         ${p.roles.map(
                           (r) => html`
                           <span class="role"
-                                style=${r.Color ? `border-color:${r.Color}; color:${r.Color}` : ''}>${r.Label}</span>
+                                style=${r.color ? `border-color:${r.color}; color:${r.color}` : ''}>${r.label}</span>
                         `,
                         )}
                       </div>

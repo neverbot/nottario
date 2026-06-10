@@ -320,8 +320,8 @@ class NottarioGantt extends LitElement {
       adj.get(a).add(b);
     };
     for (const d of this.deps || []) {
-      add(d.TaskID, d.DependsOnID);
-      add(d.DependsOnID, d.TaskID);
+      add(d.task_id, d.depends_on_id);
+      add(d.depends_on_id, d.task_id);
     }
     const out = new Set([taskID]);
     const stack = [taskID];
@@ -354,11 +354,11 @@ class NottarioGantt extends LitElement {
   // open the detail panel (the historical single-click behaviour).
   // Otherwise replace the selection with this task's connected set.
   _onTaskClick(t) {
-    if (this._selectedSet.has(t.ID)) {
+    if (this._selectedSet.has(t.id)) {
       this._emitSelect(t);
       return;
     }
-    this._selectTask(t.ID);
+    this._selectTask(t.id);
   }
 
   // Click on a dependency arrow. Selects the union of both endpoints'
@@ -374,11 +374,11 @@ class NottarioGantt extends LitElement {
     const next = new Set(this.foldedFeatures);
     const seen = new Set();
     for (const t of tasks) {
-      if (t.Type !== 'feature') continue;
-      seen.add(t.ID);
-      if (!this._knownFeatureIDs.has(t.ID)) {
-        next.add(t.ID);
-        this._knownFeatureIDs.add(t.ID);
+      if (t.type !== 'feature') continue;
+      seen.add(t.id);
+      if (!this._knownFeatureIDs.has(t.id)) {
+        next.add(t.id);
+        this._knownFeatureIDs.add(t.id);
       }
     }
     // Forget features that no longer exist.
@@ -404,8 +404,8 @@ class NottarioGantt extends LitElement {
       // Refold has no motion — we intentionally only animate the
       // open direction (design call, see task `5245b74c`).
       const children = (this.tasks || [])
-        .filter((t) => t.ParentTaskID === featureID)
-        .map((t) => t.ID);
+        .filter((t) => t.parent_task_id === featureID)
+        .map((t) => t.id);
       this._justAppeared = new Set(children);
       this._pendingUnfoldScroll = true;
       // Drop the class after the animation has had time to finish
@@ -423,9 +423,9 @@ class NottarioGantt extends LitElement {
       // seconds so it doesn't sit there forever.
       const childrenByParent = new Map();
       for (const t of this.tasks || []) {
-        if (!t.ParentTaskID) continue;
-        if (!childrenByParent.has(t.ParentTaskID)) childrenByParent.set(t.ParentTaskID, []);
-        childrenByParent.get(t.ParentTaskID).push(t.ID);
+        if (!t.parent_task_id) continue;
+        if (!childrenByParent.has(t.parent_task_id)) childrenByParent.set(t.parent_task_id, []);
+        childrenByParent.get(t.parent_task_id).push(t.id);
       }
       const sub = new Set([featureID]);
       const walk = (id) => {
@@ -737,19 +737,19 @@ class NottarioGantt extends LitElement {
   }
 
   _roleLabel(id) {
-    const r = (this.roles || []).find((x) => x.ID === id);
-    return r ? r.Label : '';
+    const r = (this.roles || []).find((x) => x.id === id);
+    return r ? r.label : '';
   }
 
   _featureRoles(featureID) {
     // List the distinct roles of the feature's non-feature descendants,
     // separated by commas, in the project's role order.
-    const taskByID = new Map((this.tasks || []).map((t) => [t.ID, t]));
+    const taskByID = new Map((this.tasks || []).map((t) => [t.id, t]));
     const childrenByParent = new Map();
     for (const t of this.tasks || []) {
-      if (!t.ParentTaskID) continue;
-      if (!childrenByParent.has(t.ParentTaskID)) childrenByParent.set(t.ParentTaskID, []);
-      childrenByParent.get(t.ParentTaskID).push(t.ID);
+      if (!t.parent_task_id) continue;
+      if (!childrenByParent.has(t.parent_task_id)) childrenByParent.set(t.parent_task_id, []);
+      childrenByParent.get(t.parent_task_id).push(t.id);
     }
     const seen = new Set();
     const walk = (id) => {
@@ -763,19 +763,19 @@ class NottarioGantt extends LitElement {
     const roleIDs = new Set();
     for (const id of seen) {
       const t = taskByID.get(id);
-      if (t && t.Type !== 'feature' && t.TargetRoleID) roleIDs.add(t.TargetRoleID);
+      if (t && t.type !== 'feature' && t.target_role_id) roleIDs.add(t.target_role_id);
     }
     const sortedRoles = [...(this.roles || [])]
-      .filter((r) => roleIDs.has(r.ID))
-      .sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0))
-      .map((r) => r.Label.toLowerCase());
+      .filter((r) => roleIDs.has(r.id))
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((r) => r.label.toLowerCase());
     return sortedRoles.length ? sortedRoles.join(', ') : 'no roles';
   }
 
   _priorityLabel(value) {
     if (this.priorities && this.priorities.length) {
-      const exact = this.priorities.find((p) => p.Value === value);
-      if (exact) return exact.Key;
+      const exact = this.priorities.find((p) => p.value === value);
+      if (exact) return exact.key;
     }
     return `p${value}`;
   }
@@ -805,13 +805,13 @@ class NottarioGantt extends LitElement {
   // Group tasks by role; falls back to a "general" pseudo-role for
   // tasks without target_role_id.
   bands() {
-    const order = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
+    const order = [...this.roles].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     const general = { ID: '__general__', Key: 'general', Label: 'General', Color: '#59636e' };
     const result = order.map((r) => ({ role: r, tasks: [] }));
     result.push({ role: general, tasks: [] });
-    const byID = new Map(order.map((r) => [r.ID, result.find((b) => b.role.ID === r.ID)]));
+    const byID = new Map(order.map((r) => [r.id, result.find((b) => b.role.id === r.id)]));
     for (const t of this.tasks || []) {
-      const band = t.TargetRoleID ? byID.get(t.TargetRoleID) : result[result.length - 1];
+      const band = t.target_role_id ? byID.get(t.target_role_id) : result[result.length - 1];
       (band || result[result.length - 1]).tasks.push(t);
     }
     // Drop bands with no tasks except the general one if it has any.
@@ -826,12 +826,12 @@ class NottarioGantt extends LitElement {
   // Depth = 0 when the task has no `todo`/`doing` predecessors;
   // otherwise = max(predecessor.depth) + 1.
   computeTopoDepths(tasks) {
-    const taskByID = new Map(tasks.map((t) => [t.ID, t]));
+    const taskByID = new Map(tasks.map((t) => [t.id, t]));
     const incoming = new Map();
-    for (const t of tasks) incoming.set(t.ID, []);
+    for (const t of tasks) incoming.set(t.id, []);
     for (const d of this.deps) {
-      if (incoming.has(d.TaskID) && taskByID.has(d.DependsOnID)) {
-        incoming.get(d.TaskID).push(d.DependsOnID);
+      if (incoming.has(d.task_id) && taskByID.has(d.depends_on_id)) {
+        incoming.get(d.task_id).push(d.depends_on_id);
       }
     }
     const depth = new Map();
@@ -842,13 +842,13 @@ class NottarioGantt extends LitElement {
         const t = taskByID.get(pre);
         if (!t) continue;
         // Done predecessors don't push a `todo` deeper into the future.
-        if (t.State === 'done') continue;
+        if (t.state === 'done') continue;
         d = Math.max(d, visit(pre) + 1);
       }
       depth.set(id, d);
       return d;
     };
-    for (const t of tasks) visit(t.ID);
+    for (const t of tasks) visit(t.id);
     return depth;
   }
 
@@ -890,7 +890,7 @@ class NottarioGantt extends LitElement {
     //     rightmost slot, flush against NOW.
     const doneByID = new Map();
     for (const t of this.tasks || []) {
-      if (t.State === 'done' && t.ActualEnd) doneByID.set(t.ID, t);
+      if (t.state === 'done' && t.actual_end) doneByID.set(t.id, t);
     }
     // A past task is "anchored" when it touches at least one dependency
     // edge that will be drawn as an arrow on the chart. Anchored tasks
@@ -900,24 +900,24 @@ class NottarioGantt extends LitElement {
     // arrow geometry.
     const depTouched = new Set();
     for (const d of this.deps) {
-      if (doneByID.has(d.TaskID)) depTouched.add(d.TaskID);
-      if (doneByID.has(d.DependsOnID)) depTouched.add(d.DependsOnID);
+      if (doneByID.has(d.task_id)) depTouched.add(d.task_id);
+      if (doneByID.has(d.depends_on_id)) depTouched.add(d.depends_on_id);
     }
     // A done task whose ANCESTOR feature touches a dep edge inherits
     // that anchored status. Otherwise leaf children of an anchored
     // feature have succession=0, gravitate to NOW and stretch the
     // parent's aggregate all the way to the present.
     const taskByIDForSucc = new Map();
-    for (const t of this.tasks || []) taskByIDForSucc.set(t.ID, t);
+    for (const t of this.tasks || []) taskByIDForSucc.set(t.id, t);
     for (const t of this.tasks || []) {
-      if (!doneByID.has(t.ID)) continue;
-      let p = taskByIDForSucc.get(t.ParentTaskID);
+      if (!doneByID.has(t.id)) continue;
+      let p = taskByIDForSucc.get(t.parent_task_id);
       while (p) {
-        if (depTouched.has(p.ID)) {
-          depTouched.add(t.ID);
+        if (depTouched.has(p.id)) {
+          depTouched.add(t.id);
           break;
         }
-        p = taskByIDForSucc.get(p.ParentTaskID);
+        p = taskByIDForSucc.get(p.parent_task_id);
       }
     }
     // Future topological depths drive both the future X axis and the
@@ -934,11 +934,11 @@ class NottarioGantt extends LitElement {
       const cellCounts = new Map();
       let doingCount = 0;
       for (const t of b.tasks) {
-        if (t.State === 'doing') {
+        if (t.state === 'doing') {
           doingCount++;
-        } else if (t.State === 'todo') {
-          const d = globalDepths.get(t.ID) || 0;
-          const key = `${d}:${t.Priority}`;
+        } else if (t.state === 'todo') {
+          const d = globalDepths.get(t.id) || 0;
+          const key = `${d}:${t.priority}`;
           cellCounts.set(key, (cellCounts.get(key) || 0) + 1);
         }
       }
@@ -963,31 +963,31 @@ class NottarioGantt extends LitElement {
     // itself sits far in the past.
     const depSuccessors = new Map();
     for (const d of this.deps) {
-      if (doneByID.has(d.TaskID) && doneByID.has(d.DependsOnID)) {
-        if (!depSuccessors.has(d.DependsOnID)) depSuccessors.set(d.DependsOnID, []);
-        depSuccessors.get(d.DependsOnID).push(d.TaskID);
+      if (doneByID.has(d.task_id) && doneByID.has(d.depends_on_id)) {
+        if (!depSuccessors.has(d.depends_on_id)) depSuccessors.set(d.depends_on_id, []);
+        depSuccessors.get(d.depends_on_id).push(d.task_id);
       }
     }
     for (const t of this.tasks || []) {
-      if (!doneByID.has(t.ID)) continue;
-      let p = taskByIDForSucc.get(t.ParentTaskID);
+      if (!doneByID.has(t.id)) continue;
+      let p = taskByIDForSucc.get(t.parent_task_id);
       while (p) {
-        const parentSuccs = depSuccessors.get(p.ID);
+        const parentSuccs = depSuccessors.get(p.id);
         if (parentSuccs && parentSuccs.length) {
-          if (!depSuccessors.has(t.ID)) depSuccessors.set(t.ID, []);
-          const list = depSuccessors.get(t.ID);
+          if (!depSuccessors.has(t.id)) depSuccessors.set(t.id, []);
+          const list = depSuccessors.get(t.id);
           for (const s of parentSuccs) if (!list.includes(s)) list.push(s);
         }
-        p = taskByIDForSucc.get(p.ParentTaskID);
+        p = taskByIDForSucc.get(p.parent_task_id);
       }
     }
     const bandSuccessor = new Map();
     for (const b of bands) {
       const anchoredChronoSorted = b.tasks
-        .filter((t) => t.State === 'done' && t.ActualEnd && depTouched.has(t.ID))
-        .sort((x, y) => new Date(x.ActualEnd).getTime() - new Date(y.ActualEnd).getTime());
+        .filter((t) => t.state === 'done' && t.actual_end && depTouched.has(t.id))
+        .sort((x, y) => new Date(x.actual_end).getTime() - new Date(y.actual_end).getTime());
       for (let i = 0; i < anchoredChronoSorted.length - 1; i++) {
-        bandSuccessor.set(anchoredChronoSorted[i].ID, anchoredChronoSorted[i + 1].ID);
+        bandSuccessor.set(anchoredChronoSorted[i].id, anchoredChronoSorted[i + 1].id);
       }
     }
     // Children indexed by parent so a feature's succession can floor
@@ -995,10 +995,10 @@ class NottarioGantt extends LitElement {
     // step inside computeSucc below).
     const childrenByParentForSucc = new Map();
     for (const t of this.tasks || []) {
-      if (!t.ParentTaskID) continue;
-      if (!childrenByParentForSucc.has(t.ParentTaskID))
-        childrenByParentForSucc.set(t.ParentTaskID, []);
-      childrenByParentForSucc.get(t.ParentTaskID).push(t.ID);
+      if (!t.parent_task_id) continue;
+      if (!childrenByParentForSucc.has(t.parent_task_id))
+        childrenByParentForSucc.set(t.parent_task_id, []);
+      childrenByParentForSucc.get(t.parent_task_id).push(t.id);
     }
     const succession = new Map();
     const visiting = new Set();
@@ -1050,16 +1050,16 @@ class NottarioGantt extends LitElement {
       // placed yet — we re-place them here.
       const slotOccupants = new Map();
       for (const t of b.tasks) {
-        if (t.State !== 'done' || !t.ActualEnd) continue;
-        if (!depTouched.has(t.ID)) continue;
-        const s = globalPastSlot.get(t.ID);
+        if (t.state !== 'done' || !t.actual_end) continue;
+        if (!depTouched.has(t.id)) continue;
+        const s = globalPastSlot.get(t.id);
         slotOccupants.set(s, (slotOccupants.get(s) || 0) + 1);
       }
       // Newest free first: closer-to-NOW priority gets the rightmost
       // available slot.
       const freeSorted = b.tasks
-        .filter((t) => t.State === 'done' && t.ActualEnd && !depTouched.has(t.ID))
-        .sort((x, y) => new Date(y.ActualEnd).getTime() - new Date(x.ActualEnd).getTime());
+        .filter((t) => t.state === 'done' && t.actual_end && !depTouched.has(t.id))
+        .sort((x, y) => new Date(y.actual_end).getTime() - new Date(x.actual_end).getTime());
       for (const t of freeSorted) {
         let bestSlot = null;
         for (const s of usedGlobalSlots) {
@@ -1071,7 +1071,7 @@ class NottarioGantt extends LitElement {
           // No room anywhere — fall back to the task's initial slot.
           continue;
         }
-        globalPastSlot.set(t.ID, bestSlot);
+        globalPastSlot.set(t.id, bestSlot);
         slotOccupants.set(bestSlot, (slotOccupants.get(bestSlot) || 0) + 1);
         usedGlobalSlots.add(bestSlot);
       }
@@ -1089,9 +1089,9 @@ class NottarioGantt extends LitElement {
     {
       const isHiddenByFold = (taskID) => {
         let cur = taskByIDForSucc.get(taskID);
-        while (cur && cur.ParentTaskID) {
-          if (this.foldedFeatures.has(cur.ParentTaskID)) return true;
-          cur = taskByIDForSucc.get(cur.ParentTaskID);
+        while (cur && cur.parent_task_id) {
+          if (this.foldedFeatures.has(cur.parent_task_id)) return true;
+          cur = taskByIDForSucc.get(cur.parent_task_id);
         }
         return false;
       };
@@ -1128,7 +1128,7 @@ class NottarioGantt extends LitElement {
     const pastSlotPerBand = bands.map((b) => {
       const m = new Map();
       for (const t of b.tasks) {
-        if (globalPastSlot.has(t.ID)) m.set(t.ID, globalPastSlot.get(t.ID));
+        if (globalPastSlot.has(t.id)) m.set(t.id, globalPastSlot.get(t.id));
       }
       return m;
     });
@@ -1171,13 +1171,13 @@ class NottarioGantt extends LitElement {
       // and is the bug the user spotted).
       const hasDescendants = new Set();
       for (const t of this.tasks || []) {
-        if (t.ParentTaskID) hasDescendants.add(t.ParentTaskID);
+        if (t.parent_task_id) hasDescendants.add(t.parent_task_id);
       }
       const tasksByDepth = new Map();
       for (const t of this.tasks || []) {
-        if (t.State !== 'todo') continue;
-        if (t.Type === 'feature' && hasDescendants.has(t.ID)) continue;
-        const d = globalDepths.get(t.ID) || 0;
+        if (t.state !== 'todo') continue;
+        if (t.type === 'feature' && hasDescendants.has(t.id)) continue;
+        const d = globalDepths.get(t.id) || 0;
         if (!tasksByDepth.has(d)) tasksByDepth.set(d, []);
         tasksByDepth.get(d).push(t);
       }
@@ -1187,7 +1187,7 @@ class NottarioGantt extends LitElement {
       let cursor = futureStartX;
       for (const d of depthsSorted) {
         const ts = tasksByDepth.get(d);
-        const distinctPriorities = Array.from(new Set(ts.map((t) => t.Priority))).sort(
+        const distinctPriorities = Array.from(new Set(ts.map((t) => t.priority))).sort(
           (a, b) => b - a,
         ); // DESC
         for (let i = 0; i < distinctPriorities.length; i++) {
@@ -1195,7 +1195,7 @@ class NottarioGantt extends LitElement {
           const x = cursor + i * futureColumnWidth + 12;
           futurePriorityBuckets.push({ depth: d, priority: p, x });
           for (const t of ts) {
-            if (t.Priority === p) futureSubColumnX.set(t.ID, x);
+            if (t.priority === p) futureSubColumnX.set(t.id, x);
           }
         }
         cursor += Math.max(1, distinctPriorities.length) * futureColumnWidth;
@@ -1217,12 +1217,12 @@ class NottarioGantt extends LitElement {
     //   • the set of tasks hidden because a feature ancestor is folded
     //   • a per-feature aggregate position when folded (envelope of its
     //     non-feature descendants).
-    const taskByID = new Map((this.tasks || []).map((t) => [t.ID, t]));
+    const taskByID = new Map((this.tasks || []).map((t) => [t.id, t]));
     const childrenByParent = new Map();
     for (const t of this.tasks || []) {
-      if (!t.ParentTaskID) continue;
-      if (!childrenByParent.has(t.ParentTaskID)) childrenByParent.set(t.ParentTaskID, []);
-      childrenByParent.get(t.ParentTaskID).push(t.ID);
+      if (!t.parent_task_id) continue;
+      if (!childrenByParent.has(t.parent_task_id)) childrenByParent.set(t.parent_task_id, []);
+      childrenByParent.get(t.parent_task_id).push(t.id);
     }
     const collectDescendants = (id, out) => {
       for (const c of childrenByParent.get(id) || []) {
@@ -1235,7 +1235,7 @@ class NottarioGantt extends LitElement {
     const hiddenByFold = new Set();
     for (const fid of this.foldedFeatures) {
       const f = taskByID.get(fid);
-      if (!f || f.Type !== 'feature') continue;
+      if (!f || f.type !== 'feature') continue;
       collectDescendants(fid, hiddenByFold);
     }
 
@@ -1244,15 +1244,15 @@ class NottarioGantt extends LitElement {
     // even when descendants live in a band other than the feature's.
     const bandIndexByTaskID = new Map();
     bands.forEach((b, bi) => {
-      for (const t of b.tasks) bandIndexByTaskID.set(t.ID, bi);
+      for (const t of b.tasks) bandIndexByTaskID.set(t.id, bi);
     });
     const rawPositions = new Map(); // taskID -> {from, to, bi}
     bands.forEach((b, bi) => {
       const depths = futureDepthsPerBand[bi];
       const slots = pastSlotPerBand[bi];
       for (const t of b.tasks) {
-        const pastSlot = t.State === 'done' ? (slots.get(t.ID) ?? null) : null;
-        const futureX = t.State === 'todo' ? futureSubColumnX.get(t.ID) : undefined;
+        const pastSlot = t.state === 'done' ? (slots.get(t.id) ?? null) : null;
+        const futureX = t.state === 'todo' ? futureSubColumnX.get(t.id) : undefined;
         const x = this.taskX({
           t,
           labelWidth,
@@ -1267,7 +1267,7 @@ class NottarioGantt extends LitElement {
           minBarWidth,
         });
         if (!x) continue;
-        rawPositions.set(t.ID, { from: x.from, to: x.to, bi });
+        rawPositions.set(t.id, { from: x.from, to: x.to, bi });
       }
     });
 
@@ -1280,7 +1280,7 @@ class NottarioGantt extends LitElement {
     const featureAggregates = new Map(); // featureID -> {from, to, bi, crossRole, roleColors}
     for (const fid of this.foldedFeatures) {
       const feat = taskByID.get(fid);
-      if (!feat || feat.Type !== 'feature') continue;
+      if (!feat || feat.type !== 'feature') continue;
       const desc = collectDescendants(fid, new Set());
       if (!desc.size) continue;
       // Aggregate position uses the feature's OWN slot, not the
@@ -1298,7 +1298,7 @@ class NottarioGantt extends LitElement {
       const bandVotes = new Map();
       for (const did of desc) {
         const d = taskByID.get(did);
-        if (!d || d.Type === 'feature') continue;
+        if (!d || d.type === 'feature') continue;
         const p = rawPositions.get(did);
         if (!p) continue;
         bandsSeen.add(p.bi);
@@ -1323,7 +1323,7 @@ class NottarioGantt extends LitElement {
       // band's display position so the dots read top→bottom by role.
       const roleColors = [...bandsSeen]
         .sort((a, b) => a - b)
-        .map((bi) => bands[bi].role.Color || '#8c959f');
+        .map((bi) => bands[bi].role.color || '#8c959f');
       featureAggregates.set(fid, { from: lo, to: hi, bi: naturalBi, crossRole, roleColors });
     }
 
@@ -1345,10 +1345,10 @@ class NottarioGantt extends LitElement {
     // ---- Visible entries per (display) band ----
     const visiblePerBand = displayBands.map(() => []);
     for (const t of this.tasks || []) {
-      if (hiddenByFold.has(t.ID)) continue;
-      if (t.Type === 'feature') {
-        if (this.foldedFeatures.has(t.ID) && featureAggregates.has(t.ID)) {
-          const agg = featureAggregates.get(t.ID);
+      if (hiddenByFold.has(t.id)) continue;
+      if (t.type === 'feature') {
+        if (this.foldedFeatures.has(t.id) && featureAggregates.has(t.id)) {
+          const agg = featureAggregates.get(t.id);
           const targetBi = 0;
           visiblePerBand[targetBi].push({
             task: t,
@@ -1358,8 +1358,8 @@ class NottarioGantt extends LitElement {
             crossRole: agg.crossRole,
             roleColors: agg.roleColors,
           });
-        } else if (!childrenByParent.has(t.ID)) {
-          const p = rawPositions.get(t.ID);
+        } else if (!childrenByParent.has(t.id)) {
+          const p = rawPositions.get(t.id);
           if (p)
             visiblePerBand[p.bi + bandOffset].push({
               task: t,
@@ -1371,7 +1371,7 @@ class NottarioGantt extends LitElement {
         // unfolded feature with children: feature itself hidden, kids show through
         continue;
       }
-      const p = rawPositions.get(t.ID);
+      const p = rawPositions.get(t.id);
       if (p)
         visiblePerBand[p.bi + bandOffset].push({ task: t, from: p.from, to: p.to, kind: 'normal' });
     }
@@ -1445,7 +1445,7 @@ class NottarioGantt extends LitElement {
     const width = Math.max(intrinsicWidth, this._stageWidth || 0);
 
     // Build an index for dependency arrows.
-    const posByTaskID = new Map(positions.map((p) => [p.task.ID, p]));
+    const posByTaskID = new Map(positions.map((p) => [p.task.id, p]));
 
     // When a dep endpoint is a feature that the user expanded, the
     // feature itself has no position (it disappears in favour of its
@@ -1486,20 +1486,20 @@ class NottarioGantt extends LitElement {
     // depends on them is already 'done'. That's a logical
     // inconsistency: the dependent completed before its precondition.
     // We surface it on the bar with a solid red border.
-    const stateByID = new Map((this.tasks || []).map((t) => [t.ID, t.State]));
+    const stateByID = new Map((this.tasks || []).map((t) => [t.id, t.state]));
     const dependentsByID = new Map();
     for (const d of this.deps) {
-      // d.TaskID depends on d.DependsOnID — so d.TaskID is a dependent
-      // (later task) of d.DependsOnID.
-      if (!dependentsByID.has(d.DependsOnID)) dependentsByID.set(d.DependsOnID, []);
-      dependentsByID.get(d.DependsOnID).push(d.TaskID);
+      // d.task_id depends on d.depends_on_id — so d.task_id is a dependent
+      // (later task) of d.depends_on_id.
+      if (!dependentsByID.has(d.depends_on_id)) dependentsByID.set(d.depends_on_id, []);
+      dependentsByID.get(d.depends_on_id).push(d.task_id);
     }
     const inconsistentIDs = new Set();
     for (const t of this.tasks || []) {
-      if (t.State === 'done') continue;
-      for (const dependentID of dependentsByID.get(t.ID) || []) {
+      if (t.state === 'done') continue;
+      for (const dependentID of dependentsByID.get(t.id) || []) {
         if (stateByID.get(dependentID) === 'done') {
-          inconsistentIDs.add(t.ID);
+          inconsistentIDs.add(t.id);
           break;
         }
       }
@@ -1510,11 +1510,11 @@ class NottarioGantt extends LitElement {
     // memberships list (once per role), so dedupe by UserID.
     const usersById = new Map();
     for (const m of this.members || []) {
-      if (!usersById.has(m.UserID)) {
-        usersById.set(m.UserID, {
-          AvatarURL: m.AvatarURL,
-          DisplayName: m.DisplayName,
-          GithubLogin: m.GithubLogin,
+      if (!usersById.has(m.user_id)) {
+        usersById.set(m.user_id, {
+          AvatarURL: m.avatar_url,
+          DisplayName: m.display_name,
+          GithubLogin: m.github_login,
         });
       }
     }
@@ -1524,7 +1524,7 @@ class NottarioGantt extends LitElement {
     // show through a transparent fill.
     let visIdx = 0;
     const bandFill = displayBands.map((b) => {
-      if (b.role.ID === '__features__') return '#f0f2f5';
+      if (b.role.id === '__features__') return '#f0f2f5';
       const c = visIdx % 2 ? '#fff' : '#f6f8fa';
       visIdx++;
       return c;
@@ -1535,7 +1535,7 @@ class NottarioGantt extends LitElement {
     // set is bright and its arrows promote on top of the task rects.
     const hasSelection = this._selectedSet.size > 0;
     const isPromotedEdge = (d) =>
-      hasSelection && (this._selectedSet.has(d.TaskID) || this._selectedSet.has(d.DependsOnID));
+      hasSelection && (this._selectedSet.has(d.task_id) || this._selectedSet.has(d.depends_on_id));
 
     return html`
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
@@ -1578,7 +1578,7 @@ class NottarioGantt extends LitElement {
           })()}
           ${displayBands.map((b, bi) => {
             if (bandHeights[bi] === 0) return null;
-            const isFeatures = b.role.ID === '__features__';
+            const isFeatures = b.role.id === '__features__';
             let cls;
             if (isFeatures) {
               cls = 'band-bg features';
@@ -1592,7 +1592,7 @@ class NottarioGantt extends LitElement {
                     width=${width} height=${bandHeights[bi]}></rect>
               <text class="band-label"
                     x="8" y=${bandTops[bi] + bandHeights[bi] / 2 + 4}>
-                ${isFeatures ? 'Features' : b.role.Label}
+                ${isFeatures ? 'Features' : b.role.label}
               </text>
             `;
           })}
@@ -1636,16 +1636,16 @@ class NottarioGantt extends LitElement {
           <!-- Tasks placed in their lane -->
           ${positions.map((p) => {
             const t = p.task;
-            const color = displayBands[p.bi].role.Color || '#59636e';
+            const color = displayBands[p.bi].role.color || '#59636e';
             const y = taskY(p.bi, p.lane);
             const w = Math.max(8, p.to - p.from);
-            const user = t.AssigneeUserID ? usersById.get(t.AssigneeUserID) : null;
+            const user = t.assignee_user_id ? usersById.get(t.assignee_user_id) : null;
             const avatarX = p.from + avatarPad;
             const avatarY = y + (taskHeight - avatarSize) / 2;
             const labelX = user ? avatarX + avatarSize + 6 : p.from + 8;
             const labelMaxChars = Math.max(6, Math.floor((p.to - labelX - 6) / 7));
             if (p.kind === 'feature-agg') {
-              const childCount = (childrenByParent.get(t.ID) || []).length;
+              const childCount = (childrenByParent.get(t.id) || []).length;
               const dots = p.roleColors || [];
               const dotR = 4;
               const dotGap = 4;
@@ -1654,11 +1654,11 @@ class NottarioGantt extends LitElement {
               const dotsBlockW = dots.length * (dotR * 2) + Math.max(0, dots.length - 1) * dotGap;
               const dotsStartX = p.to - dotPadRight - dotsBlockW + dotR;
               const labelRoom = Math.max(6, Math.floor((dotsStartX - dotR - labelX - 6) / 7));
-              const aggDimmed = hasSelection && !this._selectedSet.has(t.ID);
-              const aggAppeared = this._justAppeared?.has(t.ID) ? ' just-appeared' : '';
+              const aggDimmed = hasSelection && !this._selectedSet.has(t.id);
+              const aggAppeared = this._justAppeared?.has(t.id) ? ' just-appeared' : '';
               return svg`
-                <rect class=${`task-rect feature-agg${aggDimmed ? ' dim' : ''}${hasSelection && this._selectedSet.has(t.ID) ? ' promoted' : ''}${aggAppeared}`}
-                      data-task-id=${t.ID}
+                <rect class=${`task-rect feature-agg${aggDimmed ? ' dim' : ''}${hasSelection && this._selectedSet.has(t.id) ? ' promoted' : ''}${aggAppeared}`}
+                      data-task-id=${t.id}
                       x=${p.from} y=${y}
                       width=${w} height=${taskHeight}
                       rx="6" ry="6"
@@ -1668,7 +1668,7 @@ class NottarioGantt extends LitElement {
                       style="cursor:pointer"
                       @click=${(e) => {
                         e.stopPropagation();
-                        this._toggleFold(t.ID);
+                        this._toggleFold(t.id);
                       }}
                       @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}
                       @mousemove=${(e) => this._onBarMove(e, t, p.from, y)}
@@ -1679,7 +1679,7 @@ class NottarioGantt extends LitElement {
                 </rect>
                 <text class="task-label" x=${labelX} y=${y + taskHeight / 2 + 4}
                       style="pointer-events:none">
-                  ▸ ${this._truncate(t.Title, labelRoom)}
+                  ▸ ${this._truncate(t.title, labelRoom)}
                 </text>
                 ${dots.map(
                   (c, i) => svg`
@@ -1693,18 +1693,18 @@ class NottarioGantt extends LitElement {
                 )}
               `;
             }
-            const isFeatureUnfolded = t.Type === 'feature' && !this.foldedFeatures.has(t.ID);
+            const isFeatureUnfolded = t.type === 'feature' && !this.foldedFeatures.has(t.id);
             // Childless features and (defensive) any feature reaching here render as normal.
-            const taskDimmed = hasSelection && !this._selectedSet.has(t.ID);
+            const taskDimmed = hasSelection && !this._selectedSet.has(t.id);
             const todoFill = bandFill[p.bi] || '#fff';
-            const taskAppeared = this._justAppeared?.has(t.ID) ? ' just-appeared' : '';
+            const taskAppeared = this._justAppeared?.has(t.id) ? ' just-appeared' : '';
             return svg`
-              <rect class=${`task-rect ${t.State}${t.Type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.ID) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}${hasSelection && this._selectedSet.has(t.ID) ? ' promoted' : ''}${taskAppeared}`}
-                    data-task-id=${t.ID}
+              <rect class=${`task-rect ${t.state}${t.type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.id) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}${hasSelection && this._selectedSet.has(t.id) ? ' promoted' : ''}${taskAppeared}`}
+                    data-task-id=${t.id}
                     x=${p.from} y=${y}
                     width=${w} height=${taskHeight}
                     rx="6" ry="6"
-                    fill=${t.State === 'done' ? '#d1d9e0' : t.State === 'doing' ? color : todoFill}
+                    fill=${t.state === 'done' ? '#d1d9e0' : t.state === 'doing' ? color : todoFill}
                     stroke=${color}
                     @click=${(e) => {
                       e.stopPropagation();
@@ -1722,10 +1722,10 @@ class NottarioGantt extends LitElement {
                     tabindex="0">
               </rect>
               ${
-                user && user.AvatarURL
+                user && user.avatar_url
                   ? svg`
                 <g transform=${`translate(${avatarX}, ${avatarY})`} style="pointer-events:none">
-                  <image href=${user.AvatarURL}
+                  <image href=${user.avatar_url}
                          width=${avatarSize} height=${avatarSize}
                          clip-path="url(#gantt-avatar-clip)"></image>
                   <circle cx=${avatarSize / 2} cy=${avatarSize / 2} r=${avatarSize / 2}
@@ -1734,10 +1734,10 @@ class NottarioGantt extends LitElement {
               `
                   : null
               }
-              <text class=${`task-label ${t.State === 'doing' ? 'on-dark' : ''}`}
+              <text class=${`task-label ${t.state === 'doing' ? 'on-dark' : ''}`}
                     x=${labelX} y=${y + taskHeight / 2 + 4}
                     style="pointer-events:none">
-                ${this._truncate(t.Title, labelMaxChars)}
+                ${this._truncate(t.title, labelMaxChars)}
               </text>
             `;
           })}
@@ -1788,12 +1788,12 @@ class NottarioGantt extends LitElement {
     depths,
     minBarWidth,
   }) {
-    if (t.State === 'done') {
+    if (t.state === 'done') {
       if (pastSlot == null) return null; // no actual_end ⇒ not on past axis
       const from = labelWidth + pastSlot * pastSlotW + 6;
       return { from, to: from + minBarWidth };
     }
-    if (t.State === 'doing') {
+    if (t.state === 'doing') {
       const from = presentX + 12;
       return { from, to: from + minBarWidth };
     }
@@ -1801,7 +1801,7 @@ class NottarioGantt extends LitElement {
     // pass. Fall back to depth-only if we somehow didn't precompute.
     let from = futureX;
     if (from == null) {
-      const d = depths.get(t.ID) || 0;
+      const d = depths.get(t.id) || 0;
       from = futureStartX + d * futureColumnWidth + 12;
     }
     return { from, to: from + minBarWidth };
@@ -1812,17 +1812,17 @@ class NottarioGantt extends LitElement {
   // task rects, and the promoted pass after, so selection-incident
   // arrows always land on top of every box they cross.
   _renderArrowPath(d, resolveSource, resolveTarget, taskCenterY, taskHeight, hasSelection) {
-    const from = resolveSource(d.DependsOnID);
-    const to = resolveTarget(d.TaskID);
+    const from = resolveSource(d.depends_on_id);
+    const to = resolveTarget(d.task_id);
     if (!from || !to) return null;
     const markerW = 8;
     const promoted =
-      hasSelection && (this._selectedSet.has(d.TaskID) || this._selectedSet.has(d.DependsOnID));
+      hasSelection && (this._selectedSet.has(d.task_id) || this._selectedSet.has(d.depends_on_id));
     const dimmed = hasSelection && !promoted;
     const cls = `arrow${promoted ? ' promoted' : ''}${dimmed ? ' dim' : ''}`;
     const onClick = (e) => {
       e.stopPropagation();
-      this._onArrowClick(d.DependsOnID);
+      this._onArrowClick(d.depends_on_id);
     };
     const sourceRight = from.to;
     const targetLeft = to.from;
@@ -1874,9 +1874,9 @@ class NottarioGantt extends LitElement {
   // just because the rect received keyboard focus.
   _onBarHover(_e, task, barX, barY) {
     const prior = this._hover;
-    const cursor = prior && prior.task && prior.task.ID === task.ID ? prior.cursor : null;
+    const cursor = prior && prior.task && prior.task.id === task.id ? prior.cursor : null;
     this._hover = { task, barX, barY, cursor };
-    this._pointerBarID = task.ID;
+    this._pointerBarID = task.id;
   }
   // Convert a pointer event into scrolled-content coords (the same
   // frame `position: absolute` children of `.stage` live in) and
@@ -1890,7 +1890,7 @@ class NottarioGantt extends LitElement {
       y: e.clientY - r.top + stage.scrollTop,
     };
     this._hover = { task, barX, barY, cursor };
-    this._pointerBarID = task.ID;
+    this._pointerBarID = task.id;
   }
   // Pointer left the bar: drop the hover entirely.
   _onBarLeave() {
@@ -1962,11 +1962,13 @@ class NottarioGantt extends LitElement {
       top = Math.max(scrollTop + 8, anchorY - cardH - (cursor ? 16 : 8));
     }
 
-    const role = t.TargetRoleID ? this.roles.find((r) => r.ID === t.TargetRoleID) : null;
-    const user = t.AssigneeUserID ? this.members.find((m) => m.UserID === t.AssigneeUserID) : null;
-    const isFolded = t.Type === 'feature' && this.foldedFeatures.has(t.ID);
+    const role = t.target_role_id ? this.roles.find((r) => r.id === t.target_role_id) : null;
+    const user = t.assignee_user_id
+      ? this.members.find((m) => m.user_id === t.assignee_user_id)
+      : null;
+    const isFolded = t.type === 'feature' && this.foldedFeatures.has(t.id);
     const childCount = isFolded
-      ? (this.tasks || []).filter((x) => x.ParentTaskID === t.ID).length
+      ? (this.tasks || []).filter((x) => x.parent_task_id === t.id).length
       : 0;
 
     // Single template for every bar — features and tasks share the
@@ -1977,21 +1979,21 @@ class NottarioGantt extends LitElement {
     return html`
       <div class="hover-card" role="tooltip"
            style=${`left:${left}px; top:${top}px`}>
-        <div class="title">${t.Title}</div>
+        <div class="title">${t.title}</div>
         <div class="row">
-          <span class=${`chip state-${t.State}`}>${t.State}</span>
+          <span class=${`chip state-${t.state}`}>${t.state}</span>
           ${
-            t.Type === 'bug'
+            t.type === 'bug'
               ? html`<span class="chip type-bug">bug</span>`
-              : t.Type !== 'task'
-                ? html`<span class="chip">${t.Type}</span>`
+              : t.type !== 'task'
+                ? html`<span class="chip">${t.type}</span>`
                 : null
           }
-          <span class="chip">${this._priorityLabel(t.Priority)}</span>
+          <span class="chip">${this._priorityLabel(t.priority)}</span>
           ${
             role
               ? html`
-            <span class="chip role" style=${`background:${role.Color || '#59636e'}`}>${role.Label}</span>
+            <span class="chip role" style=${`background:${role.color || '#59636e'}`}>${role.label}</span>
           `
               : null
           }
@@ -2000,8 +2002,8 @@ class NottarioGantt extends LitElement {
           user
             ? html`
           <div class="assignee">
-            ${user.AvatarURL ? html`<img src=${user.AvatarURL} alt="">` : null}
-            <span>${user.DisplayName || user.GithubLogin}</span>
+            ${user.avatar_url ? html`<img src=${user.avatar_url} alt="">` : null}
+            <span>${user.display_name || user.github_login}</span>
           </div>
         `
             : null
@@ -2009,7 +2011,7 @@ class NottarioGantt extends LitElement {
         ${
           isFolded
             ? html`
-          <div class="meta">${childCount} task${childCount === 1 ? '' : 's'} · ${this._featureRoles(t.ID)}</div>
+          <div class="meta">${childCount} task${childCount === 1 ? '' : 's'} · ${this._featureRoles(t.id)}</div>
         `
             : null
         }

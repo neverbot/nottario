@@ -272,7 +272,7 @@ class NottarioTopbar extends LitElement {
         fetch(`/api/projects/${pid}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((p) => {
-            if (p && this._projectNameFor === pid) this._projectName = p.Name;
+            if (p && this._projectNameFor === pid) this._projectName = p.name;
           })
           .catch(() => {
             /* ignore */

@@ -290,7 +290,7 @@ class NottarioArchGraph extends LitElement {
       this.kinds = (await kr.json()).kinds || [];
       const nodes = (await nr.json()).nodes || [];
       const map = {};
-      for (const n of nodes) map[n.Slug] = n;
+      for (const n of nodes) map[n.slug] = n;
       this.allNodes = map;
       this.allEdges = (await er.json()).edges || [];
     } catch (e) {
@@ -317,12 +317,12 @@ class NottarioArchGraph extends LitElement {
   }
   _nodeByID(id) {
     if (!this.allNodes) return null;
-    return Object.values(this.allNodes).find((n) => n.ID === id) || null;
+    return Object.values(this.allNodes).find((n) => n.id === id) || null;
   }
   _selectedID() {
     if (!this.selectedSlug || !this.allNodes) return '';
     const n = this.allNodes[this.selectedSlug];
-    return n ? n.ID : '';
+    return n ? n.id : '';
   }
   _ancestorChain(id) {
     if (!id) return [];
@@ -331,8 +331,8 @@ class NottarioArchGraph extends LitElement {
     let guard = 0;
     while (cur && guard++ < 32) {
       chain.unshift(cur);
-      if (!cur.ParentID) break;
-      cur = this._nodeByID(cur.ParentID);
+      if (!cur.parent_id) break;
+      cur = this._nodeByID(cur.parent_id);
     }
     return chain;
   }
@@ -366,8 +366,8 @@ class NottarioArchGraph extends LitElement {
       this._writeHash();
       return;
     }
-    this.selectedSlug = n.Slug;
-    this.loadDetail(n.Slug);
+    this.selectedSlug = n.slug;
+    this.loadDetail(n.slug);
     this._writeHash();
   }
   _onExpandChanged(e) {
@@ -385,9 +385,9 @@ class NottarioArchGraph extends LitElement {
     if (this.allNodes === null) return html`<p>Loading…</p>`;
     const selID = this._selectedID();
     const sel = selID ? this._nodeByID(selID) : null;
-    const inEdges = sel ? (this.allEdges || []).filter((e) => e.ToNodeID === sel.ID) : [];
-    const outEdges = sel ? (this.allEdges || []).filter((e) => e.FromNodeID === sel.ID) : [];
-    const ancestors = sel ? this._ancestorChain(sel.ID) : [];
+    const inEdges = sel ? (this.allEdges || []).filter((e) => e.to_node_id === sel.id) : [];
+    const outEdges = sel ? (this.allEdges || []).filter((e) => e.from_node_id === sel.id) : [];
+    const ancestors = sel ? this._ancestorChain(sel.id) : [];
 
     return html`
       ${this.error ? html`<div class="error">${this.error}</div>` : null}
@@ -443,36 +443,36 @@ class NottarioArchGraph extends LitElement {
       <aside class="panel">
         <header class="head">
           <div class="kind-chip">
-            <span class="dot" style=${`background:${this._kindColor(sel.Kind)}`}></span>
-            <span class="lbl">${(sel.Kind || '').toLowerCase()}</span>
+            <span class="dot" style=${`background:${this._kindColor(sel.kind)}`}></span>
+            <span class="lbl">${(sel.kind || '').toLowerCase()}</span>
           </div>
-          <h2>${sel.Name}</h2>
+          <h2>${sel.name}</h2>
         </header>
         <div class="crumb">
           ${ancestors.map(
             (a, i) => html`
             ${i > 0 ? html`<span class="sep">/</span>` : null}
-            <a @click=${() => this._onCanvasSelect({ detail: { id: a.ID } })}>${a.Slug}</a>
+            <a @click=${() => this._onCanvasSelect({ detail: { id: a.id } })}>${a.slug}</a>
           `,
           )}
         </div>
         ${
-          sel.LinkedRepo
+          sel.linked_repo
             ? html`
           <div class="meta-row">
             <span class="lbl">repo</span>
-            <code>${sel.LinkedRepo}${sel.LinkedPath ? '/' + sel.LinkedPath : ''}</code>
+            <code>${sel.linked_repo}${sel.linked_path ? '/' + sel.linked_path : ''}</code>
           </div>
         `
             : null
         }
         ${
-          sel.DescriptionMD
+          sel.description
             ? html`
           <section class="section">
             <nottario-markdown
               project-id=${this.projectId}
-              .source=${sel.DescriptionMD}></nottario-markdown>
+              .source=${sel.description}></nottario-markdown>
           </section>
         `
             : null
@@ -487,15 +487,15 @@ class NottarioArchGraph extends LitElement {
                 ${inEdges.map(
                   (e) => html`
                   <a class="edge-chip"
-                     @click=${() => this._onCanvasSelect({ detail: { id: e.FromNodeID } })}
+                     @click=${() => this._onCanvasSelect({ detail: { id: e.from_node_id } })}
                      @mouseenter=${() => {
-                       this._hoveredEdgeID = e.ID;
+                       this._hoveredEdgeID = e.id;
                      }}
                      @mouseleave=${() => {
                        this._hoveredEdgeID = '';
                      }}>
-                    <span class="lbl">${e.Label || e.Kind || 'connects'}</span>
-                    <span class="from">← ${this._nodeByID(e.FromNodeID)?.Name || '?'}</span>
+                    <span class="lbl">${e.label || e.kind || 'connects'}</span>
+                    <span class="from">← ${this._nodeByID(e.from_node_id)?.name || '?'}</span>
                   </a>
                 `,
                 )}
@@ -512,15 +512,15 @@ class NottarioArchGraph extends LitElement {
                 ${outEdges.map(
                   (e) => html`
                   <a class="edge-chip"
-                     @click=${() => this._onCanvasSelect({ detail: { id: e.ToNodeID } })}
+                     @click=${() => this._onCanvasSelect({ detail: { id: e.to_node_id } })}
                      @mouseenter=${() => {
-                       this._hoveredEdgeID = e.ID;
+                       this._hoveredEdgeID = e.id;
                      }}
                      @mouseleave=${() => {
                        this._hoveredEdgeID = '';
                      }}>
-                    <span class="lbl">${e.Label || e.Kind || 'connects'}</span>
-                    <span class="to">→ ${this._nodeByID(e.ToNodeID)?.Name || '?'}</span>
+                    <span class="lbl">${e.label || e.kind || 'connects'}</span>
+                    <span class="to">→ ${this._nodeByID(e.to_node_id)?.name || '?'}</span>
                   </a>
                 `,
                 )}

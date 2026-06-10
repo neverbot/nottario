@@ -747,9 +747,9 @@ class NottarioBoardPage extends LitElement {
 
   // ---- Drag and drop between columns ----------------------------
   _onCardDragStart(e, t) {
-    this._draggingID = t.ID;
+    this._draggingID = t.id;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', t.ID);
+    e.dataTransfer.setData('text/plain', t.id);
   }
   _onCardDragEnd() {
     this._draggingID = null;
@@ -774,9 +774,9 @@ class NottarioBoardPage extends LitElement {
     this._draggingID = null;
     this._dragOverState = null;
     if (!id) return;
-    const task = this.tasks.find((x) => x.ID === id);
-    if (!task || task.State === state) return;
-    this._moveStateWithUndo(id, state, task.State);
+    const task = this.tasks.find((x) => x.id === id);
+    if (!task || task.state === state) return;
+    this._moveStateWithUndo(id, state, task.state);
   }
 
   _onEsc(e) {
@@ -847,7 +847,7 @@ class NottarioBoardPage extends LitElement {
     };
     const taskId = h.get('task');
     if (!taskId) return;
-    const t = (this.tasks || []).find((x) => x.ID === taskId);
+    const t = (this.tasks || []).find((x) => x.id === taskId);
     if (t) this.open(t);
   }
 
@@ -902,12 +902,12 @@ class NottarioBoardPage extends LitElement {
       // task.comment.* affect only the open detail dialog; refreshing
       // the whole kanban for every comment edit would be wasteful.
       if (ev.type.startsWith('task.comment.')) {
-        if (this.selected && ev.task_id === this.selected.task.ID) {
-          this.loadDetail(this.selected.task.ID);
+        if (this.selected && ev.task_id === this.selected.task.id) {
+          this.loadDetail(this.selected.task.id);
         }
       } else if (ev.type === 'realtime.reconnected' || ev.type.startsWith('task.')) {
         this.load();
-        if (this.selected) this.loadDetail(this.selected.task.ID);
+        if (this.selected) this.loadDetail(this.selected.task.id);
       }
       // Cycle lifecycle: a new cycle opened or the active one closed.
       // If we were explicitly viewing the cycle that just closed, snap
@@ -968,28 +968,28 @@ class NottarioBoardPage extends LitElement {
   // exactly what an agent would pick up next.
   _nextEligible() {
     if (!this.tasks || !this.tasks.length) return null;
-    const taskByID = new Map(this.tasks.map((t) => [t.ID, t]));
+    const taskByID = new Map(this.tasks.map((t) => [t.id, t]));
     const blocked = new Set();
     for (const d of this.deps || []) {
-      const preID = d.DependsOnID || d.depends_on_id || d.depends_on_task_id;
-      const tid = d.TaskID || d.task_id;
+      const preID = d.depends_on_id || d.depends_on_id || d.depends_on_task_id;
+      const tid = d.task_id || d.task_id;
       const pre = taskByID.get(preID);
-      if (pre && pre.State !== 'done') blocked.add(tid);
+      if (pre && pre.state !== 'done') blocked.add(tid);
     }
     const eligible = this.tasks
-      .filter((t) => t.State === 'todo' && t.Type !== 'feature' && !blocked.has(t.ID))
-      .sort((a, b) => b.Priority - a.Priority || new Date(a.CreatedAt) - new Date(b.CreatedAt));
+      .filter((t) => t.state === 'todo' && t.type !== 'feature' && !blocked.has(t.id))
+      .sort((a, b) => b.priority - a.priority || new Date(a.created_at) - new Date(b.created_at));
     return eligible[0] || null;
   }
 
   roleByID(id) {
-    return this.roles.find((r) => r.ID === id);
+    return this.roles.find((r) => r.id === id);
   }
 
   _priorityLabel(value) {
     if (!this.priorities || !this.priorities.length) return `p${value}`;
-    const exact = this.priorities.find((p) => p.Value === value);
-    if (exact) return exact.Key;
+    const exact = this.priorities.find((p) => p.value === value);
+    if (exact) return exact.key;
     return `p${value}`;
   }
 
@@ -1000,15 +1000,15 @@ class NottarioBoardPage extends LitElement {
   _nearestBucketKey(value) {
     if (!this.priorities || !this.priorities.length) return '';
     let best = this.priorities[0];
-    let bestDiff = Math.abs(best.Value - value);
+    let bestDiff = Math.abs(best.value - value);
     for (let i = 1; i < this.priorities.length; i++) {
-      const d = Math.abs(this.priorities[i].Value - value);
+      const d = Math.abs(this.priorities[i].value - value);
       if (d < bestDiff) {
         best = this.priorities[i];
         bestDiff = d;
       }
     }
-    return best.Key;
+    return best.key;
   }
 
   back() {
@@ -1041,25 +1041,25 @@ class NottarioBoardPage extends LitElement {
           this.byState('todo').length === 0 ? 'All caught up.' : 'Nothing eligible to start.'
         }</div>`;
       }
-      const role = next.TargetRoleID ? this.roleByID(next.TargetRoleID) : null;
+      const role = next.target_role_id ? this.roleByID(next.target_role_id) : null;
       return html`
         <div class="upnext">
           <div class="eyebrow">Up next</div>
-          <div class="title">${next.Title}</div>
+          <div class="title">${next.title}</div>
           <div class="meta">
-            <span class=${`prio ${this._priorityBucket(next.Priority)}`}>
+            <span class=${`prio ${this._priorityBucket(next.priority)}`}>
               <span class="dot"></span>
-              ${this._priorityLabel(next.Priority)}
+              ${this._priorityLabel(next.priority)}
             </span>
             ${
               role
                 ? html`<span class="role-badge"
-              style=${`--role-color:${role.Color || '#d0d7de'}`}>${role.Label}</span>`
+              style=${`--role-color:${role.color || '#d0d7de'}`}>${role.label}</span>`
                 : ''
             }
           </div>
           <div class="row">
-            <button class="btn primary" @click=${() => this.setState(next.ID, 'doing')}>Start</button>
+            <button class="btn primary" @click=${() => this.setState(next.id, 'doing')}>Start</button>
             <button class="btn ghost" @click=${() => this.open(next)}>Open</button>
             <div class="spacer"></div>
           </div>
@@ -1070,14 +1070,14 @@ class NottarioBoardPage extends LitElement {
   }
 
   byState(s) {
-    let items = this.tasks.filter((t) => t.State === s);
+    let items = this.tasks.filter((t) => t.state === s);
     items = this._applyFilters(items);
     if (s === 'done') {
       // Most recently finished at the top — fall back to UpdatedAt
       // when ActualEnd is null (legacy rows / manual edits).
       items.sort((a, b) => {
-        const at = new Date(a.ActualEnd || a.UpdatedAt).getTime();
-        const bt = new Date(b.ActualEnd || b.UpdatedAt).getTime();
+        const at = new Date(a.actual_end || a.updated_at).getTime();
+        const bt = new Date(b.actual_end || b.updated_at).getTime();
         return bt - at;
       });
     }
@@ -1090,15 +1090,15 @@ class NottarioBoardPage extends LitElement {
   _applyFilters(items) {
     const f = this._filters || {};
     if (f.mine && this.me) {
-      items = items.filter((t) => t.AssigneeUserID === this.me.id);
+      items = items.filter((t) => t.assignee_user_id === this.me.id);
     }
     if (f.roles && f.roles.length) {
       const set = new Set(f.roles);
-      items = items.filter((t) => set.has(t.TargetRoleID));
+      items = items.filter((t) => set.has(t.target_role_id));
     }
     if (f.types && f.types.length) {
       const set = new Set(f.types);
-      items = items.filter((t) => set.has(t.Type));
+      items = items.filter((t) => set.has(t.type));
     }
     return items;
   }
@@ -1121,7 +1121,7 @@ class NottarioBoardPage extends LitElement {
 
   open(t) {
     this.selected = { task: t, deps: [], commits: [], comments: [] };
-    this.loadDetail(t.ID);
+    this.loadDetail(t.id);
   }
 
   async loadDetail(id) {
@@ -1204,12 +1204,12 @@ class NottarioBoardPage extends LitElement {
   // it to the integer value the REST API expects via the cached
   // priorities catalogue.
   async setPriority(taskID, key) {
-    const bucket = (this.priorities || []).find((p) => p.Key === key);
+    const bucket = (this.priorities || []).find((p) => p.key === key);
     if (!bucket) return;
     const r = await fetch(`/api/projects/${this.projectId}/tasks/${taskID}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ priority: bucket.Value }),
+      body: JSON.stringify({ priority: bucket.value }),
     });
     if (r.ok) {
       await this.load();
@@ -1232,15 +1232,15 @@ class NottarioBoardPage extends LitElement {
   }
 
   renderCard(t) {
-    const role = t.TargetRoleID ? this.roleByID(t.TargetRoleID) : null;
-    const assignee = t.AssigneeUserID ? this._memberByID(t.AssigneeUserID) : null;
-    const assigneeName = assignee ? assignee.DisplayName || assignee.GithubLogin || '' : '';
+    const role = t.target_role_id ? this.roleByID(t.target_role_id) : null;
+    const assignee = t.assignee_user_id ? this._memberByID(t.assignee_user_id) : null;
+    const assigneeName = assignee ? assignee.display_name || assignee.github_login || '' : '';
     const a11yLabel =
-      `${t.Title}, ${t.Type}, ${t.State}` +
-      (role ? `, role ${role.Label}` : '') +
-      `, priority ${this._priorityLabel(t.Priority)}` +
+      `${t.title}, ${t.type}, ${t.state}` +
+      (role ? `, role ${role.label}` : '') +
+      `, priority ${this._priorityLabel(t.priority)}` +
       (assigneeName ? `, assigned to ${assigneeName}` : '');
-    const dragging = this._draggingID === t.ID;
+    const dragging = this._draggingID === t.id;
     return html`
       <div class=${`card${dragging ? ' dragging' : ''}`}
            role="button"
@@ -1256,16 +1256,16 @@ class NottarioBoardPage extends LitElement {
                this.open(t);
              }
            }}>
-        <div class="title">${t.Title}</div>
+        <div class="title">${t.title}</div>
         <div class="meta">
-          <span class=${`prio ${this._priorityBucket(t.Priority)}`}>
+          <span class=${`prio ${this._priorityBucket(t.priority)}`}>
             <span class="dot"></span>
-            ${this._priorityLabel(t.Priority)}
+            ${this._priorityLabel(t.priority)}
           </span>
           ${
             role
               ? html`<span class="role-badge"
-            style=${`--role-color:${role.Color || '#d0d7de'}`}>${role.Label}</span>`
+            style=${`--role-color:${role.color || '#d0d7de'}`}>${role.label}</span>`
               : ''
           }
         </div>
@@ -1273,7 +1273,7 @@ class NottarioBoardPage extends LitElement {
           assignee
             ? html`
           <nottario-avatar class="assignee" size="20"
-                          src=${assignee.AvatarURL || ''}
+                          src=${assignee.avatar_url || ''}
                           name=${assigneeName}
                           title=${assigneeName}></nottario-avatar>
         `
@@ -1289,8 +1289,8 @@ class NottarioBoardPage extends LitElement {
   // otherwise we follow whichever cycle is active (closed_at = null).
   _currentCycle() {
     const list = this.cycles || [];
-    if (this.cycleId) return list.find((c) => c.ID === this.cycleId) || null;
-    return list.find((c) => !c.ClosedAt) || null;
+    if (this.cycleId) return list.find((c) => c.id === this.cycleId) || null;
+    return list.find((c) => !c.closed_at) || null;
   }
 
   _toggleCycleDropdown() {
@@ -1302,8 +1302,8 @@ class NottarioBoardPage extends LitElement {
     // Follow the active cycle when picking it (clean URL); otherwise
     // record the explicit selection in the hash so a refresh preserves
     // the view.
-    const active = (this.cycles || []).find((c) => !c.ClosedAt);
-    if (active && active.ID === id) {
+    const active = (this.cycles || []).find((c) => !c.closed_at);
+    if (active && active.id === id) {
       // Use replaceState so we don't pollute history with hash flips.
       history.replaceState(null, '', window.location.pathname + window.location.search);
       this.cycleId = null;
@@ -1319,9 +1319,9 @@ class NottarioBoardPage extends LitElement {
   // server-side).
   _cycleCountsString() {
     const tasks = this.tasks || [];
-    const done = tasks.filter((t) => t.State === 'done').length;
-    const doing = tasks.filter((t) => t.State === 'doing').length;
-    const todo = tasks.filter((t) => t.State === 'todo').length;
+    const done = tasks.filter((t) => t.state === 'done').length;
+    const doing = tasks.filter((t) => t.state === 'doing').length;
+    const todo = tasks.filter((t) => t.state === 'todo').length;
     const total = tasks.length;
     return `${done}/${total} done · ${doing} doing · ${todo} todo`;
   }
@@ -1331,7 +1331,7 @@ class NottarioBoardPage extends LitElement {
   _canEndSprint() {
     if (!this.me || !this.project) return false;
     if (this.me.is_admin) return true;
-    return this.project.OwnerUserID === this.me.id;
+    return this.project.owner_user_id === this.me.id;
   }
 
   renderCycleSwitcher() {
@@ -1344,8 +1344,8 @@ class NottarioBoardPage extends LitElement {
                 aria-haspopup="listbox"
                 aria-expanded=${this._cycleDropdownOpen ? 'true' : 'false'}
                 @click=${() => this._toggleCycleDropdown()}>
-          ${current.Name}
-          ${!current.ClosedAt ? html`<span class="muted">(active)</span>` : html`<span class="muted">(closed)</span>`}
+          ${current.name}
+          ${!current.closed_at ? html`<span class="muted">(active)</span>` : html`<span class="muted">(closed)</span>`}
           <span class="caret">▾</span>
         </button>
         ${
@@ -1355,13 +1355,13 @@ class NottarioBoardPage extends LitElement {
             ${list.map(
               (c) => html`
               <li role="option"
-                  aria-selected=${c.ID === current.ID ? 'true' : 'false'}
-                  class=${c.ID === current.ID ? 'current' : ''}
-                  @click=${() => this._selectCycle(c.ID)}>
-                <span>${c.Name}</span>
+                  aria-selected=${c.id === current.id ? 'true' : 'false'}
+                  class=${c.id === current.id ? 'current' : ''}
+                  @click=${() => this._selectCycle(c.id)}>
+                <span>${c.name}</span>
                 ${
-                  c.ClosedAt
-                    ? html`<span class="muted">closed ${this._relTime(c.ClosedAt)}</span>`
+                  c.closed_at
+                    ? html`<span class="muted">closed ${this._relTime(c.closed_at)}</span>`
                     : html`<span class="muted">active</span>`
                 }
               </li>
@@ -1382,22 +1382,22 @@ class NottarioBoardPage extends LitElement {
   // will actually do.
   _computeEndCounts() {
     const tasks = this.tasks || [];
-    const features = tasks.filter((t) => t.Type === 'feature' && t.State !== 'done');
-    const partialFeatureIDs = new Set(features.map((f) => f.ID));
+    const features = tasks.filter((t) => t.type === 'feature' && t.state !== 'done');
+    const partialFeatureIDs = new Set(features.map((f) => f.id));
     let partialFeatureDoneChildren = 0;
     for (const t of tasks) {
-      if (t.ParentTaskID && partialFeatureIDs.has(t.ParentTaskID) && t.State === 'done') {
+      if (t.parent_task_id && partialFeatureIDs.has(t.parent_task_id) && t.state === 'done') {
         partialFeatureDoneChildren++;
       }
     }
     return {
-      doing: tasks.filter((t) => t.State === 'doing').length,
+      doing: tasks.filter((t) => t.state === 'doing').length,
       // Top-level todo only — children of a partial feature move with
       // their parent and shouldn't be double-counted.
-      todo: tasks.filter((t) => t.State === 'todo' && !t.ParentTaskID).length,
+      todo: tasks.filter((t) => t.state === 'todo' && !t.parent_task_id).length,
       partialFeatures: features.length,
       partialFeatureDoneChildren,
-      standaloneDone: tasks.filter((t) => t.State === 'done' && !t.ParentTaskID).length,
+      standaloneDone: tasks.filter((t) => t.state === 'done' && !t.parent_task_id).length,
     };
   }
 
@@ -1406,9 +1406,9 @@ class NottarioBoardPage extends LitElement {
   _defaultNextName() {
     const current = this._currentCycle();
     if (!current) return '';
-    const m = current.Name.match(/^(.*?)(\d+)$/);
+    const m = current.name.match(/^(.*?)(\d+)$/);
     if (m) return m[1] + (parseInt(m[2], 10) + 1);
-    return `${current.Name}-next`;
+    return `${current.name}-next`;
   }
 
   _openEndSprint() {
@@ -1458,23 +1458,23 @@ class NottarioBoardPage extends LitElement {
              if (e.key === 'Escape') this._endSprintOpen = false;
            }}>
         <div class="panel">
-          <h3 id="end-sprint-title">End ${current.Name}</h3>
+          <h3 id="end-sprint-title">End ${current.name}</h3>
           <nottario-field label="Next sprint name">
             <input name="next_name" .value=${defaultName}>
           </nottario-field>
           <p>This will:</p>
           <ul>
-            <li>Close <strong>${current.Name}</strong> (irreversible).</li>
+            <li>Close <strong>${current.name}</strong> (irreversible).</li>
             <li>Move ${counts.doing} doing + ${counts.todo} todo tasks forward.</li>
             <li>Re-stamp ${counts.partialFeatures} partial features
               (incl. ${counts.partialFeatureDoneChildren} done children).</li>
-            <li>Leave ${counts.standaloneDone} standalone done tasks in ${current.Name}.</li>
+            <li>Leave ${counts.standaloneDone} standalone done tasks in ${current.name}.</li>
           </ul>
           <div class="actions-row">
             <button class="btn secondary"
                     @click=${() => (this._endSprintOpen = false)}>Cancel</button>
             <button class="btn danger"
-                    @click=${() => this._confirmEndSprint()}>End ${current.Name}</button>
+                    @click=${() => this._confirmEndSprint()}>End ${current.name}</button>
           </div>
         </div>
       </div>
@@ -1484,7 +1484,7 @@ class NottarioBoardPage extends LitElement {
   render() {
     if (!this.project) return html`<p>Loading…</p>`;
     const current = this._currentCycle();
-    const viewingActive = current && !current.ClosedAt;
+    const viewingActive = current && !current.closed_at;
     const stateLabels = { todo: 'To do', doing: 'In progress', done: 'Done' };
     return html`
       <nottario-page-header
@@ -1501,7 +1501,7 @@ class NottarioBoardPage extends LitElement {
           viewingActive && this._canEndSprint()
             ? html`<button slot="actions" class="btn danger"
                          title="Close this cycle and open the next"
-                         @click=${() => this._openEndSprint()}>End ${current.Name}</button>`
+                         @click=${() => this._openEndSprint()}>End ${current.name}</button>`
             : null
         }
         <button slot="actions" class="btn primary"
@@ -1522,7 +1522,7 @@ class NottarioBoardPage extends LitElement {
               const isEmpty = items.length === 0;
               const dragOver = this._dragOverState === s && this._draggingID;
               const draggingFromThis =
-                this._draggingID && this.tasks.find((x) => x.ID === this._draggingID)?.State === s;
+                this._draggingID && this.tasks.find((x) => x.id === this._draggingID)?.state === s;
               const cls = `col${isEmpty ? ' empty' : ''}${dragOver && !draggingFromThis ? ' drag-over' : ''}`;
               return html`
                 <section class=${cls}
@@ -1575,9 +1575,9 @@ class NottarioBoardPage extends LitElement {
                 (r) => html`
                 <label>
                   <input type="checkbox"
-                         ?checked=${f.roles?.includes(r.ID)}
-                         @change=${() => this._toggleFilterValue('roles', r.ID)}>
-                  ${r.Label}
+                         ?checked=${f.roles?.includes(r.id)}
+                         @change=${() => this._toggleFilterValue('roles', r.id)}>
+                  ${r.label}
                 </label>
               `,
               )}
@@ -1667,8 +1667,8 @@ class NottarioBoardPage extends LitElement {
   // user undo within 6 seconds. The toast replaces the immediate
   // mutation-without-recovery that the old drag-drop had.
   _moveStateWithUndo(taskID, newState, oldState) {
-    const t = this.tasks.find((x) => x.ID === taskID);
-    const label = t ? `"${t.Title.slice(0, 32)}${t.Title.length > 32 ? '…' : ''}"` : 'task';
+    const t = this.tasks.find((x) => x.id === taskID);
+    const label = t ? `"${t.title.slice(0, 32)}${t.title.length > 32 ? '…' : ''}"` : 'task';
     this.setState(taskID, newState);
     if (this._toast?.timer) clearTimeout(this._toast.timer);
     const labels = { todo: 'To do', doing: 'In progress', done: 'Done' };
@@ -1719,25 +1719,26 @@ class NottarioBoardPage extends LitElement {
               <nottario-field label="Priority" style="flex:1">
                 <select name="priority_key">
                   ${[...this.priorities]
-                    .sort((a, b) => b.Value - a.Value)
+                    .sort((a, b) => b.value - a.value)
                     .map(
                       (p) =>
-                        html`<option value=${p.Key} ?selected=${p.Key === 'medium'}>${p.Key} (${p.Value})</option>`,
+                        html`<option value=${p.key} ?selected=${p.key === 'medium'}>${p.key} (${p.value})</option>`,
                     )}
                 </select>
               </nottario-field>
               <nottario-field label="Target role" style="flex:1">
                 <select name="target_role_id">
                   <option value="">— none —</option>
-                  ${this.roles.map((r) => html`<option value=${r.ID}>${r.Label}</option>`)}
+                  ${this.roles.map((r) => html`<option value=${r.id}>${r.label}</option>`)}
                 </select>
               </nottario-field>
             </div>
             <nottario-field label="Assignee" hint="optional">
               <select name="assignee_user_id">
                 <option value="">— none —</option>
-                ${[...new Map((this.members || []).map((m) => [m.UserID, m])).values()].map(
-                  (m) => html`<option value=${m.UserID}>${m.DisplayName || m.GithubLogin}</option>`,
+                ${[...new Map((this.members || []).map((m) => [m.user_id, m])).values()].map(
+                  (m) =>
+                    html`<option value=${m.user_id}>${m.display_name || m.github_login}</option>`,
                 )}
               </select>
             </nottario-field>
@@ -1761,11 +1762,11 @@ class NottarioBoardPage extends LitElement {
   // URL; comments and the task assignee link to one of them.
   _memberByID(uid) {
     if (!uid) return null;
-    return (this.members || []).find((m) => m.UserID === uid) || null;
+    return (this.members || []).find((m) => m.user_id === uid) || null;
   }
 
   _taskByID(id) {
-    return (this.tasks || []).find((t) => t.ID === id) || null;
+    return (this.tasks || []).find((t) => t.id === id) || null;
   }
 
   _relTime(iso) {
@@ -1781,9 +1782,9 @@ class NottarioBoardPage extends LitElement {
 
   renderDetail() {
     const { task, deps, commits, comments } = this.selected;
-    const role = task.TargetRoleID ? this.roleByID(task.TargetRoleID) : null;
-    const assignee = this._memberByID(task.AssigneeUserID);
-    const shortID = (task.ID || '').slice(0, 7);
+    const role = task.target_role_id ? this.roleByID(task.target_role_id) : null;
+    const assignee = this._memberByID(task.assignee_user_id);
+    const shortID = (task.id || '').slice(0, 7);
     return html`
       <div class="dialog"
            role="dialog"
@@ -1796,10 +1797,10 @@ class NottarioBoardPage extends LitElement {
         <div class="panel detail">
           <header class="head">
             <div class="title-row">
-              <h3 id="task-dialog-title">${task.Title}</h3>
+              <h3 id="task-dialog-title">${task.title}</h3>
               <div class="title-actions">
                 <button class="icon-btn danger" title="Delete task" aria-label="Delete task"
-                        @click=${() => (this._confirmDeleteID = task.ID)}>
+                        @click=${() => (this._confirmDeleteID = task.id)}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M6 2.5h4M3 4.5h10M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2M6.8 7v4M9.2 7v4"
                           stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1816,7 +1817,7 @@ class NottarioBoardPage extends LitElement {
             </div>
 
             <div class="sub-line">
-              <span class="badge ${task.Type}">${task.Type}</span>
+              <span class="badge ${task.type}">${task.type}</span>
               <span class="dot">·</span>
               <span class="short-id">#${shortID}</span>
             </div>
@@ -1827,8 +1828,8 @@ class NottarioBoardPage extends LitElement {
                 <div class="state-control">
                   ${['todo', 'doing', 'done'].map(
                     (s) => html`
-                    <button class=${task.State === s ? 'active' : ''}
-                            @click=${() => this.setState(task.ID, s)}>${s}</button>
+                    <button class=${task.state === s ? 'active' : ''}
+                            @click=${() => this.setState(task.id, s)}>${s}</button>
                   `,
                   )}
                 </div>
@@ -1837,14 +1838,14 @@ class NottarioBoardPage extends LitElement {
               <div class="field-line">
                 <span class="lbl">Priority</span>
                 <select class="priority"
-                        @change=${(e) => this.setPriority(task.ID, e.target.value)}>
+                        @change=${(e) => this.setPriority(task.id, e.target.value)}>
                   ${[...this.priorities]
-                    .sort((a, b) => b.Value - a.Value)
+                    .sort((a, b) => b.value - a.value)
                     .map(
                       (p) => html`
-                    <option value=${p.Key}
-                            ?selected=${p.Key === this._nearestBucketKey(task.Priority)}>
-                      ${p.Key} (${p.Value})
+                    <option value=${p.key}
+                            ?selected=${p.key === this._nearestBucketKey(task.priority)}>
+                      ${p.key} (${p.value})
                     </option>
                   `,
                     )}
@@ -1853,25 +1854,25 @@ class NottarioBoardPage extends LitElement {
 
               <div class="field-line">
                 <span class="lbl">Role</span>
-                <span class="val">${role ? role.Label : html`<span class="muted">none</span>`}</span>
+                <span class="val">${role ? role.label : html`<span class="muted">none</span>`}</span>
               </div>
 
               <div class="field-line">
                 <span class="lbl">Assignee</span>
                 <span class="val assignee-edit">
                   ${
-                    assignee && assignee.AvatarURL
+                    assignee && assignee.avatar_url
                       ? html`<nottario-avatar size="20"
-                              src=${assignee.AvatarURL}
-                              name=${assignee.DisplayName || assignee.GithubLogin || ''}></nottario-avatar>`
+                              src=${assignee.avatar_url}
+                              name=${assignee.display_name || assignee.github_login || ''}></nottario-avatar>`
                       : null
                   }
-                  <select @change=${(e) => this.setAssignee(task.ID, e.target.value)}>
-                    <option value="" ?selected=${!task.AssigneeUserID}>— unassigned —</option>
-                    ${[...new Map((this.members || []).map((m) => [m.UserID, m])).values()].map(
+                  <select @change=${(e) => this.setAssignee(task.id, e.target.value)}>
+                    <option value="" ?selected=${!task.assignee_user_id}>— unassigned —</option>
+                    ${[...new Map((this.members || []).map((m) => [m.user_id, m])).values()].map(
                       (m) => html`
-                        <option value=${m.UserID} ?selected=${m.UserID === task.AssigneeUserID}>
-                          ${m.DisplayName || m.GithubLogin}
+                        <option value=${m.user_id} ?selected=${m.user_id === task.assignee_user_id}>
+                          ${m.display_name || m.github_login}
                         </option>
                       `,
                     )}
@@ -1883,12 +1884,12 @@ class NottarioBoardPage extends LitElement {
 
           <div class="body">
             ${
-              task.DescriptionMD
+              task.description
                 ? html`
               <section>
                 <nottario-markdown
                   project-id=${this.projectId}
-                  .source=${task.DescriptionMD}></nottario-markdown>
+                  .source=${task.description}></nottario-markdown>
               </section>
             `
                 : null
@@ -1924,8 +1925,8 @@ class NottarioBoardPage extends LitElement {
                     ${commits.map(
                       (c) => html`
                       <div class="commit">
-                        ${c.Repo}<span class="sha">@${(c.SHA || '').slice(0, 8)}</span>
-                        ${c.Message ? html` ${c.Message}` : null}
+                        ${c.repo}<span class="sha">@${(c.sha || '').slice(0, 8)}</span>
+                        ${c.message ? html` ${c.message}` : null}
                       </div>
                     `,
                     )}
@@ -1940,22 +1941,22 @@ class NottarioBoardPage extends LitElement {
                 comments.length === 0
                   ? html`<p class="empty">No comments yet.</p>`
                   : comments.map((c) => {
-                      const author = this._memberByID(c.AuthorUserID);
+                      const author = this._memberByID(c.author_user_id);
                       return html`
                     <div class="comment">
                       <div class="ava">
                         <nottario-avatar size="24"
-                          src=${author?.AvatarURL || ''}
-                          name=${author?.DisplayName || author?.GithubLogin || 'agent'}></nottario-avatar>
+                          src=${author?.avatar_url || ''}
+                          name=${author?.display_name || author?.github_login || 'agent'}></nottario-avatar>
                       </div>
                       <div>
                         <div class="meta-line">
-                          <span class="name">${author?.DisplayName || author?.GithubLogin || 'agent'}</span>
-                          <span class="when">${this._relTime(c.CreatedAt)}</span>
+                          <span class="name">${author?.display_name || author?.github_login || 'agent'}</span>
+                          <span class="when">${this._relTime(c.created_at)}</span>
                         </div>
                         <nottario-markdown
                           project-id=${this.projectId}
-                          .source=${c.BodyMD || ''}></nottario-markdown>
+                          .source=${c.body || ''}></nottario-markdown>
                       </div>
                     </div>
                   `;
@@ -1966,7 +1967,7 @@ class NottarioBoardPage extends LitElement {
                     @submit=${(e) => {
                       e.preventDefault();
                       const t = e.target.body;
-                      this.addComment(task.ID, t.value);
+                      this.addComment(task.id, t.value);
                       t.value = '';
                     }}>
                 <textarea name="body" placeholder="Write a comment in markdown..."></textarea>

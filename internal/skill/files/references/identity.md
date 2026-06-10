@@ -43,7 +43,7 @@ everywhere.
 | `is_admin`     | `true` if the user is the instance admin (first GitHub user to ever log in). Does not grant cross-project access for token callers. |
 | `source`       | always `"token"` for MCP callers (other surfaces may use `"session"`).         |
 | `token_id`     | uuid of the specific API token presented.                                      |
-| `memberships`  | array of `{project_id, project_slug, project_name, role_id, role_key, role_label, role_color, role_position}`. For token callers this list is **filtered to the token's project only** — every entry refers to the same `project_id`, one per role the user holds in that project. Use `memberships[0].ProjectID` as the canonical `project_id` for the rest of the session. |
+| `memberships`  | array of `{project_id, project_slug, project_name, role_id, role_key, role_label, role_color, role_position}`. For token callers this list is **filtered to the token's project only** — every entry refers to the same `project_id`, one per role the user holds in that project. Use `memberships[0].project_id` as the canonical `project_id` for the rest of the session. |
 
 ## Roles
 

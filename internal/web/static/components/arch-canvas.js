@@ -280,11 +280,11 @@ class NottarioArchCanvas extends LitElement {
   _buildTree() {
     const byID = new Map();
     for (const n of this.nodes || []) {
-      byID.set(n.ID, { node: n, children: [] });
+      byID.set(n.id, { node: n, children: [] });
     }
     const roots = [];
     for (const wrapper of byID.values()) {
-      const pid = wrapper.node.ParentID;
+      const pid = wrapper.node.parent_id;
       if (pid && byID.has(pid)) {
         byID.get(pid).children.push(wrapper);
       } else {
@@ -297,17 +297,17 @@ class NottarioArchCanvas extends LitElement {
       return 1;
     };
     roots.sort((a, b) => {
-      const rk = rank(a.node.Kind) - rank(b.node.Kind);
+      const rk = rank(a.node.kind) - rank(b.node.kind);
       if (rk !== 0) return rk;
-      const rp = (a.node.Position ?? 0) - (b.node.Position ?? 0);
+      const rp = (a.node.position ?? 0) - (b.node.position ?? 0);
       if (rp !== 0) return rp;
-      return (a.node.Name || '').localeCompare(b.node.Name || '');
+      return (a.node.name || '').localeCompare(b.node.name || '');
     });
     for (const w of byID.values()) {
       w.children.sort((a, b) => {
-        const rp = (a.node.Position ?? 0) - (b.node.Position ?? 0);
+        const rp = (a.node.position ?? 0) - (b.node.position ?? 0);
         if (rp !== 0) return rp;
-        return (a.node.Name || '').localeCompare(b.node.Name || '');
+        return (a.node.name || '').localeCompare(b.node.name || '');
       });
     }
     return { roots, byID };
@@ -319,7 +319,7 @@ class NottarioArchCanvas extends LitElement {
   _isExpanded(w, depth) {
     if (!w.children.length) return false;
     if (depth === 0) return true; // roots always show their immediate children
-    return this.expanded?.has?.(w.node.ID) ?? false;
+    return this.expanded?.has?.(w.node.id) ?? false;
   }
 
   _flatten(roots) {
@@ -345,8 +345,10 @@ class NottarioArchCanvas extends LitElement {
       // Name + slug enter the key because they drive measured leaf
       // sizes — a rename changes the box width, so the cached layout
       // would no longer be valid.
-      nodes: (this.nodes || []).map((n) => `${n.ID}|${n.ParentID}|${n.Name || ''}|${n.Slug || ''}`),
-      edges: (this.edges || []).map((e) => e.FromNodeID + '>' + e.ToNodeID),
+      nodes: (this.nodes || []).map(
+        (n) => `${n.id}|${n.parent_id}|${n.name || ''}|${n.slug || ''}`,
+      ),
+      edges: (this.edges || []).map((e) => e.from_node_id + '>' + e.to_node_id),
       expanded: [...(this.expanded || [])].sort(),
     });
     if (this._elkCache && this._elkCacheKey === key) return this._elkCache;
@@ -500,7 +502,7 @@ class NottarioArchCanvas extends LitElement {
     if (typeof localStorage === 'undefined') return;
     try {
       const flatSnap = layout.flat.map((w) => ({
-        id: w.node.ID,
+        id: w.node.id,
         x: w.x,
         y: w.y,
         w: w.w,
@@ -513,7 +515,7 @@ class NottarioArchCanvas extends LitElement {
       const routes = (layout._elkRouted || []).map((r) => ({
         d: r.d,
         waypoints: r.waypoints,
-        edgeID: r.edge?.ID ?? null,
+        edgeID: r.edge?.id ?? null,
       }));
       const payload = {
         v: 1,
@@ -552,7 +554,7 @@ class NottarioArchCanvas extends LitElement {
       }
       const flat = this._flatten(roots);
       const edgesByID = new Map();
-      for (const e of this.edges || []) edgesByID.set(e.ID, e);
+      for (const e of this.edges || []) edgesByID.set(e.id, e);
       const _elkRouted = payload.routes
         .map((r) => ({
           d: r.d,
@@ -581,14 +583,14 @@ class NottarioArchCanvas extends LitElement {
       const hasKids = (w.children?.length || 0) > 0;
       const expanded = hasKids && isExpanded(w, depth);
       const node = {
-        id: w.node.ID,
-        labels: [{ text: w.node.Name || '' }],
+        id: w.node.id,
+        labels: [{ text: w.node.name || '' }],
         layoutOptions: {
           'elk.padding': '[top=44,left=24,bottom=24,right=24]',
         },
       };
       if (!hasKids || !expanded) {
-        const sz = NottarioArchCanvas._leafSize(w.node.Name, w.node.Slug);
+        const sz = NottarioArchCanvas._leafSize(w.node.name, w.node.slug);
         node.width = sz.w;
         node.height = sz.h;
       } else {
@@ -613,17 +615,17 @@ class NottarioArchCanvas extends LitElement {
       const project = (id) => {
         if (visibleIDs.has(id)) return id;
         let w = byID.get(id);
-        while (w && w.node.ParentID) {
-          if (visibleIDs.has(w.node.ParentID)) return w.node.ParentID;
-          w = byID.get(w.node.ParentID);
+        while (w && w.node.parent_id) {
+          if (visibleIDs.has(w.node.parent_id)) return w.node.parent_id;
+          w = byID.get(w.node.parent_id);
         }
         return null;
       };
-      const s = project(e.FromNodeID);
-      const t = project(e.ToNodeID);
+      const s = project(e.from_node_id);
+      const t = project(e.to_node_id);
       if (!s || !t || s === t) continue;
       elkEdges.push({
-        id: `${e.FromNodeID}__${e.ToNodeID}`,
+        id: `${e.from_node_id}__${e.to_node_id}`,
         sources: [s],
         targets: [t],
         _origEdge: e,
@@ -670,7 +672,7 @@ class NottarioArchCanvas extends LitElement {
     // Translate ELK edge sections (sequence of {startPoint, bendPoints,
     // endPoint}) into our waypoints + d.
     const routedEdges = [];
-    const wByID = new Map(roots.flatMap((r) => this._flatten([r])).map((w) => [w.node.ID, w]));
+    const wByID = new Map(roots.flatMap((r) => this._flatten([r])).map((w) => [w.node.id, w]));
     // Snap an entry/exit segment to be perpendicular to the node face it
     // touches. Without this, ELK occasionally returns a sub-pixel
     // misaligned last bend-point and the arrowhead ends up tilted with
@@ -725,8 +727,8 @@ class NottarioArchCanvas extends LitElement {
       }
       wp.push({ x: cx + sec.endPoint.x, y: cy + sec.endPoint.y });
       // Force entry/exit segments to be perpendicular to source/target.
-      const srcNode = wByID.get(orig.FromNodeID) || wByID.get(elkEdgeEntry.sources[0]);
-      const tgtNode = wByID.get(orig.ToNodeID) || wByID.get(elkEdgeEntry.targets[0]);
+      const srcNode = wByID.get(orig.from_node_id) || wByID.get(elkEdgeEntry.sources[0]);
+      const tgtNode = wByID.get(orig.to_node_id) || wByID.get(elkEdgeEntry.targets[0]);
       snapTerminalOrthogonal(wp, srcNode, 'start');
       snapTerminalOrthogonal(wp, tgtNode, 'end');
       routedEdges.push({ d: this._pathD(wp), waypoints: wp, edge: orig });
@@ -880,16 +882,16 @@ class NottarioArchCanvas extends LitElement {
     // endpoints of that one edge stay full-opacity, everything else
     // dims (and only that edge gets the accent stroke).
     if (this.highlightEdge) {
-      const ed = (this.edges || []).find((e) => e.ID === this.highlightEdge);
-      if (ed) return new Set([ed.FromNodeID, ed.ToNodeID]);
+      const ed = (this.edges || []).find((e) => e.id === this.highlightEdge);
+      if (ed) return new Set([ed.from_node_id, ed.to_node_id]);
     }
     const q = (this.query || '').trim().toLowerCase();
     if (this._hover) {
       // Hover: hovered node + nodes connected by any edge.
       const set = new Set([this._hover]);
       for (const e of this.edges || []) {
-        if (e.FromNodeID === this._hover) set.add(e.ToNodeID);
-        if (e.ToNodeID === this._hover) set.add(e.FromNodeID);
+        if (e.from_node_id === this._hover) set.add(e.to_node_id);
+        if (e.to_node_id === this._hover) set.add(e.from_node_id);
       }
       return set;
     }
@@ -897,8 +899,8 @@ class NottarioArchCanvas extends LitElement {
       const set = new Set();
       for (const w of layout.flat) {
         const n = w.node;
-        if ((n.Name || '').toLowerCase().includes(q) || (n.Slug || '').toLowerCase().includes(q)) {
-          set.add(n.ID);
+        if ((n.name || '').toLowerCase().includes(q) || (n.slug || '').toLowerCase().includes(q)) {
+          set.add(n.id);
         }
       }
       return set;
@@ -907,7 +909,7 @@ class NottarioArchCanvas extends LitElement {
       // Focus mode: the focused subtree.
       const set = new Set();
       const collect = (w) => {
-        set.add(w.node.ID);
+        set.add(w.node.id);
         if (w.children) for (const c of w.children) collect(c);
       };
       const w = layout.byID.get(this.focus);
@@ -1005,26 +1007,26 @@ class NottarioArchCanvas extends LitElement {
     // fall through here to just select. For leaves, just select.
     if (w._isContainer && !w._expanded) {
       const ex = new Set(this.expanded || []);
-      ex.add(w.node.ID);
+      ex.add(w.node.id);
       this.expanded = ex;
       this._emitExpandChanged();
     }
-    this._emitSelect(w.node.ID);
+    this._emitSelect(w.node.id);
   }
   _onNodeDblClick(e, w) {
     e.stopPropagation();
-    this.focusOn(w.node.ID);
+    this.focusOn(w.node.id);
   }
   _onCaretClick(e, w) {
     e.stopPropagation();
     const ex = new Set(this.expanded || []);
-    if (ex.has(w.node.ID)) ex.delete(w.node.ID);
-    else ex.add(w.node.ID);
+    if (ex.has(w.node.id)) ex.delete(w.node.id);
+    else ex.add(w.node.id);
     this.expanded = ex;
     this._emitExpandChanged();
   }
   _onNodeEnter(w) {
-    this._hover = w.node.ID;
+    this._hover = w.node.id;
   }
   _onNodeLeave() {
     this._hover = '';
@@ -1038,14 +1040,14 @@ class NottarioArchCanvas extends LitElement {
       case 'Enter':
       case ' ':
         e.preventDefault();
-        this._emitSelect(w.node.ID);
+        this._emitSelect(w.node.id);
         return;
       case 'ArrowRight':
       case 'ArrowDown':
         if (w._isContainer && !w._expanded) {
           e.preventDefault();
           const ex = new Set(this.expanded || []);
-          ex.add(w.node.ID);
+          ex.add(w.node.id);
           this.expanded = ex;
           this._emitExpandChanged();
         }
@@ -1055,7 +1057,7 @@ class NottarioArchCanvas extends LitElement {
         if (w._isContainer && w._expanded) {
           e.preventDefault();
           const ex = new Set(this.expanded || []);
-          ex.delete(w.node.ID);
+          ex.delete(w.node.id);
           this.expanded = ex;
           this._emitExpandChanged();
         }
@@ -1154,14 +1156,14 @@ class NottarioArchCanvas extends LitElement {
     const cls = [
       'node',
       w._isContainer ? 'container' : 'leaf',
-      this.selected === n.ID ? 'selected' : '',
+      this.selected === n.id ? 'selected' : '',
       'clickable',
       dim ? 'dim' : '',
     ]
       .filter(Boolean)
       .join(' ');
-    const dot = kindDotColor(n.Kind);
-    const kindLabel = (n.Kind || '').toLowerCase();
+    const dot = kindDotColor(n.kind);
+    const kindLabel = (n.kind || '').toLowerCase();
     const caret = w._isContainer ? (w._expanded ? '▾' : '▸') : null;
     const showAsContainer = w._isContainer && w._expanded;
 
@@ -1169,8 +1171,8 @@ class NottarioArchCanvas extends LitElement {
       return svg`
         <g class=${cls} transform=${`translate(${w.x},${w.y})`}
            role="button"
-           tabindex=${this.selected === n.ID ? '0' : '-1'}
-           aria-label=${`${kindLabel || 'node'} ${n.Name}`}
+           tabindex=${this.selected === n.id ? '0' : '-1'}
+           aria-label=${`${kindLabel || 'node'} ${n.name}`}
            @click=${(e) => this._onNodeClick(e, w)}
            @dblclick=${(e) => this._onNodeDblClick(e, w)}
            @keydown=${(e) => this._onNodeKey(e, w)}
@@ -1183,7 +1185,7 @@ class NottarioArchCanvas extends LitElement {
             <circle cx="3" cy="6" r="3" fill=${dot}></circle>
             <text x="10" y="9">${kindLabel}</text>
           </g>
-          <text class="name" x=${w.w / 2} y="18" text-anchor="middle">${n.Name}</text>
+          <text class="name" x=${w.w / 2} y="18" text-anchor="middle">${n.name}</text>
           <!-- Caret glyph (visual hint only; pointer-events: none). -->
           <text class="caret" x=${w.w - 16} y="18" text-anchor="middle">${caret}</text>
           <!-- Whole header strip catches clicks for expand/collapse.
@@ -1194,7 +1196,7 @@ class NottarioArchCanvas extends LitElement {
       `;
     }
     // Collapsed container OR leaf
-    const hint = w._isContainer && !w._expanded ? `${w.children.length} inside` : n.Slug || '';
+    const hint = w._isContainer && !w._expanded ? `${w.children.length} inside` : n.slug || '';
     return svg`
       <g class=${cls} transform=${`translate(${w.x},${w.y})`}
          @click=${(e) => this._onNodeClick(e, w)}
@@ -1215,7 +1217,7 @@ class NottarioArchCanvas extends LitElement {
         `
             : null
         }
-        ${this._renderLeafName(n.Name, w.w, w.h, hint)}
+        ${this._renderLeafName(n.name, w.w, w.h, hint)}
       </g>
     `;
   }
@@ -1262,7 +1264,7 @@ class NottarioArchCanvas extends LitElement {
   _renderEdge(routed, dim, highlight) {
     if (!routed) return null;
     const e = routed.edge;
-    const isSelected = this.selected === e.FromNodeID || this.selected === e.ToNodeID;
+    const isSelected = this.selected === e.from_node_id || this.selected === e.to_node_id;
     const cls = [
       'edge',
       isSelected ? 'selected' : '',
@@ -1317,8 +1319,8 @@ class NottarioArchCanvas extends LitElement {
   }
 
   _renderEdgeLabel(routed, dim, obs) {
-    if (!routed || !routed.edge.Label) return null;
-    const label = routed.edge.Label;
+    if (!routed || !routed.edge.label) return null;
+    const label = routed.edge.label;
     const textWidth = Math.max(24, label.length * 6.5);
     const pillW = textWidth + 10;
     const pillH = 18;
@@ -1375,12 +1377,12 @@ class NottarioArchCanvas extends LitElement {
     const hi = this._highlightedSet(layout);
     const isDim = (id) => hi !== null && !hi.has(id);
     const isHighlightedEdge = (e) => {
-      if (this.highlightEdge) return e.ID === this.highlightEdge;
-      return hi !== null && hi.has(e.FromNodeID) && hi.has(e.ToNodeID);
+      if (this.highlightEdge) return e.id === this.highlightEdge;
+      return hi !== null && hi.has(e.from_node_id) && hi.has(e.to_node_id);
     };
     const isAccentedEdge = (e) =>
-      (this._hover && (e.FromNodeID === this._hover || e.ToNodeID === this._hover)) ||
-      (this.highlightEdge && e.ID === this.highlightEdge);
+      (this._hover && (e.from_node_id === this._hover || e.to_node_id === this._hover)) ||
+      (this.highlightEdge && e.id === this.highlightEdge);
 
     const containers = layout.flat.filter((w) => w._isContainer && w._expanded);
     const leavesAndCollapsed = layout.flat.filter((w) => !w._isContainer || !w._expanded);
@@ -1400,11 +1402,11 @@ class NottarioArchCanvas extends LitElement {
            @pointerup=${(e) => this._onSvgPointerUp(e)}
            @pointercancel=${(e) => this._onSvgPointerUp(e)}
            @wheel=${(e) => this._onSvgWheel(e)}>
-        ${containers.map((w) => this._renderNode(w, isDim(w.node.ID)))}
+        ${containers.map((w) => this._renderNode(w, isDim(w.node.id)))}
         ${routedEdges.map((r) =>
           this._renderEdge(r, hi !== null && !isHighlightedEdge(r.edge), isAccentedEdge(r.edge)),
         )}
-        ${leavesAndCollapsed.map((w) => this._renderNode(w, isDim(w.node.ID)))}
+        ${leavesAndCollapsed.map((w) => this._renderNode(w, isDim(w.node.id)))}
         ${routedEdges.map((r) =>
           this._renderEdgeLabel(r, hi !== null && !isHighlightedEdge(r.edge), obstacles),
         )}

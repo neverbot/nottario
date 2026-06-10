@@ -436,13 +436,13 @@ class NottarioDocsPage extends LitElement {
     this._unsub = subscribe(this.projectId, (ev) => {
       if (ev.type === 'realtime.reconnected') {
         this.load();
-        if (this.selected) this.open(this.selected.Path);
+        if (this.selected) this.open(this.selected.path);
         return;
       }
       if (!ev.type?.startsWith('doc.')) return;
       this.load();
-      if (this.selected && ev.path === this.selected.Path) {
-        this.open(this.selected.Path);
+      if (this.selected && ev.path === this.selected.path) {
+        this.open(this.selected.path);
       }
     });
   }
@@ -515,7 +515,7 @@ class NottarioDocsPage extends LitElement {
     if (e.key === 'Enter') {
       const visible = this._visibleSummaries();
       if (this._cursorIdx >= 0 && visible[this._cursorIdx]) {
-        this.open(visible[this._cursorIdx].Path);
+        this.open(visible[this._cursorIdx].path);
         e.preventDefault();
       }
       return;
@@ -608,9 +608,9 @@ class NottarioDocsPage extends LitElement {
       if (!r.ok) throw new Error((await r.json()).error || 'failed');
       const doc = await r.json();
       this.creating = false;
-      this.info = `Created ${doc.Path}`;
+      this.info = `Created ${doc.path}`;
       await this.load();
-      await this.open(doc.Path);
+      await this.open(doc.path);
     } catch (e) {
       this.error = e.message;
     }
@@ -619,7 +619,7 @@ class NottarioDocsPage extends LitElement {
   startEdit() {
     if (!this.selected) return;
     this.editing = true;
-    const fm = this.selected.Frontmatter || {};
+    const fm = this.selected.frontmatter || {};
     let draft = '';
     if (Object.keys(fm).length) {
       const lines = ['---'];
@@ -633,9 +633,9 @@ class NottarioDocsPage extends LitElement {
         }
       }
       lines.push('---');
-      draft = lines.join('\n') + '\n\n' + (this.selected.ContentMD || '');
+      draft = lines.join('\n') + '\n\n' + (this.selected.content || '');
     } else {
-      draft = this.selected.ContentMD || '';
+      draft = this.selected.content || '';
     }
     this.draft = draft;
   }
@@ -648,9 +648,9 @@ class NottarioDocsPage extends LitElement {
         body: JSON.stringify({
           scope: 'project',
           project_id: this.projectId,
-          path: this.selected.Path,
+          path: this.selected.path,
           content: this.draft,
-          expected_version: this.selected.CurrentVersion,
+          expected_version: this.selected.current_version,
         }),
       });
       if (r.status === 409) {
@@ -658,7 +658,7 @@ class NottarioDocsPage extends LitElement {
       }
       if (!r.ok) throw new Error((await r.json()).error || 'failed');
       const doc = await r.json();
-      this.info = `Saved (v${doc.CurrentVersion})`;
+      this.info = `Saved (v${doc.current_version})`;
       this.editing = false;
       this.selected = doc;
       await this.load();
@@ -668,7 +668,7 @@ class NottarioDocsPage extends LitElement {
   }
 
   async del() {
-    if (!confirm(`Delete ${this.selected.Path}?`)) return;
+    if (!confirm(`Delete ${this.selected.path}?`)) return;
     try {
       const r = await fetch('/api/docs/delete', {
         method: 'POST',
@@ -676,12 +676,12 @@ class NottarioDocsPage extends LitElement {
         body: JSON.stringify({
           scope: 'project',
           project_id: this.projectId,
-          path: this.selected.Path,
+          path: this.selected.path,
           message: 'deleted via web ui',
         }),
       });
       if (!r.ok) throw new Error('delete failed');
-      this.info = `Deleted ${this.selected.Path}`;
+      this.info = `Deleted ${this.selected.path}`;
       this.selected = null;
       await this.load();
     } catch (e) {
@@ -720,15 +720,15 @@ class NottarioDocsPage extends LitElement {
     }
     if (!this.selected) return;
     this.historyOpen = true;
-    if (this.historyVersions === null || this._historyPath !== this.selected.Path) {
+    if (this.historyVersions === null || this._historyPath !== this.selected.path) {
       try {
         const r = await fetch(
-          `/api/docs/history?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(this.selected.Path)}`,
+          `/api/docs/history?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(this.selected.path)}`,
         );
         if (!r.ok) throw new Error('history failed');
         const j = await r.json();
         this.historyVersions = j.versions || [];
-        this._historyPath = this.selected.Path;
+        this._historyPath = this.selected.path;
       } catch (e) {
         this.error = e.message;
         this.historyVersions = [];
@@ -738,14 +738,14 @@ class NottarioDocsPage extends LitElement {
 
   async openVersion(v) {
     this.historyOpen = false;
-    if (v === this.selected?.CurrentVersion) {
+    if (v === this.selected?.current_version) {
       this.viewingVersion = null;
       return;
     }
     try {
       const r = await fetch(
         `/api/docs/read-version?scope=project&project_id=${this.projectId}` +
-          `&path=${encodeURIComponent(this.selected.Path)}&version=${v}`,
+          `&path=${encodeURIComponent(this.selected.path)}&version=${v}`,
       );
       if (!r.ok) throw new Error('version read failed');
       this.viewingVersion = await r.json();
@@ -760,8 +760,8 @@ class NottarioDocsPage extends LitElement {
 
   async restoreVersion() {
     if (!this.viewingVersion || !this.selected) return;
-    const v = this.viewingVersion.Version;
-    const current = this.selected.CurrentVersion;
+    const v = this.viewingVersion.version;
+    const current = this.selected.current_version;
     if (!confirm(`Restore v${v} as a new version on top of v${current}?`)) return;
     try {
       const r = await fetch('/api/docs/write', {
@@ -770,8 +770,8 @@ class NottarioDocsPage extends LitElement {
         body: JSON.stringify({
           scope: 'project',
           project_id: this.projectId,
-          path: this.selected.Path,
-          content: this.viewingVersion.ContentMD || '',
+          path: this.selected.path,
+          content: this.viewingVersion.content || '',
           expected_version: current,
           message: `Restored from v${v}`,
         }),
@@ -784,7 +784,7 @@ class NottarioDocsPage extends LitElement {
       this.viewingVersion = null;
       this.selected = doc;
       this.historyVersions = null;
-      this.info = `Restored v${v} (now v${doc.CurrentVersion})`;
+      this.info = `Restored v${v} (now v${doc.current_version})`;
       await this.load();
     } catch (e) {
       this.error = e.message;
@@ -794,7 +794,7 @@ class NottarioDocsPage extends LitElement {
   groupByKind() {
     const out = { skill: [], context: [], note: [] };
     for (const s of this.summaries || []) {
-      (out[s.Kind] ?? out.context).push(s);
+      (out[s.kind] ?? out.context).push(s);
     }
     return out;
   }
@@ -811,7 +811,7 @@ class NottarioDocsPage extends LitElement {
   _matchesSearch(s) {
     if (!this.search.trim()) return true;
     const q = this.search.trim().toLowerCase();
-    return (s.Title || '').toLowerCase().includes(q) || (s.Path || '').toLowerCase().includes(q);
+    return (s.title || '').toLowerCase().includes(q) || (s.path || '').toLowerCase().includes(q);
   }
 
   _renderTitleWithMark(title) {
@@ -873,15 +873,15 @@ class NottarioDocsPage extends LitElement {
                     const cursorIdx = visible.indexOf(s);
                     const isCursor = cursorIdx === this._cursorIdx;
                     const cls = [
-                      this.selected?.Path === s.Path ? 'active' : '',
+                      this.selected?.path === s.path ? 'active' : '',
                       !match ? 'dim' : '',
                       isCursor ? 'keyboard-cursor' : '',
                     ]
                       .filter(Boolean)
                       .join(' ');
                     return html`
-                      <li class=${cls} @click=${() => this.open(s.Path)} title=${s.Path}>
-                        ${this._renderTitleWithMark(s.Title || s.Path)}
+                      <li class=${cls} @click=${() => this.open(s.path)} title=${s.path}>
+                        ${this._renderTitleWithMark(s.title || s.path)}
                       </li>
                     `;
                   })}
@@ -921,10 +921,10 @@ class NottarioDocsPage extends LitElement {
         <ul class="tree">
           ${this.hits.map(
             (h) => html`
-            <li class=${this.selected?.Path === h.Path ? 'active' : ''}
-                @click=${() => this.open(h.Path)}
-                title=${h.Path}>
-              ${this._renderTitleWithMark(h.Title || h.Path)}
+            <li class=${this.selected?.path === h.path ? 'active' : ''}
+                @click=${() => this.open(h.path)}
+                title=${h.path}>
+              ${this._renderTitleWithMark(h.title || h.path)}
             </li>
           `,
           )}
@@ -970,13 +970,13 @@ class NottarioDocsPage extends LitElement {
     const viewing = this.viewingVersion;
     // breadcrumb segments from the path. The last segment (the
     // filename) is rendered bold + dark; everything before is muted.
-    const segs = (s.Path || '').split('/');
+    const segs = (s.path || '').split('/');
     const last = segs.pop();
     return html`
       <div class="reader-col">
         <div class="reader-title">
-          <h2>${s.Title || last}</h2>
-          <span class=${`badge ${s.Kind}`}>${s.Kind}</span>
+          <h2>${s.title || last}</h2>
+          <span class=${`badge ${s.kind}`}>${s.kind}</span>
           <div class="spacer"></div>
           <div class="actions">
             ${
@@ -1012,31 +1012,31 @@ class NottarioDocsPage extends LitElement {
           <span class="crumb-seg last">${last}</span>
           <span class="sep">·</span>
           <button class=${`version-btn ${this.historyOpen ? 'open' : ''}`}
-                  @click=${() => this.toggleHistory()}>v${s.CurrentVersion}</button>
+                  @click=${() => this.toggleHistory()}>v${s.current_version}</button>
         </div>
 
         ${
           viewing
             ? html`
           <div class="version-banner">
-            <span>Viewing version <strong>v${viewing.Version}</strong> read-only.
-              ${viewing.Message ? html`Message: "${viewing.Message}"` : null}</span>
+            <span>Viewing version <strong>v${viewing.version}</strong> read-only.
+              ${viewing.message ? html`Message: "${viewing.message}"` : null}</span>
             <span class="spacer"></span>
             <button @click=${() => this.restoreVersion()}>Restore this version</button>
-            <button @click=${() => this._returnToCurrent()}>Back to current (v${s.CurrentVersion})</button>
+            <button @click=${() => this._returnToCurrent()}>Back to current (v${s.current_version})</button>
           </div>
         `
             : null
         }
 
         ${
-          (viewing ? viewing.Description : s.Description)
-            ? html`<p class="description">${viewing ? viewing.Description : s.Description}</p>`
+          (viewing ? viewing.description : s.description)
+            ? html`<p class="description">${viewing ? viewing.description : s.description}</p>`
             : null
         }
         <nottario-markdown
           project-id=${this.projectId}
-          .html=${(viewing ? viewing.ContentHTML : s.ContentHTML) || ''}>
+          .html=${(viewing ? viewing.content_html : s.content_html) || ''}>
         </nottario-markdown>
       </div>
     `;
@@ -1049,17 +1049,17 @@ class NottarioDocsPage extends LitElement {
     if (!this.historyVersions.length) {
       return html`<div class="history-pop"><div class="empty">No history yet.</div></div>`;
     }
-    const current = this.selected.CurrentVersion;
+    const current = this.selected.current_version;
     return html`
       <div class="history-pop">
         <ul>
           ${this.historyVersions.map(
             (v) => html`
-            <li class=${v.Version === current ? 'current' : ''}
-                @click=${() => this.openVersion(v.Version)}>
-              <span class="vn">v${v.Version}</span>
-              <span class=${v.Message ? 'msg' : 'msg empty-msg'}>${v.Message || 'no message'}</span>
-              <span class="when">${this._relTime(v.CreatedAt)}</span>
+            <li class=${v.version === current ? 'current' : ''}
+                @click=${() => this.openVersion(v.version)}>
+              <span class="vn">v${v.version}</span>
+              <span class=${v.message ? 'msg' : 'msg empty-msg'}>${v.message || 'no message'}</span>
+              <span class="when">${this._relTime(v.created_at)}</span>
             </li>
           `,
           )}
@@ -1112,13 +1112,13 @@ class NottarioDocsPage extends LitElement {
 
   renderEditor() {
     const s = this.selected;
-    const segs = (s.Path || '').split('/');
+    const segs = (s.path || '').split('/');
     const last = segs.pop();
     return html`
       <div class="reader-col">
         <div class="reader-title">
-          <h2>${s.Title || last}</h2>
-          <span class="badge ${s.Kind}">${s.Kind}</span>
+          <h2>${s.title || last}</h2>
+          <span class="badge ${s.kind}">${s.kind}</span>
           <div class="spacer"></div>
           <div class="actions">
             <button class="btn ghost" @click=${() => {
@@ -1131,7 +1131,7 @@ class NottarioDocsPage extends LitElement {
           ${segs.map((p) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
           <span class="crumb-seg last">${last}</span>
           <span class="sep">·</span>
-          <span>editing v${s.CurrentVersion}</span>
+          <span>editing v${s.current_version}</span>
         </div>
         <div class="editor-form">
           <textarea .value=${this.draft} @input=${(e) => {

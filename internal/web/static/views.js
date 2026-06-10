@@ -60,6 +60,6 @@ export function viewByKey(key) {
 // unknown key or none at all.
 export function defaultPathFor(project) {
   if (!project) return '/';
-  const v = viewByKey(project.DefaultView || 'board/kanban');
-  return v.path(project.ID);
+  const v = viewByKey(project.default_view || 'board/kanban');
+  return v.path(project.id);
 }

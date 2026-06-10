@@ -180,7 +180,7 @@ edit the body locally (regenerate full markdown with frontmatter)
 nottario.docs.write {
   ..., path,
   content: new_body,
-  expected_version: doc.CurrentVersion,
+  expected_version: doc.current_version,
   message: "clarify wording",
 }
 // on version_conflict: re-read and retry.
@@ -199,7 +199,7 @@ Without discipline, the two diverge. The flow below keeps them in
 lockstep using the optimistic-concurrency primitives:
 
 1. **Before editing** the local file, read the Nottario copy first
-   and stash its `CurrentVersion`:
+   and stash its `current_version`:
 
    ```text
    doc = nottario.docs.read {
@@ -207,7 +207,7 @@ lockstep using the optimistic-concurrency primitives:
      project_id: "...",
      path: "projects/<id>/context/claude.md",
    }
-   // remember doc.CurrentVersion
+   // remember doc.current_version
    ```
 
 2. **Compare** Nottario's body against the local file.
@@ -225,7 +225,7 @@ lockstep using the optimistic-concurrency primitives:
      project_id: "...",
      path: "projects/<id>/context/claude.md",
      content: <full updated body>,
-     expected_version: doc.CurrentVersion,
+     expected_version: doc.current_version,
      message: "<why you changed it>",
    }
    ```

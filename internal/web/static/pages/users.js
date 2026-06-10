@@ -63,8 +63,8 @@ class NottarioUsersPage extends LitElement {
     const q = this.filter.toLowerCase();
     return this.users.filter(
       (u) =>
-        (u.DisplayName || '').toLowerCase().includes(q) ||
-        (u.GithubLogin || '').toLowerCase().includes(q),
+        (u.display_name || '').toLowerCase().includes(q) ||
+        (u.github_login || '').toLowerCase().includes(q),
     );
   }
 
@@ -104,18 +104,18 @@ class NottarioUsersPage extends LitElement {
                   <td>
                     <div class="user-cell">
                       <nottario-avatar
-                        .src=${u.AvatarURL || ''}
-                        .name=${u.DisplayName || u.GithubLogin || ''}
+                        .src=${u.avatar_url || ''}
+                        .name=${u.display_name || u.github_login || ''}
                         .size=${28}></nottario-avatar>
                       <div>
-                        <div>${u.DisplayName || u.GithubLogin}</div>
-                        <div class="login">@${u.GithubLogin}</div>
+                        <div>${u.display_name || u.github_login}</div>
+                        <div class="login">@${u.github_login}</div>
                       </div>
                     </div>
                   </td>
-                  <td>${new Date(u.CreatedAt).toLocaleDateString()}</td>
-                  <td>${u.ProjectCount}</td>
-                  <td>${u.IsAdmin ? html`<span class="badge admin">admin</span>` : ''}</td>
+                  <td>${new Date(u.created_at).toLocaleDateString()}</td>
+                  <td>${u.project_count}</td>
+                  <td>${u.is_admin ? html`<span class="badge admin">admin</span>` : ''}</td>
                 </tr>
               `,
               )}

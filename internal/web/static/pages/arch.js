@@ -390,24 +390,24 @@ class NottarioArchPage extends LitElement {
       this.project = await pr.json();
       this.kinds = (await kr.json()).kinds || [];
       const all = (await nr.json()).nodes || [];
-      const byId = new Map(all.map((n) => [n.ID, n]));
+      const byId = new Map(all.map((n) => [n.id, n]));
       const bySlug = {};
       const children = {};
       const roots = [];
       for (const n of all) {
-        bySlug[n.Slug] = n;
-        if (n.ParentID) {
-          const parent = byId.get(n.ParentID);
+        bySlug[n.slug] = n;
+        if (n.parent_id) {
+          const parent = byId.get(n.parent_id);
           if (parent) {
-            if (!children[parent.Slug]) children[parent.Slug] = [];
-            children[parent.Slug].push(n);
+            if (!children[parent.slug]) children[parent.slug] = [];
+            children[parent.slug].push(n);
             continue;
           }
         }
         roots.push(n);
       }
       const sortFn = (a, b) =>
-        a.Position - b.Position || (a.Name || '').localeCompare(b.Name || '');
+        a.position - b.position || (a.name || '').localeCompare(b.name || '');
       roots.sort(sortFn);
       for (const k of Object.keys(children)) children[k].sort(sortFn);
       this.nodeBySlug = bySlug;
@@ -419,7 +419,7 @@ class NottarioArchPage extends LitElement {
   }
 
   kindByKey(key) {
-    return this.kinds.find((k) => k.Key === key);
+    return this.kinds.find((k) => k.key === key);
   }
   hasChildren(slug) {
     return (this.childrenBySlug[slug] || []).length > 0;
@@ -429,8 +429,8 @@ class NottarioArchPage extends LitElement {
   _visibleRows(nodes = this.rootNodes || [], depth = 1, out = []) {
     for (const n of nodes) {
       out.push({ node: n, depth });
-      if (this.expanded[n.Slug]) {
-        const kids = this.childrenBySlug[n.Slug] || [];
+      if (this.expanded[n.slug]) {
+        const kids = this.childrenBySlug[n.slug] || [];
         if (kids.length) this._visibleRows(kids, depth + 1, out);
       }
     }
@@ -464,14 +464,14 @@ class NottarioArchPage extends LitElement {
     if (!target) return;
     const slug = target.dataset.slug;
     const rows = this._visibleRows();
-    const idx = rows.findIndex((r) => r.node.Slug === slug);
+    const idx = rows.findIndex((r) => r.node.slug === slug);
     if (idx < 0) return;
     const cur = rows[idx];
 
     const moveTo = (newIdx) => {
       if (newIdx < 0 || newIdx >= rows.length) return;
       e.preventDefault();
-      this._focusRow(rows[newIdx].node.Slug);
+      this._focusRow(rows[newIdx].node.slug);
     };
 
     switch (e.key) {
@@ -525,9 +525,9 @@ class NottarioArchPage extends LitElement {
           const ch = e.key.toLowerCase();
           for (let step = 1; step <= rows.length; step++) {
             const cand = rows[(idx + step) % rows.length];
-            if ((cand.node.Name || '').toLowerCase().startsWith(ch)) {
+            if ((cand.node.name || '').toLowerCase().startsWith(ch)) {
               e.preventDefault();
-              this._focusRow(cand.node.Slug);
+              this._focusRow(cand.node.slug);
               return;
             }
           }
@@ -540,10 +540,10 @@ class NottarioArchPage extends LitElement {
   _ancestorSlugs(slug) {
     const out = [];
     let cur = this.nodeBySlug[slug];
-    while (cur && cur.ParentID) {
-      const parent = Object.values(this.nodeBySlug).find((n) => n.ID === cur.ParentID);
+    while (cur && cur.parent_id) {
+      const parent = Object.values(this.nodeBySlug).find((n) => n.id === cur.parent_id);
       if (!parent) break;
-      out.push(parent.Slug);
+      out.push(parent.slug);
       cur = parent;
     }
     return out;
@@ -573,8 +573,8 @@ class NottarioArchPage extends LitElement {
       // Pre-fetch any task-linked items so the reader can render
       // chips with titles instead of bare UUIDs.
       const taskIds = (this.selectedDetail?.links || [])
-        .filter((l) => l.LinkType === 'task')
-        .map((l) => l.TargetID)
+        .filter((l) => l.link_type === 'task')
+        .map((l) => l.target_id)
         .filter((id) => !this.taskCache[id]);
       if (taskIds.length) {
         const fetched = await Promise.all(
@@ -613,8 +613,8 @@ class NottarioArchPage extends LitElement {
   _matchesFilter(n) {
     if (!this.filter) return true;
     return (
-      (n.Name || '').toLowerCase().includes(this.filter) ||
-      (n.Slug || '').toLowerCase().includes(this.filter)
+      (n.name || '').toLowerCase().includes(this.filter) ||
+      (n.slug || '').toLowerCase().includes(this.filter)
     );
   }
 
@@ -623,7 +623,7 @@ class NottarioArchPage extends LitElement {
   _isHighlighted(n) {
     if (!this.filter) return true;
     if (this._matchesFilter(n)) return true;
-    for (const c of this.childrenBySlug[n.Slug] || []) {
+    for (const c of this.childrenBySlug[n.slug] || []) {
       if (this._isHighlighted(c)) return true;
     }
     return false;
@@ -645,23 +645,23 @@ class NottarioArchPage extends LitElement {
   // (role="treeitem"), so screen readers see depth, expansion, and
   // selection state on one element.
   renderNode(n, depth = 1) {
-    const children = this.childrenBySlug[n.Slug] || [];
+    const children = this.childrenBySlug[n.slug] || [];
     const isLeaf = children.length === 0;
-    const open = !isLeaf && !!this.expanded[n.Slug];
-    const kind = this.kindByKey(n.Kind);
+    const open = !isLeaf && !!this.expanded[n.slug];
+    const kind = this.kindByKey(n.kind);
     const isDim = !this._isHighlighted(n);
-    const isSelected = this.selectedSlug === n.Slug;
+    const isSelected = this.selectedSlug === n.slug;
     // Roving tabindex: only the currently-selected row sits in the
     // tab order. The first root takes that slot when nothing is
     // selected, so keyboard users can always Tab into the tree.
     const isFocusTarget =
-      isSelected || (!this.selectedSlug && depth === 1 && this.rootNodes?.[0]?.Slug === n.Slug);
+      isSelected || (!this.selectedSlug && depth === 1 && this.rootNodes?.[0]?.slug === n.slug);
     const cls = ['node', isLeaf ? 'leaf' : '', isSelected ? 'active' : '', isDim ? 'dim' : '']
       .filter(Boolean)
       .join(' ');
     return html`
       <li role="treeitem"
-          data-slug=${n.Slug}
+          data-slug=${n.slug}
           aria-level=${depth}
           aria-selected=${isSelected ? 'true' : 'false'}
           aria-expanded=${isLeaf ? nothing : open ? 'true' : 'false'}
@@ -673,16 +673,16 @@ class NottarioArchPage extends LitElement {
               : html`<button class="toggle"
                   type="button"
                   tabindex="-1"
-                  aria-label=${open ? `Collapse ${n.Name}` : `Expand ${n.Name}`}
+                  aria-label=${open ? `Collapse ${n.name}` : `Expand ${n.name}`}
                   @click=${(e) => {
                     e.stopPropagation();
-                    this.toggle(n.Slug);
+                    this.toggle(n.slug);
                   }}
             >${open ? '▾' : '▸'}</button>`
           }
-          <span class="kind-dot" style=${`background: ${kind?.Color || '#999'}`} title=${kind?.Label || n.Kind} aria-hidden="true"></span>
-          <span class="name" @click=${() => this.select(n.Slug)}>${n.Name}</span>
-          <span class="kind-label">${n.Kind}</span>
+          <span class="kind-dot" style=${`background: ${kind?.color || '#999'}`} title=${kind?.label || n.kind} aria-hidden="true"></span>
+          <span class="name" @click=${() => this.select(n.slug)}>${n.name}</span>
+          <span class="kind-label">${n.kind}</span>
         </div>
         ${
           open
@@ -735,40 +735,40 @@ class NottarioArchPage extends LitElement {
         </div>`;
     }
     const { node, children, edges, links } = this.selectedDetail;
-    const kind = this.kindByKey(node.Kind);
-    const incoming = edges.filter((e) => e.ToSlug === node.Slug);
-    const outgoing = edges.filter((e) => e.FromSlug === node.Slug);
-    const taskLinks = (links || []).filter((l) => l.LinkType === 'task');
-    const docLinks = (links || []).filter((l) => l.LinkType === 'doc');
+    const kind = this.kindByKey(node.kind);
+    const incoming = edges.filter((e) => e.to_slug === node.slug);
+    const outgoing = edges.filter((e) => e.from_slug === node.slug);
+    const taskLinks = (links || []).filter((l) => l.link_type === 'task');
+    const docLinks = (links || []).filter((l) => l.link_type === 'doc');
     return html`
       <div class="reader">
         <button class="reader-back" @click=${() => this._backToList()}>← Back to list</button>
         <header>
-          <h3>${node.Name}</h3>
-          <span class="kind-pill" style=${`background: ${kind?.Color || '#eaeef2'}1a; color: ${kind?.Color || '#1f2328'}`}>${kind?.Label || node.Kind}</span>
+          <h3>${node.name}</h3>
+          <span class="kind-pill" style=${`background: ${kind?.color || '#eaeef2'}1a; color: ${kind?.color || '#1f2328'}`}>${kind?.label || node.kind}</span>
           <div style="flex:1"></div>
-          <span class="meta"><code>${node.Slug}</code></span>
+          <span class="meta"><code>${node.slug}</code></span>
         </header>
         <div class="meta-grid">
-          ${node.LinkedRepo ? html`<div>Repo</div><div><code>${node.LinkedRepo}</code></div>` : null}
-          ${node.LinkedPath ? html`<div>Path</div><div><code>${node.LinkedPath}</code></div>` : null}
+          ${node.linked_repo ? html`<div>Repo</div><div><code>${node.linked_repo}</code></div>` : null}
+          ${node.linked_path ? html`<div>Path</div><div><code>${node.linked_path}</code></div>` : null}
           ${
-            Object.keys(node.Metadata || {}).length
+            Object.keys(node.metadata || {}).length
               ? html`
             <div>Metadata</div>
-            <div><code>${JSON.stringify(node.Metadata)}</code></div>
+            <div><code>${JSON.stringify(node.metadata)}</code></div>
           `
               : null
           }
         </div>
         ${
-          node.DescriptionMD
+          node.description
             ? html`
           <div class="section">
             <h4>Description</h4>
             <nottario-markdown
               project-id=${this.projectId}
-              .source=${node.DescriptionMD}></nottario-markdown>
+              .source=${node.description}></nottario-markdown>
           </div>
         `
             : null
@@ -780,10 +780,10 @@ class NottarioArchPage extends LitElement {
             <h4>Children (${children.length})</h4>
             ${children.map(
               (c) => html`
-              <div class="edge-line" @click=${() => this.select(c.Slug)}>
-                <span class="kind-dot" style=${`background: ${this.kindByKey(c.Kind)?.Color || '#999'}`}></span>
-                <span class="endpoint">${c.Name}</span>
-                <span class="kind-label">${c.Kind}</span>
+              <div class="edge-line" @click=${() => this.select(c.slug)}>
+                <span class="kind-dot" style=${`background: ${this.kindByKey(c.kind)?.color || '#999'}`}></span>
+                <span class="endpoint">${c.name}</span>
+                <span class="kind-label">${c.kind}</span>
               </div>
             `,
             )}
@@ -799,10 +799,10 @@ class NottarioArchPage extends LitElement {
             ${outgoing.map(
               (e) => html`
               <div class="edge-line">
-                <span class="kind">${e.Kind}</span>
+                <span class="kind">${e.kind}</span>
                 <span class="arrow">→</span>
-                <span class="endpoint" @click=${() => this.select(e.ToSlug)}>${e.ToName}</span>
-                ${e.Label ? html`<span class="label">${e.Label}</span>` : null}
+                <span class="endpoint" @click=${() => this.select(e.to_slug)}>${e.to_name}</span>
+                ${e.label ? html`<span class="label">${e.label}</span>` : null}
               </div>
             `,
             )}
@@ -818,10 +818,10 @@ class NottarioArchPage extends LitElement {
             ${incoming.map(
               (e) => html`
               <div class="edge-line">
-                <span class="endpoint" @click=${() => this.select(e.FromSlug)}>${e.FromName}</span>
+                <span class="endpoint" @click=${() => this.select(e.from_slug)}>${e.from_name}</span>
                 <span class="arrow">→</span>
-                <span class="kind">${e.Kind}</span>
-                ${e.Label ? html`<span class="label">${e.Label}</span>` : null}
+                <span class="kind">${e.kind}</span>
+                ${e.label ? html`<span class="label">${e.label}</span>` : null}
               </div>
             `,
             )}
@@ -836,7 +836,7 @@ class NottarioArchPage extends LitElement {
             <h4>Linked items (${taskLinks.length + docLinks.length})</h4>
             <div class="linked-items">
               ${taskLinks.map((l) => {
-                const t = this.taskCache[l.TargetID];
+                const t = this.taskCache[l.target_id];
                 return t
                   ? html`
                   <nottario-task-chip
@@ -844,17 +844,17 @@ class NottarioArchPage extends LitElement {
                     .task=${t}></nottario-task-chip>
                 `
                   : html`
-                  <div class="edge-line"><span class="kind">task</span><code>${l.TargetID}</code></div>
+                  <div class="edge-line"><span class="kind">task</span><code>${l.target_id}</code></div>
                 `;
               })}
               ${docLinks.map(
                 (l) => html`
                 <a class="doc-link"
-                   href=${`/projects/${this.projectId}/docs/${l.TargetID}`}
+                   href=${`/projects/${this.projectId}/docs/${l.target_id}`}
                    @click=${(e) => {
                      e.preventDefault();
-                     window.nottarioNavigate(`/projects/${this.projectId}/docs/${l.TargetID}`);
-                   }}>${l.TargetID}</a>
+                     window.nottarioNavigate(`/projects/${this.projectId}/docs/${l.target_id}`);
+                   }}>${l.target_id}</a>
               `,
               )}
             </div>

@@ -289,7 +289,7 @@ class NottarioProjectsPage extends LitElement {
 
   _renderCard(p) {
     const dest = defaultPathFor(p);
-    const destLabel = viewByKey(p.DefaultView || 'board/kanban').label;
+    const destLabel = viewByKey(p.default_view || 'board/kanban').label;
     const stop = (e, path) => {
       e.stopPropagation();
       this.goto(path);
@@ -299,8 +299,8 @@ class NottarioProjectsPage extends LitElement {
     };
 
     const meta = [];
-    if (p.PrimaryLanguage) meta.push(html`<span class="lang">${p.PrimaryLanguage}</span>`);
-    if (p.ProjectType) meta.push(html`<span class="ptype">${p.ProjectType}</span>`);
+    if (p.primary_language) meta.push(html`<span class="lang">${p.primary_language}</span>`);
+    if (p.project_type) meta.push(html`<span class="ptype">${p.project_type}</span>`);
     const metaWithSeps = meta.flatMap((node, i) =>
       i === 0 ? [node] : [html`<span class="sep">·</span>`, node],
     );
@@ -315,10 +315,10 @@ class NottarioProjectsPage extends LitElement {
              }
            }}>
         <div class="top">
-          <h3 title=${p.Name}>${p.Name}</h3>
+          <h3 title=${p.name}>${p.name}</h3>
           <span class="dest-chip" title="Default view">${destLabel}</span>
           ${
-            p.Stats && p.Stats.TodoCount + p.Stats.DoingCount + p.Stats.DoneCount === 0
+            p.stats && p.stats.todo_count + p.stats.doing_count + p.stats.done_count === 0
               ? html`<span class="dest-chip empty-chip" title="No tasks yet">empty</span>`
               : null
           }
@@ -326,13 +326,13 @@ class NottarioProjectsPage extends LitElement {
             this.me?.is_admin
               ? html`<button class="settings-link" title="Project settings"
                           aria-label="Settings"
-                          @click=${(e) => stop(e, `/projects/${p.ID}/settings`)}
+                          @click=${(e) => stop(e, `/projects/${p.id}/settings`)}
                           @keydown=${stopOnly}>⚙</button>`
               : null
           }
         </div>
-        <div class=${p.Description ? 'desc' : 'desc placeholder'} title=${p.Description || ''}>
-          ${p.Description || 'No description'}
+        <div class=${p.description ? 'desc' : 'desc placeholder'} title=${p.description || ''}>
+          ${p.description || 'No description'}
         </div>
         ${this._renderStats(p)}
         ${meta.length ? html`<div class="meta">${metaWithSeps}</div>` : null}
@@ -343,9 +343,9 @@ class NottarioProjectsPage extends LitElement {
   }
 
   _renderStats(p) {
-    const s = p.Stats;
+    const s = p.stats;
     if (!s) return null;
-    const total = s.TodoCount + s.DoingCount + s.DoneCount;
+    const total = s.todo_count + s.doing_count + s.done_count;
     // Empty backlog: render nothing. The "empty" chip in the top
     // row already conveys the state, and skipping the stats line
     // keeps the card honestly short instead of inflating it with
@@ -353,13 +353,13 @@ class NottarioProjectsPage extends LitElement {
     if (total === 0) return null;
     return html`
       <div class="stats">
-        <span class="stat"><span class="n">${s.TodoCount}</span> todo</span>
-        <span class="stat doing"><span class="n">${s.DoingCount}</span> doing</span>
-        <span class="stat"><span class="n">${s.DoneCount}</span> done</span>
+        <span class="stat"><span class="n">${s.todo_count}</span> todo</span>
+        <span class="stat doing"><span class="n">${s.doing_count}</span> doing</span>
+        <span class="stat"><span class="n">${s.done_count}</span> done</span>
         ${
-          s.LastActivityAt
-            ? html`<span class="activity" title=${new Date(s.LastActivityAt).toLocaleString()}>
-                   ${this._relativeTime(s.LastActivityAt)}
+          s.last_activity_at
+            ? html`<span class="activity" title=${new Date(s.last_activity_at).toLocaleString()}>
+                   ${this._relativeTime(s.last_activity_at)}
                  </span>`
             : null
         }
@@ -368,7 +368,7 @@ class NottarioProjectsPage extends LitElement {
   }
 
   _renderRepos(p) {
-    const repos = p.Repos || [];
+    const repos = p.repos || [];
     if (repos.length === 0) return null;
     const shown = repos.slice(0, 3);
     const extra = repos.length - shown.length;
@@ -381,7 +381,7 @@ class NottarioProjectsPage extends LitElement {
   }
 
   _renderFooter(p) {
-    const members = p.Members || [];
+    const members = p.members || [];
     if (members.length === 0) return null;
     const shown = members.slice(0, 5);
     const extra = members.length - shown.length;
@@ -391,10 +391,10 @@ class NottarioProjectsPage extends LitElement {
           ${shown.map(
             (m) => html`
             <nottario-avatar
-              .src=${m.AvatarURL || ''}
-              .name=${m.DisplayName || m.GithubLogin || ''}
+              .src=${m.avatar_url || ''}
+              .name=${m.display_name || m.github_login || ''}
               .size=${22}
-              title=${m.DisplayName || m.GithubLogin}></nottario-avatar>`,
+              title=${m.display_name || m.github_login}></nottario-avatar>`,
           )}
           ${extra > 0 ? html`<span class="more">+${extra}</span>` : null}
         </div>

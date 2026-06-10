@@ -15,7 +15,7 @@ under `domains/`; call `nottario.skill.read` to pull the one you need.
 Always start with `nottario.whoami`. It tells you the **user** you act
 on behalf of (`user_id`, `github_login`), whether you are an **admin**,
 the **token_id** authenticating you, and the **single project** the
-token is scoped to (`memberships[0].ProjectID` and friends — token
+token is scoped to (`memberships[0].project_id` and friends — token
 callers always see exactly one membership: the one belonging to the
 token's project). On failure the token is missing or revoked — stop
 and ask the human for a fresh one (web UI → open the project →
@@ -33,7 +33,7 @@ Deep dive: `references/identity.md`.
 
 Every tool call that touches a project needs `project_id` as an
 explicit argument. With per-project tokens, the answer comes straight
-from step 1: `whoami.memberships[0].ProjectID` is the only project the
+from step 1: `whoami.memberships[0].project_id` is the only project the
 token can reach. Cache it once and pass it on every call.
 
 `nottario.projects.list` exists for completeness but for a token

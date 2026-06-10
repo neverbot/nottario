@@ -342,7 +342,7 @@ class NottarioProjectSettings extends LitElement {
     return html`
       <nottario-page-header
         title="Settings"
-        .subtitle=${this.project.Slug}>
+        .subtitle=${this.project.slug}>
       </nottario-page-header>
       <nottario-tabs
         .options=${tabs.map((t) => ({ id: t.id, label: t.label }))}
@@ -357,42 +357,42 @@ class NottarioProjectSettings extends LitElement {
   renderGeneral() {
     const p = this.project;
     const admin = this.me?.is_admin;
-    const currentView = viewByKey(p.DefaultView || 'board/kanban');
+    const currentView = viewByKey(p.default_view || 'board/kanban');
     if (!admin) {
       return html`
         <dl>
-          <dt><strong>Name</strong></dt><dd>${p.Name}</dd>
-          <dt><strong>Description</strong></dt><dd>${p.Description || html`<span class="muted">none</span>`}</dd>
-          <dt><strong>Primary language</strong></dt><dd>${p.PrimaryLanguage || html`<span class="muted">none</span>`}</dd>
-          <dt><strong>Project type</strong></dt><dd>${p.ProjectType || html`<span class="muted">none</span>`}</dd>
+          <dt><strong>Name</strong></dt><dd>${p.name}</dd>
+          <dt><strong>Description</strong></dt><dd>${p.description || html`<span class="muted">none</span>`}</dd>
+          <dt><strong>Primary language</strong></dt><dd>${p.primary_language || html`<span class="muted">none</span>`}</dd>
+          <dt><strong>Project type</strong></dt><dd>${p.project_type || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Default view</strong></dt><dd>${currentView.label}</dd>
-          <dt><strong>Cycle label</strong></dt><dd>${p.CycleLabel || 'sprint'}</dd>
+          <dt><strong>Cycle label</strong></dt><dd>${p.cycle_label || 'sprint'}</dd>
           <dt><strong>Repositories</strong></dt>
           <dd>${
-            p.Repos && p.Repos.length
-              ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.Repos.map((r) => html`<li>${r}</li>`)}</ul>`
+            p.repos && p.repos.length
+              ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.repos.map((r) => html`<li>${r}</li>`)}</ul>`
               : html`<span class="muted">none</span>`
           }</dd>
         </dl>
       `;
     }
-    const reposText = (p.Repos || []).join('\n');
+    const reposText = (p.repos || []).join('\n');
     return html`
       <form class="general-form" @submit=${(e) => this.saveGeneral(e)}>
         <nottario-field label="Name">
-          <input name="name" required .value=${p.Name}>
+          <input name="name" required .value=${p.name}>
         </nottario-field>
         <nottario-field label="Description">
-          <input name="description" .value=${p.Description || ''}>
+          <input name="description" .value=${p.description || ''}>
         </nottario-field>
         <div style="display:flex;gap:12px">
           <nottario-field label="Primary language" style="flex:1">
             <input name="primary_language" placeholder="go, typescript, python…"
-                   .value=${p.PrimaryLanguage || ''}>
+                   .value=${p.primary_language || ''}>
           </nottario-field>
           <nottario-field label="Project type" style="flex:1">
             <input name="project_type" placeholder="web-app, cli-tool, library…"
-                   .value=${p.ProjectType || ''}>
+                   .value=${p.project_type || ''}>
           </nottario-field>
         </div>
         <nottario-field label="Default view" hint="where a project card on the home page navigates">
@@ -405,7 +405,7 @@ class NottarioProjectSettings extends LitElement {
           </select>
         </nottario-field>
         <nottario-field label="Cycle label" hint="e.g. sprint, iteration, milestone — used when auto-naming new cycles">
-          <input name="cycle_label" .value=${p.CycleLabel || 'sprint'} style="max-width:260px">
+          <input name="cycle_label" .value=${p.cycle_label || 'sprint'} style="max-width:260px">
         </nottario-field>
         <nottario-field label="Repositories" hint="one per line or comma-separated, format owner/repo">
           <textarea name="repos" rows="3" .value=${reposText}></textarea>
@@ -428,14 +428,14 @@ class NottarioProjectSettings extends LitElement {
         admin
           ? html`
           <nottario-field label="Default page size for tasks.list" hint="tasks per page" style="max-width:320px">
-            <input type="number" min="1" max="500" .value=${String(p.MCPPageSize || 50)}
+            <input type="number" min="1" max="500" .value=${String(p.mcp_page_size || 50)}
                    @change=${(e) => this.saveMCPPageSize(e.target.value)}
                    style="width:96px;font-variant-numeric:tabular-nums">
           </nottario-field>`
           : html`
           <p style="margin:0 0 12px">
             <strong>Default page size for tasks.list:</strong>
-            ${p.MCPPageSize || 50} tasks per page
+            ${p.mcp_page_size || 50} tasks per page
             <span class="muted">(admin only)</span>
           </p>`
       }
@@ -475,7 +475,7 @@ class NottarioProjectSettings extends LitElement {
   }
 
   renderRoles() {
-    const sorted = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
+    const sorted = [...this.roles].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     const canDrag = this.me?.is_admin;
     return html`
       ${canDrag ? html`<p class="helper" style="margin:0 0 10px">Drag rows to reorder. Order is shared with the Gantt view.</p>` : null}
@@ -490,25 +490,25 @@ class NottarioProjectSettings extends LitElement {
           ${sorted.map(
             (r) => html`
             <tr draggable=${canDrag ? 'true' : 'false'}
-                data-id=${r.ID}
-                @dragstart=${(e) => this._dragStart(e, r.ID)}
+                data-id=${r.id}
+                @dragstart=${(e) => this._dragStart(e, r.id)}
                 @dragend=${(e) => this._dragEnd(e)}
                 @dragover=${(e) => this._dragOver(e)}
                 @dragleave=${(e) => this._dragLeave(e)}
-                @drop=${(e) => this._drop(e, r.ID)}>
+                @drop=${(e) => this._drop(e, r.id)}>
               ${canDrag ? html`<td class="drag-handle" title="Drag to reorder">⋮⋮</td>` : null}
-              <td class="mono">${r.Key}</td>
-              <td>${r.Label}</td>
+              <td class="mono">${r.key}</td>
+              <td>${r.label}</td>
               <td>${
-                r.Color
-                  ? html`<span class="color-dot" style=${`background:${r.Color}`}></span><span class="mono" style="font-size:11px">${r.Color}</span>`
+                r.color
+                  ? html`<span class="color-dot" style=${`background:${r.color}`}></span><span class="mono" style="font-size:11px">${r.color}</span>`
                   : html`<span class="muted">—</span>`
               }</td>
               <td class="row-actions">
                 ${
                   canDrag
                     ? html`<button class="delete" title="Delete role" aria-label="Delete role"
-                                          @click=${() => this.deleteRole(r.ID)}>✕</button>`
+                                          @click=${() => this.deleteRole(r.id)}>✕</button>`
                     : null
                 }
               </td>
@@ -569,12 +569,12 @@ class NottarioProjectSettings extends LitElement {
     e.currentTarget.classList.remove('drag-over');
     const sourceId = this._dragId;
     if (!sourceId || sourceId === targetId) return;
-    const sorted = [...this.roles].sort((a, b) => (a.Position ?? 0) - (b.Position ?? 0));
-    const without = sorted.filter((r) => r.ID !== sourceId);
-    const targetIdx = without.findIndex((r) => r.ID === targetId);
-    const sourceRole = sorted.find((r) => r.ID === sourceId);
+    const sorted = [...this.roles].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const without = sorted.filter((r) => r.id !== sourceId);
+    const targetIdx = without.findIndex((r) => r.id === targetId);
+    const sourceRole = sorted.find((r) => r.id === sourceId);
     without.splice(targetIdx, 0, sourceRole);
-    const ids = without.map((r) => r.ID);
+    const ids = without.map((r) => r.id);
     // Optimistic local update.
     this.roles = without.map((r, i) => ({ ...r, Position: i }));
     try {
@@ -592,7 +592,7 @@ class NottarioProjectSettings extends LitElement {
 
   renderPriorities() {
     const sorted = [...this.priorities].sort(
-      (a, b) => a.Position - b.Position || b.Value - a.Value,
+      (a, b) => a.position - b.position || b.value - a.value,
     );
     return html`
       <p class="helper" style="margin:0 0 12px">
@@ -607,21 +607,21 @@ class NottarioProjectSettings extends LitElement {
           ${sorted.map(
             (p) => html`
             <tr>
-              <td class="mono">${p.Key}</td>
+              <td class="mono">${p.key}</td>
               <td>
                 ${
                   this.me?.is_admin
-                    ? html`<input type="number" min="0" max="100" .value=${String(p.Value)}
-                          @change=${(e) => this.upsertPriority(p.Key, e.target.value, p.Position)}
+                    ? html`<input type="number" min="0" max="100" .value=${String(p.value)}
+                          @change=${(e) => this.upsertPriority(p.key, e.target.value, p.position)}
                           class="inline-num">`
-                    : p.Value
+                    : p.value
                 }
               </td>
               <td class="row-actions">
                 ${
                   this.me?.is_admin
                     ? html`<button class="delete" title="Delete priority" aria-label="Delete priority"
-                                  @click=${() => this.deletePriority(p.Key)}>✕</button>`
+                                  @click=${() => this.deletePriority(p.key)}>✕</button>`
                     : null
                 }
               </td>
@@ -670,12 +670,12 @@ class NottarioProjectSettings extends LitElement {
   }
 
   _uniqueMembers() {
-    return [...new Map((this.members || []).map((m) => [m.UserID, m])).values()];
+    return [...new Map((this.members || []).map((m) => [m.user_id, m])).values()];
   }
 
   _memberByID(uid) {
     if (!uid) return null;
-    return this._uniqueMembers().find((m) => m.UserID === uid) || null;
+    return this._uniqueMembers().find((m) => m.user_id === uid) || null;
   }
 
   async _setOwner(userID) {
@@ -700,7 +700,7 @@ class NottarioProjectSettings extends LitElement {
   renderMembers() {
     const admin = this.me?.is_admin;
     const colCount = admin ? 3 : 2;
-    const owner = this._memberByID(this.project.OwnerUserID);
+    const owner = this._memberByID(this.project.owner_user_id);
     return html`
       ${
         admin
@@ -710,8 +710,8 @@ class NottarioProjectSettings extends LitElement {
           <select @change=${(e) => this._setOwner(e.target.value)}>
             ${this._uniqueMembers().map(
               (m) => html`
-              <option value=${m.UserID} ?selected=${m.UserID === this.project.OwnerUserID}>
-                ${m.DisplayName || m.GithubLogin}
+              <option value=${m.user_id} ?selected=${m.user_id === this.project.owner_user_id}>
+                ${m.display_name || m.github_login}
               </option>
             `,
             )}
@@ -721,7 +721,7 @@ class NottarioProjectSettings extends LitElement {
           : html`
         <div class="owner-row">
           <span class="lbl">Owner</span>
-          <span>${owner ? owner.DisplayName || owner.GithubLogin : html`<span class="muted">—</span>`}</span>
+          <span>${owner ? owner.display_name || owner.github_login : html`<span class="muted">—</span>`}</span>
         </div>
       `
       }
@@ -743,28 +743,28 @@ class NottarioProjectSettings extends LitElement {
                 <td>
                   <div class="user-cell">
                     <nottario-avatar
-                      .src=${m.AvatarURL || ''}
-                      .name=${m.DisplayName || m.GithubLogin || ''}
+                      .src=${m.avatar_url || ''}
+                      .name=${m.display_name || m.github_login || ''}
                       .size=${28}></nottario-avatar>
                     <div class="user-text">
-                      <div>${m.DisplayName || m.GithubLogin}
-                        ${m.IsAdmin ? html`<span class="badge admin">admin</span>` : ''}
+                      <div>${m.display_name || m.github_login}
+                        ${m.is_admin ? html`<span class="badge admin">admin</span>` : ''}
                       </div>
-                      <div class="login">@${m.GithubLogin}</div>
+                      <div class="login">@${m.github_login}</div>
                     </div>
                   </div>
                 </td>
                 <td>
-                  ${m.RoleColor ? html`<span class="color-dot" style=${`background:${m.RoleColor}`}></span>` : ''}
-                  ${m.RoleLabel}
+                  ${m.role_color ? html`<span class="color-dot" style=${`background:${m.role_color}`}></span>` : ''}
+                  ${m.role_label}
                 </td>
                 ${
                   admin
                     ? html`
                   <td class="row-actions">
                     <button class="delete"
-                            title="Remove this role from ${m.DisplayName || m.GithubLogin}"
-                            @click=${() => this.removeMember(m.UserID, m.RoleID)}>×</button>
+                            title="Remove this role from ${m.display_name || m.github_login}"
+                            @click=${() => this.removeMember(m.user_id, m.role_id)}>×</button>
                   </td>
                 `
                     : null
@@ -784,7 +784,7 @@ class NottarioProjectSettings extends LitElement {
               <option value="" disabled selected>Pick a user…</option>
               ${this.users.map(
                 (u) => html`
-                <option value=${u.ID}>${u.DisplayName || u.GithubLogin} (@${u.GithubLogin})</option>
+                <option value=${u.id}>${u.display_name || u.github_login} (@${u.github_login})</option>
               `,
               )}
             </select>
@@ -792,7 +792,7 @@ class NottarioProjectSettings extends LitElement {
           <nottario-field label="Role" class="narrow" style="flex:0 0 180px;min-width:180px">
             <select name="role_id" required>
               <option value="" disabled selected>Pick a role…</option>
-              ${this.roles.map((r) => html`<option value=${r.ID}>${r.Label}</option>`)}
+              ${this.roles.map((r) => html`<option value=${r.id}>${r.label}</option>`)}
             </select>
           </nottario-field>
           <div class="add-action">
@@ -835,7 +835,7 @@ class NottarioProjectSettings extends LitElement {
   _isMember() {
     if (this.me?.is_admin) return true;
     const ms = this.me?.memberships || [];
-    return ms.some((m) => m.ProjectID === this.projectId);
+    return ms.some((m) => m.project_id === this.projectId);
   }
 
   _fmtDate(d) {
@@ -943,22 +943,22 @@ class NottarioProjectSettings extends LitElement {
               : this.tokens.map(
                   (t) => html`
               <tr>
-                <td>${t.Name}</td>
-                <td class="mono">${t.Prefix}…</td>
-                <td>${this._fmtDate(t.CreatedAt)}</td>
-                <td>${this._fmtDate(t.LastUsedAt)}</td>
+                <td>${t.name}</td>
+                <td class="mono">${t.prefix}…</td>
+                <td>${this._fmtDate(t.created_at)}</td>
+                <td>${this._fmtDate(t.last_used_at)}</td>
                 <td>${
-                  t.RevokedAt
+                  t.revoked_at
                     ? html`<span class="status-revoked">revoked</span>`
                     : html`<span class="status-active">active</span>`
                 }</td>
                 <td class="row-actions">
                   ${
-                    t.RevokedAt
+                    t.revoked_at
                       ? null
                       : html`
                     <button class="delete" title="Revoke token" aria-label="Revoke token"
-                            @click=${() => this._revokeToken(t.ID)}>✕</button>`
+                            @click=${() => this._revokeToken(t.id)}>✕</button>`
                   }
                 </td>
               </tr>
@@ -1016,7 +1016,7 @@ class NottarioProjectSettings extends LitElement {
             <nottario-field label="Default role" hint="optional — used when the agent doesn't specify one">
               <select name="default_role_id">
                 <option value="">(none)</option>
-                ${this.roles.map((r) => html`<option value=${r.ID}>${r.Label}</option>`)}
+                ${this.roles.map((r) => html`<option value=${r.id}>${r.label}</option>`)}
               </select>
             </nottario-field>
             <div class="actions-row" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">

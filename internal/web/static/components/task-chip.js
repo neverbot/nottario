@@ -88,16 +88,16 @@ class NottarioTaskChip extends LitElement {
       return html`<a class="missing" title="unknown task">unknown task</a>`;
     }
     const t = this.task;
-    const short = (t.ID || '').slice(0, 7);
-    const href = `/projects/${this.projectId}/board/kanban#task=${t.ID}`;
-    const a11yLabel = `Task ${short}: ${t.Title || t.ID}` + (t.State ? `, state ${t.State}` : '');
+    const short = (t.id || '').slice(0, 7);
+    const href = `/projects/${this.projectId}/board/kanban#task=${t.id}`;
+    const a11yLabel = `Task ${short}: ${t.title || t.id}` + (t.state ? `, state ${t.state}` : '');
     return html`
       <a href=${href}
-         title=${t.Title || t.ID}
+         title=${t.title || t.id}
          aria-label=${a11yLabel}>
         <span class="id">#${short}</span>
-        <span class="title">${t.Title || t.ID}</span>
-        ${t.State ? html`<span class="state state-${t.State}">${t.State}</span>` : null}
+        <span class="title">${t.title || t.id}</span>
+        ${t.state ? html`<span class="state state-${t.state}">${t.state}</span>` : null}
       </a>
     `;
   }
