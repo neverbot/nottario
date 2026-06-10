@@ -287,7 +287,7 @@ class NottarioMarkdown extends LitElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: this.projectId || '',
-          content_md: this.source,
+          content: this.source,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'render failed');

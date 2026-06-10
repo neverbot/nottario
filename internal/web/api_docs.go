@@ -157,7 +157,7 @@ type writeDocRequest struct {
 	ProjectID       string `json:"project_id"`
 	Path            string `json:"path"`
 	Kind            string `json:"kind"`
-	ContentMD       string `json:"content_md"`
+	Content         string `json:"content"`
 	Message         string `json:"message"`
 	ExpectedVersion *int   `json:"expected_version"`
 }
@@ -192,7 +192,7 @@ func WriteDocHandler(d DocsDeps) http.Handler {
 			ProjectID:       pid,
 			Path:            req.Path,
 			Kind:            docs.Kind(req.Kind),
-			ContentMD:       req.ContentMD,
+			ContentMD:       req.Content,
 			Message:         req.Message,
 			ExpectedVersion: req.ExpectedVersion,
 		}, d.authorship(c))

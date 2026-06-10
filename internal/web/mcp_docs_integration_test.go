@@ -16,7 +16,7 @@ func TestMCP_Docs_WriteReadVersionDelete(t *testing.T) {
 	f.callJSON(t, "nottario.docs.write", map[string]any{
 		"project_id":       f.projectID,
 		"path":             path,
-		"content_md":       "# v1\n\nfirst",
+		"content":          "# v1\n\nfirst",
 		"expected_version": 0,
 		"message":          "init",
 	}, &v1)
@@ -41,7 +41,7 @@ func TestMCP_Docs_WriteReadVersionDelete(t *testing.T) {
 	f.callJSON(t, "nottario.docs.write", map[string]any{
 		"project_id":       f.projectID,
 		"path":             path,
-		"content_md":       "stale",
+		"content":          "stale",
 		"expected_version": 0,
 		"message":          "stale-update",
 	}, &conflict)
@@ -53,7 +53,7 @@ func TestMCP_Docs_WriteReadVersionDelete(t *testing.T) {
 	f.callJSON(t, "nottario.docs.write", map[string]any{
 		"project_id":       f.projectID,
 		"path":             path,
-		"content_md":       "# v2\n\nsecond",
+		"content":          "# v2\n\nsecond",
 		"expected_version": 1,
 		"message":          "update",
 	}, nil)

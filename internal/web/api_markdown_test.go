@@ -44,7 +44,7 @@ func newMarkdownServer(t *testing.T) (*httptest.Server, *http.Cookie, *identity.
 
 func TestAPIMarkdown_RejectsUnauthenticated(t *testing.T) {
 	srv, _, _ := newMarkdownServer(t)
-	body := bytes.NewBufferString(`{"content_md":"hi"}`)
+	body := bytes.NewBufferString(`{"content":"hi"}`)
 	resp, err := http.Post(srv.URL, "application/json", body)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -71,7 +71,7 @@ func TestAPIMarkdown_RejectsInvalidJSON(t *testing.T) {
 
 func TestAPIMarkdown_RejectsInvalidProjectID(t *testing.T) {
 	srv, cookie, _ := newMarkdownServer(t)
-	body := bytes.NewBufferString(`{"project_id":"not-a-uuid","content_md":"hi"}`)
+	body := bytes.NewBufferString(`{"project_id":"not-a-uuid","content":"hi"}`)
 	req, _ := http.NewRequest(http.MethodPost, srv.URL, body)
 	req.AddCookie(cookie)
 	resp, err := http.DefaultClient.Do(req)
@@ -86,7 +86,7 @@ func TestAPIMarkdown_RejectsInvalidProjectID(t *testing.T) {
 
 func TestAPIMarkdown_RendersAuthenticated(t *testing.T) {
 	srv, cookie, _ := newMarkdownServer(t)
-	body := bytes.NewBufferString(`{"content_md":"# Hi\n\nA *line*."}`)
+	body := bytes.NewBufferString(`{"content":"# Hi\n\nA *line*."}`)
 	req, _ := http.NewRequest(http.MethodPost, srv.URL, body)
 	req.AddCookie(cookie)
 	resp, err := http.DefaultClient.Do(req)

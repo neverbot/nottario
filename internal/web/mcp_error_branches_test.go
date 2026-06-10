@@ -154,9 +154,9 @@ func TestMCP_Docs_ErrorBranches(t *testing.T) {
 		args map[string]any
 	}{
 		{"write empty path", "nottario.docs.write",
-			map[string]any{"scope": "project", "project_id": f.projectID, "path": "", "content_md": "x"}},
+			map[string]any{"scope": "project", "project_id": f.projectID, "path": "", "content": "x"}},
 		{"write project scope without project_id", "nottario.docs.write",
-			map[string]any{"scope": "project", "path": "p.md", "content_md": "x"}},
+			map[string]any{"scope": "project", "path": "p.md", "content": "x"}},
 		{"read missing path", "nottario.docs.read",
 			map[string]any{"scope": "project", "project_id": f.projectID}},
 		{"read project scope without project_id", "nottario.docs.read",
@@ -170,7 +170,7 @@ func TestMCP_Docs_ErrorBranches(t *testing.T) {
 		{"read_version missing version", "nottario.docs.read_version",
 			map[string]any{"scope": "project", "project_id": f.projectID, "path": "p.md"}},
 		{"write invalid scope", "nottario.docs.write",
-			map[string]any{"scope": "wat", "path": "p.md", "content_md": "x"}},
+			map[string]any{"scope": "wat", "path": "p.md", "content": "x"}},
 		{"read invalid scope", "nottario.docs.read",
 			map[string]any{"scope": "wat", "path": "p.md"}},
 	}
@@ -239,7 +239,7 @@ func TestMCP_Arch_LinksAndMove(t *testing.T) {
 	}, nil)
 	f.callJSON(t, "nottario.docs.write", map[string]any{
 		"scope": "project", "project_id": f.projectID,
-		"path": "projects/" + f.projectID + "/context/notes.md", "content_md": "hi",
+		"path": "projects/" + f.projectID + "/context/notes.md", "content": "hi",
 	}, nil)
 
 	// Link doc → unlink doc.
@@ -591,7 +591,7 @@ func TestMCP_Docs_GlobalScope(t *testing.T) {
 
 	// write global doc → list global → read global.
 	f.callJSON(t, "nottario.docs.write", map[string]any{
-		"scope": "global", "path": "global/x.md", "content_md": "g",
+		"scope": "global", "path": "global/x.md", "content": "g",
 	}, nil)
 	var list struct {
 		Documents []map[string]any `json:"documents"`

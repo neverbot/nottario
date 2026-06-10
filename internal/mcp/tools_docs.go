@@ -38,7 +38,7 @@ type docsSearchInput struct {
 type docsWriteInput struct {
 	docsScopeInput
 	Path            string `json:"path" jsonschema:"logical path"`
-	ContentMD       string `json:"content_md" jsonschema:"full markdown body including optional YAML frontmatter at the top"`
+	Content         string `json:"content" jsonschema:"full markdown body including optional YAML frontmatter at the top"`
 	Kind            string `json:"kind,omitempty" jsonschema:"optional override; otherwise read from frontmatter or defaults to 'context'"`
 	Message         string `json:"message,omitempty" jsonschema:"short explanation of the change, stored on the version row"`
 	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"optional optimistic-concurrency check: must equal current_version (or 0 for new docs)"`
@@ -138,7 +138,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 		doc, err := docs.Write(ctx, d.Pool, docs.WriteParams{
 			Scope: scope, ProjectID: pid,
 			Path: in.Path, Kind: docs.Kind(in.Kind),
-			ContentMD:       in.ContentMD,
+			ContentMD:       in.Content,
 			Message:         in.Message,
 			ExpectedVersion: in.ExpectedVersion,
 		}, docs.Authorship{UserID: ptrUUID(c.UserID), TokenID: ptrUUID(c.TokenID)})

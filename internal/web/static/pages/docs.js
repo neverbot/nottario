@@ -570,7 +570,7 @@ class NottarioDocsPage extends LitElement {
           scope: 'project',
           project_id: this.projectId,
           path,
-          content_md: this.draft,
+          content: this.draft,
           expected_version: 0,
         }),
       });
@@ -616,7 +616,7 @@ class NottarioDocsPage extends LitElement {
           scope: 'project',
           project_id: this.projectId,
           path: this.selected.Path,
-          content_md: this.draft,
+          content: this.draft,
           expected_version: this.selected.CurrentVersion,
         }),
       });
@@ -730,7 +730,7 @@ class NottarioDocsPage extends LitElement {
           scope: 'project',
           project_id: this.projectId,
           path: this.selected.Path,
-          content_md: this.viewingVersion.ContentMD || '',
+          content: this.viewingVersion.ContentMD || '',
           expected_version: current,
           message: `Restored from v${v}`,
         }),

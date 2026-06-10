@@ -69,9 +69,10 @@ tags: [testing, quality]
 - Any other keys are stored verbatim in `frontmatter` and round-trip
   through `read` / `write`.
 
-When you read a document, the response splits `content_md` (body only)
-from `frontmatter` (parsed object). When you write, you send the full
-markdown including frontmatter; the server splits and stores them.
+When you read a document, the response splits the body from the
+parsed frontmatter (as an object). When you write, you send the full
+markdown including frontmatter in `content`; the server splits and
+stores them.
 
 ## Tools
 
@@ -98,7 +99,7 @@ Creates or updates the document keyed by `(scope, project_id, path)`.
 The body you send should include any frontmatter you want preserved:
 
 ```text
-content_md = "---\ntitle: …\nkind: skill\n---\n\nBody…"
+content = "---\ntitle: …\nkind: skill\n---\n\nBody…"
 ```
 
 **Optimistic concurrency**: always pass `expected_version`.
@@ -150,7 +151,7 @@ nottario.docs.write {
   scope: "project",
   project_id: "...",
   path: "projects/<id>/context/decisions/2026-05-22-no-sqlite.md",
-  content_md: "---\ntitle: Postgres only\nkind: context\n---\n\n# Postgres only\n\n## Decision\n\n…\n\n## Rationale\n\n…\n",
+  content: "---\ntitle: Postgres only\nkind: context\n---\n\n# Postgres only\n\n## Decision\n\n…\n\n## Rationale\n\n…\n",
   expected_version: 0,
   message: "decide to drop sqlite support",
 }
@@ -166,7 +167,7 @@ nottario.docs.write {
   scope: "project",
   project_id: "...",
   path: "projects/<id>/notes/<your-login>/<topic>.md",
-  content_md: "Body…",
+  content: "Body…",
   expected_version: 0,
 }
 ```
@@ -175,10 +176,10 @@ nottario.docs.write {
 
 ```text
 doc = nottario.docs.read { ..., path }
-edit doc.ContentMD locally (regenerate full markdown with frontmatter)
+edit the body locally (regenerate full markdown with frontmatter)
 nottario.docs.write {
   ..., path,
-  content_md: new_body,
+  content: new_body,
   expected_version: doc.CurrentVersion,
   message: "clarify wording",
 }
@@ -223,7 +224,7 @@ lockstep using the optimistic-concurrency primitives:
      scope: "project",
      project_id: "...",
      path: "projects/<id>/context/claude.md",
-     content_md: <full updated body>,
+     content: <full updated body>,
      expected_version: doc.CurrentVersion,
      message: "<why you changed it>",
    }

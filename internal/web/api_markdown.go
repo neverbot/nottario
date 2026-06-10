@@ -18,7 +18,7 @@ type MarkdownDeps struct {
 
 type renderMarkdownRequest struct {
 	ProjectID string `json:"project_id"`
-	ContentMD string `json:"content_md"`
+	Content   string `json:"content"`
 }
 
 // RenderMarkdownHandler returns rendered HTML for arbitrary markdown.
@@ -57,7 +57,7 @@ func RenderMarkdownHandler(d MarkdownDeps) http.Handler {
 			}
 			pid = &parsed
 		}
-		html, err := markdown.Render(r.Context(), d.Pool, req.ContentMD, pid)
+		html, err := markdown.Render(r.Context(), d.Pool, req.Content, pid)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

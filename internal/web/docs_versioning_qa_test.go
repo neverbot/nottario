@@ -139,7 +139,7 @@ type writeDocBody struct {
 	Scope           string `json:"scope"`
 	ProjectID       string `json:"project_id"`
 	Path            string `json:"path"`
-	ContentMD       string `json:"content_md"`
+	ContentMD       string `json:"content"`
 	Message         string `json:"message"`
 	ExpectedVersion *int   `json:"expected_version,omitempty"`
 }
