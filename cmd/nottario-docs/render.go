@@ -171,9 +171,11 @@ func writePage(outDir string, p *Page, html string) error {
 }
 
 // renderAll loads, expands, renders, and writes every page, plus the
-// client-side search index.
+// client-side search index. Skills bundled with the binary are read
+// from disk and surfaced under /skills/ so the docs are guaranteed
+// to ship the latest version on every build.
 func renderAll(inDir, outDir string) error {
-	pages, err := loadPages(inDir)
+	pages, err := allPages(inDir)
 	if err != nil {
 		return err
 	}
@@ -213,7 +215,7 @@ func renderAll(inDir, outDir string) error {
 
 // sectionOrder is the order in which sections appear in the side nav.
 // Sections not in this list go last in alphabetical order.
-var sectionOrder = []string{"Start", "Reference", "Operating", "Updates"}
+var sectionOrder = []string{"Start", "Reference", "Skills", "Operating", "Updates"}
 
 func buildNav(pages []*Page) []NavSection {
 	const misc = "Misc"

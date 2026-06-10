@@ -14,7 +14,7 @@ import (
 // whats-new). Returns the first error joined with subsequent ones so
 // CI surfaces every fix at once instead of dripping them out.
 func runChecks(inDir string) error {
-	pages, err := loadPages(inDir)
+	pages, err := allPages(inDir)
 	if err != nil {
 		return err
 	}
