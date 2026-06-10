@@ -239,6 +239,32 @@ func TestNodes_InsertUpdateGetList(t *testing.T) {
 	}
 }
 
+// TestNodes_HTMLEntitiesDecodedAtBoundary ensures that the rare agent
+// that hands us an HTML-entity-encoded name or description (a
+// `Pages &amp; Router` style payload that the Lit renderer would
+// otherwise re-escape and surface literally to users) gets the
+// entities decoded at the UpsertNode boundary. The DB row holds
+// plain UTF-8 from then on.
+func TestNodes_HTMLEntitiesDecodedAtBoundary(t *testing.T) {
+	ctx, tc, cancel := seedProject(t)
+	defer cancel()
+
+	row, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+		Slug: "viewer.pages", Kind: "module",
+		Name:          "Pages &amp; Router",
+		DescriptionMD: "Routes &lt;/&gt; &amp; render &quot;leaf&quot; pages.",
+	})
+	if err != nil {
+		t.Fatalf("UpsertNode: %v", err)
+	}
+	if row.Name != "Pages & Router" {
+		t.Errorf("name not decoded: %q", row.Name)
+	}
+	if row.DescriptionMD != "Routes </> & render \"leaf\" pages." {
+		t.Errorf("description not decoded: %q", row.DescriptionMD)
+	}
+}
+
 func TestNodes_MoveAndCycles(t *testing.T) {
 	ctx, tc, cancel := seedProject(t)
 	defer cancel()

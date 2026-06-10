@@ -156,6 +156,14 @@ nottario.arch.upsert_node {
 The first time you touch architecture in a project, the default kind
 catalogue is seeded automatically.
 
+**Send `name` and `description` as plain UTF-8.** Do not HTML-encode
+ampersands, angle brackets or quotes — `Pages & Router`, not
+`Pages &amp; Router`. The web UI escapes these for display, so an
+encoded payload renders to the user as the literal `&amp;`. The
+server now decodes a small set of common entities defensively when
+it receives them, but the cleanest fix is to never encode in the
+first place.
+
 ### `nottario.arch.move_node`
 
 Reparent a node. Cycles are rejected.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"regexp"
 	"strings"
 
@@ -45,6 +46,15 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 	if err := EnsureDefaultKinds(ctx, pool, projectID); err != nil {
 		return nil, err
 	}
+	// Defensive: agents occasionally send HTML-entity-encoded strings
+	// (`Pages &amp; Router`) because they are mentally building a
+	// markup payload. Stored verbatim, those entities then get
+	// re-escaped by the Lit renderer and show up to users as
+	// `Pages &amp; Router` literal. Decode at the boundary so the row
+	// holds plain UTF-8. Names that genuinely need the literal token
+	// `&amp;` are vanishingly rare in architecture-node labels.
+	p.Name = html.UnescapeString(p.Name)
+	p.DescriptionMD = html.UnescapeString(p.DescriptionMD)
 	if p.Slug == "" {
 		return nil, ErrSlugRequired
 	}
