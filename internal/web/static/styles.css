@@ -1,29 +1,107 @@
 :root {
-  --fg: #1f2328;
-  --fg-muted: #59636e;
-  --fg-on-accent: #ffffff;
-  --bg: #ffffff;
-  --bg-subtle: #f6f8fa;
-  --bg-overlay: rgba(0, 0, 0, 0.04);
-  --border: #d1d9e0;
-  --border-strong: #afb8c1;
-  --accent: #0969da;
-  --accent-hover: #0860c8;
-  --success: #1f883d;
-  --warning: #9a6700;
-  --danger: #cf222e;
+  /* ---- Brand anchor ----
+     Two hex values that the favicon, the topbar mark and the login
+     screen carry. Everything else descends from these. */
+  --brand-blue:  #1f6feb;
+  --brand-green: #2da44e;
+
+  /* ---- Neutral ramp ----
+     Cool-tinted grey scale. gray-0 is page bg; gray-9 is body text.
+     Use the ramp for any greyscale value — don't reach for raw hex. */
+  --gray-0: #ffffff;
+  --gray-1: #f6f8fa;
+  --gray-2: #eaeef2;
+  --gray-3: #d0d7de;
+  --gray-4: #afb8c1;
+  --gray-5: #8c959f;
+  --gray-6: #6e7781;
+  --gray-7: #57606a;
+  --gray-8: #424a53;
+  --gray-9: #1f2328;
+
+  /* ---- Functional aliases ----
+     Names that describe role, not appearance. UI code should reach
+     for these rather than the ramp directly whenever the value has
+     semantic meaning (fg/bg/border/accent/etc). */
+  --fg:            var(--gray-9);
+  --fg-muted:      var(--gray-7);
+  --fg-subtle:     var(--gray-6);
+  --fg-on-accent:  #ffffff;
+  --bg:            var(--gray-0);
+  --bg-subtle:     var(--gray-1);
+  --bg-overlay:    rgba(0, 0, 0, 0.04);
+  --border:        var(--gray-3);
+  --border-muted:  var(--gray-2);
+  --border-strong: var(--gray-4);
+  --accent:        var(--brand-blue);
+  --accent-hover:  #1158c8;
+  --success:       var(--brand-green);
+  --success-hover: #1a7f37;
+  --warning:       #bf8700;
+  --warning-text:  #7d4e00;
+  --danger:        #cf222e;
+  --danger-hover:  #a40e26;
+  --danger-text:   #82071e;
+
+  /* ---- Status tints ----
+     Chip / pill backgrounds. Pair each with the matching --fg-* for
+     accessible contrast (AAA on white). */
+  --tint-blue:    #ddf4ff;
+  --tint-blue-fg: #0550ae;
+  --tint-green:   #dafbe1;
+  --tint-green-fg:#116329;
+  --tint-yellow:  #fff8c5;
+  --tint-yellow-fg:#7d4e00;
+  --tint-red:     #ffebe9;
+  --tint-red-fg:  #82071e;
+  --tint-purple:  #fbefff;
+  --tint-purple-fg:#6639ba;
+
+  /* ---- Role default colours ----
+     The DB stores per-project role colour. These are the seed values
+     and the fallback for any role row that ships without a colour. */
+  --role-backend:  var(--brand-blue);
+  --role-frontend: var(--brand-green);
+  --role-qa:       #bf8700;
+  --role-design:   #8250df;
+
+  /* ---- Typography ---- */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
           Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --radius: 6px;
+
+  /* ---- Shape ---- */
+  --radius:    6px;
   --radius-lg: 8px;
+  --radius-sm: 4px;
   --shadow-sm: 0 1px 0 rgba(31, 35, 40, 0.04);
   --shadow-md: 0 3px 6px rgba(140, 149, 159, 0.15);
-  /* A11y: single focus-ring token. Brand-palette task will replace
-     this value; everything that needs a focus indicator should
-     reference --color-focus-ring rather than hard-code blue. */
-  --color-focus-ring: #0969da;
+  --shadow-lg: 0 8px 24px rgba(31, 35, 40, 0.12);
+
+  /* ---- Focus ring ----
+     Single token reused by every interactive surface. Brand-blue so
+     it reads as one with the other accent affordances. */
+  --color-focus-ring: var(--accent);
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--color-focus-ring);
+
+  /* ---- Gantt semantic tokens ----
+     The marquee timeline reads its paint from named slots so the
+     palette task can re-skin it without touching gantt.js. */
+  --gantt-band-1:           var(--bg);
+  --gantt-band-features:    #f0f2f5;
+  --gantt-band-separator:   var(--gray-2);
+  --gantt-zone-divider:     var(--gray-3);
+  --gantt-zone-past-tint:   rgba(140, 149, 159, 0.04);
+  --gantt-now-line:         var(--danger);
+  --gantt-now-glow:         rgba(207, 34, 46, 0.08);
+  --gantt-bar-done-fill:    var(--gray-3);
+  --gantt-bar-done-stroke:  var(--gray-4);
+  --gantt-bar-feature-fill: #eef0f3;
+  --gantt-arrow:            var(--gray-4);
+  --gantt-arrow-promoted:   var(--fg);
+  --gantt-label:            var(--fg);
+  --gantt-label-muted:      var(--fg-muted);
+  --gantt-label-on-tint:    var(--fg);
 }
 
 /* A11y: visually-hidden skip-to-content link. Becomes visible when
@@ -95,7 +173,7 @@ button {
   border-radius: var(--radius);
   transition: background-color 120ms, border-color 120ms;
 }
-button:hover { background: #eef2f6; border-color: var(--border-strong); }
+button:hover { background: var(--gray-2); border-color: var(--border-strong); }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 button.primary {
@@ -103,7 +181,7 @@ button.primary {
   border-color: rgba(31, 35, 40, 0.15);
   color: var(--fg-on-accent);
 }
-button.primary:hover { background: #1a7f37; }
+button.primary:hover { background: var(--success-hover); }
 
 button.danger {
   color: var(--danger);
@@ -122,7 +200,7 @@ input[type="text"], input[type="email"], textarea, select {
 input:focus-visible, textarea:focus-visible, select:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
 }
 
 .muted { color: var(--fg-muted); }
@@ -146,4 +224,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   border: 1px solid var(--border);
 }
 
-.badge.admin { background: #fff8c5; color: #7d4e00; border-color: #d4a72c; }
+.badge.admin {
+  background: var(--tint-yellow);
+  color: var(--tint-yellow-fg);
+  border-color: #d4a72c;
+}
