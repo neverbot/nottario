@@ -12,6 +12,18 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## 2026-06-12
+
+- **Brand-anchored palette + Gantt visual refresh.** The whole web
+  UI now reads its colour from a single CSS-token system rooted in
+  the brand gradient (`#1f6feb` blue, `#2da44e` green); the new
+  documentation lives in `docs/design/palette.md`. The Gantt picked
+  up a confident `NOW` pill with a translucent glow column, a subtle
+  past-zone wash, hairline separators between lanes (no more zebra
+  stripes), role-tinted doing/todo bars instead of saturated fills,
+  a corner red dot for bugs (so several bugs no longer drown the
+  timeline in red), and a collapsed legend at the foot.
+
 ## 2026-06-10
 
 - **Kanban: filter row, priority dots and column rename.** Three
