@@ -25,6 +25,12 @@ class NottarioProjectSettings extends LitElement {
     showIssueToken: { state: true },
     issuedToken: { state: true },
     tokenError: { state: true },
+    // Inline-confirm UX for the destructive Revoke action: id of the
+    // token currently armed (Yes/Cancel shown in the row), or null.
+    _revokeArmedId: { state: true },
+    // Which "Copy …" button most recently fired its post-click ack
+    // flash. Cleared on a timeout from the click handler.
+    _copyAck: { state: true },
   };
 
   static styles = [
@@ -190,11 +196,67 @@ class NottarioProjectSettings extends LitElement {
       font-size: 12px;
       margin-top: 12px;
     }
-    .dialog .panel { width: 560px; }
+    /* Default panel sits at the form's tighter 420; the issued-secret
+       state widens to 560 (qualified by the .panel.wide class) so the
+       install snippet doesn't wrap mid-flag. */
+    .dialog .panel { width: 420px; }
+    .dialog .panel.wide { width: 560px; }
     .dialog .panel h3 { margin: 0 0 16px 0; }
     .muted { color: var(--fg-muted); }
-    .status-active { color: var(--success); font-weight: 500; }
-    .status-revoked { color: var(--fg-muted); }
+    /* Status pill: a small dot + label so the column scans at a
+       glance in a list of many tokens. The dot carries the
+       semantics; the text is the AA fallback. */
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+    .status::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .status.active { color: var(--success); }
+    .status.revoked { color: var(--fg-muted); font-weight: 400; }
+    /* Inline revoke confirm: replaces the native window.confirm()
+       so the confirm flow stays inside the table row, on-brand and
+       scannable. */
+    .revoke-confirm {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--fg-muted);
+    }
+    .revoke-confirm strong { color: var(--fg); font-weight: 500; }
+    .revoke-confirm button {
+      padding: 2px 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      border-radius: 4px;
+    }
+    .revoke-confirm .yes {
+      background: var(--danger);
+      color: var(--fg-on-accent);
+      border-color: var(--danger);
+    }
+    .revoke-confirm .yes:hover { background: var(--danger-hover); }
+    /* Non-member empty state — tokenised. */
+    .tokens-locked {
+      padding: 24px;
+      text-align: center;
+      color: var(--fg-muted);
+      background: var(--bg);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+    }
+    /* Copy-success ack: the same button briefly swaps to a
+       check-mark + "Copied" so the user knows the click landed. */
+    .copy-ack { color: var(--success); font-weight: 600; }
   `,
   ];
 
@@ -211,6 +273,8 @@ class NottarioProjectSettings extends LitElement {
     this.showIssueToken = false;
     this.issuedToken = null;
     this.tokenError = '';
+    this._revokeArmedId = null;
+    this._copyAck = null;
     new EscController(this, (e) => {
       if (this.showIssueToken) {
         this._closeTokenDialog();
@@ -838,8 +902,58 @@ class NottarioProjectSettings extends LitElement {
     return ms.some((m) => m.project_id === this.projectId);
   }
 
+  // Created column: a compact absolute date (no time, no seconds). The
+  // full ISO timestamp sits in the title attribute for power users.
   _fmtDate(d) {
-    return d ? new Date(d).toLocaleString() : '—';
+    if (!d) return '—';
+    const dt = new Date(d);
+    return dt.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  // Last-used column: relative ("3 days ago", "just now") so the
+  // freshness of an active token reads at a glance. Older than 30
+  // days falls back to the absolute date so we don't pretend to
+  // know "47 days ago".
+  _fmtRelativeDate(d) {
+    if (!d) return '—';
+    const then = new Date(d).getTime();
+    const now = Date.now();
+    const secs = Math.max(0, Math.floor((now - then) / 1000));
+    if (secs < 45) return 'just now';
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins} min ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+    return this._fmtDate(d);
+  }
+
+  _armRevoke(id) {
+    this._revokeArmedId = id;
+  }
+
+  _cancelRevoke() {
+    this._revokeArmedId = null;
+  }
+
+  async _copyAndAck(text, which) {
+    try {
+      await navigator.clipboard.writeText(text);
+      this._copyAck = which;
+      // Brief confirmation; clears so the button text returns to
+      // its rest state and the user can click again if needed.
+      setTimeout(() => {
+        if (this._copyAck === which) this._copyAck = null;
+      }, 1500);
+    } catch (_) {
+      // Clipboard failed — leave the ack off; the user can fall back
+      // to selecting the visible text manually (user-select: all).
+    }
   }
 
   async _loadTokens() {
@@ -890,7 +1004,7 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async _revokeToken(id) {
-    if (!confirm('Revoke this token? Agents using it will be locked out immediately.')) return;
+    this._revokeArmedId = null;
     try {
       const res = await fetch(`/api/projects/${this.projectId}/tokens/${id}`, {
         method: 'DELETE',
@@ -906,8 +1020,8 @@ class NottarioProjectSettings extends LitElement {
   renderTokens() {
     if (!this._isMember()) {
       return html`
-        <div class="empty" style="padding:24px;text-align:center;color:var(--fg-muted);background:#fff;border:1px dashed var(--border);border-radius:8px">
-          Only project members can manage API tokens for this project.
+        <div class="tokens-locked">
+          Only project members can manage API tokens.
         </div>
       `;
     }
@@ -919,7 +1033,7 @@ class NottarioProjectSettings extends LitElement {
     return html`
       <div class="tokens-header">
         <p class="helper">
-          API tokens authenticate agents (MCP clients) against this project. Each token is scoped to this project only.
+          API tokens authenticate MCP agents. Each is scoped to this project.
         </p>
         <div class="spacer"></div>
         <button class="btn primary" @click=${() => this._openTokenDialog()}>New token</button>
@@ -940,34 +1054,47 @@ class NottarioProjectSettings extends LitElement {
           ${
             this.tokens.length === 0
               ? html`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No tokens yet.</td></tr>`
-              : this.tokens.map(
-                  (t) => html`
-              <tr>
-                <td>${t.name}</td>
-                <td class="mono">${t.prefix}…</td>
-                <td>${this._fmtDate(t.created_at)}</td>
-                <td>${this._fmtDate(t.last_used_at)}</td>
-                <td>${
-                  t.revoked_at
-                    ? html`<span class="status-revoked">revoked</span>`
-                    : html`<span class="status-active">active</span>`
-                }</td>
-                <td class="row-actions">
-                  ${
-                    t.revoked_at
-                      ? null
-                      : html`
-                    <button class="delete" title="Revoke token" aria-label="Revoke token"
-                            @click=${() => this._revokeToken(t.id)}>✕</button>`
-                  }
-                </td>
-              </tr>
-            `,
-                )
+              : this.tokens.map((t) => this._renderTokenRow(t))
           }
         </tbody>
       </table>
       ${this.showIssueToken ? this._renderTokenDialog() : null}
+    `;
+  }
+
+  _renderTokenRow(t) {
+    const armed = this._revokeArmedId === t.id;
+    return html`
+      <tr>
+        <td>${t.name}</td>
+        <td class="mono">${t.prefix}…</td>
+        <td title=${t.created_at || ''}>${this._fmtDate(t.created_at)}</td>
+        <td title=${t.last_used_at || ''}>${this._fmtRelativeDate(t.last_used_at)}</td>
+        <td>
+          ${
+            t.revoked_at
+              ? html`<span class="status revoked">revoked</span>`
+              : html`<span class="status active">active</span>`
+          }
+        </td>
+        <td class="row-actions">
+          ${
+            t.revoked_at
+              ? null
+              : armed
+                ? html`
+                  <span class="revoke-confirm">
+                    <strong>Revoke?</strong>
+                    <button class="yes"
+                            @click=${() => this._revokeToken(t.id)}>Yes</button>
+                    <button @click=${() => this._cancelRevoke()}>Cancel</button>
+                  </span>`
+                : html`
+                  <button class="delete" title="Revoke token" aria-label="Revoke token"
+                          @click=${() => this._armRevoke(t.id)}>✕</button>`
+          }
+        </td>
+      </tr>
     `;
   }
 
@@ -983,9 +1110,13 @@ class NottarioProjectSettings extends LitElement {
   --transport http \\
   --header "Authorization: Bearer ${secret}" \\
   --scope local`;
+      const copyTokenLabel =
+        this._copyAck === 'token' ? html`<span class="copy-ack">✓ Copied</span>` : 'Copy token';
+      const copySnippetLabel =
+        this._copyAck === 'snippet' ? html`<span class="copy-ack">✓ Copied</span>` : 'Copy snippet';
       return html`
         <div class="dialog">
-          <div class="panel">
+          <div class="panel wide">
             <h3>Token issued</h3>
             <div class="secret-banner">
               <strong>Copy this token now.</strong> It will not be shown again.
@@ -995,9 +1126,9 @@ class NottarioProjectSettings extends LitElement {
             <div class="snippet">${snippet}</div>
             <div class="actions-row" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
               <button class="btn secondary"
-                      @click=${() => navigator.clipboard.writeText(secret)}>Copy token</button>
+                      @click=${() => this._copyAndAck(secret, 'token')}>${copyTokenLabel}</button>
               <button class="btn secondary"
-                      @click=${() => navigator.clipboard.writeText(snippet)}>Copy snippet</button>
+                      @click=${() => this._copyAndAck(snippet, 'snippet')}>${copySnippetLabel}</button>
               <button class="btn primary" @click=${() => this._closeTokenDialog()}>Done</button>
             </div>
           </div>
