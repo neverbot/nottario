@@ -106,22 +106,20 @@ class NottarioGantt extends LitElement {
       stroke: var(--gantt-zone-divider);
       stroke-width: 1;
     }
-    .now-glow {
-      fill: var(--gantt-now-glow);
-    }
     .now-line {
       stroke: var(--gantt-now-line);
-      stroke-width: 2;
+      stroke-width: 1.5;
     }
     .now-pill-bg {
       fill: var(--gantt-now-line);
     }
     .now-pill-text {
       fill: var(--fg-on-accent);
-      font-size: 10.5px;
+      font-size: 9.5px;
       font-weight: 700;
       letter-spacing: 0.08em;
       font-family: ui-monospace, SFMono-Regular, monospace;
+      dominant-baseline: central;
     }
     .task-rect {
       stroke-width: 1.5;
@@ -177,13 +175,6 @@ class NottarioGantt extends LitElement {
       stroke-dasharray: 0 !important;
       stroke-width: 2.5 !important;
     }
-    /* Bug indicator — a small red dot painted at the top-left of the
-       bar. Drawn as a separate <circle> so the bar's role paint
-       survives and multiple bugs don't drown the timeline in red. */
-    .bug-dot {
-      fill: var(--danger);
-      pointer-events: none;
-    }
     .task-label {
       fill: var(--gantt-label);
       font-size: 11px;
@@ -194,6 +185,13 @@ class NottarioGantt extends LitElement {
     .task-label.on-tint {
       font-weight: 600;
     }
+    /* Bug indicator: typography, not colour. Italic title + a
+       "bug:" prefix. Red is reserved for the inconsistency alarm and
+       the NOW line, so it never reads as "this task needs attention
+       NOW" when a bar is merely a bug. */
+    .task-label.bug {
+      font-style: italic;
+    }
     .arrow {
       stroke: var(--border-strong);
       stroke-width: 1;
@@ -201,32 +199,12 @@ class NottarioGantt extends LitElement {
       marker-end: url(#dep-arrowhead);
     }
     .legend {
-      padding: 6px 16px 10px;
+      padding: 8px 16px;
       font-size: 11px;
       color: var(--fg-muted);
-    }
-    .legend > summary {
-      cursor: pointer;
-      user-select: none;
-      list-style: none;
-      padding: 4px 0;
-      color: var(--fg-muted);
-      font-weight: 500;
-    }
-    .legend > summary::-webkit-details-marker { display: none; }
-    .legend > summary::before {
-      content: '▸ ';
-      display: inline-block;
-      width: 12px;
-      color: var(--fg-subtle);
-    }
-    .legend[open] > summary::before { content: '▾ '; }
-    .legend-row {
       display: flex;
-      gap: 14px;
+      gap: 16px;
       flex-wrap: wrap;
-      margin-top: 6px;
-      padding-left: 12px;
     }
     .legend .swatch {
       display: inline-block;
@@ -237,8 +215,11 @@ class NottarioGantt extends LitElement {
       margin-right: 4px;
       box-sizing: border-box;
     }
-    .legend .swatch-circle {
-      border-radius: 50%;
+    .legend .bug-mark {
+      font-style: italic;
+      font-weight: 600;
+      color: var(--fg);
+      margin-right: 4px;
     }
     .error {
       color: var(--danger);
@@ -1688,33 +1669,34 @@ class NottarioGantt extends LitElement {
           <line class="zone-divider" x1=${presentX} y1="0" x2=${presentX} y2=${totalHeight}></line>
           <line class="zone-divider" x1=${futureStartX} y1="0" x2=${futureStartX} y2=${totalHeight}></line>
 
-          <!-- "now" marker: a translucent glow column under a confident
-               2px red line, topped by a small NOW pill anchored to the
-               time-axis row. The pill replaces the legacy thin "now"
-               text label so the marquee reads at a glance. -->
-          <rect class="now-glow"
-                x=${presentX + presentWidth / 2 - 6}
-                y="0"
-                width="12"
-                height=${totalHeight}></rect>
+          <!-- "now" marker: the original thin red line, topped by a
+               small NOW pill anchored to the time-axis row. The pill
+               replaces the legacy "now" text label so the marquee
+               reads at a glance. -->
           <line class="now-line"
                 x1=${presentX + presentWidth / 2} y1=${headerH - 6}
                 x2=${presentX + presentWidth / 2} y2=${totalHeight}>
             <title>${this.now ? this.now.toLocaleString() : ''}</title>
           </line>
-          <rect class="now-pill-bg"
-                x=${presentX + presentWidth / 2 - 18}
-                y="2"
-                width="36" height=${headerH - 10}
-                rx="3" ry="3"></rect>
-          <text class="now-pill-text"
-                x=${presentX + presentWidth / 2}
-                y=${(headerH - 10) / 2 + 8}
-                text-anchor="middle"
-                dominant-baseline="central">
-            <title>${this.now ? this.now.toLocaleString() : ''}</title>
-            NOW
-          </text>
+          ${(() => {
+            const pillW = 30;
+            const pillH = 14;
+            const pillX = presentX + presentWidth / 2 - pillW / 2;
+            const pillY = 4;
+            return svg`
+              <rect class="now-pill-bg"
+                    x=${pillX} y=${pillY}
+                    width=${pillW} height=${pillH}
+                    rx="3" ry="3"></rect>
+              <text class="now-pill-text"
+                    x=${presentX + presentWidth / 2}
+                    y=${pillY + pillH / 2}
+                    text-anchor="middle">
+                <title>${this.now ? this.now.toLocaleString() : ''}</title>
+                NOW
+              </text>
+            `;
+          })()}
 
           <!-- Dependency arrows, FIRST PASS: rendered before the task
                rects so the bars paint on top of them. Selection-incident
@@ -1834,13 +1816,6 @@ class NottarioGantt extends LitElement {
                     tabindex="0">
               </rect>
               ${
-                t.type === 'bug'
-                  ? svg`<circle class="bug-dot"
-                                cx=${p.from + 6} cy=${y + 6}
-                                r="3"></circle>`
-                  : null
-              }
-              ${
                 user && user.avatar_url
                   ? svg`
                 <g transform=${`translate(${avatarX}, ${avatarY})`} style="pointer-events:none">
@@ -1853,10 +1828,10 @@ class NottarioGantt extends LitElement {
               `
                   : null
               }
-              <text class=${`task-label${labelOnTint ? ' on-tint' : ''}`}
+              <text class=${`task-label${labelOnTint ? ' on-tint' : ''}${t.type === 'bug' ? ' bug' : ''}`}
                     x=${labelX} y=${y + taskHeight / 2 + 4}
                     style=${labelStyle}>
-                ${this._truncate(t.title, labelMaxChars)}
+                ${t.type === 'bug' ? 'bug: ' : ''}${this._truncate(t.title, labelMaxChars - (t.type === 'bug' ? 5 : 0))}
               </text>
             `;
           })}
@@ -1877,17 +1852,14 @@ class NottarioGantt extends LitElement {
           })}
         </svg>
       </div>
-      <details class="legend">
-        <summary>Legend</summary>
-        <div class="legend-row">
-          <span><span class="swatch" style="background:var(--gantt-bar-done-fill);border:1px solid var(--gantt-bar-done-stroke)"></span> done</span>
-          <span><span class="swatch" style="background:color-mix(in srgb, var(--brand-blue) 14%, white);border:1.5px solid var(--brand-blue)"></span> doing</span>
-          <span><span class="swatch" style="background:color-mix(in srgb, var(--brand-blue) 14%, white);border:1.5px dashed var(--brand-blue)"></span> todo</span>
-          <span><span class="swatch swatch-circle" style="background:var(--danger)"></span> bug</span>
-          <span><span class="swatch" style="border:2px solid var(--danger)"></span> inconsistent — dependent already done</span>
-          <span><span class="swatch" style="background:var(--gantt-now-line);width:2px"></span> now</span>
-        </div>
-      </details>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--gantt-bar-done-fill);border:1px solid var(--gantt-bar-done-stroke)"></span> done</span>
+        <span><span class="swatch" style="background:color-mix(in srgb, var(--brand-blue) 14%, white);border:1.5px solid var(--brand-blue)"></span> doing</span>
+        <span><span class="swatch" style="background:color-mix(in srgb, var(--brand-blue) 14%, white);border:1.5px dashed var(--brand-blue)"></span> todo</span>
+        <span><span class="bug-mark">bug:</span> italic title — bug</span>
+        <span><span class="swatch" style="border:2px solid var(--danger)"></span> inconsistent — dependent already done</span>
+        <span><span class="swatch" style="background:var(--gantt-now-line);width:2px"></span> now</span>
+      </div>
     `;
   }
 
