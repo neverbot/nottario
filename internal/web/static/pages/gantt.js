@@ -545,8 +545,13 @@ class NottarioGantt extends LitElement {
       this._initialCenterDone = false; // re-centre when project changes
     }
     if (c && c.has && c.has('cycleId') && !c.has('projectId')) {
-      // Switching cycle within the same project: just re-fetch tasks.
+      // Switching cycle within the same project: re-fetch tasks and
+      // re-centre. Closed sprints have NOW outside the populated
+      // range, but `_centerOnNow` still puts the line in the middle
+      // of the viewport, which is what a user pressing the dropdown
+      // expects after the new data lands.
       this.load();
+      this._initialCenterDone = false;
     }
     // Once the SVG is in the DOM and has its first computed layout,
     // scroll the stage so the "now" line sits in the middle. We only
