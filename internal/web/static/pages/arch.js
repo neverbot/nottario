@@ -36,7 +36,7 @@ class NottarioArchPage extends LitElement {
     css`
     :host { display: block; }
     .header h2 { margin: 0; }
-    .header .muted { color: #59636e; }
+    .header .muted { color: var(--fg-muted); }
 
     /* Two-column desktop. Single-column mobile (<720px): only one
        of sidebar/reader visible at a time, switched by the
@@ -49,7 +49,7 @@ class NottarioArchPage extends LitElement {
     }
     .sidebar, .reader {
       background: #fff;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 12px;
       overflow: auto;
@@ -63,7 +63,7 @@ class NottarioArchPage extends LitElement {
     }
     .sidebar-head strong { font-size: 14px; }
     .sidebar-head .muted {
-      color: #59636e;
+      color: var(--fg-muted);
       margin-left: auto;
       font-size: 11px;
     }
@@ -75,7 +75,7 @@ class NottarioArchPage extends LitElement {
     .tree ul { list-style: none; padding-left: 14px; margin: 0; }
     [role="treeitem"] { outline: none; }
     [role="treeitem"]:focus-visible > .node {
-      box-shadow: 0 0 0 2px var(--color-focus-ring, #0969da);
+      box-shadow: 0 0 0 2px var(--color-focus-ring, var(--accent));
     }
     .node {
       display: flex;
@@ -90,10 +90,10 @@ class NottarioArchPage extends LitElement {
     /* Leaves get a visual indent equal to (toggle 14px + gap 6px)
        so their names line up with siblings that DO have a toggle. */
     .node.leaf { padding-left: 26px; }
-    .node:hover { background: #f6f8fa; }
+    .node:hover { background: var(--bg-subtle); }
     .node.active {
-      background: #ddf4ff;
-      color: #0969da;
+      background: var(--tint-blue);
+      color: var(--accent);
     }
     .node.active .name { font-weight: 600; }
     .node.dim { opacity: 0.35; }
@@ -101,7 +101,7 @@ class NottarioArchPage extends LitElement {
     .toggle {
       flex: 0 0 14px;
       text-align: center;
-      color: #59636e;
+      color: var(--fg-muted);
       user-select: none;
       font-family: ui-monospace, monospace;
       font-size: 11px;
@@ -112,7 +112,7 @@ class NottarioArchPage extends LitElement {
       line-height: 1;
     }
     .toggle:focus-visible {
-      outline: 2px solid var(--color-focus-ring, #0969da);
+      outline: 2px solid var(--color-focus-ring, var(--accent));
       outline-offset: 1px;
       border-radius: 3px;
     }
@@ -127,12 +127,12 @@ class NottarioArchPage extends LitElement {
     .name {
       font-size: 14px;
       font-weight: 500;
-      color: #1f2328;
+      color: var(--fg);
     }
-    .node.active .name { color: #0969da; }
+    .node.active .name { color: var(--accent); }
     .kind-label {
       font-size: 10.5px;
-      color: #8b949e;
+      color: var(--gray-5);
       text-transform: uppercase;
       letter-spacing: 0.04em;
       margin-left: 2px;
@@ -147,7 +147,7 @@ class NottarioArchPage extends LitElement {
       align-items: center;
       justify-content: center;
       text-align: center;
-      color: #59636e;
+      color: var(--fg-muted);
       padding: 32px;
       gap: 4px;
     }
@@ -155,7 +155,7 @@ class NottarioArchPage extends LitElement {
       margin: 0;
       font-size: 15px;
       font-weight: 600;
-      color: #1f2328;
+      color: var(--fg);
     }
     .reader.empty p { margin: 0; max-width: 36ch; line-height: 1.5; }
 
@@ -164,21 +164,21 @@ class NottarioArchPage extends LitElement {
       margin: -4px 0 8px;
       background: transparent;
       border: 0;
-      color: #0969da;
+      color: var(--accent);
       cursor: pointer;
       padding: 4px 6px;
       border-radius: 6px;
       font: inherit;
       align-self: flex-start;
     }
-    .reader-back:hover { background: #f6f8fa; }
+    .reader-back:hover { background: var(--bg-subtle); }
 
     .reader header {
       display: flex;
       align-items: baseline;
       gap: 8px;
       flex-wrap: wrap;
-      border-bottom: 1px solid #eaeef2;
+      border-bottom: 1px solid var(--gray-2);
       padding-bottom: 8px;
       margin-bottom: 12px;
     }
@@ -188,7 +188,7 @@ class NottarioArchPage extends LitElement {
       font-weight: 600;
       line-height: 1.3;
     }
-    .reader .meta { color: #59636e; font-size: 12px; }
+    .reader .meta { color: var(--fg-muted); font-size: 12px; }
     .kind-pill {
       display: inline-flex;
       align-items: center;
@@ -197,8 +197,8 @@ class NottarioArchPage extends LitElement {
       border-radius: 6px;
       font-size: 11px;
       font-weight: 600;
-      background: #eaeef2;
-      color: #1f2328;
+      background: var(--gray-2);
+      color: var(--fg);
       letter-spacing: 0.02em;
     }
     .reader .meta-grid {
@@ -209,7 +209,7 @@ class NottarioArchPage extends LitElement {
       margin-bottom: 12px;
     }
     .reader .meta-grid > div:nth-child(odd) {
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
@@ -221,7 +221,7 @@ class NottarioArchPage extends LitElement {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .reader .edge-line {
       padding: 6px 8px;
@@ -233,23 +233,23 @@ class NottarioArchPage extends LitElement {
       flex-wrap: wrap;
     }
     .reader .edge-line + .edge-line { margin-top: 2px; }
-    .reader .edge-line:hover { background: #f6f8fa; cursor: pointer; }
+    .reader .edge-line:hover { background: var(--bg-subtle); cursor: pointer; }
     .reader .edge-line .kind {
       font-family: ui-monospace, monospace;
       font-size: 11.5px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .reader .edge-line .label {
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 12px;
     }
     .reader .edge-line .endpoint {
-      color: #0969da;
+      color: var(--accent);
       cursor: pointer;
       font-weight: 500;
     }
     .reader .edge-line .endpoint:hover { text-decoration: underline; }
-    .arrow { color: #8b949e; }
+    .arrow { color: var(--gray-5); }
 
     .linked-items {
       display: flex;
@@ -262,34 +262,34 @@ class NottarioArchPage extends LitElement {
       gap: 6px;
       padding: 4px 10px;
       border-radius: 6px;
-      background: #f6f8fa;
-      border: 1px solid #d1d9e0;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
       font-family: ui-monospace, monospace;
       font-size: 12px;
-      color: #1f2328;
+      color: var(--fg);
       text-decoration: none;
       width: max-content;
       max-width: 100%;
     }
-    .doc-link:hover { background: #eaeef2; }
+    .doc-link:hover { background: var(--gray-2); }
     .doc-link::before {
       content: '';
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #6e7781;
+      background: var(--fg-subtle);
     }
 
     .empty-pane {
-      color: #8b949e;
+      color: var(--gray-5);
       font-size: 13px;
       font-style: italic;
       margin: 0;
     }
 
     .error {
-      color: #cf222e;
-      background: #ffebe9;
+      color: var(--danger);
+      background: var(--tint-red);
       padding: 8px 12px;
       border-radius: 6px;
       margin-bottom: 8px;
@@ -745,7 +745,10 @@ class NottarioArchPage extends LitElement {
         <button class="reader-back" @click=${() => this._backToList()}>← Back to list</button>
         <header>
           <h3>${node.name}</h3>
-          <span class="kind-pill" style=${`background: ${kind?.color || '#eaeef2'}1a; color: ${kind?.color || '#1f2328'}`}>${kind?.label || node.kind}</span>
+          <span class="kind-pill" style=${(() => {
+            const c = kind?.color || 'var(--fg-muted)';
+            return `background: color-mix(in srgb, ${c} 12%, white); color: color-mix(in srgb, ${c} 70%, black)`;
+          })()}>${kind?.label || node.kind}</span>
           <div style="flex:1"></div>
           <span class="meta"><code>${node.slug}</code></span>
         </header>

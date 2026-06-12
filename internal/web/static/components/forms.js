@@ -27,13 +27,13 @@ export const formStyles = css`
   }
 
   .helper {
-    color: #59636e;
+    color: var(--fg-muted);
     font-size: 12px;
     margin: 0;
   }
   .helper code {
     font-family: ui-monospace, SFMono-Regular, monospace;
-    background: #f6f8fa;
+    background: var(--bg-subtle);
     padding: 0 4px;
     border-radius: 3px;
     font-size: 11px;

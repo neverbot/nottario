@@ -22,7 +22,7 @@ class NottarioShell extends LitElement {
     :host {
       display: block;
       min-height: 100vh;
-      background: var(--bg-subtle, #f6f8fa);
+      background: var(--bg-subtle, var(--bg-subtle));
     }
     main {
       max-width: 1080px;
@@ -39,8 +39,8 @@ class NottarioShell extends LitElement {
       left: 0;
       padding: 8px 12px;
       background: #fff;
-      color: #0969da;
-      border: 1px solid #d1d9e0;
+      color: var(--accent);
+      border: 1px solid var(--border);
       border-radius: 6px;
       font-weight: 600;
       text-decoration: none;
@@ -51,7 +51,7 @@ class NottarioShell extends LitElement {
     .loading {
       padding: 48px;
       text-align: center;
-      color: #59636e;
+      color: var(--fg-muted);
     }
   `;
 

@@ -27,7 +27,7 @@ class NottarioPageHeader extends LitElement {
       box-sizing: border-box;
       margin-bottom: 16px;
       padding-bottom: 12px;
-      border-bottom: 1px solid #eaeef2;
+      border-bottom: 1px solid var(--gray-2);
     }
     * { box-sizing: border-box; }
 
@@ -36,17 +36,17 @@ class NottarioPageHeader extends LitElement {
       gap: 4px;
       align-items: center;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
       margin-bottom: 4px;
       min-height: 16px;
     }
     .crumbs a {
-      color: #0969da;
+      color: var(--accent);
       text-decoration: none;
     }
     .crumbs a:hover { text-decoration: underline; }
     .crumbs .sep { opacity: 0.5; }
-    .crumbs .current { color: #59636e; }
+    .crumbs .current { color: var(--fg-muted); }
 
     .row {
       display: flex;
@@ -66,14 +66,14 @@ class NottarioPageHeader extends LitElement {
       font-size: 20px;
       font-weight: 600;
       line-height: 1.2;
-      color: #1f2328;
+      color: var(--fg);
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .subtitle {
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 13px;
       white-space: nowrap;
     }

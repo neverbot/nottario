@@ -58,7 +58,7 @@ class NottarioProjectSettings extends LitElement {
       padding: 0;
       font-size: 12px;
       line-height: 1;
-      color: #8b949e;
+      color: var(--gray-5);
       background: transparent;
       border: 1px solid transparent;
       border-radius: 6px;
@@ -66,12 +66,12 @@ class NottarioProjectSettings extends LitElement {
       font: inherit;
     }
     .row-actions .delete:hover {
-      color: #cf222e;
+      color: var(--danger);
       border-color: rgba(207, 34, 46, 0.4);
-      background: #ffebe9;
+      background: var(--tint-red);
     }
     .row-actions .delete:focus-visible {
-      outline: 2px solid #cf222e;
+      outline: 2px solid var(--danger);
       outline-offset: 1px;
     }
     /* Add-row forms below tables. End-to-end fields aligned with the
@@ -98,49 +98,49 @@ class NottarioProjectSettings extends LitElement {
     .inline-num {
       width: 84px;
       padding: 4px 8px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       background: #fff;
       font: inherit;
       font-variant-numeric: tabular-nums;
       box-sizing: border-box;
     }
-    .inline-num:focus { outline: 2px solid #0969da; border-color: #0969da; }
+    .inline-num:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 
     .mono { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
 
     /* Member cells */
     .user-cell { display: flex; align-items: center; gap: 10px; }
     .user-cell .user-text { line-height: 1.3; }
-    .user-cell .login { color: #59636e; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
+    .user-cell .login { color: var(--fg-muted); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
     /* project-settings-only override: separation from inline name. */
     .badge.admin { margin-left: 6px; }
-    .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
+    .error { color: var(--danger); margin-bottom: 8px; font-size: 13px; }
     .owner-row {
       display: flex;
       align-items: center;
       gap: 12px;
       margin: 0 0 14px;
       padding: 10px 12px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: #f6f8fa;
+      background: var(--bg-subtle);
     }
     .owner-row .lbl {
       font-weight: 600;
-      color: #1f2328;
+      color: var(--fg);
       min-width: 60px;
     }
     .owner-row select {
       padding: 4px 8px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       background: #fff;
       font: inherit;
     }
     tr[draggable] { cursor: grab; }
     tr.dragging { opacity: 0.45; }
-    tr.drag-over td:first-child { box-shadow: inset 2px 0 0 0 #1f6feb; }
+    tr.drag-over td:first-child { box-shadow: inset 2px 0 0 0 var(--brand-blue); }
     .drag-handle {
       color: #8c959f;
       cursor: grab;
@@ -159,19 +159,19 @@ class NottarioProjectSettings extends LitElement {
     .tokens-header .spacer { flex: 1; }
     .tokens-header p.helper { margin: 0; }
     .secret-banner {
-      background: #fff8c5;
+      background: var(--tint-yellow);
       border: 1px solid #d4a72c;
       border-radius: 6px;
       padding: 12px;
       margin-bottom: 12px;
-      color: #7d4e00;
+      color: var(--warning-text);
       box-sizing: border-box;
     }
     .secret {
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
       padding: 8px 12px;
-      background: #f6f8fa;
-      border: 1px solid #d1d9e0;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
       border-radius: 4px;
       word-break: break-all;
       user-select: all;
@@ -181,8 +181,8 @@ class NottarioProjectSettings extends LitElement {
     .snippet {
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
       padding: 10px 12px;
-      background: #f6f8fa;
-      border: 1px solid #d1d9e0;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
       border-radius: 6px;
       white-space: pre;
       overflow-x: auto;
@@ -192,9 +192,9 @@ class NottarioProjectSettings extends LitElement {
     }
     .dialog .panel { width: 560px; }
     .dialog .panel h3 { margin: 0 0 16px 0; }
-    .muted { color: #59636e; }
-    .status-active { color: #1f883d; font-weight: 500; }
-    .status-revoked { color: #59636e; }
+    .muted { color: var(--fg-muted); }
+    .status-active { color: var(--success); font-weight: 500; }
+    .status-revoked { color: var(--fg-muted); }
   `,
   ];
 
@@ -528,7 +528,7 @@ class NottarioProjectSettings extends LitElement {
             <input name="label" placeholder="Backend" required>
           </nottario-field>
           <nottario-field label="Color" class="narrow">
-            <input name="color" placeholder="#1f6feb">
+            <input name="color" placeholder="var(--brand-blue)">
           </nottario-field>
           <div class="add-action">
             <button type="submit" class="btn primary">Add role</button>
@@ -906,7 +906,7 @@ class NottarioProjectSettings extends LitElement {
   renderTokens() {
     if (!this._isMember()) {
       return html`
-        <div class="empty" style="padding:24px;text-align:center;color:#59636e;background:#fff;border:1px dashed #d0d7de;border-radius:8px">
+        <div class="empty" style="padding:24px;text-align:center;color:var(--fg-muted);background:#fff;border:1px dashed var(--border);border-radius:8px">
           Only project members can manage API tokens for this project.
         </div>
       `;

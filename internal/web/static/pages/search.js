@@ -34,7 +34,7 @@ class NottarioSearchBox extends LitElement {
     input {
       width: 100%;
       padding: 5px 10px;
-      border: 1px solid #afb8c1;
+      border: 1px solid var(--border-strong);
       border-radius: 6px;
       background: rgba(255, 255, 255, 0.08);
       color: #fff;
@@ -43,13 +43,13 @@ class NottarioSearchBox extends LitElement {
     }
     input::placeholder { color: rgba(255,255,255,0.6); }
     input:focus-visible {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 1px;
       background: #fff;
-      color: #1f2328;
-      border-color: #0969da;
+      color: var(--fg);
+      border-color: var(--accent);
     }
-    input:focus::placeholder { color: #59636e; }
+    input:focus::placeholder { color: var(--fg-muted); }
     /* Discoverable shortcut: a tiny kbd hint floats inside the input
        when it is unfocused and empty, telling the user how to reach
        this search from anywhere via the global "/" handler. Hidden
@@ -77,8 +77,8 @@ class NottarioSearchBox extends LitElement {
       left: 0;
       right: 0;
       background: #fff;
-      color: #1f2328;
-      border: 1px solid #d1d9e0;
+      color: var(--fg);
+      border: 1px solid var(--border);
       border-radius: 6px;
       box-shadow: 0 6px 16px rgba(0,0,0,0.18);
       max-height: 60vh;
@@ -95,34 +95,34 @@ class NottarioSearchBox extends LitElement {
       justify-content: space-between;
       align-items: center;
       padding: 6px 12px;
-      background: #f6f8fa;
-      border-bottom: 1px solid #eaeef2;
+      background: var(--bg-subtle);
+      border-bottom: 1px solid var(--gray-2);
       font-size: 11px;
       font-weight: 600;
-      color: #59636e;
+      color: var(--fg-muted);
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
     .group-header .count {
       font-weight: 500;
-      color: #8b949e;
+      color: var(--gray-5);
       text-transform: none;
       letter-spacing: 0;
     }
-    .group + .group .group-header { border-top: 1px solid #eaeef2; }
+    .group + .group .group-header { border-top: 1px solid var(--gray-2); }
     .hit {
       padding: 8px 12px;
-      border-bottom: 1px solid #eaeef2;
+      border-bottom: 1px solid var(--gray-2);
       cursor: pointer;
       font-size: 13px;
     }
     .group .hit:last-child { border-bottom: none; }
-    .hit:hover { background: #f6f8fa; }
+    .hit:hover { background: var(--bg-subtle); }
     .hit.selected,
-    .hit.selected:hover { background: #ddf4ff; }
+    .hit.selected:hover { background: var(--tint-blue); }
     .hit .title { font-weight: 500; }
     .hit .desc {
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 12px;
       margin-top: 2px;
       white-space: nowrap;
@@ -133,7 +133,7 @@ class NottarioSearchBox extends LitElement {
        server escapes everything else so the only HTML here is the
        <mark> tag itself. */
     .hit mark {
-      background: #fff8c5;
+      background: var(--tint-yellow);
       color: inherit;
       padding: 0 1px;
       border-radius: 2px;
@@ -141,7 +141,7 @@ class NottarioSearchBox extends LitElement {
     }
     .hit .meta {
       font-size: 11px;
-      color: #59636e;
+      color: var(--fg-muted);
       margin-top: 2px;
     }
     .kind-pill {
@@ -150,29 +150,29 @@ class NottarioSearchBox extends LitElement {
       border-radius: 2em;
       font-size: 10px;
       text-transform: uppercase;
-      background: #eaeef2;
-      color: #1f2328;
+      background: var(--gray-2);
+      color: var(--fg);
       margin-right: 6px;
       font-weight: 500;
     }
-    .kind-pill.task { background: #ddf4ff; color: #0969da; }
+    .kind-pill.task { background: var(--tint-blue); color: var(--accent); }
     /* document pill: GitHub's attention-subtle (orange) pair —
-       earlier yellow #fff8c5 collided with the <mark> highlight that
+       earlier yellow var(--tint-yellow) collided with the <mark> highlight that
        uses the same hue, so document rows stuttered visually. */
-    .kind-pill.document { background: #fff1e5; color: #9a6700; }
+    .kind-pill.document { background: #fff1e5; color: var(--warning); }
     .kind-pill.arch_node { background: #f3eaff; color: #6f42c1; }
     .empty, .hint, .error {
       padding: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 12px;
       text-align: center;
     }
-    .empty strong { color: #1f2328; }
+    .empty strong { color: var(--fg); }
     .empty .hint-sub {
       display: block;
       margin-top: 4px;
       font-size: 11px;
-      color: #8b949e;
+      color: var(--gray-5);
     }
     .error {
       display: flex;
@@ -180,8 +180,8 @@ class NottarioSearchBox extends LitElement {
       align-items: center;
       gap: 12px;
       padding: 8px 12px;
-      background: #ffebe9;
-      color: #82071e;
+      background: var(--tint-red);
+      color: var(--danger-text);
       border-bottom: 1px solid #ffc1ba;
       text-align: left;
     }
@@ -189,7 +189,7 @@ class NottarioSearchBox extends LitElement {
       flex: 0 0 auto;
       background: #fff;
       border: 1px solid #ffc1ba;
-      color: #82071e;
+      color: var(--danger-text);
       font-size: 11px;
       font-weight: 500;
       padding: 2px 8px;
@@ -197,7 +197,7 @@ class NottarioSearchBox extends LitElement {
       cursor: pointer;
       font-family: inherit;
     }
-    .retry-btn:hover { background: #ffebe9; }
+    .retry-btn:hover { background: var(--tint-red); }
   `;
 
   constructor() {

@@ -26,9 +26,9 @@ export const buttonStyles = css`
     height: 30px;
     padding: 0 12px;
     border-radius: 6px;
-    border: 1px solid #d0d7de;
+    border: 1px solid var(--border);
     background: #ffffff;
-    color: #1f2328;
+    color: var(--fg);
     font: inherit;
     font-size: 13px;
     font-weight: 500;
@@ -37,32 +37,32 @@ export const buttonStyles = css`
     transition: background-color 60ms ease-out, border-color 60ms ease-out;
     box-sizing: border-box;
   }
-  .btn:hover { background: #f3f4f6; border-color: #afb8c1; }
-  .btn:focus-visible { outline: 2px solid #0969da; outline-offset: 1px; }
+  .btn:hover { background: #f3f4f6; border-color: var(--border-strong); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
   .btn.primary {
-    background: #1f883d;
+    background: var(--success);
     color: #ffffff;
     border-color: rgba(31, 35, 40, 0.15);
   }
-  .btn.primary:hover { background: #1a7f37; border-color: rgba(31, 35, 40, 0.2); }
+  .btn.primary:hover { background: var(--success-hover); border-color: rgba(31, 35, 40, 0.2); }
 
   .btn.secondary { /* alias of base — explicit name for readability */ }
 
   .btn.ghost {
     background: transparent;
     border-color: transparent;
-    color: #1f2328;
+    color: var(--fg);
   }
   .btn.ghost:hover { background: #f3f4f6; border-color: transparent; }
 
   .btn.danger {
-    color: #cf222e;
+    color: var(--danger);
     border-color: rgba(207, 34, 46, 0.35);
     background: #ffffff;
   }
-  .btn.danger:hover { background: #ffebe9; border-color: #cf222e; }
+  .btn.danger:hover { background: var(--tint-red); border-color: var(--danger); }
 
   .btn.icon {
     width: 30px;

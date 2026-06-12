@@ -77,12 +77,12 @@ class NottarioArchCanvas extends LitElement {
        CSS rx/ry was added in SVG2 but Firefox (as of 2026) still
        ignores it; only the rx="" / ry="" attributes are universal. */
     .node rect.box {
-      stroke: #d1d9e0;
+      stroke: var(--border);
       stroke-width: 1;
     }
-    .node.container rect.box { fill: #f6f8fa; }
+    .node.container rect.box { fill: var(--bg-subtle); }
     .node.leaf      rect.box { fill: #ffffff; }
-    .node.selected rect.box { stroke: #0969da; stroke-width: 2; }
+    .node.selected rect.box { stroke: var(--accent); stroke-width: 2; }
     /* Hover/search dim: applied to nodes NOT in the highlighted set. */
     .node.dim { opacity: 0.25; transition: opacity 140ms ease-out; }
     .node       { transition: opacity 140ms ease-out; }
@@ -93,11 +93,11 @@ class NottarioArchCanvas extends LitElement {
       font: 600 10.5px/1 ui-monospace, SFMono-Regular, monospace;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      fill: #59636e;
+      fill: var(--fg-muted);
     }
     .caret {
       font: 600 11px/1 ui-monospace, SFMono-Regular, monospace;
-      fill: #8b949e;
+      fill: var(--gray-5);
       pointer-events: none;
     }
     /* Hit overlays — transparent fill, sit ON TOP of the strip content
@@ -107,57 +107,57 @@ class NottarioArchCanvas extends LitElement {
       cursor: pointer;
     }
     .strip-hit:hover ~ text.caret,
-    .caret-hit:hover  ~ text.caret { fill: #1f2328; }
+    .caret-hit:hover  ~ text.caret { fill: var(--fg); }
     .name {
       font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      fill: #1f2328;
+      fill: var(--fg);
     }
     .slug {
       font: 11px/1 ui-monospace, SFMono-Regular, monospace;
-      fill: #8b949e;
+      fill: var(--gray-5);
     }
 
     /* Edges */
     .edge {
       fill: none;
-      stroke: #59636e;
+      stroke: var(--fg-muted);
       stroke-width: 1.5;
       transition: opacity 140ms ease-out, stroke 140ms ease-out;
     }
-    .edge.selected, .edge.highlight { stroke: #0969da; stroke-width: 2; }
+    .edge.selected, .edge.highlight { stroke: var(--accent); stroke-width: 2; }
     .edge.dim { opacity: 0.18; }
     .edge-label rect {
       fill: #ffffff;
-      stroke: #d1d9e0;
+      stroke: var(--border);
       stroke-width: 1;
     }
     .edge-label text {
       font: 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      fill: #1f2328;
+      fill: var(--fg);
     }
     .edge-label.dim { opacity: 0.18; transition: opacity 140ms ease-out; }
     .edge-label { transition: opacity 140ms ease-out; }
 
     /* Ancestor breadcrumb strip shown in Focus mode */
     .focus-strip {
-      fill: #f6f8fa;
-      stroke: #d1d9e0;
+      fill: var(--bg-subtle);
+      stroke: var(--border);
       stroke-width: 1;
     }
     .focus-strip-text {
       font: 600 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      fill: #1f2328;
+      fill: var(--fg);
     }
-    .focus-strip-sep { fill: #8b949e; }
+    .focus-strip-sep { fill: var(--gray-5); }
     .focus-exit {
       font: 600 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      fill: #0969da;
+      fill: var(--accent);
       cursor: pointer;
     }
 
     .empty-text {
       font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      fill: #8b949e;
+      fill: var(--gray-5);
       font-style: italic;
     }
     .laying-out {
@@ -167,7 +167,7 @@ class NottarioArchCanvas extends LitElement {
       align-items: center;
       justify-content: center;
       font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      color: #8b949e;
+      color: var(--gray-5);
       font-style: italic;
       pointer-events: none;
     }
@@ -1180,9 +1180,9 @@ class NottarioArchCanvas extends LitElement {
            @mouseleave=${() => this._onNodeLeave()}>
           <rect class="box" x="0" y="0" width=${w.w} height=${w.h} rx="8" ry="8"></rect>
           <line x1="0" y1=${NottarioArchCanvas.LABEL_STRIP} x2=${w.w} y2=${NottarioArchCanvas.LABEL_STRIP}
-                stroke="#eaeef2" stroke-width="1"></line>
+                style="stroke: var(--gray-2)" stroke-width="1"></line>
           <g class="kind-chip" transform="translate(10,10)">
-            <circle cx="3" cy="6" r="3" fill=${dot}></circle>
+            <circle cx="3" cy="6" r="3" style=${`fill: ${dot}`}></circle>
             <text x="10" y="9">${kindLabel}</text>
           </g>
           <text class="name" x=${w.w / 2} y="18" text-anchor="middle">${n.name}</text>
@@ -1205,7 +1205,7 @@ class NottarioArchCanvas extends LitElement {
          @mouseleave=${() => this._onNodeLeave()}>
         <rect class="box" x="0" y="0" width=${w.w} height=${w.h} rx="8" ry="8"></rect>
         <g class="kind-chip" transform="translate(10,10)">
-          <circle cx="3" cy="6" r="3" fill=${dot}></circle>
+          <circle cx="3" cy="6" r="3" style=${`fill: ${dot}`}></circle>
           <text x="10" y="9">${kindLabel}</text>
         </g>
         ${
@@ -1309,11 +1309,11 @@ class NottarioArchCanvas extends LitElement {
       const xRight = lastWP.x + aSize / 2;
       arrow = `M ${xLeft} ${baseY} L ${lastWP.x} ${lastWP.y} L ${xRight} ${baseY} Z`;
     }
-    const stroke = isSelected || highlight ? '#0969da' : '#59636e';
+    const stroke = isSelected || highlight ? 'var(--accent)' : 'var(--fg-muted)';
     return svg`
       <g>
-        <path class=${cls} d=${dPath}></path>
-        <path class=${cls} d=${arrow} fill=${stroke} stroke="none"></path>
+        <path class=${cls} d=${dPath} style=${`stroke: ${stroke}`}></path>
+        <path class=${cls} d=${arrow} style=${`fill: ${stroke}; stroke: none`}></path>
       </g>
     `;
   }
@@ -1418,19 +1418,19 @@ class NottarioArchCanvas extends LitElement {
 function kindDotColor(kind) {
   switch ((kind || '').toLowerCase()) {
     case 'system':
-      return '#0969da';
+      return 'var(--accent)';
     case 'service':
-      return '#1f883d';
+      return 'var(--success)';
     case 'module':
-      return '#8250df';
+      return 'var(--role-design)';
     case 'external':
       return '#bc4c00';
     case 'data':
-      return '#9a6700';
+      return 'var(--warning)';
     case 'queue':
-      return '#cf222e';
+      return 'var(--danger)';
     default:
-      return '#59636e';
+      return 'var(--fg-muted)';
   }
 }
 

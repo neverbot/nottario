@@ -42,10 +42,10 @@ class NottarioField extends LitElement {
       margin-bottom: 4px;
       font-weight: 500;
       font-size: 13px;
-      color: #1f2328;
+      color: var(--fg);
     }
     label .hint {
-      color: #59636e;
+      color: var(--fg-muted);
       font-weight: 400;
       font-size: 12px;
       margin-left: 4px;
@@ -55,7 +55,7 @@ class NottarioField extends LitElement {
     ::slotted(select) {
       width: 100%;
       padding: 6px 10px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       font: inherit;
       background: #ffffff;
@@ -66,7 +66,7 @@ class NottarioField extends LitElement {
        edge). Apaga el chevron nativo y pinta uno uniforme con un SVG
        de fondo anclado a 8px del borde derecho; el padding-right
        reserva el hueco. Tamaño y color coordinados con el texto
-       muted (#59636e). */
+       muted (var(--fg-muted)). */
     ::slotted(select) {
       appearance: none;
       -webkit-appearance: none;
@@ -78,9 +78,9 @@ class NottarioField extends LitElement {
     ::slotted(input:focus),
     ::slotted(textarea:focus),
     ::slotted(select:focus) {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 0;
-      border-color: #0969da;
+      border-color: var(--accent);
     }
     ::slotted(textarea) {
       resize: vertical;

@@ -45,11 +45,11 @@ class NottarioDocsPage extends LitElement {
       grid-template-columns: 260px 1fr;
       gap: 0;
       align-items: start;
-      border-top: 1px solid #d1d9e0;
+      border-top: 1px solid var(--border);
       min-height: calc(100vh - 200px);
     }
     .rail {
-      border-right: 1px solid #d1d9e0;
+      border-right: 1px solid var(--border);
       /* Left padding gives focus outlines and active-row chrome room
          to render without clipping against the page's left edge. */
       padding: 12px 12px 24px 4px;
@@ -65,11 +65,11 @@ class NottarioDocsPage extends LitElement {
     kbd {
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 10px;
-      background: #f6f8fa;
-      border: 1px solid #d0d7de;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
       border-radius: 3px;
       padding: 1px 4px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
 
     /* Group eyebrow matches the existing UPPERCASE muted style used
@@ -79,7 +79,7 @@ class NottarioDocsPage extends LitElement {
       font-size: 10px;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      color: #8b949e;
+      color: var(--gray-5);
       font-weight: 600;
       padding: 0 6px 4px;
     }
@@ -97,26 +97,26 @@ class NottarioDocsPage extends LitElement {
       cursor: pointer;
       border-radius: 4px;
       font-size: 13px;
-      color: #1f2328;
+      color: var(--fg);
       line-height: 1.4;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       transition: opacity 120ms ease-out;
     }
-    .tree li:hover { background: #f6f8fa; }
+    .tree li:hover { background: var(--bg-subtle); }
     .tree li.active {
       font-weight: 600;
-      color: #0969da;
-      background: #f6f8fa;
+      color: var(--accent);
+      background: var(--bg-subtle);
     }
     .tree li.dim { opacity: 0.3; }
     .tree li.keyboard-cursor {
-      box-shadow: inset 2px 0 0 #0969da;
+      box-shadow: inset 2px 0 0 var(--accent);
       padding-left: 4px;
     }
     .tree mark {
-      background: #fff8c5;
+      background: var(--tint-yellow);
       color: inherit;
       padding: 0 1px;
       border-radius: 2px;
@@ -125,7 +125,7 @@ class NottarioDocsPage extends LitElement {
     .rail-footer {
       margin-top: 12px;
       padding: 8px 6px 0;
-      border-top: 1px solid #eaeef2;
+      border-top: 1px solid var(--gray-2);
     }
     .rail-footer .btn {
       width: 100%;
@@ -147,7 +147,7 @@ class NottarioDocsPage extends LitElement {
       font-size: 22px;
       font-weight: 600;
       letter-spacing: -0.01em;
-      color: #1f2328;
+      color: var(--fg);
     }
     .reader-title .spacer { flex: 1; }
     .reader-title .actions { display: flex; align-items: center; gap: 4px; }
@@ -165,7 +165,7 @@ class NottarioDocsPage extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: #8b949e;
+      color: var(--gray-5);
       background: transparent;
       border: 1px solid transparent;
       border-radius: 6px;
@@ -174,12 +174,12 @@ class NottarioDocsPage extends LitElement {
     }
     .actions .delete svg { display: block; }
     .actions .delete:hover {
-      color: #cf222e;
+      color: var(--danger);
       border-color: rgba(207, 34, 46, 0.4);
-      background: #ffebe9;
+      background: var(--tint-red);
     }
     .actions .delete:focus-visible {
-      outline: 2px solid #cf222e;
+      outline: 2px solid var(--danger);
       outline-offset: 1px;
     }
 
@@ -189,13 +189,13 @@ class NottarioDocsPage extends LitElement {
       gap: 8px;
       margin-top: 6px;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
       font-family: ui-monospace, SFMono-Regular, monospace;
       flex-wrap: wrap;
     }
-    .reader-meta .crumb-seg { color: #8b949e; }
-    .reader-meta .crumb-seg.last { color: #1f2328; font-weight: 600; }
-    .reader-meta .sep { color: #d0d7de; }
+    .reader-meta .crumb-seg { color: var(--gray-5); }
+    .reader-meta .crumb-seg.last { color: var(--fg); font-weight: 600; }
+    .reader-meta .sep { color: var(--border); }
     .reader-meta .version-btn {
       background: transparent;
       border: 1px solid transparent;
@@ -206,14 +206,14 @@ class NottarioDocsPage extends LitElement {
       cursor: pointer;
     }
     .reader-meta .version-btn:hover {
-      color: #1f2328;
-      background: #f6f8fa;
-      border-color: #d0d7de;
+      color: var(--fg);
+      background: var(--bg-subtle);
+      border-color: var(--border);
     }
     .reader-meta .version-btn.open {
-      color: #1f2328;
-      background: #ddf4ff;
-      border-color: #0969da;
+      color: var(--fg);
+      background: var(--tint-blue);
+      border-color: var(--accent);
     }
 
     /* The prose container now lives inside <nottario-markdown>; the
@@ -222,7 +222,7 @@ class NottarioDocsPage extends LitElement {
     .description {
       max-width: 76ch;
       margin: 24px 0 0;
-      color: #59636e;
+      color: var(--fg-muted);
       font-style: italic;
       font-size: 14px;
     }
@@ -236,11 +236,11 @@ class NottarioDocsPage extends LitElement {
       gap: 8px;
       margin-top: 12px;
       padding: 6px 10px;
-      background: #fff8c5;
+      background: var(--tint-yellow);
       border: 1px solid rgba(212, 167, 44, 0.5);
       border-radius: 6px;
       font-size: 12px;
-      color: #7d4e00;
+      color: var(--warning-text);
     }
     .version-banner .spacer { flex: 1; }
     .version-banner button {
@@ -267,13 +267,13 @@ class NottarioDocsPage extends LitElement {
       max-height: 420px;
       overflow: auto;
       background: #ffffff;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 8px;
       box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
       z-index: 50;
       padding: 6px;
     }
-    .history-pop .empty { padding: 12px; color: #59636e; font-size: 13px; }
+    .history-pop .empty { padding: 12px; color: var(--fg-muted); font-size: 13px; }
     .history-pop ul { list-style: none; margin: 0; padding: 0; }
     .history-pop li {
       padding: 8px 10px;
@@ -284,25 +284,25 @@ class NottarioDocsPage extends LitElement {
       gap: 8px;
       align-items: baseline;
     }
-    .history-pop li:hover { background: #f6f8fa; }
-    .history-pop li.current { background: #ddf4ff; }
+    .history-pop li:hover { background: var(--bg-subtle); }
+    .history-pop li.current { background: var(--tint-blue); }
     .history-pop .vn {
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 12px;
-      color: #0969da;
+      color: var(--accent);
       font-weight: 600;
     }
     .history-pop .msg {
       font-size: 13px;
-      color: #1f2328;
+      color: var(--fg);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .history-pop .msg.empty-msg { color: #8b949e; font-style: italic; }
+    .history-pop .msg.empty-msg { color: var(--gray-5); font-style: italic; }
     .history-pop .when {
       font-size: 11px;
-      color: #8b949e;
+      color: var(--gray-5);
       white-space: nowrap;
     }
 
@@ -314,7 +314,7 @@ class NottarioDocsPage extends LitElement {
     .empty-pane {
       max-width: 52ch;
       margin: 64px 0 0;
-      color: #1f2328;
+      color: var(--fg);
     }
     .empty-pane h3 {
       margin: 0 0 8px;
@@ -323,7 +323,7 @@ class NottarioDocsPage extends LitElement {
     }
     .empty-pane p {
       margin: 0 0 16px;
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 14px;
       line-height: 1.55;
     }
@@ -334,8 +334,8 @@ class NottarioDocsPage extends LitElement {
       margin: 0 0 20px;
       font-size: 13px;
     }
-    .empty-pane dt { color: #1f2328; font-weight: 600; }
-    .empty-pane dd { margin: 0; color: #59636e; }
+    .empty-pane dt { color: var(--fg); font-weight: 600; }
+    .empty-pane dd { margin: 0; color: var(--fg-muted); }
     .empty-pane .cta { display: flex; gap: 8px; }
 
     /* Create + edit panes share the prose width. The editor
@@ -373,8 +373,8 @@ class NottarioDocsPage extends LitElement {
       font-size: 12px;
       margin-top: 8px;
     }
-    .status.error { color: #cf222e; background: #ffebe9; border: 1px solid rgba(207, 34, 46, 0.4); }
-    .status.info  { color: #1a7f37; background: #dafbe1; border: 1px solid rgba(31, 136, 61, 0.4); }
+    .status.error { color: var(--danger); background: var(--tint-red); border: 1px solid rgba(207, 34, 46, 0.4); }
+    .status.info  { color: var(--success-hover); background: var(--tint-green); border: 1px solid rgba(31, 136, 61, 0.4); }
   `,
   ];
 
@@ -892,7 +892,7 @@ class NottarioDocsPage extends LitElement {
           ${
             !this.summaries.length
               ? html`
-            <p style="color:#59636e;font-size:13px;padding:0 6px">
+            <p style="color:var(--fg-muted);font-size:13px;padding:0 6px">
               No documents yet. Use <strong>New document</strong> below to create one.
             </p>
           `
@@ -911,7 +911,7 @@ class NottarioDocsPage extends LitElement {
   renderHits() {
     if (!this.hits.length)
       return html`
-      <p style="color:#59636e;font-size:13px;padding:0 6px">
+      <p style="color:var(--fg-muted);font-size:13px;padding:0 6px">
         No matches in the project documents.
       </p>
     `;

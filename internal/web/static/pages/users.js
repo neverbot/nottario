@@ -29,9 +29,9 @@ class NottarioUsersPage extends LitElement {
       align-items: center;
       gap: 10px;
     }
-    .login { color: #59636e; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
-    .muted { color: #59636e; }
-    .error { color: #cf222e; font-size: 13px; margin-bottom: 8px; }
+    .login { color: var(--fg-muted); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
+    .muted { color: var(--fg-muted); }
+    .error { color: var(--danger); font-size: 13px; margin-bottom: 8px; }
   `,
   ];
 

@@ -44,54 +44,84 @@ class NottarioGantt extends LitElement {
     :host { display: block; }
     .stage {
       position: relative;
-      background: #fff;
-      border: 1px solid #d1d9e0;
+      background: var(--bg);
+      border: 1px solid var(--border);
       border-radius: 8px;
       overflow: auto;
       max-height: 70vh;
     }
-    svg { display: block; }
-    .band-bg {
-      fill: #f6f8fa;
+    .stage.empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 240px;
+      color: var(--fg-muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 32px;
     }
-    .band-bg.alt {
-      fill: #fff;
+    svg { display: block; }
+    /* Single-fill lanes; rhythm comes from a 1px hairline between
+       rows (rendered as a separate line element below), not from
+       zebra stripes. Features band gets a slightly darker fill so
+       it reads as a parent row. */
+    .band-bg {
+      fill: var(--gantt-band-1);
     }
     .band-bg.features {
-      fill: #f0f2f5;
+      fill: var(--gantt-band-features);
+    }
+    .band-separator {
+      stroke: var(--gantt-band-separator);
+      stroke-width: 1;
+    }
+    .zone-past-tint {
+      fill: var(--gantt-zone-past-tint);
     }
     .band-label, .features-label {
-      fill: #57606a;
-      font-size: 10px;
-      letter-spacing: 0.06em;
+      fill: var(--gantt-label-muted);
+      font-size: 11px;
+      letter-spacing: 0.04em;
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
     .zone-label {
-      fill: #59636e;
-      font-size: 10px;
+      fill: var(--gantt-label-muted);
+      font-size: 11px;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
       font-family: ui-monospace, SFMono-Regular, monospace;
+      font-variant-numeric: tabular-nums;
     }
     .priority-label {
-      fill: #57606a;
-      font-size: 10px;
+      fill: var(--gantt-label-muted);
+      font-size: 11px;
+      letter-spacing: 0.04em;
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
     .zone-divider {
-      stroke: #afb8c1;
+      stroke: var(--gantt-zone-divider);
       stroke-width: 1;
-      stroke-dasharray: 3 3;
+    }
+    .now-glow {
+      fill: var(--gantt-now-glow);
     }
     .now-line {
-      stroke: #cf222e;
-      stroke-width: 1.5;
+      stroke: var(--gantt-now-line);
+      stroke-width: 2;
     }
-    .now-label {
-      fill: #cf222e;
-      font-size: 11px;
-      font-weight: 600;
+    .now-pill-bg {
+      fill: var(--gantt-now-line);
+    }
+    .now-pill-text {
+      fill: var(--fg-on-accent);
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      font-family: ui-monospace, SFMono-Regular, monospace;
     }
     .task-rect {
       stroke-width: 1.5;
@@ -99,7 +129,7 @@ class NottarioGantt extends LitElement {
       rx: 4;
       ry: 4;
     }
-    .task-rect:hover { stroke: #1f2328; }
+    .task-rect:hover { stroke: var(--fg); }
     /* Selection: when something is selected, non-connected bars dim
        and non-connected arrows fade so the focused subgraph reads
        loudly. Promoted arrows render in a second pass (after the
@@ -107,13 +137,13 @@ class NottarioGantt extends LitElement {
     .task-rect.dim { opacity: 0.35; }
     .arrow.dim { opacity: 0.18; }
     .arrow { cursor: pointer; }
-    .arrow.promoted { stroke: #1f2328; }
+    .arrow.promoted { stroke: var(--fg); }
     /* A bar that's part of the active selection (single-task pipeline
        or just-unfolded feature subtree) gets a thicker, darker stroke
        so done bars — which sit in pale gray and don't visually
        distinguish themselves from dimmed neighbours otherwise — read
        as "this is what you're looking at right now". */
-    .task-rect.promoted { stroke: #1f2328 !important; stroke-width: 2 !important; }
+    .task-rect.promoted { stroke: var(--fg) !important; stroke-width: 2 !important; }
     /* Bars that became visible via a feature unfold get a brief
        opacity fade-in so the eye locates them after the layout
        reflows. Refold has no motion. */
@@ -127,47 +157,76 @@ class NottarioGantt extends LitElement {
     @media (prefers-reduced-motion: reduce) {
       .task-rect.just-appeared { animation: none; }
     }
+    /* Done bars are intentionally monochrome — past noise calmed so
+       the eye gravitates to NOW and FUTURE. */
     .task-rect.done {
-      fill: #d1d9e0;
-      stroke: #afb8c1;
+      fill: var(--gantt-bar-done-fill);
+      stroke: var(--gantt-bar-done-stroke);
     }
-    .task-rect.doing {
-      stroke: #1f6feb;
-    }
+    /* Todo bars share the role-color tint with doing bars and only
+       differ by a dashed stroke. Fill/stroke are set inline (role
+       hex → color-mix tint) so a per-project role palette works
+       without re-skinning the CSS. */
     .task-rect.todo {
       stroke-dasharray: 4 3;
-    }
-    /* Bug-type tasks get a tight dotted red stroke regardless of state. */
-    .task-rect.bug {
-      stroke: #cf222e !important;
-      stroke-dasharray: 2 3 !important;
     }
     /* Inconsistent: the task is not yet done but one of its dependents
        is already done. Surface as a solid red 2.5px border. */
     .task-rect.inconsistent {
-      stroke: #cf222e !important;
+      stroke: var(--danger) !important;
       stroke-dasharray: 0 !important;
       stroke-width: 2.5 !important;
     }
+    /* Bug indicator — a small red dot painted at the top-left of the
+       bar. Drawn as a separate <circle> so the bar's role paint
+       survives and multiple bugs don't drown the timeline in red. */
+    .bug-dot {
+      fill: var(--danger);
+      pointer-events: none;
+    }
     .task-label {
-      fill: #1f2328;
+      fill: var(--gantt-label);
       font-size: 11px;
       pointer-events: none;
     }
-    .task-label.on-dark { fill: #fff; }
+    /* Labels painted on top of a role-color tint use a darkened
+       version of the role colour (the "ink" — set inline). */
+    .task-label.on-tint {
+      font-weight: 600;
+    }
     .arrow {
-      stroke: #afb8c1;
+      stroke: var(--border-strong);
       stroke-width: 1;
       fill: none;
       marker-end: url(#dep-arrowhead);
     }
     .legend {
-      padding: 8px 16px;
+      padding: 6px 16px 10px;
       font-size: 11px;
-      color: #59636e;
+      color: var(--fg-muted);
+    }
+    .legend > summary {
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      padding: 4px 0;
+      color: var(--fg-muted);
+      font-weight: 500;
+    }
+    .legend > summary::-webkit-details-marker { display: none; }
+    .legend > summary::before {
+      content: '▸ ';
+      display: inline-block;
+      width: 12px;
+      color: var(--fg-subtle);
+    }
+    .legend[open] > summary::before { content: '▾ '; }
+    .legend-row {
       display: flex;
-      gap: 16px;
+      gap: 14px;
       flex-wrap: wrap;
+      margin-top: 6px;
+      padding-left: 12px;
     }
     .legend .swatch {
       display: inline-block;
@@ -176,10 +235,14 @@ class NottarioGantt extends LitElement {
       border-radius: 2px;
       vertical-align: middle;
       margin-right: 4px;
+      box-sizing: border-box;
+    }
+    .legend .swatch-circle {
+      border-radius: 50%;
     }
     .error {
-      color: #cf222e;
-      background: #ffebe9;
+      color: var(--danger);
+      background: var(--tint-red);
       padding: 8px 12px;
       border-radius: 6px;
       margin-bottom: 8px;
@@ -201,8 +264,8 @@ class NottarioGantt extends LitElement {
          the card would render ~22px wider than the runtime cap. */
       box-sizing: border-box;
       background: #fff;
-      color: #1f2328;
-      border: 1px solid #d0d7de;
+      color: var(--fg);
+      border: 1px solid var(--border);
       border-radius: 8px;
       box-shadow: 0 4px 12px rgba(31, 35, 40, 0.12);
       padding: 8px 10px;
@@ -220,7 +283,7 @@ class NottarioGantt extends LitElement {
     .hover-card .title {
       font-size: 13px;
       font-weight: 600;
-      color: #1f2328;
+      color: var(--fg);
       margin-bottom: 4px;
     }
     .hover-card .row {
@@ -239,20 +302,24 @@ class NottarioGantt extends LitElement {
       font-size: 11px;
       line-height: 1.3;
       font-weight: 500;
-      background: #eaeef2;
-      color: #1f2328;
+      background: var(--gray-2);
+      color: var(--fg);
     }
-    .hover-card .chip.state-todo  { background: #eaeef2; color: #59636e; }
-    .hover-card .chip.state-doing { background: #ddf4ff; color: #0969da; }
-    .hover-card .chip.state-done  { background: #dafbe1; color: #1a7f37; }
-    .hover-card .chip.type-bug    { background: #ffebe9; color: #cf222e; }
-    .hover-card .chip.role        { color: #fff; }
+    .hover-card .chip.state-todo  { background: var(--gray-2); color: var(--fg-muted); }
+    .hover-card .chip.state-doing { background: var(--tint-blue); color: var(--tint-blue-fg); }
+    .hover-card .chip.state-done  { background: var(--tint-green); color: var(--tint-green-fg); }
+    .hover-card .chip.type-bug    { background: var(--tint-red); color: var(--tint-red-fg); }
+    /* Role chip: background and foreground are derived from the
+       project's role colour via color-mix; the inline style sets
+       them at render time so contrast is always AAA-safe even for
+       neon role colours. */
+    .hover-card .chip.role        { font-weight: 600; }
     .hover-card .assignee {
       display: flex;
       align-items: center;
       gap: 6px;
       margin-top: 6px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .hover-card .assignee img {
       width: 16px; height: 16px;
@@ -260,20 +327,20 @@ class NottarioGantt extends LitElement {
       object-fit: cover;
     }
     .hover-card .meta {
-      color: #59636e;
+      color: var(--fg-muted);
       margin-top: 4px;
     }
     /* Faint footer line ("Double-click to open / expand") so the
        interaction hint reads as guidance, not as data. */
     .hover-card .meta.hint {
-      color: #8b949e;
+      color: var(--gray-5);
       font-size: 11px;
       margin-top: 6px;
     }
     .empty {
       padding: 40px;
       text-align: center;
-      color: #59636e;
+      color: var(--fg-muted);
     }
   `;
 
@@ -806,7 +873,12 @@ class NottarioGantt extends LitElement {
   // tasks without target_role_id.
   bands() {
     const order = [...this.roles].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    const general = { ID: '__general__', Key: 'general', Label: 'General', Color: '#59636e' };
+    const general = {
+      ID: '__general__',
+      Key: 'general',
+      Label: 'General',
+      Color: 'var(--fg-muted)',
+    };
     const result = order.map((r) => ({ role: r, tasks: [] }));
     result.push({ role: general, tasks: [] });
     const byID = new Map(order.map((r) => [r.id, result.find((b) => b.role.id === r.id)]));
@@ -1335,7 +1407,12 @@ class NottarioGantt extends LitElement {
     const featuresBand =
       featureAggregates.size > 0
         ? {
-            role: { ID: '__features__', Key: 'features', Label: 'Features', Color: '#6e7781' },
+            role: {
+              ID: '__features__',
+              Key: 'features',
+              Label: 'Features',
+              Color: 'var(--fg-subtle)',
+            },
             tasks: [],
           }
         : null;
@@ -1519,16 +1596,13 @@ class NottarioGantt extends LitElement {
       }
     }
 
-    // Pre-compute band fill per band index so todo bars can read
-    // solid against the lane background instead of letting arrows
-    // show through a transparent fill.
-    let visIdx = 0;
-    const bandFill = displayBands.map((b) => {
-      if (b.role.id === '__features__') return '#f0f2f5';
-      const c = visIdx % 2 ? '#fff' : '#f6f8fa';
-      visIdx++;
-      return c;
-    });
+    // Band fill: a single lane background. Rhythm comes from a 1px
+    // hairline between bands, not from zebra alternation (cleaner,
+    // tableroom density à la GitHub). The features band still has
+    // its own slightly darker fill so it reads as a parent row.
+    const bandFill = displayBands.map((b) =>
+      b.role.id === '__features__' ? 'var(--gantt-band-features)' : 'var(--gantt-band-1)',
+    );
 
     // Selection-aware predicates: when nothing is selected every bar
     // and arrow renders at full strength. Otherwise the connected
@@ -1548,16 +1622,16 @@ class NottarioGantt extends LitElement {
           <defs>
             <marker id="dep-arrowhead" viewBox="0 0 10 10" refX="0" refY="5"
                     markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="#afb8c1"></path>
+              <path d="M 0 0 L 10 5 L 0 10 z" style="fill: var(--gantt-arrow)"></path>
             </marker>
             <clipPath id="gantt-avatar-clip">
               <circle cx=${avatarSize / 2} cy=${avatarSize / 2} r=${avatarSize / 2}></circle>
             </clipPath>
           </defs>
 
-          <!-- Zone labels -->
+          <!-- Zone labels. The NOW zone gets its own pill below,
+               so the only labels needed here are PAST and FUTURE. -->
           <text class="zone-label" x=${labelWidth + 4} y="14">PAST · chronological</text>
-          <text class="zone-label" x=${presentX + 4} y="14">NOW</text>
           <text class="zone-label" x=${futureStartX + 4} y="14">FUTURE · topological + priority</text>
 
           <!-- Priority labels at the top of each future sub-column -->
@@ -1567,11 +1641,10 @@ class NottarioGantt extends LitElement {
           `,
           )}
 
-          <!-- Band rows (empty bands collapse to height 0 and skip render).
-               The alternation counter is independent of the displayBands
-               index so that hidden bands (height 0) don't break the
-               stripe pattern of the bands that DO render. Features has
-               its own class and is excluded from the count. -->
+          <!-- Band rows (empty bands collapse to height 0 and skip
+               render). No alternation: a single fill carries the lane;
+               a hairline between consecutive visible bands gives the
+               rhythm. Features keeps its own slightly darker class. -->
           ${(() => {
             this._visibleBandIdx = 0;
             return null;
@@ -1579,17 +1652,20 @@ class NottarioGantt extends LitElement {
           ${displayBands.map((b, bi) => {
             if (bandHeights[bi] === 0) return null;
             const isFeatures = b.role.id === '__features__';
-            let cls;
-            if (isFeatures) {
-              cls = 'band-bg features';
-            } else {
-              cls = `band-bg ${this._visibleBandIdx % 2 ? 'alt' : ''}`;
-              this._visibleBandIdx++;
-            }
+            const cls = isFeatures ? 'band-bg features' : 'band-bg';
+            if (!isFeatures) this._visibleBandIdx++;
+            const showSeparator = this._visibleBandIdx > 1 && !isFeatures;
             return svg`
               <rect class=${cls}
                     x="0" y=${bandTops[bi]}
                     width=${width} height=${bandHeights[bi]}></rect>
+              ${
+                showSeparator
+                  ? svg`<line class="band-separator"
+                            x1="0" y1=${bandTops[bi]}
+                            x2=${width} y2=${bandTops[bi]}></line>`
+                  : null
+              }
               <text class="band-label"
                     x="8" y=${bandTops[bi] + bandHeights[bi] / 2 + 4}>
                 ${isFeatures ? 'Features' : b.role.label}
@@ -1597,23 +1673,47 @@ class NottarioGantt extends LitElement {
             `;
           })}
 
-          <!-- Zone dividers -->
+          <!-- Past-zone tint: a subtle wash painted on top of the
+               band fills so done work reads as archive. The 4%
+               opacity keeps the bars beneath legible. -->
+          <rect class="zone-past-tint"
+                x=${labelWidth} y="0"
+                width=${Math.max(0, presentX - labelWidth)}
+                height=${totalHeight}></rect>
+
+          <!-- Zone dividers: thin solid hairlines (no dashed). The
+               past-zone tint above already communicates the past/now
+               border ambiently. -->
           <line class="zone-divider" x1=${labelWidth} y1="0" x2=${labelWidth} y2=${totalHeight}></line>
           <line class="zone-divider" x1=${presentX} y1="0" x2=${presentX} y2=${totalHeight}></line>
           <line class="zone-divider" x1=${futureStartX} y1="0" x2=${futureStartX} y2=${totalHeight}></line>
 
-          <!-- "now" marker -->
+          <!-- "now" marker: a translucent glow column under a confident
+               2px red line, topped by a small NOW pill anchored to the
+               time-axis row. The pill replaces the legacy thin "now"
+               text label so the marquee reads at a glance. -->
+          <rect class="now-glow"
+                x=${presentX + presentWidth / 2 - 6}
+                y="0"
+                width="12"
+                height=${totalHeight}></rect>
           <line class="now-line"
-                x1=${presentX + presentWidth / 2} y1=${headerH - 8}
+                x1=${presentX + presentWidth / 2} y1=${headerH - 6}
                 x2=${presentX + presentWidth / 2} y2=${totalHeight}>
             <title>${this.now ? this.now.toLocaleString() : ''}</title>
           </line>
-          <text class="now-label"
+          <rect class="now-pill-bg"
+                x=${presentX + presentWidth / 2 - 18}
+                y="2"
+                width="36" height=${headerH - 10}
+                rx="3" ry="3"></rect>
+          <text class="now-pill-text"
                 x=${presentX + presentWidth / 2}
-                y=${headerH - 12}
-                text-anchor="middle">
+                y=${(headerH - 10) / 2 + 8}
+                text-anchor="middle"
+                dominant-baseline="central">
             <title>${this.now ? this.now.toLocaleString() : ''}</title>
-            now
+            NOW
           </text>
 
           <!-- Dependency arrows, FIRST PASS: rendered before the task
@@ -1636,7 +1736,7 @@ class NottarioGantt extends LitElement {
           <!-- Tasks placed in their lane -->
           ${positions.map((p) => {
             const t = p.task;
-            const color = displayBands[p.bi].role.color || '#59636e';
+            const color = displayBands[p.bi].role.color || 'var(--fg-muted)';
             const y = taskY(p.bi, p.lane);
             const w = Math.max(8, p.to - p.from);
             const user = t.assignee_user_id ? usersById.get(t.assignee_user_id) : null;
@@ -1662,10 +1762,8 @@ class NottarioGantt extends LitElement {
                       x=${p.from} y=${y}
                       width=${w} height=${taskHeight}
                       rx="6" ry="6"
-                      fill="#eef0f3"
-                      stroke=${color}
                       stroke-dasharray="6 3"
-                      style="cursor:pointer"
+                      style=${`cursor: pointer; fill: var(--gantt-bar-feature-fill); stroke: ${color}`}
                       @click=${(e) => {
                         e.stopPropagation();
                         this._toggleFold(t.id);
@@ -1696,16 +1794,30 @@ class NottarioGantt extends LitElement {
             const isFeatureUnfolded = t.type === 'feature' && !this.foldedFeatures.has(t.id);
             // Childless features and (defensive) any feature reaching here render as normal.
             const taskDimmed = hasSelection && !this._selectedSet.has(t.id);
-            const todoFill = bandFill[p.bi] || '#fff';
             const taskAppeared = this._justAppeared?.has(t.id) ? ' just-appeared' : '';
+            // Role-derived paint. Tint = 14% role over white (a soft
+            // pastel that lets multiple bars share a lane without
+            // shouting). Ink = role colour darkened 75% toward black
+            // so labels stay AAA-readable on top of the tint.
+            // CSS color-mix is the runtime engine; `color` may be a
+            // hex from the DB or a `var()` fallback — both work.
+            const tint = `color-mix(in srgb, ${color} 14%, white)`;
+            const ink = `color-mix(in srgb, ${color} 75%, black)`;
+            // Done bars defer to the CSS class so the monochrome
+            // paint survives any per-project role colour. Doing /
+            // todo bars get the role tint inline.
+            const barStyle = t.state === 'done' ? '' : `fill: ${tint}; stroke: ${color}`;
+            const labelOnTint = t.state !== 'done';
+            const labelStyle = labelOnTint
+              ? `pointer-events: none; fill: ${ink}`
+              : 'pointer-events: none';
             return svg`
-              <rect class=${`task-rect ${t.state}${t.type === 'bug' ? ' bug' : ''}${inconsistentIDs.has(t.id) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}${hasSelection && this._selectedSet.has(t.id) ? ' promoted' : ''}${taskAppeared}`}
+              <rect class=${`task-rect ${t.state}${inconsistentIDs.has(t.id) ? ' inconsistent' : ''}${taskDimmed ? ' dim' : ''}${hasSelection && this._selectedSet.has(t.id) ? ' promoted' : ''}${taskAppeared}`}
                     data-task-id=${t.id}
                     x=${p.from} y=${y}
                     width=${w} height=${taskHeight}
                     rx="6" ry="6"
-                    fill=${t.state === 'done' ? '#d1d9e0' : t.state === 'doing' ? color : todoFill}
-                    stroke=${color}
+                    style=${barStyle}
                     @click=${(e) => {
                       e.stopPropagation();
                       this._onTaskClick(t);
@@ -1722,6 +1834,13 @@ class NottarioGantt extends LitElement {
                     tabindex="0">
               </rect>
               ${
+                t.type === 'bug'
+                  ? svg`<circle class="bug-dot"
+                                cx=${p.from + 6} cy=${y + 6}
+                                r="3"></circle>`
+                  : null
+              }
+              ${
                 user && user.avatar_url
                   ? svg`
                 <g transform=${`translate(${avatarX}, ${avatarY})`} style="pointer-events:none">
@@ -1729,14 +1848,14 @@ class NottarioGantt extends LitElement {
                          width=${avatarSize} height=${avatarSize}
                          clip-path="url(#gantt-avatar-clip)"></image>
                   <circle cx=${avatarSize / 2} cy=${avatarSize / 2} r=${avatarSize / 2}
-                          fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="1"></circle>
+                          style="fill: none; stroke: var(--gray-3); stroke-width: 1"></circle>
                 </g>
               `
                   : null
               }
-              <text class=${`task-label ${t.state === 'doing' ? 'on-dark' : ''}`}
+              <text class=${`task-label${labelOnTint ? ' on-tint' : ''}`}
                     x=${labelX} y=${y + taskHeight / 2 + 4}
-                    style="pointer-events:none">
+                    style=${labelStyle}>
                 ${this._truncate(t.title, labelMaxChars)}
               </text>
             `;
@@ -1758,14 +1877,17 @@ class NottarioGantt extends LitElement {
           })}
         </svg>
       </div>
-      <div class="legend">
-        <span><span class="swatch" style="background:#d1d9e0;border:1px solid #afb8c1"></span> done</span>
-        <span><span class="swatch" style="background:#1f6feb"></span> doing</span>
-        <span><span class="swatch" style="border:1px dashed #59636e"></span> todo</span>
-        <span><span class="swatch" style="border:1px dotted #cf222e"></span> bug</span>
-        <span><span class="swatch" style="border:2px solid #cf222e"></span> inconsistent (dependent already done)</span>
-        <span><span class="swatch" style="background:#cf222e;width:2px"></span> now</span>
-      </div>
+      <details class="legend">
+        <summary>Legend</summary>
+        <div class="legend-row">
+          <span><span class="swatch" style="background:var(--gantt-bar-done-fill);border:1px solid var(--gantt-bar-done-stroke)"></span> done</span>
+          <span><span class="swatch" style="background:color-mix(in srgb, var(--brand-blue) 14%, white);border:1.5px solid var(--brand-blue)"></span> doing</span>
+          <span><span class="swatch" style="background:color-mix(in srgb, var(--brand-blue) 14%, white);border:1.5px dashed var(--brand-blue)"></span> todo</span>
+          <span><span class="swatch swatch-circle" style="background:var(--danger)"></span> bug</span>
+          <span><span class="swatch" style="border:2px solid var(--danger)"></span> inconsistent — dependent already done</span>
+          <span><span class="swatch" style="background:var(--gantt-now-line);width:2px"></span> now</span>
+        </div>
+      </details>
     `;
   }
 
@@ -1993,7 +2115,10 @@ class NottarioGantt extends LitElement {
           ${
             role
               ? html`
-            <span class="chip role" style=${`background:${role.color || '#59636e'}`}>${role.label}</span>
+            <span class="chip role" style=${(() => {
+              const c = role.color || 'var(--fg-muted)';
+              return `background: color-mix(in srgb, ${c} 18%, white); color: color-mix(in srgb, ${c} 70%, black)`;
+            })()}>${role.label}</span>
           `
               : null
           }

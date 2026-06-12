@@ -30,10 +30,10 @@ class NottarioProfilePage extends LitElement {
       font-size: 14px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: #59636e;
+      color: var(--fg-muted);
       margin: 28px 0 10px;
       padding-bottom: 6px;
-      border-bottom: 1px solid #eaeef2;
+      border-bottom: 1px solid var(--gray-2);
       font-weight: 600;
     }
     h2:first-of-type { margin-top: 0; }
@@ -43,19 +43,19 @@ class NottarioProfilePage extends LitElement {
       align-items: center;
       gap: 16px;
       background: #fff;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 18px 20px;
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
     }
     .identity .name { font-size: 20px; font-weight: 600; margin: 0; }
     .identity .login {
-      color: #59636e;
+      color: var(--fg-muted);
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 13px;
     }
     .identity .meta-line {
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 12px;
       margin-top: 6px;
     }
@@ -71,12 +71,12 @@ class NottarioProfilePage extends LitElement {
       display: inline-block;
       padding: 1px 8px;
       border-radius: 999px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       background: #fff;
       font-size: 12px;
     }
     table.memberships a.project-link {
-      color: #1f2328;
+      color: var(--fg);
       font-weight: 500;
       text-decoration: none;
     }
@@ -85,7 +85,7 @@ class NottarioProfilePage extends LitElement {
     .settings-list,
     .account-list {
       background: #fff;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 8px;
       overflow: hidden;
     }
@@ -94,19 +94,19 @@ class NottarioProfilePage extends LitElement {
       align-items: center;
       gap: 16px;
       padding: 12px 16px;
-      border-bottom: 1px solid #eaeef2;
+      border-bottom: 1px solid var(--gray-2);
     }
     .row:last-child { border-bottom: none; }
     .row .label {
       flex: 0 0 180px;
       font-weight: 500;
-      color: #1f2328;
+      color: var(--fg);
       font-size: 14px;
     }
-    .row .value { flex: 1; font-size: 13px; color: #1f2328; }
-    .row .value.muted { color: #59636e; font-style: italic; }
+    .row .value { flex: 1; font-size: 13px; color: var(--fg); }
+    .row .value.muted { color: var(--fg-muted); font-style: italic; }
     .row a.tokens-link {
-      color: #0969da;
+      color: var(--accent);
       text-decoration: none;
     }
     .row a.tokens-link:hover { text-decoration: underline; }
@@ -114,13 +114,13 @@ class NottarioProfilePage extends LitElement {
 
     .empty {
       padding: 18px 16px;
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 13px;
       background: #fff;
-      border: 1px dashed #d0d7de;
+      border: 1px dashed var(--border);
       border-radius: 8px;
     }
-    .error { color: #cf222e; margin-bottom: 12px; font-size: 13px; }
+    .error { color: var(--danger); margin-bottom: 12px; font-size: 13px; }
   `,
   ];
 

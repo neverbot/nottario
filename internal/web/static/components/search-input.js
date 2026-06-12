@@ -44,19 +44,19 @@ class NottarioSearchInput extends LitElement {
     input {
       width: 100%;
       padding: 6px 30px 6px 10px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       font: inherit;
       font-size: 13px;
       background: #ffffff;
-      color: #1f2328;
+      color: var(--fg);
       box-sizing: border-box;
     }
-    input::placeholder { color: #8b949e; }
+    input::placeholder { color: var(--gray-5); }
     input:focus {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 0;
-      border-color: #0969da;
+      border-color: var(--accent);
     }
     .clear {
       position: absolute;
@@ -71,18 +71,18 @@ class NottarioSearchInput extends LitElement {
       background: transparent;
       border: 1px solid transparent;
       cursor: pointer;
-      color: #59636e;
+      color: var(--fg-muted);
       padding: 0;
       border-radius: 4px;
       font: inherit;
     }
     .clear:hover {
-      color: #1f2328;
-      background: #f6f8fa;
-      border-color: #d0d7de;
+      color: var(--fg);
+      background: var(--bg-subtle);
+      border-color: var(--border);
     }
     .clear:focus-visible {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 0;
     }
     .clear svg { display: block; }
@@ -90,7 +90,7 @@ class NottarioSearchInput extends LitElement {
       display: block;
       margin-top: 4px;
       font-size: 11px;
-      color: #8b949e;
+      color: var(--gray-5);
       padding-left: 2px;
     }
   `;

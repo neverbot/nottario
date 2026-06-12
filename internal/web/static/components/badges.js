@@ -18,25 +18,25 @@ export const badgeStyles = css`
     border-radius: 2em;
     font-size: 11px;
     font-weight: 500;
-    border: 1px solid #d1d9e0;
+    border: 1px solid var(--border);
     background: #ffffff;
-    color: #1f2328;
+    color: var(--fg);
     line-height: 1.4;
     vertical-align: 2px;
   }
 
   /* task types */
-  .badge.bug     { background: #ffebe9; border-color: #ffabab; color: #cf222e; }
-  .badge.feature { background: #ddf4ff; border-color: #8ec0ff; color: #0969da; }
-  .badge.chore   { background: #fff8c5; border-color: #d4a72c; color: #7d4e00; }
-  .badge.spike   { background: #ddf4d1; border-color: #95d57e; color: #1a7f37; }
+  .badge.bug     { background: var(--tint-red); border-color: #ffabab; color: var(--danger); }
+  .badge.feature { background: var(--tint-blue); border-color: #8ec0ff; color: var(--accent); }
+  .badge.chore   { background: var(--tint-yellow); border-color: #d4a72c; color: var(--warning-text); }
+  .badge.spike   { background: #ddf4d1; border-color: #95d57e; color: var(--success-hover); }
   .badge.task    { /* base — neutral; explicit so the class can always be applied */ }
 
   /* doc kinds */
-  .badge.skill   { background: #ddf4ff; border-color: #8ec0ff; color: #0969da; }
-  .badge.context { background: #f6f8fa; border-color: #d1d9e0; color: #1f2328; }
-  .badge.note    { background: #fff8c5; border-color: #d4a72c; color: #7d4e00; }
+  .badge.skill   { background: var(--tint-blue); border-color: #8ec0ff; color: var(--accent); }
+  .badge.context { background: var(--bg-subtle); border-color: var(--border); color: var(--fg); }
+  .badge.note    { background: var(--tint-yellow); border-color: #d4a72c; color: var(--warning-text); }
 
   /* user-level marker (orthogonal to type/kind) */
-  .badge.admin   { background: #fff8c5; border-color: #eac54f; color: #9a6700; font-weight: 600; }
+  .badge.admin   { background: var(--tint-yellow); border-color: #eac54f; color: var(--warning); font-weight: 600; }
 `;

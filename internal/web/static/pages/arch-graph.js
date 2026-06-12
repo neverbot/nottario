@@ -43,20 +43,20 @@ class NottarioArchGraph extends LitElement {
       font: inherit;
       font-size: 12px;
       background: #ffffff;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       cursor: pointer;
-      color: #1f2328;
+      color: var(--fg);
     }
-    .btn:hover { background: #f6f8fa; border-color: #afb8c1; }
-    .btn.on { background: #0969da; color: #fff; border-color: #0969da; }
+    .btn:hover { background: var(--bg-subtle); border-color: var(--border-strong); }
+    .btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
     .btn.on:hover { background: #0860c4; border-color: #0860c4; }
 
     .split {
       display: grid;
       grid-template-columns: 1fr 320px;
       gap: 0;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 8px;
       overflow: hidden;
       min-height: 70vh;
@@ -64,7 +64,7 @@ class NottarioArchGraph extends LitElement {
     }
     nottario-arch-canvas {
       display: block;
-      border-right: 1px solid #d1d9e0;
+      border-right: 1px solid var(--border);
       /* HEIGHT, not min-height. With min-height alone, the inner SVG
          (width:100% height:100% with a viewBox) auto-grows to keep
          the viewBox's aspect ratio, dragging the host's height
@@ -85,10 +85,10 @@ class NottarioArchGraph extends LitElement {
       overflow: auto;
       max-height: 70vh;
       font-size: 13px;
-      color: #1f2328;
+      color: var(--fg);
     }
     .panel .empty-pane {
-      color: #8b949e;
+      color: var(--gray-5);
       font-style: italic;
       margin: 12px 0 0;
     }
@@ -103,7 +103,7 @@ class NottarioArchGraph extends LitElement {
       font-size: 18px;
       font-weight: 600;
       line-height: 1.25;
-      color: #1f2328;
+      color: var(--fg);
     }
     .kind-chip {
       display: inline-flex;
@@ -112,7 +112,7 @@ class NottarioArchGraph extends LitElement {
       font: 600 10.5px/1 ui-monospace, SFMono-Regular, monospace;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .kind-chip .dot {
       width: 8px;
@@ -123,16 +123,16 @@ class NottarioArchGraph extends LitElement {
     .crumb {
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 11px;
-      color: #8b949e;
+      color: var(--gray-5);
       margin-top: 6px;
       display: flex;
       flex-wrap: wrap;
       gap: 4px;
       align-items: center;
     }
-    .crumb a { color: #59636e; cursor: pointer; }
-    .crumb a:hover { color: #0969da; }
-    .crumb .sep { color: #d0d7de; }
+    .crumb a { color: var(--fg-muted); cursor: pointer; }
+    .crumb a:hover { color: var(--accent); }
+    .crumb .sep { color: var(--border); }
 
     .meta-row {
       margin-top: 10px;
@@ -142,7 +142,7 @@ class NottarioArchGraph extends LitElement {
       font-size: 12px;
     }
     .meta-row .lbl {
-      color: #8b949e;
+      color: var(--gray-5);
       text-transform: uppercase;
       letter-spacing: 0.04em;
       font-size: 10px;
@@ -150,8 +150,8 @@ class NottarioArchGraph extends LitElement {
     }
     .meta-row code {
       font-size: 12px;
-      color: #1f2328;
-      background: #f6f8fa;
+      color: var(--fg);
+      background: var(--bg-subtle);
       padding: 1px 6px;
       border-radius: 4px;
     }
@@ -161,13 +161,13 @@ class NottarioArchGraph extends LitElement {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: #8b949e;
+      color: var(--gray-5);
       font-weight: 600;
       margin: 0 0 8px;
     }
     .section .empty {
       font-size: 13px;
-      color: #8b949e;
+      color: var(--gray-5);
       font-style: italic;
       margin: 0;
     }
@@ -182,21 +182,21 @@ class NottarioArchGraph extends LitElement {
       align-items: baseline;
       gap: 8px;
       padding: 6px 10px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: #f6f8fa;
+      background: var(--bg-subtle);
       cursor: pointer;
       font-size: 12px;
-      color: #1f2328;
+      color: var(--fg);
       text-decoration: none;
     }
     .edge-chip:hover {
-      border-color: #0969da;
-      background: #ddf4ff;
+      border-color: var(--accent);
+      background: var(--tint-blue);
     }
     .edge-chip .lbl { font-weight: 500; }
     .edge-chip .from, .edge-chip .to {
-      color: #59636e;
+      color: var(--fg-muted);
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -205,7 +205,7 @@ class NottarioArchGraph extends LitElement {
 
     .tasks { display: flex; flex-direction: column; gap: 4px; }
 
-    .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
+    .error { color: var(--danger); margin-bottom: 8px; font-size: 13px; }
   `;
 
   constructor() {
@@ -340,19 +340,19 @@ class NottarioArchGraph extends LitElement {
   _kindColor(k) {
     switch ((k || '').toLowerCase()) {
       case 'system':
-        return '#0969da';
+        return 'var(--accent)';
       case 'service':
-        return '#1f883d';
+        return 'var(--success)';
       case 'module':
-        return '#8250df';
+        return 'var(--role-design)';
       case 'external':
         return '#bc4c00';
       case 'data':
-        return '#9a6700';
+        return 'var(--warning)';
       case 'queue':
-        return '#cf222e';
+        return 'var(--danger)';
       default:
-        return '#59636e';
+        return 'var(--fg-muted)';
     }
   }
 

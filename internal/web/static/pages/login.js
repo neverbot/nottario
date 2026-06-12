@@ -20,20 +20,20 @@ class NottarioLogin extends LitElement {
       max-width: 380px;
       width: 100%;
       background: #fff;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 8px;
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
       text-align: center;
     }
     h1 { margin: 0 0 8px 0; font-size: 24px; }
-    p { margin: 0 0 24px 0; color: #59636e; }
+    p { margin: 0 0 24px 0; color: var(--fg-muted); }
     .flash {
       box-sizing: border-box;
       margin: 0 0 20px 0;
       padding: 10px 12px;
       border: 1px solid #ffc1ba;
-      background: #ffebe9;
-      color: #82071e;
+      background: var(--tint-red);
+      color: var(--danger-text);
       border-radius: 6px;
       font-size: 13px;
       text-align: left;

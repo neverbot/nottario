@@ -27,10 +27,10 @@ class NottarioTaskChip extends LitElement {
       align-items: center;
       gap: 6px;
       padding: 2px 8px 2px 6px;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 999px;
-      background: #f6f8fa;
-      color: #1f2328;
+      background: var(--bg-subtle);
+      color: var(--fg);
       font-size: 12px;
       font-weight: 500;
       text-decoration: none;
@@ -38,13 +38,13 @@ class NottarioTaskChip extends LitElement {
       max-width: 100%;
     }
     a:hover {
-      border-color: #0969da;
-      background: #ddf4ff;
-      color: #0969da;
+      border-color: var(--accent);
+      background: var(--tint-blue);
+      color: var(--accent);
     }
     .id {
       font-family: ui-monospace, SFMono-Regular, monospace;
-      color: #8b949e;
+      color: var(--gray-5);
       font-size: 11px;
     }
     .title {
@@ -63,15 +63,15 @@ class NottarioTaskChip extends LitElement {
       line-height: 1.2;
       flex: 0 0 auto;
     }
-    .state-todo  { color: #59636e; background: #eaeef2; }
-    .state-doing { color: #0969da; background: #ddf4ff; }
-    .state-done  { color: #1a7f37; background: #dafbe1; opacity: 0.7; }
+    .state-todo  { color: var(--fg-muted); background: var(--gray-2); }
+    .state-doing { color: var(--accent); background: var(--tint-blue); }
+    .state-done  { color: var(--success-hover); background: var(--tint-green); opacity: 0.7; }
 
     /* Missing task fallback: the chip is still rendered (so an
        orphan dependency is visible) but in a muted, italic shape. */
     a.missing {
-      color: #cf222e;
-      background: #ffebe9;
+      color: var(--danger);
+      background: var(--tint-red);
       border-color: rgba(207, 34, 46, 0.4);
       font-style: italic;
     }

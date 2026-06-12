@@ -46,7 +46,7 @@ class NottarioMarkdown extends LitElement {
 
     .prose {
       max-width: 76ch;
-      color: #1f2328;
+      color: var(--fg);
       font-size: 14px;
       line-height: 1.65;
     }
@@ -55,23 +55,23 @@ class NottarioMarkdown extends LitElement {
     /* Typography hierarchy — tighter than brand defaults, calibrated
        to GitHub's reading scale. */
     .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
-      color: #1f2328;
+      color: var(--fg);
       font-weight: 600;
       line-height: 1.25;
       margin: 24px 0 12px;
     }
-    .prose h1 { font-size: 22px; padding-bottom: 6px; border-bottom: 1px solid #d1d9e0; }
-    .prose h2 { font-size: 19px; padding-bottom: 4px; border-bottom: 1px solid #eaeef2; }
+    .prose h1 { font-size: 22px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .prose h2 { font-size: 19px; padding-bottom: 4px; border-bottom: 1px solid var(--gray-2); }
     .prose h3 { font-size: 16px; }
     .prose h4 { font-size: 14px; }
-    .prose h5, .prose h6 { font-size: 13px; color: #59636e; }
+    .prose h5, .prose h6 { font-size: 13px; color: var(--fg-muted); }
     .prose > :first-child { margin-top: 0; }
     .prose > :last-child { margin-bottom: 0; }
 
     .prose p { margin: 0 0 12px; }
 
     .prose a {
-      color: #0969da;
+      color: var(--accent);
       text-decoration: none;
     }
     .prose a:hover { text-decoration: underline; }
@@ -91,14 +91,14 @@ class NottarioMarkdown extends LitElement {
     .prose blockquote {
       margin: 0 0 12px;
       padding: 0 12px;
-      border-left: 3px solid #d1d9e0;
-      color: #59636e;
+      border-left: 3px solid var(--border);
+      color: var(--fg-muted);
     }
 
     .prose code {
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
       font-size: 0.88em;
-      background: #f6f8fa;
+      background: var(--bg-subtle);
       padding: 0.15em 0.4em;
       border-radius: 4px;
     }
@@ -106,8 +106,8 @@ class NottarioMarkdown extends LitElement {
     .prose pre {
       margin: 0 0 12px;
       padding: 12px;
-      background: #f6f8fa;
-      border: 1px solid #d1d9e0;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
       border-radius: 6px;
       overflow: auto;
       font-size: 12.5px;
@@ -124,7 +124,7 @@ class NottarioMarkdown extends LitElement {
     .prose table {
       border-collapse: separate;
       border-spacing: 0;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
       margin: 0 0 12px;
@@ -132,22 +132,22 @@ class NottarioMarkdown extends LitElement {
     }
     .prose th, .prose td {
       padding: 6px 10px;
-      border-bottom: 1px solid #eaeef2;
+      border-bottom: 1px solid var(--gray-2);
       text-align: left;
     }
     .prose th {
-      background: #f6f8fa;
+      background: var(--bg-subtle);
       font-weight: 600;
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .prose tr:last-child td { border-bottom: none; }
 
     .prose hr {
       border: none;
-      border-top: 1px solid #d1d9e0;
+      border-top: 1px solid var(--border);
       margin: 24px 0;
     }
 
@@ -165,9 +165,9 @@ class NottarioMarkdown extends LitElement {
       padding: 0 8px;
       height: 20px;
       border-radius: 999px;
-      border: 1px solid #d1d9e0;
-      background: #f6f8fa;
-      color: #1f2328;
+      border: 1px solid var(--border);
+      background: var(--bg-subtle);
+      color: var(--fg);
       font-size: 12px;
       font-weight: 500;
       text-decoration: none;
@@ -176,28 +176,28 @@ class NottarioMarkdown extends LitElement {
       white-space: nowrap;
     }
     .prose a.chip:hover {
-      border-color: #0969da;
-      color: #0969da;
-      background: #ddf4ff;
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--tint-blue);
       text-decoration: none;
     }
     .prose .chip-task { color: #0a3069; }
-    .prose .chip-doc  { color: #1a7f37; }
-    .prose .chip-arch { color: #8250df; }
+    .prose .chip-doc  { color: var(--success-hover); }
+    .prose .chip-arch { color: var(--role-design); }
     .prose .chip-missing {
-      color: #cf222e;
-      background: #ffebe9;
+      color: var(--danger);
+      background: var(--tint-red);
       border-color: rgba(207, 34, 46, 0.4);
       font-style: italic;
     }
     .prose .chip-state-done { opacity: 0.6; }
 
     .status {
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 13px;
       font-style: italic;
     }
-    .status.error { color: #cf222e; font-style: normal; }
+    .status.error { color: var(--danger); font-style: normal; }
 
     /* highlight.js GitHub theme — vendored from highlight.js@11.10.0/styles/github.css.
        Included in the component's shadow so every consumer gets the same

@@ -28,7 +28,7 @@ class NottarioAvatar extends LitElement {
       box-sizing: border-box;
       overflow: hidden;
       border-radius: 50%;
-      background: var(--avatar-bg, #59636e);
+      background: var(--avatar-bg, var(--fg-muted));
       color: #fff;
       font-weight: 600;
       text-transform: uppercase;
@@ -74,7 +74,7 @@ class NottarioAvatar extends LitElement {
       this.style.fontSize = `${Math.max(10, Math.round(this.size * 0.4))}px`;
     }
     if (changed.has('color')) {
-      this.style.setProperty('--avatar-bg', this.color || '#59636e');
+      this.style.setProperty('--avatar-bg', this.color || 'var(--fg-muted)');
     }
   }
 

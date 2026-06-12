@@ -22,27 +22,27 @@ import { css } from '/static/vendor/lit/lit.js';
 export const surfaceStyles = css`
   .surface {
     background: #ffffff;
-    border: 1px solid #d1d9e0;
+    border: 1px solid var(--border);
     border-radius: 8px;
     box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
     box-sizing: border-box;
   }
   .surface.tinted {
-    background: #f6f8fa;
+    background: var(--bg-subtle);
     box-shadow: none;
   }
   .empty {
     padding: 40px 24px;
     text-align: center;
-    color: #59636e;
+    color: var(--fg-muted);
     background: #ffffff;
-    border: 1px dashed #d1d9e0;
+    border: 1px dashed var(--border);
     border-radius: 8px;
     box-sizing: border-box;
   }
   .empty strong {
     display: block;
-    color: #1f2328;
+    color: var(--fg);
     font-size: 15px;
     margin-bottom: 4px;
   }
@@ -63,7 +63,7 @@ export const tableStyles = css`
     border-collapse: separate;
     border-spacing: 0;
     background: #ffffff;
-    border: 1px solid #d1d9e0;
+    border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
@@ -73,15 +73,15 @@ export const tableStyles = css`
   table.data-table td {
     text-align: left;
     padding: 9px 14px;
-    border-bottom: 1px solid #eaeef2;
+    border-bottom: 1px solid var(--gray-2);
     font-size: 13px;
     vertical-align: middle;
   }
   table.data-table tbody tr:last-child td { border-bottom: none; }
   table.data-table th {
-    background: #f6f8fa;
+    background: var(--bg-subtle);
     font-weight: 600;
-    color: #59636e;
+    color: var(--fg-muted);
     text-transform: uppercase;
     font-size: 11px;
     letter-spacing: 0.04em;

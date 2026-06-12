@@ -70,7 +70,7 @@ class NottarioBoardPage extends LitElement {
       align-items: center;
       gap: 10px;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .cycle-switcher .pill {
       display: inline-flex;
@@ -79,17 +79,17 @@ class NottarioBoardPage extends LitElement {
       height: 28px;
       padding: 0 10px;
       border-radius: 999px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       background: #fff;
-      color: #1f2328;
+      color: var(--fg);
       font: inherit;
       font-size: 12px;
       font-weight: 500;
       cursor: pointer;
     }
-    .cycle-switcher .pill:hover { border-color: #afb8c1; }
-    .cycle-switcher .pill .caret { color: #59636e; font-size: 10px; }
-    .cycle-switcher .pill .muted { color: #8b949e; font-weight: 400; }
+    .cycle-switcher .pill:hover { border-color: var(--border-strong); }
+    .cycle-switcher .pill .caret { color: var(--fg-muted); font-size: 10px; }
+    .cycle-switcher .pill .muted { color: var(--gray-5); font-weight: 400; }
     .cycle-dropdown {
       position: absolute;
       top: 32px;
@@ -99,7 +99,7 @@ class NottarioBoardPage extends LitElement {
       padding: 4px 0;
       list-style: none;
       background: #fff;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
       min-width: 220px;
@@ -114,17 +114,17 @@ class NottarioBoardPage extends LitElement {
       padding: 6px 12px;
       cursor: pointer;
       font-size: 13px;
-      color: #1f2328;
+      color: var(--fg);
     }
     .cycle-dropdown li:hover { background: #f3f4f6; }
-    .cycle-dropdown li.current { font-weight: 600; background: #ddf4ff; }
-    .cycle-dropdown li .muted { color: #8b949e; font-size: 11px; }
+    .cycle-dropdown li.current { font-weight: 600; background: var(--tint-blue); }
+    .cycle-dropdown li .muted { color: var(--gray-5); font-size: 11px; }
     .cycle-counts {
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 12px;
       white-space: nowrap;
     }
-    .cycle-counts .sep { color: #d0d7de; margin: 0 6px; }
+    .cycle-counts .sep { color: var(--border); margin: 0 6px; }
 
     /* ---- End-sprint dialog ---- */
     .end-sprint-dialog .panel { width: 480px; }
@@ -132,7 +132,7 @@ class NottarioBoardPage extends LitElement {
       margin: 8px 0 16px;
       padding-left: 20px;
       font-size: 13px;
-      color: #1f2328;
+      color: var(--fg);
       line-height: 1.6;
     }
     .end-sprint-dialog ul li { margin-bottom: 2px; }
@@ -159,22 +159,22 @@ class NottarioBoardPage extends LitElement {
       height: 26px;
       padding: 0 10px;
       border-radius: 999px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       background: #fff;
-      color: #1f2328;
+      color: var(--fg);
       font: inherit;
       font-size: 12px;
       font-weight: 500;
       cursor: pointer;
     }
-    .filter-chip:hover { border-color: #afb8c1; }
+    .filter-chip:hover { border-color: var(--border-strong); }
     .filter-chip.active {
-      background: #ddf4ff;
-      border-color: #0969da;
-      color: #0550ae;
+      background: var(--tint-blue);
+      border-color: var(--accent);
+      color: var(--tint-blue-fg);
     }
     .filter-chip .count {
-      background: #0969da;
+      background: var(--accent);
       color: #fff;
       border-radius: 999px;
       padding: 1px 6px;
@@ -185,20 +185,20 @@ class NottarioBoardPage extends LitElement {
     .filter-clear {
       background: transparent;
       border: 0;
-      color: #59636e;
+      color: var(--fg-muted);
       font: inherit;
       font-size: 12px;
       cursor: pointer;
       padding: 4px 6px;
     }
-    .filter-clear:hover { color: #1f2328; text-decoration: underline; }
+    .filter-clear:hover { color: var(--fg); text-decoration: underline; }
     .filter-menu {
       position: absolute;
       top: calc(100% + 4px);
       left: 0;
       min-width: 180px;
       background: #fff;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 8px;
       box-shadow: 0 6px 16px rgba(31, 35, 40, 0.12);
       padding: 4px;
@@ -229,23 +229,23 @@ class NottarioBoardPage extends LitElement {
       height: 26px;
       padding: 0 10px;
       border-radius: 999px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       background: #fff;
-      color: #59636e;
+      color: var(--fg-muted);
       font-size: 12px;
       font-weight: 500;
       cursor: pointer;
       font: inherit;
     }
-    .doing-pill:hover { border-color: #afb8c1; color: #1f2328; }
+    .doing-pill:hover { border-color: var(--border-strong); color: var(--fg); }
     .doing-pill .dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #afb8c1;
+      background: var(--border-strong);
     }
     .col {
-      background: #f6f8fa;
+      background: var(--bg-subtle);
       border-radius: 8px;
       padding: 8px;
       align-self: start; /* don't stretch to match the tallest column */
@@ -254,7 +254,7 @@ class NottarioBoardPage extends LitElement {
     .col.empty.doing { padding: 8px; }
     .upnext {
       background: #fff;
-      border: 1px dashed #afb8c1;
+      border: 1px dashed var(--border-strong);
       border-radius: 8px;
       padding: 12px 12px 10px;
       margin: 4px 0;
@@ -266,13 +266,13 @@ class NottarioBoardPage extends LitElement {
       font-size: 11px;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: #59636e;
+      color: var(--fg-muted);
       font-weight: 600;
     }
     .upnext .title {
       font-weight: 600;
       font-size: 14px;
-      color: #1f2328;
+      color: var(--fg);
       line-height: 1.3;
     }
     .upnext .meta {
@@ -280,7 +280,7 @@ class NottarioBoardPage extends LitElement {
       gap: 6px;
       flex-wrap: wrap;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .upnext .row {
       display: flex;
@@ -290,7 +290,7 @@ class NottarioBoardPage extends LitElement {
     }
     .upnext .row .spacer { flex: 1; }
     .upnext button.start {
-      background: #1f883d;
+      background: var(--success);
       color: #fff;
       border: 1px solid rgba(31, 35, 40, 0.15);
       padding: 5px 12px;
@@ -299,10 +299,10 @@ class NottarioBoardPage extends LitElement {
       font-size: 13px;
       cursor: pointer;
     }
-    .upnext button.start:hover { background: #1a7f37; }
+    .upnext button.start:hover { background: var(--success-hover); }
     .upnext button.peek {
       background: transparent;
-      color: #0969da;
+      color: var(--accent);
       border: none;
       cursor: pointer;
       font-size: 12px;
@@ -313,7 +313,7 @@ class NottarioBoardPage extends LitElement {
       margin: 4px 4px 8px 4px;
       font-size: 13px;
       text-transform: uppercase;
-      color: #59636e;
+      color: var(--fg-muted);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -321,13 +321,13 @@ class NottarioBoardPage extends LitElement {
     .col.empty h3 { margin-bottom: 4px; }
     .col .empty-note {
       font-size: 12px;
-      color: #8b949e;
+      color: var(--gray-5);
       padding: 0 4px 2px;
       font-style: italic;
     }
     .count {
-      background: #eaeef2;
-      color: #59636e;
+      background: var(--gray-2);
+      color: var(--fg-muted);
       border-radius: 2em;
       padding: 0 8px;
       font-size: 12px;
@@ -336,7 +336,7 @@ class NottarioBoardPage extends LitElement {
     .card {
       position: relative;
       background: #fff;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 6px;
       padding: 10px 12px;
       margin-bottom: 8px;
@@ -353,7 +353,7 @@ class NottarioBoardPage extends LitElement {
       border-radius: 50%;
       box-shadow: 0 0 0 2px #fff;
     }
-    .card:hover { border-color: #afb8c1; }
+    .card:hover { border-color: var(--border-strong); }
     /* DnD: the card the user is dragging fades; the column it's
        being dragged over picks up a subtle accent ring to confirm
        it will receive the drop. */
@@ -361,9 +361,9 @@ class NottarioBoardPage extends LitElement {
     .card[draggable="true"]:active { cursor: grabbing; }
     .card.dragging { opacity: 0.4; }
     .col.drag-over {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: -2px;
-      background: #ddf4ff;
+      background: var(--tint-blue);
     }
     .card .title { font-weight: 500; margin-bottom: 4px; }
     .card .meta {
@@ -371,7 +371,7 @@ class NottarioBoardPage extends LitElement {
       gap: 6px;
       flex-wrap: wrap;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     /* Role badge: a flat-coloured pill whose hue follows the role's
        configured colour. Uses color-mix so the tint stays robust
@@ -384,11 +384,11 @@ class NottarioBoardPage extends LitElement {
       align-items: center;
       padding: 1px 8px;
       border-radius: 999px;
-      border: 1px solid var(--role-color, #d0d7de);
-      background: color-mix(in srgb, var(--role-color, #d0d7de) 10%, #fff);
+      border: 1px solid var(--role-color, var(--border));
+      background: color-mix(in srgb, var(--role-color, var(--border)) 10%, #fff);
       font-size: 11px;
       font-weight: 500;
-      color: #1f2328;
+      color: var(--fg);
     }
 
     /* Priority is encoded as a coloured dot so it's the first thing
@@ -406,11 +406,11 @@ class NottarioBoardPage extends LitElement {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #afb8c1;
+      background: var(--border-strong);
     }
-    .prio.high .dot { background: #cf222e; }
+    .prio.high .dot { background: var(--danger); }
     .prio.medium .dot { background: #bf8700; }
-    .prio.low .dot { background: #8b949e; }
+    .prio.low .dot { background: var(--gray-5); }
 
     /* ---- Bottom toast (undo affordance) ---- */
     .toast {
@@ -422,7 +422,7 @@ class NottarioBoardPage extends LitElement {
       align-items: center;
       gap: 12px;
       padding: 10px 14px;
-      background: #1f2328;
+      background: var(--fg);
       color: #fff;
       border-radius: 8px;
       box-shadow: 0 8px 24px rgba(31, 35, 40, 0.24);
@@ -446,9 +446,9 @@ class NottarioBoardPage extends LitElement {
       padding: 18px 20px;
     }
     .confirm-dialog .panel h3 { margin: 0 0 8px; font-size: 15px; }
-    .confirm-dialog .panel p { margin: 0 0 16px; color: #59636e; font-size: 13px; }
+    .confirm-dialog .panel p { margin: 0 0 16px; color: var(--fg-muted); font-size: 13px; }
 
-    .error { color: #cf222e; margin-bottom: 8px; font-size: 13px; }
+    .error { color: var(--danger); margin-bottom: 8px; font-size: 13px; }
 
     /* ---- Task-detail dialog ---- */
 
@@ -469,7 +469,7 @@ class NottarioBoardPage extends LitElement {
        so the eye lands on the title without competing chrome. */
     .detail .head {
       padding: 20px 22px 14px;
-      border-bottom: 1px solid #eaeef2;
+      border-bottom: 1px solid var(--gray-2);
     }
     .detail .head .title-row {
       display: flex;
@@ -482,7 +482,7 @@ class NottarioBoardPage extends LitElement {
       font-weight: 600;
       line-height: 1.25;
       letter-spacing: -0.01em;
-      color: #1f2328;
+      color: var(--fg);
       flex: 1;
       min-width: 0;
     }
@@ -492,14 +492,14 @@ class NottarioBoardPage extends LitElement {
       gap: 8px;
       margin-top: 6px;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .detail .head .short-id {
       font-family: ui-monospace, SFMono-Regular, monospace;
-      color: #8b949e;
+      color: var(--gray-5);
       font-size: 12px;
     }
-    .detail .head .sub-line .dot { color: #d0d7de; }
+    .detail .head .sub-line .dot { color: var(--border); }
     .detail .head .title-actions {
       display: flex;
       align-items: center;
@@ -515,7 +515,7 @@ class NottarioBoardPage extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: #8b949e;
+      color: var(--gray-5);
       background: transparent;
       border: 1px solid transparent;
       border-radius: 6px;
@@ -524,18 +524,18 @@ class NottarioBoardPage extends LitElement {
     }
     .detail .head .icon-btn svg { display: block; }
     .detail .head .icon-btn:hover {
-      color: #1f2328;
-      background: #f6f8fa;
-      border-color: #d0d7de;
+      color: var(--fg);
+      background: var(--bg-subtle);
+      border-color: var(--border);
     }
     .detail .head .icon-btn:focus-visible {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 1px;
     }
     .detail .head .icon-btn.danger:hover,
     .detail .head .icon-btn.danger:focus-visible {
-      color: #cf222e;
-      background: #ffebe9;
+      color: var(--danger);
+      background: var(--tint-red);
       border-color: rgba(207, 34, 46, 0.4);
     }
 
@@ -548,7 +548,7 @@ class NottarioBoardPage extends LitElement {
       gap: 12px 18px;
       margin-top: 12px;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
       align-items: center;
     }
     .detail .meta .field-line {
@@ -556,9 +556,9 @@ class NottarioBoardPage extends LitElement {
       align-items: center;
       gap: 6px;
     }
-    .detail .meta .lbl { color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
-    .detail .meta .val { color: #1f2328; }
-    .detail .meta .val .muted { color: #8b949e; font-style: italic; font-weight: 400; }
+    .detail .meta .lbl { color: var(--gray-5); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .detail .meta .val { color: var(--fg); }
+    .detail .meta .val .muted { color: var(--gray-5); font-style: italic; font-weight: 400; }
     .detail .meta .author-cell { display: inline-flex; align-items: center; gap: 6px; }
     /* Inline assignee picker: keep the avatar + select on one row.
        The select gets the standard nottario-field chrome via the
@@ -570,7 +570,7 @@ class NottarioBoardPage extends LitElement {
     }
     .detail .meta .assignee-edit select {
       padding: 4px 28px 4px 8px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       font: inherit;
       font-size: 12px;
@@ -582,8 +582,8 @@ class NottarioBoardPage extends LitElement {
       background-position: right 8px center;
     }
     .detail .meta .assignee-edit select:focus {
-      outline: 2px solid #0969da;
-      border-color: #0969da;
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
     }
 
     /* State control as compact segmented pill — three buttons share a
@@ -591,7 +591,7 @@ class NottarioBoardPage extends LitElement {
        (matches the kanban "done" reading), the others stay neutral. */
     .detail .state-control {
       display: inline-flex;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
       background: #ffffff;
@@ -602,24 +602,24 @@ class NottarioBoardPage extends LitElement {
       font-size: 12px;
       background: transparent;
       border: none;
-      border-right: 1px solid #d0d7de;
+      border-right: 1px solid var(--border);
       cursor: pointer;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .detail .state-control button:last-child { border-right: none; }
-    .detail .state-control button:hover { background: #f6f8fa; color: #1f2328; }
+    .detail .state-control button:hover { background: var(--bg-subtle); color: var(--fg); }
     .detail .state-control button.active {
-      background: #1f883d;
+      background: var(--success);
       color: #ffffff;
       font-weight: 600;
     }
-    .detail .state-control button.active:hover { background: #1a7f37; }
+    .detail .state-control button.active:hover { background: var(--success-hover); }
 
     /* Priority dropdown — same chrome as the new-task dialog's
        select, narrow enough not to dominate the meta row. */
     .detail .meta select.priority {
       padding: 2px 22px 2px 8px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 4px;
       font: inherit;
       font-size: 12px;
@@ -635,7 +635,7 @@ class NottarioBoardPage extends LitElement {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: #8b949e;
+      color: var(--gray-5);
       font-weight: 600;
       margin: 0 0 8px;
     }
@@ -655,12 +655,12 @@ class NottarioBoardPage extends LitElement {
     }
     .detail .commits-list .commit {
       padding: 4px 8px;
-      background: #f6f8fa;
-      border: 1px solid #d1d9e0;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
       border-radius: 4px;
-      color: #1f2328;
+      color: var(--fg);
     }
-    .detail .commits-list .commit .sha { color: #0969da; }
+    .detail .commits-list .commit .sha { color: var(--accent); }
 
     /* Comments thread — each row has a small leading avatar column. */
     .detail .comment {
@@ -668,7 +668,7 @@ class NottarioBoardPage extends LitElement {
       grid-template-columns: 28px 1fr;
       gap: 10px;
       padding: 10px 0;
-      border-top: 1px solid #eaeef2;
+      border-top: 1px solid var(--gray-2);
     }
     .detail .comment:first-of-type { border-top: none; padding-top: 0; }
     .detail .comment .ava { padding-top: 1px; }
@@ -677,22 +677,22 @@ class NottarioBoardPage extends LitElement {
       align-items: baseline;
       gap: 8px;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
       margin-bottom: 2px;
     }
-    .detail .comment .meta-line .name { color: #1f2328; font-weight: 600; }
-    .detail .comment .meta-line .when { color: #8b949e; }
+    .detail .comment .meta-line .name { color: var(--fg); font-weight: 600; }
+    .detail .comment .meta-line .when { color: var(--gray-5); }
 
     .detail .add-comment {
       margin-top: 14px;
       padding-top: 14px;
-      border-top: 1px solid #eaeef2;
+      border-top: 1px solid var(--gray-2);
     }
     .detail .add-comment textarea {
       width: 100%;
       min-height: 64px;
       padding: 8px 10px;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
       font: inherit;
       font-size: 13px;
@@ -701,9 +701,9 @@ class NottarioBoardPage extends LitElement {
       background: #ffffff;
     }
     .detail .add-comment textarea:focus {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 0;
-      border-color: #0969da;
+      border-color: var(--accent);
     }
     .detail .add-comment .row {
       display: flex;
@@ -714,7 +714,7 @@ class NottarioBoardPage extends LitElement {
 
     .detail .empty {
       font-size: 13px;
-      color: #8b949e;
+      color: var(--gray-5);
       font-style: italic;
     }
   `,
@@ -1054,7 +1054,7 @@ class NottarioBoardPage extends LitElement {
             ${
               role
                 ? html`<span class="role-badge"
-              style=${`--role-color:${role.color || '#d0d7de'}`}>${role.label}</span>`
+              style=${`--role-color:${role.color || 'var(--border)'}`}>${role.label}</span>`
                 : ''
             }
           </div>
@@ -1265,7 +1265,7 @@ class NottarioBoardPage extends LitElement {
           ${
             role
               ? html`<span class="role-badge"
-            style=${`--role-color:${role.color || '#d0d7de'}`}>${role.label}</span>`
+            style=${`--role-color:${role.color || 'var(--border)'}`}>${role.label}</span>`
               : ''
           }
         </div>
@@ -1743,7 +1743,7 @@ class NottarioBoardPage extends LitElement {
               </select>
             </nottario-field>
             <div class="actions-row">
-              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#59636e;cursor:pointer;margin-right:auto">
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-muted);cursor:pointer;margin-right:auto">
                 <input type="checkbox"
                        ?checked=${this._newTaskAdvanced}
                        @change=${(e) => (this._newTaskAdvanced = e.target.checked)}>

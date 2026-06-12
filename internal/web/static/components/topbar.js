@@ -23,7 +23,7 @@ class NottarioTopbar extends LitElement {
       box-sizing: border-box;
       display: block;
       color: #fff;
-      background: #1f2328; /* slightly cooler than the previous #24292f */
+      background: var(--fg); /* slightly cooler than the previous #24292f */
       border-bottom: 1px solid #14171a;
       font-size: 14px;
     }
@@ -53,7 +53,7 @@ class NottarioTopbar extends LitElement {
       width: 22px;
       height: 22px;
       border-radius: 5px;
-      background: linear-gradient(135deg, #2da44e 0%, #1f6feb 100%);
+      background: linear-gradient(135deg, var(--brand-green) 0%, var(--brand-blue) 100%);
       display: inline-block;
     }
     .brand-name { font-size: 15px; }
@@ -83,7 +83,7 @@ class NottarioTopbar extends LitElement {
       color: #fff;
     }
     .project-row {
-      background: #1f2328;
+      background: var(--fg);
       border-top: 1px solid rgba(255,255,255,0.06);
     }
     .project-row .inner {
@@ -187,8 +187,8 @@ class NottarioTopbar extends LitElement {
       right: 0;
       min-width: 240px;
       background: #ffffff;
-      color: #1f2328;
-      border: 1px solid #d0d7de;
+      color: var(--fg);
+      border: 1px solid var(--border);
       border-radius: 8px;
       box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
       padding: 6px;
@@ -196,11 +196,11 @@ class NottarioTopbar extends LitElement {
     }
     .menu .who {
       padding: 8px 10px 10px;
-      border-bottom: 1px solid #eaeef2;
+      border-bottom: 1px solid var(--gray-2);
       margin-bottom: 4px;
     }
     .menu .who .display { font-weight: 600; }
-    .menu .who .login { color: #59636e; font-size: 12px; }
+    .menu .who .login { color: var(--fg-muted); font-size: 12px; }
     .menu .who .badges { margin-top: 6px; }
     .menu .item {
       display: flex;
@@ -208,7 +208,7 @@ class NottarioTopbar extends LitElement {
       gap: 8px;
       padding: 7px 10px;
       border-radius: 5px;
-      color: #1f2328;
+      color: var(--fg);
       text-decoration: none;
       background: transparent;
       border: none;
@@ -218,10 +218,10 @@ class NottarioTopbar extends LitElement {
       font: inherit;
     }
     .menu .item:hover { background: #f3f4f6; }
-    .menu .item.danger { color: #cf222e; }
+    .menu .item.danger { color: var(--danger); }
     .menu .item.danger:hover,
-    .menu .item.danger:focus-visible { background: #ffebe9; }
-    .menu .sep { height: 1px; background: #eaeef2; margin: 4px 2px; }
+    .menu .item.danger:focus-visible { background: var(--tint-red); }
+    .menu .sep { height: 1px; background: var(--gray-2); margin: 4px 2px; }
   `,
   ];
 

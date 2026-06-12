@@ -42,19 +42,19 @@ class NottarioProjectsPage extends LitElement {
       gap: 10px;
       padding: 16px 18px 14px;
       background: #fff;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--border);
       border-radius: 8px;
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
       cursor: pointer;
       transition: border-color 80ms ease-out, box-shadow 80ms ease-out;
     }
     .card:hover {
-      border-color: #afb8c1;
+      border-color: var(--border-strong);
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04),
                   0 4px 12px rgba(31, 35, 40, 0.06);
     }
     .card:focus-visible {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
     .card .top {
@@ -78,9 +78,9 @@ class NottarioProjectsPage extends LitElement {
       height: 22px;
       padding: 0 8px;
       border-radius: 999px;
-      border: 1px solid #d0d7de;
-      background: #f6f8fa;
-      color: #59636e;
+      border: 1px solid var(--border);
+      background: var(--bg-subtle);
+      color: var(--fg-muted);
       font-size: 11px;
       font-weight: 500;
       letter-spacing: 0.02em;
@@ -93,7 +93,7 @@ class NottarioProjectsPage extends LitElement {
       width: 26px;
       height: 26px;
       border-radius: 6px;
-      color: #59636e;
+      color: var(--fg-muted);
       text-decoration: none;
       border: 1px solid transparent;
       background: transparent;
@@ -104,12 +104,12 @@ class NottarioProjectsPage extends LitElement {
       padding: 0;
     }
     .card .settings-link:hover {
-      color: #1f2328;
+      color: var(--fg);
       background: #f3f4f6;
-      border-color: #d0d7de;
+      border-color: var(--border);
     }
     .card .desc {
-      color: #1f2328;
+      color: var(--fg);
       font-size: 13px;
       line-height: 1.45;
       display: -webkit-box;
@@ -119,12 +119,12 @@ class NottarioProjectsPage extends LitElement {
       overflow: hidden;
       min-height: calc(1.45em * 2);
     }
-    .card .desc.placeholder { color: #59636e; opacity: 0.7; font-style: italic; min-height: 0; }
+    .card .desc.placeholder { color: var(--fg-muted); opacity: 0.7; font-style: italic; min-height: 0; }
     .card .stats {
       display: flex;
       gap: 14px;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .card .stats .stat {
       display: inline-flex;
@@ -134,21 +134,21 @@ class NottarioProjectsPage extends LitElement {
     .card .stats .stat .n {
       font-weight: 600;
       font-size: 13px;
-      color: #1f2328;
+      color: var(--fg);
       font-variant-numeric: tabular-nums;
     }
-    .card .stats .stat.doing .n { color: #1f883d; }
+    .card .stats .stat.doing .n { color: var(--success); }
     .card .stats .activity {
       margin-left: auto;
       font-size: 11px;
-      color: #59636e;
+      color: var(--fg-muted);
       white-space: nowrap;
     }
     /* "empty" chip lives next to the dest-chip in the top row when
        a project has no tasks yet. Quiet (no fill), so it doesn't
        compete with the kanban/gantt chip. */
     .card .dest-chip.empty-chip {
-      color: #8b949e;
+      color: var(--gray-5);
       background: transparent;
     }
     .card .meta {
@@ -156,7 +156,7 @@ class NottarioProjectsPage extends LitElement {
       gap: 4px 6px;
       flex-wrap: wrap;
       font-size: 12px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .card .meta .sep { opacity: 0.5; }
     .card .meta .lang,
@@ -171,18 +171,18 @@ class NottarioProjectsPage extends LitElement {
       gap: 2px;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
       font-size: 11px;
-      color: #59636e;
+      color: var(--fg-muted);
       max-height: calc(1.5em * 3);
       overflow: hidden;
     }
-    .card .repos .more { font-family: inherit; color: #8b949e; }
+    .card .repos .more { font-family: inherit; color: var(--gray-5); }
     .card .footer {
       display: flex;
       align-items: center;
       gap: 8px;
       margin-top: auto;
       padding-top: 6px;
-      border-top: 1px solid #eaeef2;
+      border-top: 1px solid var(--gray-2);
     }
     .card .avatars {
       display: inline-flex;
@@ -198,11 +198,11 @@ class NottarioProjectsPage extends LitElement {
     .card .avatars .more {
       margin-left: 6px;
       font-size: 11px;
-      color: #59636e;
+      color: var(--fg-muted);
     }
     .card .footer .spacer { flex: 1; }
     .error {
-      color: #cf222e;
+      color: var(--danger);
       font-size: 13px;
       margin-bottom: 8px;
     }

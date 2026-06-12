@@ -25,9 +25,9 @@ class NottarioSegmentedControl extends LitElement {
     .group {
       display: inline-flex;
       align-items: stretch;
-      border: 1px solid #d0d7de;
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: #f6f8fa;
+      background: var(--bg-subtle);
       padding: 2px;
       gap: 2px;
     }
@@ -40,19 +40,19 @@ class NottarioSegmentedControl extends LitElement {
       font: inherit;
       font-size: 13px;
       font-weight: 500;
-      color: #59636e;
+      color: var(--fg-muted);
       cursor: pointer;
       line-height: 1;
     }
-    button:hover { color: #1f2328; }
+    button:hover { color: var(--fg); }
     button[aria-checked="true"] {
       background: #ffffff;
-      color: #1f2328;
-      border-color: #d0d7de;
+      color: var(--fg);
+      border-color: var(--border);
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
     }
     button:focus-visible {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 1px;
     }
   `;

@@ -24,7 +24,7 @@ class NottarioTabs extends LitElement {
     .tabs {
       display: flex;
       gap: 4px;
-      border-bottom: 1px solid #d1d9e0;
+      border-bottom: 1px solid var(--border);
     }
     button {
       padding: 8px 14px;
@@ -32,19 +32,19 @@ class NottarioTabs extends LitElement {
       border: none;
       border-bottom: 2px solid transparent;
       cursor: pointer;
-      color: #59636e;
+      color: var(--fg-muted);
       font: inherit;
       font-size: 13px;
       font-weight: 500;
       margin-bottom: -1px;
     }
-    button:hover { color: #1f2328; }
+    button:hover { color: var(--fg); }
     button.active {
-      color: #1f2328;
+      color: var(--fg);
       border-bottom-color: #ff8c42;
     }
     button:focus-visible {
-      outline: 2px solid #0969da;
+      outline: 2px solid var(--accent);
       outline-offset: 2px;
       border-radius: 4px;
     }
