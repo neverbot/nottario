@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -106,7 +107,7 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := dbq.New(tx)
 
-	existing, err := q.GetDocumentByPath(ctx, dbq.GetDocumentByPathParams{
+	existing, err := q.GetDocumentByPathForUpdate(ctx, dbq.GetDocumentByPathForUpdateParams{
 		Scope:     string(p.Scope),
 		ProjectID: p.ProjectID,
 		Path:      p.Path,
@@ -186,6 +187,15 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 		AuthorUserID:  by.UserID,
 		AuthorTokenID: by.TokenID,
 	}); err != nil {
+		// Belt-and-braces: the FOR UPDATE read above already
+		// serialises writers, but if a future caller bypasses the
+		// lock path the unique constraint on
+		// (document_id, version) is the next line of defence —
+		// translate it to ErrVersionConflict so the contract holds.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, &VersionConflictError{CurrentVersion: int(existing.CurrentVersion)}
+		}
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {

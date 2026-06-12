@@ -5,6 +5,20 @@ WHERE scope = sqlc.arg('scope')::text
   AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
   AND path = sqlc.arg('path')::text;
 
+-- name: GetDocumentByPathForUpdate :one
+-- Same lookup as GetDocumentByPath but takes a row-level lock so two
+-- concurrent docs.Write transactions serialise. The second writer
+-- waits, re-reads the now-bumped current_version after the first
+-- commits, and fails the optimistic check cleanly with
+-- ErrVersionConflict — instead of racing past the check and tripping
+-- the document_versions_document_id_version_key unique constraint.
+SELECT id, current_version
+FROM documents
+WHERE scope = sqlc.arg('scope')::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND path = sqlc.arg('path')::text
+FOR UPDATE;
+
 -- name: InsertDocument :one
 INSERT INTO documents (
     scope, project_id, path, kind, title, description, content_md, frontmatter,

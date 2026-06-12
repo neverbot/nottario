@@ -38,6 +38,39 @@ func (q *Queries) GetDocumentByPath(ctx context.Context, arg GetDocumentByPathPa
 	return i, err
 }
 
+const getDocumentByPathForUpdate = `-- name: GetDocumentByPathForUpdate :one
+SELECT id, current_version
+FROM documents
+WHERE scope = $1::text
+  AND project_id IS NOT DISTINCT FROM $2::uuid
+  AND path = $3::text
+FOR UPDATE
+`
+
+type GetDocumentByPathForUpdateParams struct {
+	Scope     string
+	ProjectID *uuid.UUID
+	Path      string
+}
+
+type GetDocumentByPathForUpdateRow struct {
+	ID             uuid.UUID
+	CurrentVersion int32
+}
+
+// Same lookup as GetDocumentByPath but takes a row-level lock so two
+// concurrent docs.Write transactions serialise. The second writer
+// waits, re-reads the now-bumped current_version after the first
+// commits, and fails the optimistic check cleanly with
+// ErrVersionConflict — instead of racing past the check and tripping
+// the document_versions_document_id_version_key unique constraint.
+func (q *Queries) GetDocumentByPathForUpdate(ctx context.Context, arg GetDocumentByPathForUpdateParams) (GetDocumentByPathForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getDocumentByPathForUpdate, arg.Scope, arg.ProjectID, arg.Path)
+	var i GetDocumentByPathForUpdateRow
+	err := row.Scan(&i.ID, &i.CurrentVersion)
+	return i, err
+}
+
 const getDocumentForDelete = `-- name: GetDocumentForDelete :one
 SELECT id, current_version, title, description, content_md, frontmatter
 FROM documents
