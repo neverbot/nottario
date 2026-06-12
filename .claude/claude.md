@@ -104,6 +104,22 @@ artefacts written to disk must be in English regardless.
 
 ## Operational rules
 
+### Throwaway artefacts (screenshots, dumps, scratch files)
+- The repo has a dedicated `/.scratch/` directory (already in
+  `.gitignore`). **Every** throwaway file an agent generates during a
+  session — Chrome-devtools screenshots, ad-hoc debug dumps, JSON
+  snapshots, temporary CSV exports — goes there. Never in `.claude/`
+  (read-only context for the agent), never at the repo root, never
+  in `docs/` (which IS versioned).
+- Naming: prefix with the page or topic so the directory stays
+  scannable across sessions (`gantt-after.png`, `whoami-probe.json`,
+  `arch-tree-empty.png`). Avoid generic `screenshot.png`.
+- `tmp-*.png` at the repo root is also gitignored as a fallback when
+  a tool can't write to `/.scratch/`, but `.scratch/` is preferred.
+- The directory is local-only and is never cleaned automatically;
+  feel free to leave artefacts around within a session and to
+  re-read them later in the same conversation.
+
 ### Public changelog (`whats-new.md`)
 - Any **important** task — a new feature, a backwards-incompatible
   change, a security or data-handling change, a new env var or
