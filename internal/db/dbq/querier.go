@@ -51,6 +51,13 @@ type Querier interface {
 	// Resolves a doc chip by its logical path within a project.
 	GetDocChipByPath(ctx context.Context, arg GetDocChipByPathParams) (GetDocChipByPathRow, error)
 	GetDocumentByPath(ctx context.Context, arg GetDocumentByPathParams) (GetDocumentByPathRow, error)
+	// Same lookup as GetDocumentByPath but takes a row-level lock so two
+	// concurrent docs.Write transactions serialise. The second writer
+	// waits, re-reads the now-bumped current_version after the first
+	// commits, and fails the optimistic check cleanly with
+	// ErrVersionConflict — instead of racing past the check and tripping
+	// the document_versions_document_id_version_key unique constraint.
+	GetDocumentByPathForUpdate(ctx context.Context, arg GetDocumentByPathForUpdateParams) (GetDocumentByPathForUpdateRow, error)
 	GetDocumentForDelete(ctx context.Context, arg GetDocumentForDeleteParams) (GetDocumentForDeleteRow, error)
 	GetDocumentVersion(ctx context.Context, arg GetDocumentVersionParams) (DocumentVersion, error)
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
