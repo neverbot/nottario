@@ -182,13 +182,13 @@ class NottarioSearchBox extends LitElement {
       padding: 8px 12px;
       background: var(--tint-red);
       color: var(--danger-text);
-      border-bottom: 1px solid #ffc1ba;
+      border-bottom: 1px solid var(--tint-red-border);
       text-align: left;
     }
     .retry-btn {
       flex: 0 0 auto;
       background: #fff;
-      border: 1px solid #ffc1ba;
+      border: 1px solid var(--tint-red-border);
       color: var(--danger-text);
       font-size: 11px;
       font-weight: 500;

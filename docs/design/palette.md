@@ -80,6 +80,21 @@ saturate quickly when extended.
 | `--tint-red`       | `--tint-red-fg`     | `bug`, destructive warn  |
 | `--tint-purple`    | `--tint-purple-fg`  | design role, prefer over neon purples |
 
+## Chrome accents
+
+Surface-specific colours that earned their own token slot because at
+least two files share the value, but the meaning doesn't fit cleanly
+under a general functional alias.
+
+| Token                      | Hex       | Used by                                  |
+|----------------------------|-----------|------------------------------------------|
+| `--bg-hover`               | `#f3f4f6` | Button / menu / list hover wash          |
+| `--tint-red-border`        | `#ffc1ba` | Companion border for `--tint-red`        |
+| `--badge-warning-border`   | `#d4a72c` | Admin / chore / note badges              |
+| `--topbar-active`          | `#ff8c42` | Topbar / tab active underline (the orange marquee) |
+| `--search-hit`             | `#8ec0ff` | Search match highlight outline           |
+| `--kind-external`          | `#bc4c00` | Default colour for the arch "external" kind |
+
 ## Roles
 
 Each project stores its own role colours in the DB. The defaults

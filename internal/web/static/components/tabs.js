@@ -41,7 +41,7 @@ class NottarioTabs extends LitElement {
     button:hover { color: var(--fg); }
     button.active {
       color: var(--fg);
-      border-bottom-color: #ff8c42;
+      border-bottom-color: var(--topbar-active);
     }
     button:focus-visible {
       outline: 2px solid var(--accent);

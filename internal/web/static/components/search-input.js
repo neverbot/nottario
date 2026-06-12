@@ -48,7 +48,7 @@ class NottarioSearchInput extends LitElement {
       border-radius: 6px;
       font: inherit;
       font-size: 13px;
-      background: #ffffff;
+      background: var(--bg);
       color: var(--fg);
       box-sizing: border-box;
     }

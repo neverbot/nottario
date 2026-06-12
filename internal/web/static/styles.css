@@ -65,6 +65,18 @@
   --role-qa:       #bf8700;
   --role-design:   #8250df;
 
+  /* ---- Chrome accents ----
+     Surfaces / affordances that earned their own slot because at
+     least two files share the value, but the meaning is
+     surface-specific (not a general functional alias). */
+  --bg-hover:            #f3f4f6;  /* button / menu / list hover wash */
+  --tint-red-border:     #ffc1ba;  /* companion border for --tint-red */
+  --badge-warning-border:#d4a72c;  /* admin / chore / note badges     */
+  --topbar-active:       #ff8c42;  /* the orange marquee on topbar /
+                                      tab active underlines           */
+  --search-hit:          #8ec0ff;  /* search match highlight outline  */
+  --kind-external:       #bc4c00;  /* default arch "external" kind    */
+
   /* ---- Typography ---- */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
           Arial, sans-serif;
@@ -227,5 +239,5 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .badge.admin {
   background: var(--tint-yellow);
   color: var(--tint-yellow-fg);
-  border-color: #d4a72c;
+  border-color: var(--badge-warning-border);
 }

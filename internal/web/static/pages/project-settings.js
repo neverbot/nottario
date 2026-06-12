@@ -142,7 +142,7 @@ class NottarioProjectSettings extends LitElement {
     tr.dragging { opacity: 0.45; }
     tr.drag-over td:first-child { box-shadow: inset 2px 0 0 0 var(--brand-blue); }
     .drag-handle {
-      color: #8c959f;
+      color: var(--gray-5);
       cursor: grab;
       user-select: none;
       padding: 0 6px;
@@ -160,7 +160,7 @@ class NottarioProjectSettings extends LitElement {
     .tokens-header p.helper { margin: 0; }
     .secret-banner {
       background: var(--tint-yellow);
-      border: 1px solid #d4a72c;
+      border: 1px solid var(--badge-warning-border);
       border-radius: 6px;
       padding: 12px;
       margin-bottom: 12px;

@@ -116,7 +116,7 @@ class NottarioBoardPage extends LitElement {
       font-size: 13px;
       color: var(--fg);
     }
-    .cycle-dropdown li:hover { background: #f3f4f6; }
+    .cycle-dropdown li:hover { background: var(--bg-hover); }
     .cycle-dropdown li.current { font-weight: 600; background: var(--tint-blue); }
     .cycle-dropdown li .muted { color: var(--gray-5); font-size: 11px; }
     .cycle-counts {
@@ -213,7 +213,7 @@ class NottarioBoardPage extends LitElement {
       cursor: pointer;
       font-weight: 400;
     }
-    .filter-menu label:hover { background: #f3f4f6; }
+    .filter-menu label:hover { background: var(--bg-hover); }
     .filter-menu input[type="checkbox"] { margin: 0; }
 
     .columns {
@@ -409,7 +409,7 @@ class NottarioBoardPage extends LitElement {
       background: var(--border-strong);
     }
     .prio.high .dot { background: var(--danger); }
-    .prio.medium .dot { background: #bf8700; }
+    .prio.medium .dot { background: var(--warning); }
     .prio.low .dot { background: var(--gray-5); }
 
     /* ---- Bottom toast (undo affordance) ---- */
@@ -594,7 +594,7 @@ class NottarioBoardPage extends LitElement {
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
-      background: #ffffff;
+      background: var(--bg);
     }
     .detail .state-control button {
       padding: 4px 12px;
@@ -610,7 +610,7 @@ class NottarioBoardPage extends LitElement {
     .detail .state-control button:hover { background: var(--bg-subtle); color: var(--fg); }
     .detail .state-control button.active {
       background: var(--success);
-      color: #ffffff;
+      color: var(--bg);
       font-weight: 600;
     }
     .detail .state-control button.active:hover { background: var(--success-hover); }
@@ -623,7 +623,7 @@ class NottarioBoardPage extends LitElement {
       border-radius: 4px;
       font: inherit;
       font-size: 12px;
-      background: #ffffff;
+      background: var(--bg);
     }
 
     /* Body sections — description, deps, commits, comments. Eyebrow
@@ -698,7 +698,7 @@ class NottarioBoardPage extends LitElement {
       font-size: 13px;
       line-height: 1.5;
       resize: vertical;
-      background: #ffffff;
+      background: var(--bg);
     }
     .detail .add-comment textarea:focus {
       outline: 2px solid var(--accent);

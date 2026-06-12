@@ -201,7 +201,10 @@ class NottarioMarkdown extends LitElement {
 
     /* highlight.js GitHub theme — vendored from highlight.js@11.10.0/styles/github.css.
        Included in the component's shadow so every consumer gets the same
-       palette without a separate link rel="stylesheet". */
+       palette without a separate link rel="stylesheet".
+       The hex literals below are NOT migrated to palette tokens: a code-
+       highlight theme has its own internal consistency and should not
+       drift with the app's brand. */
     .prose pre code.hljs { display: block; overflow-x: auto; padding: 0; }
     .prose code.hljs { padding: 0; }
     .prose .hljs { color: #24292e; background: transparent; }

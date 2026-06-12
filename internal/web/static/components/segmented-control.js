@@ -46,7 +46,7 @@ class NottarioSegmentedControl extends LitElement {
     }
     button:hover { color: var(--fg); }
     button[aria-checked="true"] {
-      background: #ffffff;
+      background: var(--bg);
       color: var(--fg);
       border-color: var(--border);
       box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);

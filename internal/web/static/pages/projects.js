@@ -105,7 +105,7 @@ class NottarioProjectsPage extends LitElement {
     }
     .card .settings-link:hover {
       color: var(--fg);
-      background: #f3f4f6;
+      background: var(--bg-hover);
       border-color: var(--border);
     }
     .card .desc {

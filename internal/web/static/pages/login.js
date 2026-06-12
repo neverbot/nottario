@@ -31,7 +31,7 @@ class NottarioLogin extends LitElement {
       box-sizing: border-box;
       margin: 0 0 20px 0;
       padding: 10px 12px;
-      border: 1px solid #ffc1ba;
+      border: 1px solid var(--tint-red-border);
       background: var(--tint-red);
       color: var(--danger-text);
       border-radius: 6px;

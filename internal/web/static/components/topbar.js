@@ -125,7 +125,7 @@ class NottarioTopbar extends LitElement {
     nav.project a:hover { color: #fff; }
     nav.project a.active {
       color: #fff;
-      border-bottom-color: #ff8c42;
+      border-bottom-color: var(--topbar-active);
     }
     nav.primary a.active::after {
       content: "";
@@ -134,7 +134,7 @@ class NottarioTopbar extends LitElement {
       right: 10px;
       bottom: -10px;
       height: 2px;
-      background: #ff8c42;
+      background: var(--topbar-active);
       border-radius: 2px;
     }
 
@@ -186,7 +186,7 @@ class NottarioTopbar extends LitElement {
       top: calc(100% + 6px);
       right: 0;
       min-width: 240px;
-      background: #ffffff;
+      background: var(--bg);
       color: var(--fg);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -217,7 +217,7 @@ class NottarioTopbar extends LitElement {
       cursor: pointer;
       font: inherit;
     }
-    .menu .item:hover { background: #f3f4f6; }
+    .menu .item:hover { background: var(--bg-hover); }
     .menu .item.danger { color: var(--danger); }
     .menu .item.danger:hover,
     .menu .item.danger:focus-visible { background: var(--tint-red); }

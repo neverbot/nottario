@@ -67,7 +67,7 @@ class NottarioArchCanvas extends LitElement {
       width: 100%;
       height: 100%;
       min-height: 480px;
-      background: #ffffff;
+      background: var(--bg);
       cursor: grab;
       user-select: none;
     }
@@ -81,7 +81,7 @@ class NottarioArchCanvas extends LitElement {
       stroke-width: 1;
     }
     .node.container rect.box { fill: var(--bg-subtle); }
-    .node.leaf      rect.box { fill: #ffffff; }
+    .node.leaf      rect.box { fill: var(--bg); }
     .node.selected rect.box { stroke: var(--accent); stroke-width: 2; }
     /* Hover/search dim: applied to nodes NOT in the highlighted set. */
     .node.dim { opacity: 0.25; transition: opacity 140ms ease-out; }
@@ -127,7 +127,7 @@ class NottarioArchCanvas extends LitElement {
     .edge.selected, .edge.highlight { stroke: var(--accent); stroke-width: 2; }
     .edge.dim { opacity: 0.18; }
     .edge-label rect {
-      fill: #ffffff;
+      fill: var(--bg);
       stroke: var(--border);
       stroke-width: 1;
     }
@@ -1424,7 +1424,7 @@ function kindDotColor(kind) {
     case 'module':
       return 'var(--role-design)';
     case 'external':
-      return '#bc4c00';
+      return 'var(--kind-external)';
     case 'data':
       return 'var(--warning)';
     case 'queue':

@@ -266,7 +266,7 @@ class NottarioDocsPage extends LitElement {
       width: 360px;
       max-height: 420px;
       overflow: auto;
-      background: #ffffff;
+      background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 8px;
       box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
@@ -353,7 +353,7 @@ class NottarioDocsPage extends LitElement {
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
       font-size: 13px;
       line-height: 1.6;
-      background: #ffffff;
+      background: var(--bg);
     }
     .editor-form .actions-row {
       margin-top: 16px;

@@ -21,7 +21,7 @@ import { css } from '/static/vendor/lit/lit.js';
 //   .empty           dashed border, centered muted body — for "no rows"
 export const surfaceStyles = css`
   .surface {
-    background: #ffffff;
+    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
     box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
@@ -35,7 +35,7 @@ export const surfaceStyles = css`
     padding: 40px 24px;
     text-align: center;
     color: var(--fg-muted);
-    background: #ffffff;
+    background: var(--bg);
     border: 1px dashed var(--border);
     border-radius: 8px;
     box-sizing: border-box;
@@ -62,7 +62,7 @@ export const tableStyles = css`
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    background: #ffffff;
+    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
@@ -105,7 +105,7 @@ export const dialogStyles = css`
     z-index: 10;
   }
   .dialog .panel {
-    background: #ffffff;
+    background: var(--bg);
     border-radius: 8px;
     padding: 24px;
     width: 480px;

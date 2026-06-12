@@ -1395,7 +1395,7 @@ class NottarioGantt extends LitElement {
       // band's display position so the dots read top→bottom by role.
       const roleColors = [...bandsSeen]
         .sort((a, b) => a - b)
-        .map((bi) => bands[bi].role.color || '#8c959f');
+        .map((bi) => bands[bi].role.color || 'var(--gray-5)');
       featureAggregates.set(fid, { from: lo, to: hi, bi: naturalBi, crossRole, roleColors });
     }
 

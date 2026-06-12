@@ -42,7 +42,7 @@ class NottarioArchGraph extends LitElement {
       padding: 4px 12px;
       font: inherit;
       font-size: 12px;
-      background: #ffffff;
+      background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 6px;
       cursor: pointer;
@@ -50,7 +50,7 @@ class NottarioArchGraph extends LitElement {
     }
     .btn:hover { background: var(--bg-subtle); border-color: var(--border-strong); }
     .btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .btn.on:hover { background: #0860c4; border-color: #0860c4; }
+    .btn.on:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
     .split {
       display: grid;
@@ -60,7 +60,7 @@ class NottarioArchGraph extends LitElement {
       border-radius: 8px;
       overflow: hidden;
       min-height: 70vh;
-      background: #ffffff;
+      background: var(--bg);
     }
     nottario-arch-canvas {
       display: block;
@@ -346,7 +346,7 @@ class NottarioArchGraph extends LitElement {
       case 'module':
         return 'var(--role-design)';
       case 'external':
-        return '#bc4c00';
+        return 'var(--kind-external)';
       case 'data':
         return 'var(--warning)';
       case 'queue':

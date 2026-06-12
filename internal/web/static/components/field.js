@@ -58,7 +58,7 @@ class NottarioField extends LitElement {
       border: 1px solid var(--border);
       border-radius: 6px;
       font: inherit;
-      background: #ffffff;
+      background: var(--bg);
       box-sizing: border-box;
     }
     /* Native chevron is platform-variable (macOS Chrome draws it in a

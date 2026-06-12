@@ -27,7 +27,7 @@ export const buttonStyles = css`
     padding: 0 12px;
     border-radius: 6px;
     border: 1px solid var(--border);
-    background: #ffffff;
+    background: var(--bg);
     color: var(--fg);
     font: inherit;
     font-size: 13px;
@@ -37,13 +37,13 @@ export const buttonStyles = css`
     transition: background-color 60ms ease-out, border-color 60ms ease-out;
     box-sizing: border-box;
   }
-  .btn:hover { background: #f3f4f6; border-color: var(--border-strong); }
+  .btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
   .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
   .btn.primary {
     background: var(--success);
-    color: #ffffff;
+    color: var(--bg);
     border-color: rgba(31, 35, 40, 0.15);
   }
   .btn.primary:hover { background: var(--success-hover); border-color: rgba(31, 35, 40, 0.2); }
@@ -55,12 +55,12 @@ export const buttonStyles = css`
     border-color: transparent;
     color: var(--fg);
   }
-  .btn.ghost:hover { background: #f3f4f6; border-color: transparent; }
+  .btn.ghost:hover { background: var(--bg-hover); border-color: transparent; }
 
   .btn.danger {
     color: var(--danger);
     border-color: rgba(207, 34, 46, 0.35);
-    background: #ffffff;
+    background: var(--bg);
   }
   .btn.danger:hover { background: var(--tint-red); border-color: var(--danger); }
 
