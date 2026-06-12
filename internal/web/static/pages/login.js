@@ -10,47 +10,106 @@ class NottarioLogin extends LitElement {
     :host {
       box-sizing: border-box;
       display: flex;
-      min-height: 70vh;
+      flex-direction: column;
+      min-height: 80vh;
       align-items: center;
       justify-content: center;
+      gap: 24px;
+      padding: 32px 16px;
     }
     .card {
       box-sizing: border-box;
       padding: 32px;
       max-width: 380px;
       width: 100%;
-      background: #fff;
+      background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+      box-shadow: var(--shadow-sm);
       text-align: center;
     }
-    h1 { margin: 0 0 8px 0; font-size: 24px; }
-    p { margin: 0 0 24px 0; color: var(--fg-muted); }
+    /* Brand mark: the same green→blue gradient chip that lives in
+       the topbar (components/topbar.js). Repeated here so the first
+       touchpoint already carries the visual identity — the login
+       has no topbar so without this the user lands on a brandless
+       neutral card. */
+    .mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 9px;
+      background: linear-gradient(135deg,
+        var(--brand-green) 0%, var(--brand-blue) 100%);
+      margin: 0 auto 12px;
+    }
+    h1 {
+      margin: 0 0 6px 0;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      margin: 0 0 24px 0;
+      color: var(--fg-muted);
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
     .flash {
       box-sizing: border-box;
       margin: 0 0 20px 0;
-      padding: 10px 12px;
+      padding: 8px 12px;
       border: 1px solid var(--tint-red-border);
       background: var(--tint-red);
       color: var(--danger-text);
       border-radius: 6px;
       font-size: 13px;
+      line-height: 1.4;
       text-align: left;
     }
     .flash strong { font-weight: 600; }
+    /* GitHub sign-in CTA. Dark on light by design (mirrors GitHub's
+       own button so users recognise the affordance). The two greys
+       below are intentionally NOT tokenised — they're brand mimicry
+       of GitHub's button palette, not Nottario's. */
     a.gh {
       display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 10px 16px;
       background: #24292f;
-      color: #fff;
+      color: var(--fg-on-accent);
       border-radius: 6px;
       font-weight: 500;
+      text-decoration: none;
     }
-    a.gh:hover { background: #32383f; text-decoration: none; }
+    a.gh:hover {
+      background: #32383f;
+      text-decoration: none;
+    }
+    a.gh:focus-visible {
+      text-decoration: none;
+    }
     svg { width: 18px; height: 18px; fill: currentColor; }
+    /* Footer row anchors the card to the rest of the product — even
+       a user who hasn't signed in yet should know what Nottario is
+       and where the code lives. */
+    .footer {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 12px;
+      color: var(--fg-muted);
+    }
+    .footer a {
+      color: var(--fg-muted);
+      text-decoration: none;
+    }
+    .footer a:hover {
+      color: var(--fg);
+      text-decoration: underline;
+    }
+    .footer .sep {
+      color: var(--gray-4);
+    }
   `;
 
   constructor() {
@@ -73,9 +132,8 @@ class NottarioLogin extends LitElement {
       : html`a specific GitHub organisation`;
     return html`
       <div class="flash" role="alert">
-        This instance is restricted to members of ${org}. Sign in with a
-        GitHub account that belongs to the org, or ask the admin for
-        access.
+        Restricted to ${org} members. Use a GitHub account in the
+        org, or ask your admin.
       </div>
     `;
   }
@@ -83,8 +141,13 @@ class NottarioLogin extends LitElement {
   render() {
     return html`
       <div class="card">
+        <div class="mark" aria-hidden="true"></div>
         <h1>Welcome to Nottario</h1>
-        <p>Sign in with your GitHub account to continue.</p>
+        <p class="lede">
+          Task coordination for humans and the AI agents that work
+          with them. Sign in with GitHub to continue — passwords
+          stay at GitHub.
+        </p>
         ${this._flash()}
         <a class="gh" href="/auth/github/start" aria-label="Sign in with GitHub">
           <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -99,6 +162,12 @@ class NottarioLogin extends LitElement {
           </svg>
           Sign in with GitHub
         </a>
+      </div>
+      <div class="footer">
+        <a href="https://github.com/neverbot/nottario"
+           target="_blank" rel="noopener">github.com/neverbot/nottario</a>
+        <span class="sep">·</span>
+        <a href="/docs" target="_blank" rel="noopener">docs</a>
       </div>
     `;
   }
