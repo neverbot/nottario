@@ -411,6 +411,17 @@ func SetTaskStateHandler(d TaskDeps) http.Handler {
 				})
 				return
 			}
+			// Refused done ↔ wont_do transitions also get a structured
+			// body so the UI can explain the lifecycle rule.
+			var terr *tasks.ErrInvalidStateTransition
+			if errors.As(err, &terr) {
+				writeJSON(w, http.StatusConflict, map[string]any{
+					"error":      terr.Error(),
+					"from_state": string(terr.From),
+					"to_state":   string(terr.To),
+				})
+				return
+			}
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

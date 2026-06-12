@@ -100,7 +100,7 @@ FROM tasks t
 JOIN task_dependencies td ON td.depends_on_id = t.id
 JOIN tasks d ON d.id = td.task_id
 WHERE t.project_id = $1
-  AND t.state <> 'done'
+  AND t.state NOT IN ('done', 'wont_do')
   AND d.state = 'done'
 GROUP BY t.id
 ORDER BY t.id

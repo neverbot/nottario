@@ -176,9 +176,10 @@ func enrichProjects(ctx context.Context, q *dbq.Queries, projects []Project) err
 	if rows, err := q.ListAllProjectTaskStats(ctx); err == nil {
 		for _, r := range rows {
 			s := &ProjectStats{
-				TodoCount:  int(r.TodoCount),
-				DoingCount: int(r.DoingCount),
-				DoneCount:  int(r.DoneCount),
+				TodoCount:   int(r.TodoCount),
+				DoingCount:  int(r.DoingCount),
+				DoneCount:   int(r.DoneCount),
+				WontDoCount: int(r.WontDoCount),
 			}
 			if r.LastActivityAt.Valid {
 				v := r.LastActivityAt.Time

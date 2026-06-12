@@ -85,10 +85,11 @@ ON CONFLICT DO NOTHING;
 -- Feature parents are excluded — they're aggregates, not work units;
 -- same call we already make for the Gantt priority buckets.
 SELECT project_id,
-       COUNT(*) FILTER (WHERE state = 'todo'  AND type != 'feature')::int AS todo_count,
-       COUNT(*) FILTER (WHERE state = 'doing' AND type != 'feature')::int AS doing_count,
-       COUNT(*) FILTER (WHERE state = 'done'  AND type != 'feature')::int AS done_count,
-       MAX(updated_at)::timestamptz                                       AS last_activity_at
+       COUNT(*) FILTER (WHERE state = 'todo'    AND type != 'feature')::int AS todo_count,
+       COUNT(*) FILTER (WHERE state = 'doing'   AND type != 'feature')::int AS doing_count,
+       COUNT(*) FILTER (WHERE state = 'done'    AND type != 'feature')::int AS done_count,
+       COUNT(*) FILTER (WHERE state = 'wont_do' AND type != 'feature')::int AS wont_do_count,
+       MAX(updated_at)::timestamptz                                         AS last_activity_at
 FROM tasks
 GROUP BY project_id;
 

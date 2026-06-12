@@ -27,6 +27,9 @@ type Querier interface {
 	CountArchKinds(ctx context.Context, projectID uuid.UUID) (int32, error)
 	CountArchNodeChildren(ctx context.Context, parentID *uuid.UUID) (int32, error)
 	CountNodesByKind(ctx context.Context, arg CountNodesByKindParams) (int32, error)
+	// Counts children that still hold the parent open. wont_do is treated
+	// as "closed enough" — a feature whose remaining children were all
+	// cancelled deliberately should roll up to done.
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)
 	DeleteArchEdge(ctx context.Context, arg DeleteArchEdgeParams) (int64, error)
@@ -179,6 +182,11 @@ type Querier interface {
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
+	// The wont_do transition records actual_end so we can answer "when was
+	// this cancelled?" but leaves actual_start alone — if the task was
+	// briefly in doing, the time the human/agent spent on it before the
+	// cancel decision is preserved.
+	SetTaskWontDo(ctx context.Context, id uuid.UUID) error
 	SoftDeleteDocument(ctx context.Context, arg SoftDeleteDocumentParams) error
 	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error

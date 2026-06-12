@@ -212,10 +212,11 @@ func (q *Queries) ListAllProjectMembers(ctx context.Context) ([]ListAllProjectMe
 
 const listAllProjectTaskStats = `-- name: ListAllProjectTaskStats :many
 SELECT project_id,
-       COUNT(*) FILTER (WHERE state = 'todo'  AND type != 'feature')::int AS todo_count,
-       COUNT(*) FILTER (WHERE state = 'doing' AND type != 'feature')::int AS doing_count,
-       COUNT(*) FILTER (WHERE state = 'done'  AND type != 'feature')::int AS done_count,
-       MAX(updated_at)::timestamptz                                       AS last_activity_at
+       COUNT(*) FILTER (WHERE state = 'todo'    AND type != 'feature')::int AS todo_count,
+       COUNT(*) FILTER (WHERE state = 'doing'   AND type != 'feature')::int AS doing_count,
+       COUNT(*) FILTER (WHERE state = 'done'    AND type != 'feature')::int AS done_count,
+       COUNT(*) FILTER (WHERE state = 'wont_do' AND type != 'feature')::int AS wont_do_count,
+       MAX(updated_at)::timestamptz                                         AS last_activity_at
 FROM tasks
 GROUP BY project_id
 `
@@ -225,6 +226,7 @@ type ListAllProjectTaskStatsRow struct {
 	TodoCount      int32
 	DoingCount     int32
 	DoneCount      int32
+	WontDoCount    int32
 	LastActivityAt pgtype.Timestamptz
 }
 
@@ -245,6 +247,7 @@ func (q *Queries) ListAllProjectTaskStats(ctx context.Context) ([]ListAllProject
 			&i.TodoCount,
 			&i.DoingCount,
 			&i.DoneCount,
+			&i.WontDoCount,
 			&i.LastActivityAt,
 		); err != nil {
 			return nil, err

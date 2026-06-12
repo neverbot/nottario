@@ -459,6 +459,21 @@ func (e *UnresolvedPreconditionsError) Error() string {
 	return fmt.Sprintf("cannot close task: %d unresolved preconditions", n)
 }
 
+// ErrInvalidStateTransition is returned by SetState when the caller
+// asks for a transition the lifecycle forbids — currently `done →
+// wont_do` and `wont_do → done`. Both directions would rewrite
+// history (a shipped task pretending to be cancelled, or vice
+// versa); callers go through `wont_do → todo → doing → done` if they
+// genuinely want to revisit the decision.
+type ErrInvalidStateTransition struct {
+	From State
+	To   State
+}
+
+func (e *ErrInvalidStateTransition) Error() string {
+	return fmt.Sprintf("invalid state transition: %s → %s", e.From, e.To)
+}
+
 func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*Task, error) {
 	if !ValidState(s) {
 		return nil, fmt.Errorf("invalid state: %q", s)
@@ -483,10 +498,23 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 		return nil, err
 	}
 
-	// When closing a non-feature task, require every direct precondition
-	// to be `done`. Features are rolled up automatically by the engine
-	// (see rollUpParentDoneTx) so this check would race with itself; we
-	// skip it for them.
+	// Enforce the two cross-terminal transitions we never allow. Every
+	// other transition stays free so existing callers (re-open a done
+	// task to doing, reopen a doing to todo, etc.) keep working.
+	currentState := State(header.State)
+	if currentState == StateDone && s == StateWontDo {
+		return nil, &ErrInvalidStateTransition{From: currentState, To: s}
+	}
+	if currentState == StateWontDo && s == StateDone {
+		return nil, &ErrInvalidStateTransition{From: currentState, To: s}
+	}
+
+	// When closing a non-feature task as done, require every direct
+	// precondition to be closed (done or wont_do). Features are rolled
+	// up automatically by the engine (see rollUpParentClosedTx) so this
+	// check would race with itself; we skip it for them. wont_do
+	// transitions also skip the check — cancelling a blocked task is a
+	// valid reason to cancel it.
 	if s == StateDone && header.Type != "feature" {
 		rows, err := q.ListUnresolvedPreconditions(ctx, id)
 		if err != nil {
@@ -512,14 +540,18 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 		err = q.SetTaskDoing(ctx, id)
 	case StateDone:
 		err = q.SetTaskDone(ctx, id)
+	case StateWontDo:
+		err = q.SetTaskWontDo(ctx, id)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	// Bubble "done" upward inside the same transaction so two siblings
-	// closing concurrently can't both miss the parent.
-	if s == StateDone {
+	// Bubble a closed-state upward inside the same transaction so two
+	// siblings closing concurrently can't both miss the parent. Both
+	// `done` and `wont_do` count as closed for the rollup engine
+	// (see CountNonDoneChildren).
+	if IsClosed(s) {
 		if err := rollUpParentDoneTx(ctx, tx, header.ParentTaskID); err != nil {
 			return nil, err
 		}

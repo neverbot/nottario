@@ -66,6 +66,7 @@ type ProjectStats struct {
 	TodoCount      int        `json:"todo_count"`
 	DoingCount     int        `json:"doing_count"`
 	DoneCount      int        `json:"done_count"`
+	WontDoCount    int        `json:"wont_do_count"`
 	LastActivityAt *time.Time `json:"last_activity_at"`
 }
 

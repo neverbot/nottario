@@ -25,9 +25,10 @@ const (
 type State string
 
 const (
-	StateTodo  State = "todo"
-	StateDoing State = "doing"
-	StateDone  State = "done"
+	StateTodo   State = "todo"
+	StateDoing  State = "doing"
+	StateDone   State = "done"
+	StateWontDo State = "wont_do"
 )
 
 // Task is the central entity of the work domain.
@@ -88,8 +89,17 @@ func ValidType(t Type) bool {
 // ValidState returns true when s is one of the recognised state values.
 func ValidState(s State) bool {
 	switch s {
-	case StateTodo, StateDoing, StateDone:
+	case StateTodo, StateDoing, StateDone, StateWontDo:
 		return true
 	}
 	return false
+}
+
+// IsClosed returns true when s represents a terminal "closed" state —
+// the work is done with, whether or not it shipped. Used by
+// dependency-precondition checks and feature-parent rollup so a
+// `wont_do` upstream satisfies a downstream and a feature with a mix
+// of done + wont_do children still rolls up to done.
+func IsClosed(s State) bool {
+	return s == StateDone || s == StateWontDo
 }

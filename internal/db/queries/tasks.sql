@@ -115,7 +115,7 @@ WHERE t.project_id = $1
     t.type <> 'feature'
     OR NOT EXISTS (
       SELECT 1 FROM tasks c
-      WHERE c.parent_task_id = t.id AND c.state <> 'done'
+      WHERE c.parent_task_id = t.id AND c.state NOT IN ('done', 'wont_do')
     )
   )
   AND NOT EXISTS (
@@ -155,13 +155,13 @@ WITH candidate AS (
       t.type <> 'feature'
       OR NOT EXISTS (
         SELECT 1 FROM tasks c
-        WHERE c.parent_task_id = t.id AND c.state <> 'done'
+        WHERE c.parent_task_id = t.id AND c.state NOT IN ('done', 'wont_do')
       )
     )
     AND NOT EXISTS (
       SELECT 1 FROM task_dependencies d
       JOIN tasks d2 ON d2.id = d.depends_on_id
-      WHERE d.task_id = t.id AND d2.state <> 'done'
+      WHERE d.task_id = t.id AND d2.state NOT IN ('done', 'wont_do')
     )
     AND (
       CASE
@@ -213,13 +213,13 @@ UPDATE tasks SET
 WHERE id = $1;
 
 -- name: LockTaskTypeAndParent :one
-SELECT type, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE;
+SELECT type, parent_task_id, state FROM tasks WHERE id = $1 FOR UPDATE;
 
 -- name: ListUnresolvedPreconditions :many
 SELECT t.id, t.title, t.state
 FROM task_dependencies td
 JOIN tasks t ON t.id = td.depends_on_id
-WHERE td.task_id = $1 AND t.state <> 'done'
+WHERE td.task_id = $1 AND t.state NOT IN ('done', 'wont_do')
 ORDER BY t.actual_end NULLS LAST, t.created_at;
 
 -- name: SetTaskTodo :exec
@@ -246,12 +246,26 @@ UPDATE tasks SET
   updated_at = now()
 WHERE id = $1;
 
+-- name: SetTaskWontDo :exec
+-- The wont_do transition records actual_end so we can answer "when was
+-- this cancelled?" but leaves actual_start alone — if the task was
+-- briefly in doing, the time the human/agent spent on it before the
+-- cancel decision is preserved.
+UPDATE tasks SET
+  state = 'wont_do',
+  actual_end = now(),
+  updated_at = now()
+WHERE id = $1;
+
 -- name: GetParentStateAndGrandparent :one
 SELECT state, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE;
 
 -- name: CountNonDoneChildren :one
+-- Counts children that still hold the parent open. wont_do is treated
+-- as "closed enough" — a feature whose remaining children were all
+-- cancelled deliberately should roll up to done.
 SELECT COUNT(*)::int FROM tasks
-WHERE parent_task_id = $1 AND state <> 'done';
+WHERE parent_task_id = $1 AND state NOT IN ('done', 'wont_do');
 
 -- name: RoleExistsInProject :one
 SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND project_id = $2)::bool;

@@ -22,13 +22,13 @@ WITH candidate AS (
       t.type <> 'feature'
       OR NOT EXISTS (
         SELECT 1 FROM tasks c
-        WHERE c.parent_task_id = t.id AND c.state <> 'done'
+        WHERE c.parent_task_id = t.id AND c.state NOT IN ('done', 'wont_do')
       )
     )
     AND NOT EXISTS (
       SELECT 1 FROM task_dependencies d
       JOIN tasks d2 ON d2.id = d.depends_on_id
-      WHERE d.task_id = t.id AND d2.state <> 'done'
+      WHERE d.task_id = t.id AND d2.state NOT IN ('done', 'wont_do')
     )
     AND (
       CASE
@@ -147,9 +147,12 @@ func (q *Queries) ClaimTask(ctx context.Context, arg ClaimTaskParams) error {
 
 const countNonDoneChildren = `-- name: CountNonDoneChildren :one
 SELECT COUNT(*)::int FROM tasks
-WHERE parent_task_id = $1 AND state <> 'done'
+WHERE parent_task_id = $1 AND state NOT IN ('done', 'wont_do')
 `
 
+// Counts children that still hold the parent open. wont_do is treated
+// as "closed enough" — a feature whose remaining children were all
+// cancelled deliberately should roll up to done.
 func (q *Queries) CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error) {
 	row := q.db.QueryRow(ctx, countNonDoneChildren, parentTaskID)
 	var column_1 int32
@@ -608,7 +611,7 @@ const listUnresolvedPreconditions = `-- name: ListUnresolvedPreconditions :many
 SELECT t.id, t.title, t.state
 FROM task_dependencies td
 JOIN tasks t ON t.id = td.depends_on_id
-WHERE td.task_id = $1 AND t.state <> 'done'
+WHERE td.task_id = $1 AND t.state NOT IN ('done', 'wont_do')
 ORDER BY t.actual_end NULLS LAST, t.created_at
 `
 
@@ -639,18 +642,19 @@ func (q *Queries) ListUnresolvedPreconditions(ctx context.Context, taskID uuid.U
 }
 
 const lockTaskTypeAndParent = `-- name: LockTaskTypeAndParent :one
-SELECT type, parent_task_id FROM tasks WHERE id = $1 FOR UPDATE
+SELECT type, parent_task_id, state FROM tasks WHERE id = $1 FOR UPDATE
 `
 
 type LockTaskTypeAndParentRow struct {
 	Type         string
 	ParentTaskID *uuid.UUID
+	State        string
 }
 
 func (q *Queries) LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error) {
 	row := q.db.QueryRow(ctx, lockTaskTypeAndParent, id)
 	var i LockTaskTypeAndParentRow
-	err := row.Scan(&i.Type, &i.ParentTaskID)
+	err := row.Scan(&i.Type, &i.ParentTaskID, &i.State)
 	return i, err
 }
 
@@ -668,7 +672,7 @@ WHERE t.project_id = $1
     t.type <> 'feature'
     OR NOT EXISTS (
       SELECT 1 FROM tasks c
-      WHERE c.parent_task_id = t.id AND c.state <> 'done'
+      WHERE c.parent_task_id = t.id AND c.state NOT IN ('done', 'wont_do')
     )
   )
   AND NOT EXISTS (
@@ -810,6 +814,23 @@ WHERE id = $1
 
 func (q *Queries) SetTaskTodo(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setTaskTodo, id)
+	return err
+}
+
+const setTaskWontDo = `-- name: SetTaskWontDo :exec
+UPDATE tasks SET
+  state = 'wont_do',
+  actual_end = now(),
+  updated_at = now()
+WHERE id = $1
+`
+
+// The wont_do transition records actual_end so we can answer "when was
+// this cancelled?" but leaves actual_start alone — if the task was
+// briefly in doing, the time the human/agent spent on it before the
+// cancel decision is preserved.
+func (q *Queries) SetTaskWontDo(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setTaskWontDo, id)
 	return err
 }
 

@@ -192,7 +192,7 @@ WITH RECURSIVE partial_features AS (
     SELECT id FROM tasks
     WHERE cycle_id = $2::uuid
       AND type = 'feature'
-      AND state <> 'done'
+      AND state NOT IN ('done', 'wont_do')
 ), subtree AS (
     SELECT id FROM partial_features
     UNION
@@ -222,7 +222,7 @@ func (q *Queries) MovePartialFeatureSubtrees(ctx context.Context, arg MovePartia
 const moveStandaloneNonDone = `-- name: MoveStandaloneNonDone :execrows
 UPDATE tasks SET cycle_id = $1::uuid
 WHERE cycle_id = $2::uuid
-  AND state <> 'done'
+  AND state NOT IN ('done', 'wont_do')
 `
 
 type MoveStandaloneNonDoneParams struct {

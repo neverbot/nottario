@@ -17,7 +17,7 @@ import (
 
 type tasksListInput struct {
 	ProjectID       string `json:"project_id" jsonschema:"uuid of the project (required)"`
-	State           string `json:"state,omitempty" jsonschema:"optional filter: 'todo', 'doing' or 'done'"`
+	State           string `json:"state,omitempty" jsonschema:"optional filter: 'todo', 'doing', 'done' or 'wont_do'"`
 	Type            string `json:"type,omitempty" jsonschema:"optional filter: 'task','bug','chore','spike','feature'"`
 	AssigneeUserID  string `json:"assignee_user_id,omitempty" jsonschema:"optional uuid of a user to filter assigned tasks"`
 	TargetRoleID    string `json:"target_role_id,omitempty" jsonschema:"optional uuid of a role to filter target_role"`
@@ -67,7 +67,7 @@ type tasksUpdateInput struct {
 type tasksStateInput struct {
 	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
 	TaskID    string `json:"task_id" jsonschema:"uuid of the task"`
-	State     string `json:"state" jsonschema:"'todo', 'doing' or 'done'"`
+	State     string `json:"state" jsonschema:"'todo', 'doing', 'done' or 'wont_do'"`
 }
 
 type tasksDepInput struct {
@@ -391,7 +391,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.set_state",
-		Description: "Transitions a task between 'todo', 'doing' and 'done'. Manages actual_start and actual_end timestamps automatically.",
+		Description: "Transitions a task between 'todo', 'doing', 'done' and 'wont_do'. Manages actual_start and actual_end timestamps automatically. 'wont_do' marks the task as deliberately cancelled (we considered it and decided not to do it); it is not the same as 'done' and is reported separately. Transitions 'done' ↔ 'wont_do' are refused (both rewrite history); use 'wont_do → todo → doing → done' to revisit the decision.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksStateInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -407,6 +407,14 @@ func registerTasks(server *sdk.Server, d Deps) {
 				return jsonResult(map[string]any{
 					"error":         uerr.Error(),
 					"preconditions": uerr.Preconditions,
+				})
+			}
+			var terr *tasks.ErrInvalidStateTransition
+			if errors.As(err, &terr) {
+				return jsonResult(map[string]any{
+					"error":      terr.Error(),
+					"from_state": string(terr.From),
+					"to_state":   string(terr.To),
 				})
 			}
 			return toolError(err.Error())
