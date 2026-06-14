@@ -10,7 +10,27 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/neverbot/nottario/internal/db/dbq"
+	"github.com/neverbot/nottario/internal/identity"
 )
+
+// enrichCycleViaMCP fills ClosedViaMCP for cycles that were closed
+// via an MCP token. Batched lookup, one round-trip per call.
+func enrichCycleViaMCP(ctx context.Context, db dbq.DBTX, cycles []*Cycle) error {
+	ids := make([]uuid.UUID, 0, len(cycles))
+	for _, c := range cycles {
+		if c.ClosedByTokenID != nil {
+			ids = append(ids, *c.ClosedByTokenID)
+		}
+	}
+	names, err := identity.LookupTokenNames(ctx, db, ids)
+	if err != nil {
+		return err
+	}
+	for _, c := range cycles {
+		c.ClosedViaMCP = identity.ViaMCPFromMap(c.ClosedByTokenID, names)
+	}
+	return nil
+}
 
 // ErrNoActiveCycle is returned by ActiveCycle when a project has no
 // open cycle (closed_at IS NULL row). The migration seeds one per
@@ -47,6 +67,13 @@ func List(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]Cycle
 	for _, r := range rows {
 		out = append(out, rowToCycle(r))
 	}
+	ptrs := make([]*Cycle, len(out))
+	for i := range out {
+		ptrs[i] = &out[i]
+	}
+	if err := enrichCycleViaMCP(ctx, pool, ptrs); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -57,6 +84,9 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Cycle, error) 
 		return nil, err
 	}
 	c := rowToCycle(row)
+	if err := enrichCycleViaMCP(ctx, pool, []*Cycle{&c}); err != nil {
+		return nil, err
+	}
 	return &c, nil
 }
 
@@ -71,5 +101,8 @@ func ActiveCycle(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) (
 		return nil, err
 	}
 	c := rowToCycle(row)
+	if err := enrichCycleViaMCP(ctx, pool, []*Cycle{&c}); err != nil {
+		return nil, err
+	}
 	return &c, nil
 }

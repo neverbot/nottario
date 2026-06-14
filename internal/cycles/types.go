@@ -7,18 +7,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/neverbot/nottario/internal/identity"
 )
 
 // Cycle is one execution batch in a project's history.
 type Cycle struct {
-	ID              uuid.UUID  `json:"id"`
-	ProjectID       uuid.UUID  `json:"project_id"`
-	Name            string     `json:"name"`
-	Position        int        `json:"position"`
-	OpenedAt        time.Time  `json:"opened_at"`
-	ClosedAt        *time.Time `json:"closed_at"`
-	ClosedByUserID  *uuid.UUID `json:"closed_by_user_id"`
-	ClosedByTokenID *uuid.UUID `json:"-"`
+	ID              uuid.UUID        `json:"id"`
+	ProjectID       uuid.UUID        `json:"project_id"`
+	Name            string           `json:"name"`
+	Position        int              `json:"position"`
+	OpenedAt        time.Time        `json:"opened_at"`
+	ClosedAt        *time.Time       `json:"closed_at"`
+	ClosedByUserID  *uuid.UUID       `json:"closed_by_user_id"`
+	ClosedByTokenID *uuid.UUID       `json:"-"`
+	ClosedViaMCP    *identity.ViaMCP `json:"closed_via_mcp,omitempty"`
 }
 
 // Authorship attributes a mutation. Mirrors the same struct in

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/neverbot/nottario/internal/db/dbq"
+	"github.com/neverbot/nottario/internal/identity"
 )
 
 // Errors returned by this package.
@@ -201,6 +202,9 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	if err := enrichDocViaMCP(ctx, pool, []*Document{&d}); err != nil {
+		return nil, err
+	}
 	return &d, nil
 }
 
@@ -221,6 +225,9 @@ func Read(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uuid.
 		return nil, err
 	}
 	d := documentFromReadRow(row)
+	if err := enrichDocViaMCP(ctx, pool, []*Document{&d}); err != nil {
+		return nil, err
+	}
 	return &d, nil
 }
 
@@ -234,17 +241,18 @@ type ListFilter struct {
 
 // Summary is a lightweight document view returned by List.
 type Summary struct {
-	ID               uuid.UUID  `json:"id"`
-	Scope            Scope      `json:"scope"`
-	ProjectID        *uuid.UUID `json:"project_id"`
-	Path             string     `json:"path"`
-	Kind             Kind       `json:"kind"`
-	Title            string     `json:"title"`
-	Description      string     `json:"description"`
-	CurrentVersion   int        `json:"current_version"`
-	UpdatedByUserID  *uuid.UUID `json:"updated_by_user_id"`
-	UpdatedByTokenID *uuid.UUID `json:"-"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID               uuid.UUID        `json:"id"`
+	Scope            Scope            `json:"scope"`
+	ProjectID        *uuid.UUID       `json:"project_id"`
+	Path             string           `json:"path"`
+	Kind             Kind             `json:"kind"`
+	Title            string           `json:"title"`
+	Description      string           `json:"description"`
+	CurrentVersion   int              `json:"current_version"`
+	UpdatedByUserID  *uuid.UUID       `json:"updated_by_user_id"`
+	UpdatedByTokenID *uuid.UUID       `json:"-"`
+	UpdatedViaMCP    *identity.ViaMCP `json:"updated_via_mcp,omitempty"`
+	UpdatedAt        time.Time        `json:"updated_at"`
 }
 
 // List returns lightweight document summaries.
@@ -284,6 +292,13 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Summary, err
 			UpdatedByTokenID: r.UpdatedByTokenID,
 			UpdatedAt:        r.UpdatedAt.Time,
 		})
+	}
+	ptrs := make([]*Summary, len(out))
+	for i := range out {
+		ptrs[i] = &out[i]
+	}
+	if err := enrichSummaryViaMCP(ctx, pool, ptrs); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -341,17 +356,25 @@ func Search(ctx context.Context, pool *pgxpool.Pool, query string, f SearchFilte
 			Rank: r.Rank,
 		})
 	}
+	ptrs := make([]*Summary, len(out))
+	for i := range out {
+		ptrs[i] = &out[i].Summary
+	}
+	if err := enrichSummaryViaMCP(ctx, pool, ptrs); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
 // VersionSummary is one version row without its body.
 type VersionSummary struct {
-	Version       int        `json:"version"`
-	Title         string     `json:"title"`
-	Message       string     `json:"message"`
-	AuthorUserID  *uuid.UUID `json:"author_user_id"`
-	AuthorTokenID *uuid.UUID `json:"-"`
-	CreatedAt     time.Time  `json:"created_at"`
+	Version       int              `json:"version"`
+	Title         string           `json:"title"`
+	Message       string           `json:"message"`
+	AuthorUserID  *uuid.UUID       `json:"author_user_id"`
+	AuthorTokenID *uuid.UUID       `json:"-"`
+	ViaMCP        *identity.ViaMCP `json:"via_mcp,omitempty"`
+	CreatedAt     time.Time        `json:"created_at"`
 }
 
 // History returns the version metadata for a document, newest first.
@@ -370,6 +393,13 @@ func History(ctx context.Context, pool *pgxpool.Pool, documentID uuid.UUID) ([]V
 			AuthorTokenID: r.AuthorTokenID,
 			CreatedAt:     r.CreatedAt.Time,
 		})
+	}
+	ptrs := make([]*VersionSummary, len(out))
+	for i := range out {
+		ptrs[i] = &out[i]
+	}
+	if err := enrichVersionSummaryViaMCP(ctx, pool, ptrs); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -390,7 +420,7 @@ func ReadVersion(ctx context.Context, pool *pgxpool.Pool, documentID uuid.UUID, 
 	if err != nil {
 		return nil, err
 	}
-	return &Version{
+	v := &Version{
 		ID:            row.ID,
 		DocumentID:    row.DocumentID,
 		Version:       int(row.Version),
@@ -402,7 +432,11 @@ func ReadVersion(ctx context.Context, pool *pgxpool.Pool, documentID uuid.UUID, 
 		AuthorUserID:  row.AuthorUserID,
 		AuthorTokenID: row.AuthorTokenID,
 		CreatedAt:     row.CreatedAt.Time,
-	}, nil
+	}
+	if err := enrichVersionViaMCP(ctx, pool, []*Version{v}); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // DeleteParams carries the input to soft-delete a document. When

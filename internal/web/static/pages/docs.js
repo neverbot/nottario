@@ -303,6 +303,12 @@ class NottarioDocsPage extends LitElement {
       white-space: nowrap;
     }
     .history-pop .msg.empty-msg { color: var(--gray-5); font-style: italic; }
+    .history-pop .via {
+      font-size: 11px;
+      color: var(--fg-muted);
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      white-space: nowrap;
+    }
     .history-pop .when {
       font-size: 11px;
       color: var(--gray-5);
@@ -1088,6 +1094,11 @@ class NottarioDocsPage extends LitElement {
                 @click=${() => this.openVersion(v.version)}>
               <span class="vn">v${v.version}</span>
               <span class=${v.message ? 'msg' : 'msg empty-msg'}>${v.message || 'no message'}</span>
+              ${
+                v.via_mcp
+                  ? html`<span class="via" title=${`Agent: ${v.via_mcp.name || 'MCP'}`}>via ${v.via_mcp.name || 'MCP'}</span>`
+                  : null
+              }
               <span class="when">${this._relTime(v.created_at)}</span>
             </li>
           `,
