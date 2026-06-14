@@ -639,17 +639,56 @@ class NottarioBoardPage extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 4px;
-      font-size: 12px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
     }
     .detail .commits-list .commit {
-      padding: 4px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px 10px;
       background: var(--bg-subtle);
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: 6px;
+      color: var(--fg);
+      text-decoration: none;
+      font-size: 13px;
+      transition: background-color 0.1s, border-color 0.1s;
+    }
+    .detail .commits-list a.commit:hover {
+      background: var(--bg);
+      border-color: var(--accent);
+    }
+    .detail .commits-list a.commit:hover .sha { text-decoration: underline; }
+    .detail .commits-list .commit .top {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+    .detail .commits-list .commit .sha {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      color: var(--accent);
+      flex: 0 0 auto;
+    }
+    .detail .commits-list .commit .msg {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       color: var(--fg);
     }
-    .detail .commits-list .commit .sha { color: var(--accent); }
+    .detail .commits-list .commit .meta {
+      font-size: 11px;
+      color: var(--fg-muted);
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+    }
+    .detail .commits-list .commit .meta .repo {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+    .detail .commits-list .commit .meta .sep { opacity: 0.5; }
 
     /* Comments thread — each row has a small leading avatar column. */
     .detail .comment {
@@ -1748,6 +1787,55 @@ class NottarioBoardPage extends LitElement {
     return (this.tasks || []).find((t) => t.id === id) || null;
   }
 
+  _renderCommit(c) {
+    const sha = (c.sha || '').trim();
+    const repo = (c.repo || '').trim();
+    const shortSha = sha.slice(0, 7);
+    // Only link when repo looks like a clean GitHub `owner/repo` —
+    // anything else (extra slashes, protocol prefix, empty repo) falls
+    // back to a plain row so we never inject untrusted text into a URL.
+    const repoOK = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo);
+    const url = repoOK && sha ? `https://github.com/${repo}/commit/${sha}` : null;
+    const when = c.added_at ? this._commitRelTime(c.added_at) : '';
+    const meta = html`
+      <div class="meta">
+        ${repo ? html`<span class="repo">${repo}</span>` : null}
+        ${repo && when ? html`<span class="sep">·</span>` : null}
+        ${when ? html`<span class="when" title=${new Date(c.added_at).toLocaleString()}>${when}</span>` : null}
+      </div>
+    `;
+    const inner = html`
+      <div class="top">
+        <span class="sha">${shortSha}</span>
+        ${c.message ? html`<span class="msg" title=${c.message}>${c.message}</span>` : null}
+      </div>
+      ${repo || when ? meta : null}
+    `;
+    if (url) {
+      return html`<a class="commit" href=${url} target="_blank" rel="noopener noreferrer">${inner}</a>`;
+    }
+    return html`<div class="commit">${inner}</div>`;
+  }
+
+  // Tiny relative-time formatter for commit added_at. Same shape as
+  // the one on /projects: "5m ago", "3h ago", "2d ago", "3w ago",
+  // falls back to a locale date past ~12 weeks.
+  _commitRelTime(iso) {
+    const then = new Date(iso).getTime();
+    if (!Number.isFinite(then)) return '';
+    const diff = Date.now() - then;
+    if (diff < 60_000) return 'just now';
+    const m = Math.floor(diff / 60_000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d}d ago`;
+    const w = Math.floor(d / 7);
+    if (w < 12) return `${w}w ago`;
+    return new Date(iso).toLocaleDateString();
+  }
+
   _relTime(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -1922,14 +2010,7 @@ class NottarioBoardPage extends LitElement {
                   ? html`<p class="empty">No commits linked.</p>`
                   : html`
                   <div class="commits-list">
-                    ${commits.map(
-                      (c) => html`
-                      <div class="commit">
-                        ${c.repo}<span class="sha">@${(c.sha || '').slice(0, 8)}</span>
-                        ${c.message ? html` ${c.message}` : null}
-                      </div>
-                    `,
-                    )}
+                    ${commits.map((c) => this._renderCommit(c))}
                   </div>
                 `
               }
