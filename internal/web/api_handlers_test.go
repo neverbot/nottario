@@ -152,10 +152,9 @@ func TestApiProjects_CreateAdminOnly(t *testing.T) {
 func TestApiProjects_UpdateAndDelete(t *testing.T) {
 	f := setupHandlersFixture(t)
 
-	// PATCH name + repos + default_view.
+	// PATCH name + default_view.
 	body, _ := json.Marshal(map[string]any{
 		"name": "Renamed", "default_view": "board/gantt",
-		"repos": []string{"neverbot/nottario"},
 	})
 	r := doRaw(t, "PATCH", f.ts.URL+"/api/projects/"+f.projectID, f.authAdmin, body)
 	if r.StatusCode != http.StatusOK {
