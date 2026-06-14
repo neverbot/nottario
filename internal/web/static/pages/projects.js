@@ -153,6 +153,11 @@ class NottarioProjectsPage extends LitElement {
     }
     .card .meta {
       display: flex;
+      /* Lang chip uses mono 11px, project-type chip uses inherited
+         sans 12px. Different font metrics → different cap heights
+         and ascender extents. align-items: baseline lines the text
+         baselines so the row reads as one even with mixed faces. */
+      align-items: baseline;
       gap: 4px 6px;
       flex-wrap: wrap;
       font-size: 12px;
