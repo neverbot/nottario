@@ -78,6 +78,13 @@ lint: tools
 # NOT used: its last release (v1.2.0) is unmaintained and crashes on
 # modern Go. Tier 2 of the SQL safety feature (sqlc migration) will
 # eliminate the underlying hand-written SQL surface entirely.
+#
+# Integration tests need a Postgres reachable as a privileged role and
+# would silently t.Skip without TEST_DATABASE_URL — turning the "gate"
+# into a false green for anything that touches the DB. We pass the
+# Makefile's default DSN (the dev `db` compose service) so that, with
+# the container up, integration tests actually run; without it, they
+# fail loud at connect instead of being skipped. CI sets its own DSN.
 check:
 	@test -z "$$(gofmt -l .)" || { echo "gofmt -l reports unformatted files; run 'gofmt -w .'"; exit 1; }
 	$(GO) vet ./...
@@ -86,7 +93,7 @@ check:
 	$(MAKE) docs-check
 	$(MAKE) js-check
 	$(MAKE) frontend-check
-	$(GO) test ./...
+	TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(GO) test ./...
 
 # Frontend syntax gate. The project ships vanilla JS / Lit without a
 # build step, so a stray backtick inside a `css\`...\`` comment or any
