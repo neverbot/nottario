@@ -4,6 +4,7 @@ import { buttonStyles } from '/static/components/buttons.js';
 import { formStyles } from '/static/components/forms.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
+import { confirm } from '/static/components/confirm-dialog.js';
 import '/static/components/field.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
@@ -682,7 +683,13 @@ class NottarioDocsPage extends LitElement {
   }
 
   async del() {
-    if (!confirm(`Delete ${this.selected.path}?`)) return;
+    const ok = await confirm({
+      title: 'Delete this document?',
+      body: `${this.selected.path} and its full history will be removed.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     const path = this.selected.path;
     try {
       const r = await fetch('/api/docs/delete', {
@@ -779,7 +786,12 @@ class NottarioDocsPage extends LitElement {
     if (!this.viewingVersion || !this.selected) return;
     const v = this.viewingVersion.version;
     const current = this.selected.current_version;
-    if (!confirm(`Restore v${v} as a new version on top of v${current}?`)) return;
+    const ok = await confirm({
+      title: `Restore v${v}?`,
+      body: `The current content is preserved as v${current} in history; v${v}'s content becomes v${current + 1}.`,
+      confirmLabel: 'Restore',
+    });
+    if (!ok) return;
     try {
       const r = await fetch('/api/docs/write', {
         method: 'POST',

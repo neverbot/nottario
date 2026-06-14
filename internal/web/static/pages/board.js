@@ -3,6 +3,7 @@ import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
+import { confirm } from '/static/components/confirm-dialog.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { dialogStyles } from '/static/components/surfaces.js';
 import { formStyles } from '/static/components/forms.js';
@@ -49,7 +50,6 @@ class NottarioBoardPage extends LitElement {
     _newTaskAdvanced: { state: true },
     // Confirmation dialog state for the in-app delete flow (replaces
     // the browser-native confirm()).
-    _confirmDeleteID: { state: true },
     _endSprintOpen: { state: true },
   };
 
@@ -436,13 +436,6 @@ class NottarioBoardPage extends LitElement {
     .prio.medium .dot { background: var(--warning); }
     .prio.low .dot { background: var(--gray-5); }
 
-    /* Compact confirm dialog (replaces the browser-native confirm()). */
-    .confirm-dialog .panel {
-      width: 360px;
-      padding: 18px 20px;
-    }
-    .confirm-dialog .panel h3 { margin: 0 0 8px; font-size: 15px; }
-    .confirm-dialog .panel p { margin: 0 0 16px; color: var(--fg-muted); font-size: 13px; }
 
     .error { color: var(--danger); margin-bottom: 8px; font-size: 13px; }
 
@@ -736,7 +729,6 @@ class NottarioBoardPage extends LitElement {
     this._filters = { mine: false, roles: [], types: [] };
     this._filterOpen = null;
     this._newTaskAdvanced = false;
-    this._confirmDeleteID = null;
     new EscController(this, (e) => this._onEsc(e));
   }
 
@@ -1579,7 +1571,6 @@ class NottarioBoardPage extends LitElement {
       ${this.showCreate ? this.renderCreate() : null}
       ${this.selected ? this.renderDetail() : null}
       ${this.renderEndSprintDialog()}
-      ${this._confirmDeleteID ? this._renderConfirmDelete() : null}
     `;
   }
 
@@ -1657,37 +1648,6 @@ class NottarioBoardPage extends LitElement {
         }
       </div>
     `;
-  }
-
-  _renderConfirmDelete() {
-    return html`
-      <div class="dialog confirm-dialog"
-           role="alertdialog"
-           aria-modal="true"
-           @click=${(e) => {
-             if (e.target.classList.contains('dialog')) this._confirmDeleteID = null;
-           }}
-           @keydown=${(e) => {
-             if (e.key === 'Escape') this._confirmDeleteID = null;
-           }}>
-        <div class="panel">
-          <h3>Delete this task?</h3>
-          <p>The card and all of its comments will be removed. This cannot be undone.</p>
-          <div class="actions-row">
-            <button type="button" class="btn secondary"
-                    @click=${() => (this._confirmDeleteID = null)}>Cancel</button>
-            <button type="button" class="btn danger"
-                    @click=${() => this._confirmDeleteRun()}>Delete</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  _confirmDeleteRun() {
-    const id = this._confirmDeleteID;
-    this._confirmDeleteID = null;
-    if (id) this.deleteTask(id);
   }
 
   // Drop a task to a new state with a transient toast that lets the
@@ -1819,7 +1779,15 @@ class NottarioBoardPage extends LitElement {
               <h3 id="task-dialog-title">${task.title}</h3>
               <div class="title-actions">
                 <button class="icon-btn danger" title="Delete task" aria-label="Delete task"
-                        @click=${() => (this._confirmDeleteID = task.id)}>
+                        @click=${async () => {
+                          const ok = await confirm({
+                            title: 'Delete this task?',
+                            body: 'The card and all of its comments will be removed. This cannot be undone.',
+                            confirmLabel: 'Delete',
+                            danger: true,
+                          });
+                          if (ok) this.deleteTask(task.id);
+                        }}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M6 2.5h4M3 4.5h10M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2M6.8 7v4M9.2 7v4"
                           stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>

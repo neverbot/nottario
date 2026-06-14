@@ -7,6 +7,11 @@ import { badgeStyles } from '/static/components/badges.js';
 import { EscController } from '/static/components/esc.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
+import { confirm } from '/static/components/confirm-dialog.js';
+import { tableActionStyles } from '/static/components/table-actions.js';
+import { addRowStyles } from '/static/components/add-row.js';
+import '/static/components/color-swatches.js';
+import { BRAND_ROLE_PALETTE } from '/static/components/color-swatches.js';
 import '/static/components/field.js';
 import '/static/components/avatar.js';
 import '/static/components/tabs.js';
@@ -50,6 +55,8 @@ class NottarioProjectSettings extends LitElement {
     dialogStyles,
     formStyles,
     badgeStyles,
+    tableActionStyles,
+    addRowStyles,
     css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
@@ -62,62 +69,10 @@ class NottarioProjectSettings extends LitElement {
       vertical-align: middle;
       margin-right: 6px;
     }
-    .row-actions { text-align: right; }
-    .row-actions button { margin-left: 4px; }
-
-    /* Quieter destructive buttons in table rows: at rest a small
-       ghost X; armed/hover swaps to the loud red .btn.danger.
-       Keeps tables visually calm while still putting the destructive
-       affordance one click away. */
-    .row-actions .delete {
-      width: 26px;
-      height: 26px;
-      padding: 0;
-      font-size: 12px;
-      line-height: 1;
-      color: var(--gray-5);
-      background: transparent;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      cursor: pointer;
-      font: inherit;
-    }
-    .row-actions .delete:hover {
-      color: var(--danger);
-      border-color: rgba(207, 34, 46, 0.4);
-      background: var(--tint-red);
-    }
-    .row-actions .delete:focus-visible {
-      outline: 2px solid var(--danger);
-      outline-offset: 1px;
-    }
-    /* Pencil-icon Edit button paired with the existing delete ✕.
-       Quiet by default, picks up the accent on hover/focus. */
-    .row-actions .edit {
-      width: 26px;
-      height: 26px;
-      padding: 0;
-      color: var(--gray-5);
-      background: transparent;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .row-actions .edit:hover {
-      color: var(--accent);
-      border-color: var(--accent);
-      background: var(--tint-blue);
-    }
-    .row-actions .edit:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 1px;
-    }
     /* Role row in edit mode: inline form (label input + Save/Cancel)
-       in the Label cell, swatch grid in the Color cell. The form is
-       a real <form> so Enter submits and formButton can ack on Save. */
+       in the Label cell, the swatch picker in the Color cell. The
+       form is a real <form> so Enter submits and formButton can ack
+       on Save. */
     .role-edit-row .role-edit-form {
       display: flex;
       gap: 8px;
@@ -139,57 +94,6 @@ class NottarioProjectSettings extends LitElement {
     .role-edit-row .role-edit-form .btn {
       padding: 4px 10px;
       font-size: 13px;
-    }
-    /* Add-row forms below tables. End-to-end fields aligned with the
-       table widths above, labels visible. The 'inline' modifier
-       collapses labels to a single line and is used by the role/
-       priority add forms; the default stacked form is used for
-       multi-line creates. */
-    .add-row {
-      display: flex;
-      gap: 12px;
-      margin-top: 16px;
-      align-items: flex-end;
-      flex-wrap: wrap;
-    }
-    .add-row .field { margin-bottom: 0; flex: 1; min-width: 120px; }
-    .add-row .field.narrow { flex: 0 0 110px; }
-    .add-row nottario-field { margin-bottom: 0; flex: 1; min-width: 120px; }
-    .add-row nottario-field.narrow { flex: 0 0 110px; }
-    .add-row nottario-field.role-color-field { flex: 0 0 auto; min-width: 0; }
-    .add-row .add-action { display: flex; align-items: center; height: 32px; }
-
-    /* Role-colour swatch grid: replaces the free-form native colour
-       picker with a fixed palette so every project stays inside the
-       brand-anchored set documented in docs/design/palette.md. */
-    .role-color-swatches {
-      display: inline-flex;
-      gap: 6px;
-      align-items: center;
-      padding: 4px 6px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
-      box-sizing: border-box;
-    }
-    .role-color-swatches .swatch {
-      width: 22px;
-      height: 22px;
-      padding: 0;
-      border: 0;
-      border-radius: 50%;
-      cursor: pointer;
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
-    }
-    .role-color-swatches .swatch.selected {
-      box-shadow:
-        inset 0 0 0 1px rgba(0, 0, 0, 0.15),
-        0 0 0 2px var(--bg),
-        0 0 0 4px var(--accent);
-    }
-    .role-color-swatches .swatch:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
     }
 
     /* Inline-edit number input inside table cells. Matches the
@@ -416,22 +320,12 @@ class NottarioProjectSettings extends LitElement {
     }
   }
 
-  // Role colour palette: the brand-anchored set documented in
-  // docs/design/palette.md (`--role-backend`, `--role-frontend`,
-  // `--role-qa`, `--role-design`) plus the danger and external-kind
-  // colours. The "add role" form picks among these so every project
-  // stays within one coherent palette — no free-form hex entry.
-  _rolePalette() {
-    return ['#1f6feb', '#2da44e', '#bf8700', '#8250df', '#cf222e', '#bc4c00'];
-  }
-
   // Default for the add-role form: first palette colour no existing
   // role is using, falling back to the first if every colour is
-  // taken.
+  // taken. The palette itself lives in components/color-swatches.js.
   _nextRoleColor() {
-    const palette = this._rolePalette();
     const used = new Set((this.roles || []).map((r) => (r.color || '').toLowerCase()));
-    return palette.find((c) => !used.has(c)) || palette[0];
+    return BRAND_ROLE_PALETTE.find((c) => !used.has(c)) || BRAND_ROLE_PALETTE[0];
   }
 
   async addRole(e) {
@@ -500,7 +394,6 @@ class NottarioProjectSettings extends LitElement {
   }
 
   _renderRoleRowEditing(r) {
-    const palette = this._rolePalette();
     return html`
       <tr class="role-edit-row" data-id=${r.id}>
         <td class="drag-handle" aria-hidden="true">⋮⋮</td>
@@ -519,21 +412,11 @@ class NottarioProjectSettings extends LitElement {
           </form>
         </td>
         <td>
-          <div class="role-color-swatches" role="radiogroup" aria-label="Role colour">
-            ${palette.map((c) => {
-              const selected = this._editRoleColor === c;
-              return html`
-                <button type="button"
-                        class=${`swatch${selected ? ' selected' : ''}`}
-                        role="radio"
-                        aria-checked=${selected ? 'true' : 'false'}
-                        aria-label=${c}
-                        title=${c}
-                        style=${`background:${c}`}
-                        @click=${() => (this._editRoleColor = c)}></button>
-              `;
-            })}
-          </div>
+          <nottario-color-swatches
+            .value=${this._editRoleColor}
+            aria-label="Role colour"
+            @change=${(e) => (this._editRoleColor = e.detail.value)}>
+          </nottario-color-swatches>
         </td>
         <td></td>
       </tr>
@@ -543,7 +426,7 @@ class NottarioProjectSettings extends LitElement {
   _startRoleEdit(role) {
     this._editingRoleId = role.id;
     this._editRoleLabel = role.label || '';
-    this._editRoleColor = role.color || this._rolePalette()[0];
+    this._editRoleColor = role.color || BRAND_ROLE_PALETTE[0];
   }
 
   _cancelRoleEdit() {
@@ -583,7 +466,13 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async deleteRole(id) {
-    if (!confirm('Delete this role?')) return;
+    const ok = await confirm({
+      title: 'Delete this role?',
+      body: 'Tasks targeting this role will lose their role assignment.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/projects/${this.projectId}/roles/${id}`, {
         method: 'DELETE',
@@ -626,7 +515,13 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async deletePriority(key) {
-    if (!confirm(`Delete priority bucket "${key}"?`)) return;
+    const ok = await confirm({
+      title: `Delete priority "${key}"?`,
+      body: 'Tasks using this bucket will keep their numeric priority but the bucket name disappears.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(
         `/api/projects/${this.projectId}/priorities/${encodeURIComponent(key)}`,
@@ -827,25 +722,13 @@ class NottarioProjectSettings extends LitElement {
           <nottario-field label="Label">
             <input name="label" placeholder="Backend" required>
           </nottario-field>
-          <nottario-field label="Color" class="role-color-field">
+          <nottario-field label="Color" class="auto">
             <input name="color" type="hidden" .value=${this._addRoleColor || this._nextRoleColor()}>
-            <div class="role-color-swatches" role="radiogroup" aria-label="Role colour">
-              ${this._rolePalette().map((c) => {
-                const selected = (this._addRoleColor || this._nextRoleColor()) === c;
-                return html`
-                  <button type="button"
-                          class=${`swatch${selected ? ' selected' : ''}`}
-                          role="radio"
-                          aria-checked=${selected ? 'true' : 'false'}
-                          aria-label=${c}
-                          title=${c}
-                          style=${`background:${c}`}
-                          @click=${() => {
-                            this._addRoleColor = c;
-                          }}></button>
-                `;
-              })}
-            </div>
+            <nottario-color-swatches
+              .value=${this._addRoleColor || this._nextRoleColor()}
+              aria-label="Role colour"
+              @change=${(e) => (this._addRoleColor = e.detail.value)}>
+            </nottario-color-swatches>
           </nottario-field>
           <div class="add-action">
             <button type="submit" class="btn primary">Add role</button>
@@ -1433,7 +1316,13 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async removeMember(userID, roleID) {
-    if (!confirm('Remove this membership?')) return;
+    const ok = await confirm({
+      title: 'Remove this membership?',
+      body: 'The user keeps any other role memberships in this project.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/projects/${this.projectId}/members/${userID}/${roleID}`, {
         method: 'DELETE',
