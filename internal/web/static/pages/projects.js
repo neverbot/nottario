@@ -1,6 +1,8 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { defaultPathFor, viewByKey } from '/static/views.js';
 import { EscController } from '/static/components/esc.js';
+import { toast } from '/static/components/toast.js';
+import { formButton } from '/static/components/form-button.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, dialogStyles } from '/static/components/surfaces.js';
 import { formStyles } from '/static/components/forms.js';
@@ -255,7 +257,6 @@ class NottarioProjectsPage extends LitElement {
   }
 
   async submitCreate(e) {
-    e.preventDefault();
     const form = e.target;
     this.creating = true;
     this.error = '';
@@ -270,19 +271,23 @@ class NottarioProjectsPage extends LitElement {
         .filter(Boolean),
     };
     try {
-      const res = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      await formButton(e, async () => {
+        const res = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'failed to create');
+        }
+        this.showCreate = false;
+        await this.load();
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'failed to create');
-      }
-      this.showCreate = false;
-      await this.load();
-    } catch (e) {
-      this.error = e.message;
+      toast.success(`Project "${payload.name}" created.`);
+    } catch (err) {
+      this.error = err.message;
+      toast.error(`Couldn't create project: ${err.message}`);
     } finally {
       this.creating = false;
     }

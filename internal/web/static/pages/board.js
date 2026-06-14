@@ -1,6 +1,8 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
+import { toast } from '/static/components/toast.js';
+import { formButton } from '/static/components/form-button.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { dialogStyles } from '/static/components/surfaces.js';
 import { formStyles } from '/static/components/forms.js';
@@ -40,9 +42,6 @@ class NottarioBoardPage extends LitElement {
     // hash updates. Filter dropdowns track their own open state.
     _filters: { state: true },
     _filterOpen: { state: true },
-    // Transient bottom toast slot used by the drag-drop undo and any
-    // future "you just did X, undo?" path.
-    _toast: { state: true },
     // Set when the user picks Advanced in the new-task dialog: only
     // then is the `feature` type selectable (features have different
     // semantics — parent roll-up — and the modal shouldn't expose
@@ -437,34 +436,6 @@ class NottarioBoardPage extends LitElement {
     .prio.medium .dot { background: var(--warning); }
     .prio.low .dot { background: var(--gray-5); }
 
-    /* ---- Bottom toast (undo affordance) ---- */
-    .toast {
-      position: fixed;
-      bottom: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: inline-flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 14px;
-      background: var(--fg);
-      color: #fff;
-      border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.24);
-      font-size: 13px;
-      z-index: 40;
-    }
-    .toast button {
-      background: transparent;
-      border: 0;
-      color: #79c0ff;
-      font: inherit;
-      font-weight: 600;
-      cursor: pointer;
-      padding: 0;
-    }
-    .toast button:hover { text-decoration: underline; }
-
     /* Compact confirm dialog (replaces the browser-native confirm()). */
     .confirm-dialog .panel {
       width: 360px;
@@ -764,7 +735,6 @@ class NottarioBoardPage extends LitElement {
     this._endSprintOpen = false;
     this._filters = { mine: false, roles: [], types: [] };
     this._filterOpen = null;
-    this._toast = null;
     this._newTaskAdvanced = false;
     this._confirmDeleteID = null;
     new EscController(this, (e) => this._onEsc(e));
@@ -1195,17 +1165,20 @@ class NottarioBoardPage extends LitElement {
   }
 
   async deleteTask(id) {
+    const t = this.tasks.find((x) => x.id === id);
+    const label = t ? `"${t.title.slice(0, 32)}${t.title.length > 32 ? '…' : ''}"` : 'Task';
     const r = await fetch(`/api/projects/${this.projectId}/tasks/${id}`, { method: 'DELETE' });
     if (r.ok) {
       this.selected = null;
       await this.load();
+      toast.success(`${label} deleted.`);
     } else {
       this.error = (await r.json()).error || 'failed';
+      toast.error(`Couldn't delete: ${this.error}`);
     }
   }
 
   async createTask(e) {
-    e.preventDefault();
     const f = e.target;
     const body = {
       title: f.title.value.trim(),
@@ -1216,16 +1189,20 @@ class NottarioBoardPage extends LitElement {
     if (f.target_role_id.value) body.target_role_id = f.target_role_id.value;
     if (f.assignee_user_id.value) body.assignee_user_id = f.assignee_user_id.value;
     try {
-      const r = await fetch(`/api/projects/${this.projectId}/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      await formButton(e, async () => {
+        const r = await fetch(`/api/projects/${this.projectId}/tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'failed');
+        this.showCreate = false;
+        await this.load();
       });
-      if (!r.ok) throw new Error((await r.json()).error || 'failed');
-      this.showCreate = false;
-      await this.load();
+      toast.success('Task created.');
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't create task: ${err.message}`);
     }
   }
 
@@ -1236,7 +1213,12 @@ class NottarioBoardPage extends LitElement {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body }),
     });
-    if (r.ok) await this.loadDetail(taskID);
+    if (r.ok) {
+      await this.loadDetail(taskID);
+      toast.success('Comment added.');
+    } else {
+      toast.error("Couldn't add comment.");
+    }
   }
 
   // value is a priority bucket key (e.g. 'medium', 'high'). Resolve
@@ -1597,7 +1579,6 @@ class NottarioBoardPage extends LitElement {
       ${this.showCreate ? this.renderCreate() : null}
       ${this.selected ? this.renderDetail() : null}
       ${this.renderEndSprintDialog()}
-      ${this._toast ? this._renderToast() : null}
       ${this._confirmDeleteID ? this._renderConfirmDelete() : null}
     `;
   }
@@ -1678,15 +1659,6 @@ class NottarioBoardPage extends LitElement {
     `;
   }
 
-  _renderToast() {
-    return html`
-      <div class="toast" role="status">
-        <span>${this._toast.message}</span>
-        ${this._toast.undo ? html`<button @click=${() => this._toast.undo()}>Undo</button>` : null}
-      </div>
-    `;
-  }
-
   _renderConfirmDelete() {
     return html`
       <div class="dialog confirm-dialog"
@@ -1725,19 +1697,11 @@ class NottarioBoardPage extends LitElement {
     const t = this.tasks.find((x) => x.id === taskID);
     const label = t ? `"${t.title.slice(0, 32)}${t.title.length > 32 ? '…' : ''}"` : 'task';
     this.setState(taskID, newState);
-    if (this._toast?.timer) clearTimeout(this._toast.timer);
-    const labels = { todo: 'To do', doing: 'In progress', done: 'Done' };
-    this._toast = {
-      message: `Moved ${label} to ${labels[newState] || newState}`,
-      undo: () => {
-        this.setState(taskID, oldState);
-        clearTimeout(this._toast.timer);
-        this._toast = null;
-      },
-      timer: setTimeout(() => {
-        this._toast = null;
-      }, 6000),
-    };
+    const labels = { todo: 'To do', doing: 'In progress', done: 'Done', wont_do: "Won't do" };
+    toast.show(`Moved ${label} to ${labels[newState] || newState}`, {
+      duration: 6000,
+      undo: () => this.setState(taskID, oldState),
+    });
   }
 
   renderCreate() {

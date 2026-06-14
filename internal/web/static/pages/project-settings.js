@@ -5,6 +5,8 @@ import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
 import { formStyles } from '/static/components/forms.js';
 import { badgeStyles } from '/static/components/badges.js';
 import { EscController } from '/static/components/esc.js';
+import { toast } from '/static/components/toast.js';
+import { formButton } from '/static/components/form-button.js';
 import '/static/components/field.js';
 import '/static/components/avatar.js';
 import '/static/components/tabs.js';
@@ -314,7 +316,6 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async addRole(e) {
-    e.preventDefault();
     const form = e.target;
     const payload = {
       key: form.key.value.trim(),
@@ -322,16 +323,19 @@ class NottarioProjectSettings extends LitElement {
       color: form.color.value.trim(),
     };
     try {
-      const res = await fetch(`/api/projects/${this.projectId}/roles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      await formButton(e, async () => {
+        const res = await fetch(`/api/projects/${this.projectId}/roles`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'failed');
+        form.reset();
+        await this.load();
       });
-      if (!res.ok) throw new Error((await res.json()).error || 'failed');
-      form.reset();
-      await this.load();
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't add role: ${err.message}`);
     }
   }
 
@@ -343,8 +347,10 @@ class NottarioProjectSettings extends LitElement {
       });
       if (!res.ok) throw new Error('delete failed');
       await this.load();
+      toast.success('Role removed.');
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't remove role: ${err.message}`);
     }
   }
 
@@ -359,15 +365,21 @@ class NottarioProjectSettings extends LitElement {
       await this.load();
     } catch (err) {
       this.error = err.message;
+      throw err;
     }
   }
 
   async addPriority(e) {
-    e.preventDefault();
     const f = e.target;
     const pos = this.priorities.length;
-    await this.upsertPriority(f.key.value.trim(), f.value.value, pos);
-    f.reset();
+    try {
+      await formButton(e, async () => {
+        await this.upsertPriority(f.key.value.trim(), f.value.value, pos);
+        f.reset();
+      });
+    } catch (err) {
+      toast.error(`Couldn't add priority: ${err.message}`);
+    }
   }
 
   async deletePriority(key) {
@@ -381,8 +393,10 @@ class NottarioProjectSettings extends LitElement {
       );
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'delete failed');
       await this.load();
+      toast.success(`Priority "${key}" removed.`);
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't remove priority: ${err.message}`);
     }
   }
 
@@ -511,7 +525,6 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async saveGeneral(e) {
-    e.preventDefault();
     const f = e.target;
     const payload = {
       name: f.name.value.trim(),
@@ -526,15 +539,18 @@ class NottarioProjectSettings extends LitElement {
         .filter(Boolean),
     };
     try {
-      const res = await fetch(`/api/projects/${this.projectId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      await formButton(e, async () => {
+        const res = await fetch(`/api/projects/${this.projectId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'failed');
+        await this.load();
       });
-      if (!res.ok) throw new Error((await res.json()).error || 'failed');
-      await this.load();
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't save: ${err.message}`);
     }
   }
 
@@ -728,8 +744,11 @@ class NottarioProjectSettings extends LitElement {
       });
       if (!res.ok) throw new Error((await res.json()).error || 'failed');
       await this.load();
+      // Input @change handler — no button to ack on, so toast.
+      toast.success('MCP page size saved.');
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't save: ${err.message}`);
     }
   }
 
@@ -753,11 +772,15 @@ class NottarioProjectSettings extends LitElement {
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
         this.error = body.error || 'failed to set owner';
+        toast.error(`Couldn't set owner: ${this.error}`);
         return;
       }
       await this.load();
+      const newOwner = this._memberByID(userID);
+      toast.success(`Owner set to ${newOwner?.display_name || newOwner?.github_login || 'user'}.`);
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't set owner: ${err.message}`);
     }
   }
 
@@ -875,22 +898,27 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async addMember(e) {
-    e.preventDefault();
     const form = e.target;
     const user_id = form.user_id.value;
     const role_id = form.role_id.value;
-    if (!user_id || !role_id) return;
+    if (!user_id || !role_id) {
+      e.preventDefault();
+      return;
+    }
     try {
-      const res = await fetch(`/api/projects/${this.projectId}/members`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id, role_id }),
+      await formButton(e, async () => {
+        const res = await fetch(`/api/projects/${this.projectId}/members`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id, role_id }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'failed');
+        form.reset();
+        await this.load();
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'failed');
-      form.reset();
-      await this.load();
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't add member: ${err.message}`);
     }
   }
 
@@ -981,25 +1009,29 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async _issueToken(e) {
-    e.preventDefault();
     const form = e.target;
     const name = form.name.value.trim();
     const roleVal = form.default_role_id ? form.default_role_id.value : '';
     const body = { name };
     if (roleVal) body.default_role_id = roleVal;
     try {
-      const res = await fetch(`/api/projects/${this.projectId}/tokens`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      await formButton(e, async () => {
+        const res = await fetch(`/api/projects/${this.projectId}/tokens`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'failed');
+        this.issuedToken = await res.json();
+        // refresh list
+        this.tokens = null;
+        await this._loadTokens();
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'failed');
-      this.issuedToken = await res.json();
-      // refresh list
-      this.tokens = null;
-      await this._loadTokens();
+      // The dialog stays open and swaps into the reveal panel — no
+      // toast needed; the visual transition IS the feedback.
     } catch (err) {
       this.tokenError = err.message;
+      toast.error(`Couldn't issue token: ${err.message}`);
     }
   }
 
@@ -1012,8 +1044,10 @@ class NottarioProjectSettings extends LitElement {
       if (!res.ok) throw new Error('failed');
       this.tokens = null;
       await this._loadTokens();
+      toast.success('Token revoked.');
     } catch (err) {
       this.tokenError = err.message;
+      toast.error(`Couldn't revoke token: ${err.message}`);
     }
   }
 
@@ -1169,8 +1203,10 @@ class NottarioProjectSettings extends LitElement {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'remove failed');
       await this.load();
+      toast.success('Member removed.');
     } catch (err) {
       this.error = err.message;
+      toast.error(`Couldn't remove member: ${err.message}`);
     }
   }
 }

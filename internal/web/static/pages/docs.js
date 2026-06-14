@@ -2,6 +2,8 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { formStyles } from '/static/components/forms.js';
+import { toast } from '/static/components/toast.js';
+import { formButton } from '/static/components/form-button.js';
 import '/static/components/field.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
@@ -587,32 +589,38 @@ class NottarioDocsPage extends LitElement {
     this.newPath = '';
   }
 
-  async saveNew() {
+  async saveNew(e) {
     const path = this.newPath.trim();
     if (!path) {
       this.error = 'path required';
       return;
     }
     try {
-      const r = await fetch('/api/docs/write', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope: 'project',
-          project_id: this.projectId,
-          path,
-          content: this.draft,
-          expected_version: 0,
-        }),
-      });
-      if (!r.ok) throw new Error((await r.json()).error || 'failed');
-      const doc = await r.json();
-      this.creating = false;
-      this.info = `Created ${doc.path}`;
-      await this.load();
-      await this.open(doc.path);
-    } catch (e) {
-      this.error = e.message;
+      const doFetch = async () => {
+        const r = await fetch('/api/docs/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scope: 'project',
+            project_id: this.projectId,
+            path,
+            content: this.draft,
+            expected_version: 0,
+          }),
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'failed');
+        const doc = await r.json();
+        this.creating = false;
+        this.info = `Created ${doc.path}`;
+        await this.load();
+        await this.open(doc.path);
+      };
+      if (e) await formButton(e, doFetch);
+      else await doFetch();
+      toast.success(`Doc created: ${path}`);
+    } catch (err) {
+      this.error = err.message;
+      toast.error(`Couldn't create: ${err.message}`);
     }
   }
 
@@ -640,35 +648,42 @@ class NottarioDocsPage extends LitElement {
     this.draft = draft;
   }
 
-  async saveEdit() {
+  async saveEdit(e) {
     try {
-      const r = await fetch('/api/docs/write', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope: 'project',
-          project_id: this.projectId,
-          path: this.selected.path,
-          content: this.draft,
-          expected_version: this.selected.current_version,
-        }),
-      });
-      if (r.status === 409) {
-        throw new Error('Someone else edited this document. Refresh and retry.');
-      }
-      if (!r.ok) throw new Error((await r.json()).error || 'failed');
-      const doc = await r.json();
-      this.info = `Saved (v${doc.current_version})`;
-      this.editing = false;
-      this.selected = doc;
-      await this.load();
-    } catch (e) {
-      this.error = e.message;
+      const doFetch = async () => {
+        const r = await fetch('/api/docs/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scope: 'project',
+            project_id: this.projectId,
+            path: this.selected.path,
+            content: this.draft,
+            expected_version: this.selected.current_version,
+          }),
+        });
+        if (r.status === 409) {
+          throw new Error('Someone else edited this document. Refresh and retry.');
+        }
+        if (!r.ok) throw new Error((await r.json()).error || 'failed');
+        const doc = await r.json();
+        this.info = `Saved (v${doc.current_version})`;
+        this.editing = false;
+        this.selected = doc;
+        await this.load();
+      };
+      if (e) await formButton(e, doFetch);
+      else await doFetch();
+      toast.success(`Saved (v${this.selected.current_version}).`);
+    } catch (err) {
+      this.error = err.message;
+      toast.error(`Couldn't save: ${err.message}`);
     }
   }
 
   async del() {
     if (!confirm(`Delete ${this.selected.path}?`)) return;
+    const path = this.selected.path;
     try {
       const r = await fetch('/api/docs/delete', {
         method: 'POST',
@@ -676,16 +691,18 @@ class NottarioDocsPage extends LitElement {
         body: JSON.stringify({
           scope: 'project',
           project_id: this.projectId,
-          path: this.selected.path,
+          path,
           message: 'deleted via web ui',
         }),
       });
       if (!r.ok) throw new Error('delete failed');
-      this.info = `Deleted ${this.selected.path}`;
+      this.info = `Deleted ${path}`;
       this.selected = null;
       await this.load();
+      toast.success(`Doc deleted: ${path}`);
     } catch (e) {
       this.error = e.message;
+      toast.error(`Couldn't delete: ${e.message}`);
     }
   }
 
@@ -1087,7 +1104,7 @@ class NottarioDocsPage extends LitElement {
           <div class="spacer"></div>
           <div class="actions">
             <button class="btn ghost" @click=${() => this.cancelCreate()}>Cancel</button>
-            <button class="btn primary" @click=${() => this.saveNew()}>Create</button>
+            <button class="btn primary" @click=${(e) => this.saveNew(e)}>Create</button>
           </div>
         </div>
         <div class="editor-form">
@@ -1124,7 +1141,7 @@ class NottarioDocsPage extends LitElement {
             <button class="btn ghost" @click=${() => {
               this.editing = false;
             }}>Cancel</button>
-            <button class="btn primary" @click=${() => this.saveEdit()}>Save changes</button>
+            <button class="btn primary" @click=${(e) => this.saveEdit(e)}>Save changes</button>
           </div>
         </div>
         <div class="reader-meta">
