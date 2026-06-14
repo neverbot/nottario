@@ -36,6 +36,12 @@ class NottarioProjectSettings extends LitElement {
     // Currently-picked colour in the add-role swatch grid; null means
     // "use the suggested default" (first palette entry not yet in use).
     _addRoleColor: { state: true },
+    // In-place row editor for an existing role: id of the row in
+    // edit mode (only one at a time), plus draft label / colour. All
+    // null when no row is being edited.
+    _editingRoleId: { state: true },
+    _editRoleLabel: { state: true },
+    _editRoleColor: { state: true },
   };
 
   static styles = [
@@ -84,6 +90,55 @@ class NottarioProjectSettings extends LitElement {
     .row-actions .delete:focus-visible {
       outline: 2px solid var(--danger);
       outline-offset: 1px;
+    }
+    /* Pencil-icon Edit button paired with the existing delete ✕.
+       Quiet by default, picks up the accent on hover/focus. */
+    .row-actions .edit {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      color: var(--gray-5);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .row-actions .edit:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--tint-blue);
+    }
+    .row-actions .edit:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    /* Role row in edit mode: inline form (label input + Save/Cancel)
+       in the Label cell, swatch grid in the Color cell. The form is
+       a real <form> so Enter submits and formButton can ack on Save. */
+    .role-edit-row .role-edit-form {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .role-edit-row .role-edit-form input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      font: inherit;
+    }
+    .role-edit-row .role-edit-form input[type="text"]:focus-visible {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+    .role-edit-row .role-edit-form .btn {
+      padding: 4px 10px;
+      font-size: 13px;
     }
     /* Add-row forms below tables. End-to-end fields aligned with the
        table widths above, labels visible. The 'inline' modifier
@@ -315,9 +370,17 @@ class NottarioProjectSettings extends LitElement {
     this._revokeArmedId = null;
     this._copyAck = null;
     this._addRoleColor = null;
+    this._editingRoleId = null;
+    this._editRoleLabel = '';
+    this._editRoleColor = '';
     new EscController(this, (e) => {
       if (this.showIssueToken) {
         this._closeTokenDialog();
+        e.stopPropagation();
+        return;
+      }
+      if (this._editingRoleId) {
+        this._cancelRoleEdit();
         e.stopPropagation();
       }
     });
@@ -393,6 +456,129 @@ class NottarioProjectSettings extends LitElement {
     } catch (err) {
       this.error = err.message;
       toast.error(`Couldn't add role: ${err.message}`);
+    }
+  }
+
+  _renderRoleRowRest(r, canDrag) {
+    return html`
+      <tr draggable=${canDrag ? 'true' : 'false'}
+          data-id=${r.id}
+          @dragstart=${(e) => this._dragStart(e, r.id)}
+          @dragend=${(e) => this._dragEnd(e)}
+          @dragover=${(e) => this._dragOver(e)}
+          @dragleave=${(e) => this._dragLeave(e)}
+          @drop=${(e) => this._drop(e, r.id)}>
+        ${canDrag ? html`<td class="drag-handle" title="Drag to reorder">⋮⋮</td>` : null}
+        <td class="mono">${r.key}</td>
+        <td>${r.label}</td>
+        <td>
+          ${
+            r.color
+              ? html`<span class="color-dot" style=${`background:${r.color}`}></span><span class="mono" style="font-size:11px">${r.color}</span>`
+              : html`<span class="muted">—</span>`
+          }
+        </td>
+        <td class="row-actions">
+          ${
+            canDrag
+              ? html`
+              <button class="edit" title="Edit role" aria-label="Edit role"
+                      @click=${() => this._startRoleEdit(r)}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z"
+                        stroke="currentColor" stroke-width="1.4"
+                        stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button class="delete" title="Delete role" aria-label="Delete role"
+                      @click=${() => this.deleteRole(r.id)}>✕</button>`
+              : null
+          }
+        </td>
+      </tr>
+    `;
+  }
+
+  _renderRoleRowEditing(r) {
+    const palette = this._rolePalette();
+    return html`
+      <tr class="role-edit-row" data-id=${r.id}>
+        <td class="drag-handle" aria-hidden="true">⋮⋮</td>
+        <td class="mono">${r.key}</td>
+        <td>
+          <form @submit=${(e) => this.updateRole(e, r.id)} class="role-edit-form">
+            <input type="text"
+                   .value=${this._editRoleLabel}
+                   @input=${(e) => (this._editRoleLabel = e.target.value)}
+                   aria-label="Role label"
+                   required
+                   autofocus>
+            <button type="submit" class="btn primary edit-save">Save</button>
+            <button type="button" class="btn"
+                    @click=${() => this._cancelRoleEdit()}>Cancel</button>
+          </form>
+        </td>
+        <td>
+          <div class="role-color-swatches" role="radiogroup" aria-label="Role colour">
+            ${palette.map((c) => {
+              const selected = this._editRoleColor === c;
+              return html`
+                <button type="button"
+                        class=${`swatch${selected ? ' selected' : ''}`}
+                        role="radio"
+                        aria-checked=${selected ? 'true' : 'false'}
+                        aria-label=${c}
+                        title=${c}
+                        style=${`background:${c}`}
+                        @click=${() => (this._editRoleColor = c)}></button>
+              `;
+            })}
+          </div>
+        </td>
+        <td></td>
+      </tr>
+    `;
+  }
+
+  _startRoleEdit(role) {
+    this._editingRoleId = role.id;
+    this._editRoleLabel = role.label || '';
+    this._editRoleColor = role.color || this._rolePalette()[0];
+  }
+
+  _cancelRoleEdit() {
+    this._editingRoleId = null;
+    this._editRoleLabel = '';
+    this._editRoleColor = '';
+  }
+
+  async updateRole(e, id) {
+    const payload = {
+      label: this._editRoleLabel.trim(),
+      color: this._editRoleColor.trim(),
+    };
+    if (!payload.label) {
+      toast.error('Role label is required.');
+      e.preventDefault();
+      return;
+    }
+    try {
+      await formButton(e, async () => {
+        const res = await fetch(`/api/projects/${this.projectId}/roles/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          throw new Error((await res.json().catch(() => ({}))).error || 'failed');
+        }
+        this._cancelRoleEdit();
+        await this.load();
+      });
+      toast.success('Role updated.');
+    } catch (err) {
+      this.error = err.message;
+      toast.error(`Couldn't update role: ${err.message}`);
     }
   }
 
@@ -624,33 +810,10 @@ class NottarioProjectSettings extends LitElement {
           </tr>
         </thead>
         <tbody>
-          ${sorted.map(
-            (r) => html`
-            <tr draggable=${canDrag ? 'true' : 'false'}
-                data-id=${r.id}
-                @dragstart=${(e) => this._dragStart(e, r.id)}
-                @dragend=${(e) => this._dragEnd(e)}
-                @dragover=${(e) => this._dragOver(e)}
-                @dragleave=${(e) => this._dragLeave(e)}
-                @drop=${(e) => this._drop(e, r.id)}>
-              ${canDrag ? html`<td class="drag-handle" title="Drag to reorder">⋮⋮</td>` : null}
-              <td class="mono">${r.key}</td>
-              <td>${r.label}</td>
-              <td>${
-                r.color
-                  ? html`<span class="color-dot" style=${`background:${r.color}`}></span><span class="mono" style="font-size:11px">${r.color}</span>`
-                  : html`<span class="muted">—</span>`
-              }</td>
-              <td class="row-actions">
-                ${
-                  canDrag
-                    ? html`<button class="delete" title="Delete role" aria-label="Delete role"
-                                          @click=${() => this.deleteRole(r.id)}>✕</button>`
-                    : null
-                }
-              </td>
-            </tr>
-          `,
+          ${sorted.map((r) =>
+            this._editingRoleId === r.id
+              ? this._renderRoleRowEditing(r)
+              : this._renderRoleRowRest(r, canDrag),
           )}
         </tbody>
       </table>
