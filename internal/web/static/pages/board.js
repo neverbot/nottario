@@ -360,6 +360,31 @@ class NottarioBoardPage extends LitElement {
     .card[draggable="true"] { cursor: grab; }
     .card[draggable="true"]:active { cursor: grabbing; }
     .card.dragging { opacity: 0.4; }
+    /* Won't-do cards live in the Done column alongside real done
+       cards. Typography + opacity carry the meaning: title with a
+       strikethrough, whole card dimmed to 0.55. No new colour, no
+       new border style — the user's eye keeps the layout. Not
+       draggable: refused transitions out of wont_do (wont_do → doing
+       / wont_do → done) belong in the detail panel where the state
+       buttons can disable themselves with a tooltip. */
+    .card.wont-do {
+      opacity: 0.55;
+      cursor: pointer;
+    }
+    .card.wont-do .title {
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
+    }
+    .card.wont-do:hover {
+      opacity: 0.85;
+    }
+    /* Suffix on the Done column header: "Done · 12 (3 won't do)". */
+    .col h3 .wont-do-suffix {
+      color: var(--fg-muted);
+      font-weight: 400;
+      font-size: 12px;
+      margin-left: 6px;
+    }
     .col.drag-over {
       outline: 2px solid var(--accent);
       outline-offset: -2px;
@@ -1070,12 +1095,26 @@ class NottarioBoardPage extends LitElement {
   }
 
   byState(s) {
-    let items = this.tasks.filter((t) => t.state === s);
+    // The Done column collects both `done` and `wont_do` cards: a
+    // cancelled task is still closed, just closed by a different
+    // decision. Real done first (sorted by actual_end desc), wont_do
+    // after (also sorted desc). Other columns stay state-pure.
+    let items;
+    if (s === 'done') {
+      items = this.tasks.filter((t) => t.state === 'done' || t.state === 'wont_do');
+    } else {
+      items = this.tasks.filter((t) => t.state === s);
+    }
     items = this._applyFilters(items);
     if (s === 'done') {
-      // Most recently finished at the top — fall back to UpdatedAt
-      // when ActualEnd is null (legacy rows / manual edits).
       items.sort((a, b) => {
+        // Primary: real done before wont_do.
+        const aWont = a.state === 'wont_do' ? 1 : 0;
+        const bWont = b.state === 'wont_do' ? 1 : 0;
+        if (aWont !== bWont) return aWont - bWont;
+        // Secondary: most recently finished at the top — fall back
+        // to UpdatedAt when ActualEnd is null (legacy rows / manual
+        // edits).
         const at = new Date(a.actual_end || a.updated_at).getTime();
         const bt = new Date(b.actual_end || b.updated_at).getTime();
         return bt - at;
@@ -1241,11 +1280,16 @@ class NottarioBoardPage extends LitElement {
       `, priority ${this._priorityLabel(t.priority)}` +
       (assigneeName ? `, assigned to ${assigneeName}` : '');
     const dragging = this._draggingID === t.id;
+    const isWontDo = t.state === 'wont_do';
+    // Cancelled cards aren't draggable: every drop-target column
+    // (todo / doing) is a refused transition out of wont_do. To
+    // re-open, the user goes through the detail panel where the
+    // state buttons can explain why.
     return html`
-      <div class=${`card${dragging ? ' dragging' : ''}`}
+      <div class=${`card${dragging ? ' dragging' : ''}${isWontDo ? ' wont-do' : ''}`}
            role="button"
            tabindex="0"
-           draggable="true"
+           draggable=${isWontDo ? 'false' : 'true'}
            aria-label=${a11yLabel}
            @click=${() => this.open(t)}
            @dragstart=${(e) => this._onCardDragStart(e, t)}
@@ -1322,8 +1366,10 @@ class NottarioBoardPage extends LitElement {
     const done = tasks.filter((t) => t.state === 'done').length;
     const doing = tasks.filter((t) => t.state === 'doing').length;
     const todo = tasks.filter((t) => t.state === 'todo').length;
+    const wontDo = tasks.filter((t) => t.state === 'wont_do').length;
     const total = tasks.length;
-    return `${done}/${total} done · ${doing} doing · ${todo} todo`;
+    const wontDoSuffix = wontDo > 0 ? ` · ${wontDo} won't do` : '';
+    return `${done}/${total} done · ${doing} doing · ${todo} todo${wontDoSuffix}`;
   }
 
   // Can the current caller end the viewed sprint? Owner or instance
@@ -1531,7 +1577,16 @@ class NottarioBoardPage extends LitElement {
                          @dragover=${(e) => this._onColDragOver(e, s)}
                          @dragleave=${(e) => this._onColDragLeave(e, s)}
                          @drop=${(e) => this._onColDrop(e, s)}>
-                  <h3>${stateLabels[s]} <span class="count">${items.length}</span></h3>
+                  <h3>${stateLabels[s]} <span class="count">${
+                    s === 'done' ? items.filter((t) => t.state === 'done').length : items.length
+                  }</span>${(() => {
+                    if (s !== 'done') return '';
+                    const wontDoCount = items.filter((t) => t.state === 'wont_do').length;
+                    return wontDoCount > 0
+                      ? html`<span class="wont-do-suffix"
+                                  title="${wontDoCount} task${wontDoCount === 1 ? '' : 's'} marked won't do — closed without being done">(${wontDoCount} won't do)</span>`
+                      : '';
+                  })()}</h3>
                   ${isEmpty ? this._renderEmptyBody(s) : items.map((t) => this.renderCard(t))}
                 </section>
               `;
@@ -1826,12 +1881,25 @@ class NottarioBoardPage extends LitElement {
               <div class="field-line">
                 <span class="lbl">State</span>
                 <div class="state-control">
-                  ${['todo', 'doing', 'done'].map(
-                    (s) => html`
-                    <button class=${task.state === s ? 'active' : ''}
-                            @click=${() => this.setState(task.id, s)}>${s}</button>
-                  `,
-                  )}
+                  ${['todo', 'doing', 'done', 'wont_do'].map((s) => {
+                    // Lifecycle rules: done ↔ wont_do is refused on
+                    // the backend. Disable those buttons client-side
+                    // with a tooltip so the user doesn't have to read
+                    // an error to understand the lifecycle.
+                    const refused =
+                      (task.state === 'done' && s === 'wont_do') ||
+                      (task.state === 'wont_do' && s === 'done');
+                    const label = s === 'wont_do' ? "won't do" : s;
+                    const title = refused
+                      ? `${task.state} → ${s.replace('_', ' ')} is not allowed; re-open via "todo" first to revisit the decision`
+                      : `Set state to ${label}`;
+                    return html`
+                      <button class=${task.state === s ? 'active' : ''}
+                              ?disabled=${refused}
+                              title=${title}
+                              @click=${() => this.setState(task.id, s)}>${label}</button>
+                    `;
+                  })}
                 </div>
               </div>
 

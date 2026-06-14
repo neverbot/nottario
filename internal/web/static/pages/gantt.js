@@ -844,7 +844,13 @@ class NottarioGantt extends LitElement {
         fetch(`/api/projects/${this.projectId}/members`),
         fetch(`/api/projects/${this.projectId}/priorities`),
       ]);
-      this.tasks = (await tr.json()).tasks || [];
+      // wont_do tasks are deliberately filtered out at the ingest
+      // boundary — the Gantt shows what's happening on the timeline,
+      // and cancelled work isn't on the timeline. No toggle by
+      // design (see task ba031759). Every downstream loop (bands,
+      // positions, rollup-children, dep arrows) therefore never sees
+      // a wont_do row.
+      this.tasks = ((await tr.json()).tasks || []).filter((t) => t.state !== 'wont_do');
       this._syncFoldedFeatures(this.tasks);
       this.roles = (await rr.json()).roles || [];
       this.deps = (await dr.json()).dependencies || [];
