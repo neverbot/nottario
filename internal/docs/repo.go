@@ -243,7 +243,7 @@ type Summary struct {
 	Description      string     `json:"description"`
 	CurrentVersion   int        `json:"current_version"`
 	UpdatedByUserID  *uuid.UUID `json:"updated_by_user_id"`
-	UpdatedByTokenID *uuid.UUID `json:"updated_by_token_id"`
+	UpdatedByTokenID *uuid.UUID `json:"-"`
 	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
@@ -350,7 +350,7 @@ type VersionSummary struct {
 	Title         string     `json:"title"`
 	Message       string     `json:"message"`
 	AuthorUserID  *uuid.UUID `json:"author_user_id"`
-	AuthorTokenID *uuid.UUID `json:"author_token_id"`
+	AuthorTokenID *uuid.UUID `json:"-"`
 	CreatedAt     time.Time  `json:"created_at"`
 }
 

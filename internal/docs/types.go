@@ -47,9 +47,9 @@ type Document struct {
 	CurrentVersion   int            `json:"current_version"`
 	DeletedAt        *time.Time     `json:"deleted_at"`
 	CreatedByUserID  *uuid.UUID     `json:"created_by_user_id"`
-	CreatedByTokenID *uuid.UUID     `json:"created_by_token_id"`
+	CreatedByTokenID *uuid.UUID     `json:"-"`
 	UpdatedByUserID  *uuid.UUID     `json:"updated_by_user_id"`
-	UpdatedByTokenID *uuid.UUID     `json:"updated_by_token_id"`
+	UpdatedByTokenID *uuid.UUID     `json:"-"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 	// ContentHTML is filled by the web layer before serialization
@@ -70,7 +70,7 @@ type Version struct {
 	Frontmatter   map[string]any `json:"frontmatter"`
 	Message       string         `json:"message"`
 	AuthorUserID  *uuid.UUID     `json:"author_user_id"`
-	AuthorTokenID *uuid.UUID     `json:"author_token_id"`
+	AuthorTokenID *uuid.UUID     `json:"-"`
 	CreatedAt     time.Time      `json:"created_at"`
 	// ContentHTML is filled by the web layer before serialization;
 	// see the comment on Document.ContentHTML.

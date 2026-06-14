@@ -46,7 +46,7 @@ type Task struct {
 	ActualStart      *time.Time `json:"actual_start"`
 	ActualEnd        *time.Time `json:"actual_end"`
 	CreatedByUserID  *uuid.UUID `json:"created_by_user_id"`
-	CreatedByTokenID *uuid.UUID `json:"created_by_token_id"`
+	CreatedByTokenID *uuid.UUID `json:"-"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
 	CycleID          uuid.UUID  `json:"cycle_id"`
@@ -72,7 +72,7 @@ type Comment struct {
 	ID            uuid.UUID  `json:"id"`
 	TaskID        uuid.UUID  `json:"task_id"`
 	AuthorUserID  *uuid.UUID `json:"author_user_id"`
-	AuthorTokenID *uuid.UUID `json:"author_token_id"`
+	AuthorTokenID *uuid.UUID `json:"-"`
 	BodyMD        string     `json:"body"`
 	CreatedAt     time.Time  `json:"created_at"`
 }
