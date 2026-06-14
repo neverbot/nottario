@@ -33,6 +33,9 @@ class NottarioProjectSettings extends LitElement {
     // Which "Copy …" button most recently fired its post-click ack
     // flash. Cleared on a timeout from the click handler.
     _copyAck: { state: true },
+    // Currently-picked colour in the add-role swatch grid; null means
+    // "use the suggested default" (first palette entry not yet in use).
+    _addRoleColor: { state: true },
   };
 
   static styles = [
@@ -98,7 +101,41 @@ class NottarioProjectSettings extends LitElement {
     .add-row .field.narrow { flex: 0 0 110px; }
     .add-row nottario-field { margin-bottom: 0; flex: 1; min-width: 120px; }
     .add-row nottario-field.narrow { flex: 0 0 110px; }
+    .add-row nottario-field.role-color-field { flex: 0 0 auto; min-width: 0; }
     .add-row .add-action { display: flex; align-items: center; height: 32px; }
+
+    /* Role-colour swatch grid: replaces the free-form native colour
+       picker with a fixed palette so every project stays inside the
+       brand-anchored set documented in docs/design/palette.md. */
+    .role-color-swatches {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      padding: 4px 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      box-sizing: border-box;
+    }
+    .role-color-swatches .swatch {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+    }
+    .role-color-swatches .swatch.selected {
+      box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.15),
+        0 0 0 2px var(--bg),
+        0 0 0 4px var(--accent);
+    }
+    .role-color-swatches .swatch:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
 
     /* Inline-edit number input inside table cells. Matches the
        .field input chrome so the priorities table doesn't look like
@@ -277,6 +314,7 @@ class NottarioProjectSettings extends LitElement {
     this.tokenError = '';
     this._revokeArmedId = null;
     this._copyAck = null;
+    this._addRoleColor = null;
     new EscController(this, (e) => {
       if (this.showIssueToken) {
         this._closeTokenDialog();
@@ -315,12 +353,20 @@ class NottarioProjectSettings extends LitElement {
     }
   }
 
-  // Picks a default colour for the "add role" form: walks the
-  // brand-anchored palette and returns the first one no existing
+  // Role colour palette: the brand-anchored set documented in
+  // docs/design/palette.md (`--role-backend`, `--role-frontend`,
+  // `--role-qa`, `--role-design`) plus the danger and external-kind
+  // colours. The "add role" form picks among these so every project
+  // stays within one coherent palette — no free-form hex entry.
+  _rolePalette() {
+    return ['#1f6feb', '#2da44e', '#bf8700', '#8250df', '#cf222e', '#bc4c00'];
+  }
+
+  // Default for the add-role form: first palette colour no existing
   // role is using, falling back to the first if every colour is
-  // taken. Matches the swatches documented in docs/design/palette.md.
+  // taken.
   _nextRoleColor() {
-    const palette = ['#1f6feb', '#2da44e', '#bf8700', '#8250df', '#cf222e', '#bc4c00'];
+    const palette = this._rolePalette();
     const used = new Set((this.roles || []).map((r) => (r.color || '').toLowerCase()));
     return palette.find((c) => !used.has(c)) || palette[0];
   }
@@ -341,6 +387,7 @@ class NottarioProjectSettings extends LitElement {
         });
         if (!res.ok) throw new Error((await res.json()).error || 'failed');
         form.reset();
+        this._addRoleColor = null; // re-suggest the next free palette colour
         await this.load();
       });
     } catch (err) {
@@ -617,8 +664,25 @@ class NottarioProjectSettings extends LitElement {
           <nottario-field label="Label">
             <input name="label" placeholder="Backend" required>
           </nottario-field>
-          <nottario-field label="Color" class="narrow">
-            <input name="color" type="color" .value=${this._nextRoleColor()}>
+          <nottario-field label="Color" class="role-color-field">
+            <input name="color" type="hidden" .value=${this._addRoleColor || this._nextRoleColor()}>
+            <div class="role-color-swatches" role="radiogroup" aria-label="Role colour">
+              ${this._rolePalette().map((c) => {
+                const selected = (this._addRoleColor || this._nextRoleColor()) === c;
+                return html`
+                  <button type="button"
+                          class=${`swatch${selected ? ' selected' : ''}`}
+                          role="radio"
+                          aria-checked=${selected ? 'true' : 'false'}
+                          aria-label=${c}
+                          title=${c}
+                          style=${`background:${c}`}
+                          @click=${() => {
+                            this._addRoleColor = c;
+                          }}></button>
+                `;
+              })}
+            </div>
           </nottario-field>
           <div class="add-action">
             <button type="submit" class="btn primary">Add role</button>
