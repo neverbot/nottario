@@ -39,6 +39,15 @@ type Config struct {
 	BackupDir      string
 	BackupAt       string // "HH:MM" 24h local time.
 	BackupKeepDays int
+
+	// Arch versioning. ArchLockIdleSeconds is the global default
+	// idle threshold after which an open editing session is auto-
+	// flushed into a revision; per-project rows can override via
+	// projects.arch_lock_idle_seconds. ArchTickSeconds is the
+	// interval at which the background flush goroutine scans for
+	// expired locks.
+	ArchLockIdleSeconds int
+	ArchTickSeconds     int
 }
 
 // LoadDotEnv reads a .env file from the working directory if it
@@ -101,6 +110,23 @@ func Load() (*Config, error) {
 		days = v
 	}
 	cfg.BackupKeepDays = days
+
+	cfg.ArchLockIdleSeconds = 120
+	if s := os.Getenv("NOTTARIO_ARCH_LOCK_IDLE_SECONDS"); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("NOTTARIO_ARCH_LOCK_IDLE_SECONDS must be a positive integer, got %q", s)
+		}
+		cfg.ArchLockIdleSeconds = v
+	}
+	cfg.ArchTickSeconds = 30
+	if s := os.Getenv("NOTTARIO_ARCH_TICK_SECONDS"); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("NOTTARIO_ARCH_TICK_SECONDS must be a positive integer, got %q", s)
+		}
+		cfg.ArchTickSeconds = v
+	}
 
 	return cfg, nil
 }

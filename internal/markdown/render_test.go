@@ -210,7 +210,7 @@ func TestRender_ArchChipResolves(t *testing.T) {
 	ctx, fx, cancel := seedFixture(t)
 	defer cancel()
 
-	if _, err := arch.UpsertNode(ctx, fx.pool, fx.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, fx.pool, fx.projectID, arch.Authorship{UserID: fx.userID}, arch.UpsertParams{
 		Slug: "sys", Kind: "system", Name: "System X",
 	}); err != nil {
 		t.Fatalf("UpsertNode: %v", err)

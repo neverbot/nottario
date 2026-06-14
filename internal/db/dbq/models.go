@@ -25,32 +25,50 @@ type ApiToken struct {
 }
 
 type ArchEdge struct {
-	ID            uuid.UUID
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	FromNodeID       uuid.UUID
+	ToNodeID         uuid.UUID
+	Kind             string
+	Label            string
+	DescriptionMd    string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	UpdatedByUserID  *uuid.UUID
+	UpdatedByTokenID *uuid.UUID
+}
+
+type ArchLock struct {
 	ProjectID     uuid.UUID
-	FromNodeID    uuid.UUID
-	ToNodeID      uuid.UUID
-	Kind          string
-	Label         string
-	DescriptionMd string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
+	AuthorUserID  uuid.UUID
+	AuthorTokenID *uuid.UUID
+	LockedAt      pgtype.Timestamptz
+	LastWriteAt   pgtype.Timestamptz
+	WriteCount    int32
+	BaseVersion   int32
 }
 
 type ArchNode struct {
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
-	Slug          string
-	ParentID      *uuid.UUID
-	Kind          string
-	Name          string
-	DescriptionMd string
-	Metadata      []byte
-	LinkedRepo    pgtype.Text
-	LinkedPath    pgtype.Text
-	Position      int32
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	SearchVector  interface{}
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	Slug             string
+	ParentID         *uuid.UUID
+	Kind             string
+	Name             string
+	DescriptionMd    string
+	Metadata         []byte
+	LinkedRepo       pgtype.Text
+	LinkedPath       pgtype.Text
+	Position         int32
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	SearchVector     interface{}
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	UpdatedByUserID  *uuid.UUID
+	UpdatedByTokenID *uuid.UUID
 }
 
 type ArchNodeKind struct {
@@ -70,6 +88,19 @@ type ArchNodeLink struct {
 	LinkType  string
 	TargetID  string
 	CreatedAt pgtype.Timestamptz
+}
+
+type ArchRevision struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	Version       int32
+	Snapshot      []byte
+	Message       string
+	AuthorUserID  *uuid.UUID
+	AuthorTokenID *uuid.UUID
+	WriteCount    int32
+	AutoFlushed   bool
+	CreatedAt     pgtype.Timestamptz
 }
 
 type Cycle struct {
@@ -131,19 +162,20 @@ type Membership struct {
 }
 
 type Project struct {
-	ID              uuid.UUID
-	Slug            string
-	Name            string
-	Description     string
-	PrimaryLanguage pgtype.Text
-	ProjectType     pgtype.Text
-	CreatedByUserID *uuid.UUID
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	McpPageSize     int32
-	DefaultView     string
-	CycleLabel      string
-	OwnerUserID     uuid.UUID
+	ID                  uuid.UUID
+	Slug                string
+	Name                string
+	Description         string
+	PrimaryLanguage     pgtype.Text
+	ProjectType         pgtype.Text
+	CreatedByUserID     *uuid.UUID
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	McpPageSize         int32
+	DefaultView         string
+	CycleLabel          string
+	OwnerUserID         uuid.UUID
+	ArchLockIdleSeconds pgtype.Int4
 }
 
 type ProjectPriority struct {

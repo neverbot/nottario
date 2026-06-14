@@ -184,6 +184,82 @@ Attach a markdown document path or a task uuid to a node. The web UI
 shows these in the node panel and the agent can use them to navigate
 context quickly.
 
+### `nottario.arch.checkpoint`
+
+Closes your current editing session into a single versioned snapshot
+of the diagram with the message you provide — like a git commit. Call
+this at the end of a coherent block of changes:
+
+```text
+nottario.arch.checkpoint {
+  project_id: "...",
+  message: "added auth subsystem and its incident edges"
+}
+```
+
+The response carries the new `version`, `created_at` and `write_count`
+of the snapshot. From that point forward the next write opens a brand
+new session.
+
+## Versioning model (the lock + auto-flush)
+
+Every change you make to the diagram (`upsert_node`, `upsert_edge`,
+`remove_*`, `move_node`, `upsert_kind`, `link_*`, `unlink_*`) happens
+**inside an open editing session** scoped to the project + the human
+behind your token:
+
+- Your first write opens a session and acquires a per-project lock for
+  your `user_id`. The diagram's materialised state (`arch_nodes`,
+  `arch_edges`, …) is updated in place.
+- Subsequent writes from you (same `user_id`) extend the session — no
+  new snapshot is created. **You can do 1 or 200 writes; the resulting
+  revision is one row.**
+- When you stop writing for the configured idle window (default 120s,
+  per-project override), a background ticker closes your session into
+  a single `arch_revisions` row with `auto_flushed=true` and no
+  message.
+- **`arch.checkpoint` closes your session immediately with a message**
+  — preferred over waiting for the auto-flush, because the human
+  reading the history will see your description instead of a blank.
+
+If you try to write while a **different** user owns the session,
+Nottario refuses your call with an error carrying `retry_after_seconds`:
+the time until the foreign session expires from idle. **Do not retry in
+a tight loop.** Either wait, or work on something else (tasks, docs)
+until the window passes. The same human's parallel agents share one
+session (lock is per `user_id`, not per token), so you never collide
+with your own siblings.
+
+### Practical workflow
+
+```text
+1. upsert_node { slug: "auth.routes", kind: "module", ... }
+2. upsert_node { slug: "auth.handlers", kind: "component", parent_slug: "auth.routes", ... }
+3. upsert_edge { from_slug: "auth.handlers", to_slug: "auth.routes", kind: "calls" }
+4. upsert_edge { from_slug: "auth.handlers", to_slug: "postgres", kind: "reads" }
+5. checkpoint { message: "added auth handlers + their data-flow" }
+```
+
+Five tool calls → one revision in the history with your message.
+
+### When NOT to checkpoint mid-burst
+
+Don't checkpoint between every pair of writes. The whole point is that
+**a coherent block becomes one revision.** Checkpoint when you have
+finished a logical unit, not after each individual mutation. A good
+heuristic: checkpoint at the end of the closing-the-loop pass that
+you'd otherwise do silently.
+
+### Reading the history
+
+The REST surface for humans (and for an agent that wants to inspect
+what changed) lives at:
+
+- `GET /api/projects/{id}/arch/history?limit=N` — list of revisions,
+  newest first, without the snapshot payload.
+- `GET /api/projects/{id}/arch/revisions/{version}` — one full
+  snapshot.
+
 ## Idiomatic patterns
 
 ### "Bootstrap an architecture from a single repo"

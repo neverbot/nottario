@@ -12,6 +12,24 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## 2026-06-14
+
+- **Architecture diagram now has versioning.** Every change to nodes
+  / edges / kinds / links opens an editing session per project and
+  per author; when the author stops writing for the idle window
+  (default 120s, override per project, env var
+  `NOTTARIO_ARCH_LOCK_IDLE_SECONDS`), the session is auto-flushed
+  into a single `arch_revisions` row with the full graph snapshot.
+  Two new env vars: `NOTTARIO_ARCH_LOCK_IDLE_SECONDS` and
+  `NOTTARIO_ARCH_TICK_SECONDS` (background ticker interval, default
+  30s). New MCP tool `nottario.arch.checkpoint { message? }` lets
+  agents close their session immediately with a commit-style
+  message — recommended at the end of a coherent block of edits.
+  Different-author writes during an active session return `423
+  Locked` with `retry_after_seconds`. New REST endpoints `GET
+  /api/projects/{id}/arch/history` and `GET
+  /api/projects/{id}/arch/revisions/{version}` expose the log.
+
 ## 2026-06-12
 
 - **Brand-anchored palette + Gantt visual refresh.** The whole web

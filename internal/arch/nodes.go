@@ -42,7 +42,10 @@ type UpsertParams struct {
 }
 
 // UpsertNode creates or updates a node keyed by (project_id, slug).
-func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p UpsertParams) (*Node, error) {
+// The write happens inside an arch session: it acquires (or extends)
+// the per-project lock for `by.UserID` and records authorship on the
+// row. Returns *LockedError when another user owns the active session.
+func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by Authorship, p UpsertParams) (*Node, error) {
 	if err := EnsureDefaultKinds(ctx, pool, projectID); err != nil {
 		return nil, err
 	}
@@ -65,33 +68,6 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 		return nil, ErrNameRequired
 	}
 
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := dbq.New(tx)
-
-	ok, err := kindExistsTx(ctx, q, projectID, p.Kind)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, fmt.Errorf("%w: %q", ErrInvalidKind, p.Kind)
-	}
-
-	var parentID *uuid.UUID
-	if p.ParentSlug != "" {
-		pid, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: p.ParentSlug})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrParentMissing
-		}
-		if err != nil {
-			return nil, err
-		}
-		parentID = &pid
-	}
-
 	if p.Metadata == nil {
 		p.Metadata = map[string]any{}
 	}
@@ -99,18 +75,78 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 	if err != nil {
 		return nil, fmt.Errorf("marshal metadata: %w", err)
 	}
-
 	position := int32(0)
 	if p.Position != nil {
 		position = int32(*p.Position)
 	}
 
-	existingID, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: p.Slug})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		row, err := q.InsertArchNode(ctx, dbq.InsertArchNodeParams{
-			ProjectID:     projectID,
-			Slug:          p.Slug,
+	var out *Node
+	err = withSession(ctx, pool, projectID, by, func(tx pgx.Tx, q *dbq.Queries) error {
+		ok, err := kindExistsTx(ctx, q, projectID, p.Kind)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("%w: %q", ErrInvalidKind, p.Kind)
+		}
+
+		var parentID *uuid.UUID
+		if p.ParentSlug != "" {
+			pid, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: p.ParentSlug})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrParentMissing
+			}
+			if err != nil {
+				return err
+			}
+			parentID = &pid
+		}
+
+		existingID, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: p.Slug})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			row, err := q.InsertArchNode(ctx, dbq.InsertArchNodeParams{
+				ProjectID:     projectID,
+				Slug:          p.Slug,
+				ParentID:      parentID,
+				Kind:          p.Kind,
+				Name:          p.Name,
+				DescriptionMd: p.DescriptionMD,
+				Metadata:      metadataJSON,
+				LinkedRepo:    textOrNull(p.LinkedRepo),
+				LinkedPath:    textOrNull(p.LinkedPath),
+				Position:      position,
+				AuthorUserID:  &by.UserID,
+				AuthorTokenID: by.TokenID,
+			})
+			if err != nil {
+				return err
+			}
+			n := nodeFromInsertRow(row)
+			out = &n
+			return nil
+		case err != nil:
+			return err
+		}
+
+		if parentID != nil && *parentID == existingID {
+			return ErrCycle
+		}
+		if parentID != nil {
+			cycle, err := q.ArchNodeCycleCheck(ctx, dbq.ArchNodeCycleCheckParams{
+				NewParentID: *parentID,
+				NodeID:      existingID,
+				ProjectID:   projectID,
+			})
+			if err != nil {
+				return err
+			}
+			if cycle {
+				return ErrCycle
+			}
+		}
+		row, err := q.UpdateArchNode(ctx, dbq.UpdateArchNodeParams{
+			ID:            existingID,
 			ParentID:      parentID,
 			Kind:          p.Kind,
 			Name:          p.Name,
@@ -119,54 +155,20 @@ func UpsertNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 			LinkedRepo:    textOrNull(p.LinkedRepo),
 			LinkedPath:    textOrNull(p.LinkedPath),
 			Position:      position,
+			AuthorUserID:  &by.UserID,
+			AuthorTokenID: by.TokenID,
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if err := tx.Commit(ctx); err != nil {
-			return nil, err
-		}
-		n := nodeFromInsertRow(row)
-		return &n, nil
-	case err != nil:
-		return nil, err
-	}
-
-	if parentID != nil && *parentID == existingID {
-		return nil, ErrCycle
-	}
-	if parentID != nil {
-		cycle, err := q.ArchNodeCycleCheck(ctx, dbq.ArchNodeCycleCheckParams{
-			NewParentID: *parentID,
-			NodeID:      existingID,
-			ProjectID:   projectID,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if cycle {
-			return nil, ErrCycle
-		}
-	}
-	row, err := q.UpdateArchNode(ctx, dbq.UpdateArchNodeParams{
-		ID:            existingID,
-		ParentID:      parentID,
-		Kind:          p.Kind,
-		Name:          p.Name,
-		DescriptionMd: p.DescriptionMD,
-		Metadata:      metadataJSON,
-		LinkedRepo:    textOrNull(p.LinkedRepo),
-		LinkedPath:    textOrNull(p.LinkedPath),
-		Position:      position,
+		n := nodeFromUpdateRow(row)
+		out = &n
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	n := nodeFromUpdateRow(row)
-	return &n, nil
+	return out, nil
 }
 
 // GetNode fetches a node by slug.
@@ -203,77 +205,84 @@ func ListNodes(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, par
 	return out, nil
 }
 
-// RemoveNode deletes a node.
-func RemoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, slug string, cascade bool) error {
-	q := dbq.New(pool)
-	n, err := GetNode(ctx, pool, projectID, slug)
-	if err != nil {
-		return err
-	}
-	if !cascade {
-		children, err := q.CountArchNodeChildren(ctx, &n.ID)
+// RemoveNode deletes a node. Runs inside an arch session.
+func RemoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by Authorship, slug string, cascade bool) error {
+	return withSession(ctx, pool, projectID, by, func(tx pgx.Tx, q *dbq.Queries) error {
+		row, err := q.GetArchNodeBySlug(ctx, dbq.GetArchNodeBySlugParams{ProjectID: projectID, Slug: slug})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNodeNotFound
+		}
 		if err != nil {
 			return err
 		}
-		if children > 0 {
-			return fmt.Errorf("node has %d children — pass cascade=true to delete the subtree", children)
+		if !cascade {
+			children, err := q.CountArchNodeChildren(ctx, &row.ID)
+			if err != nil {
+				return err
+			}
+			if children > 0 {
+				return fmt.Errorf("node has %d children — pass cascade=true to delete the subtree", children)
+			}
 		}
-	}
-	return q.DeleteArchNode(ctx, n.ID)
+		return q.DeleteArchNode(ctx, row.ID)
+	})
 }
 
-// MoveNode reparents a node.
-func MoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, slug, parentSlug string) (*Node, error) {
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := dbq.New(tx)
-
-	nodeID, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: slug})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNodeNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	var parentID *uuid.UUID
-	if parentSlug != "" {
-		pid, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: parentSlug})
+// MoveNode reparents a node. Runs inside an arch session.
+func MoveNode(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by Authorship, slug, parentSlug string) (*Node, error) {
+	var out *Node
+	err := withSession(ctx, pool, projectID, by, func(tx pgx.Tx, q *dbq.Queries) error {
+		nodeID, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: slug})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrParentMissing
+			return ErrNodeNotFound
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if pid == nodeID {
-			return nil, ErrCycle
+
+		var parentID *uuid.UUID
+		if parentSlug != "" {
+			pid, err := q.GetArchNodeIDBySlug(ctx, dbq.GetArchNodeIDBySlugParams{ProjectID: projectID, Slug: parentSlug})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrParentMissing
+			}
+			if err != nil {
+				return err
+			}
+			if pid == nodeID {
+				return ErrCycle
+			}
+			cycle, err := q.ArchNodeCycleCheck(ctx, dbq.ArchNodeCycleCheckParams{
+				NewParentID: pid,
+				NodeID:      nodeID,
+				ProjectID:   projectID,
+			})
+			if err != nil {
+				return err
+			}
+			if cycle {
+				return ErrCycle
+			}
+			parentID = &pid
 		}
-		cycle, err := q.ArchNodeCycleCheck(ctx, dbq.ArchNodeCycleCheckParams{
-			NewParentID: pid,
-			NodeID:      nodeID,
-			ProjectID:   projectID,
+
+		row, err := q.MoveArchNode(ctx, dbq.MoveArchNodeParams{
+			ID:            nodeID,
+			ParentID:      parentID,
+			AuthorUserID:  &by.UserID,
+			AuthorTokenID: by.TokenID,
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if cycle {
-			return nil, ErrCycle
-		}
-		parentID = &pid
-	}
-
-	row, err := q.MoveArchNode(ctx, dbq.MoveArchNodeParams{ID: nodeID, ParentID: parentID})
+		n := nodeFromMoveRow(row)
+		out = &n
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	n := nodeFromMoveRow(row)
-	return &n, nil
+	return out, nil
 }
 
 func textOrNull(s string) pgtype.Text {

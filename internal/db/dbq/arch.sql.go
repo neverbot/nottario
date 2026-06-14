@@ -233,7 +233,9 @@ func (q *Queries) GetArchNodeIDBySlug(ctx context.Context, arg GetArchNodeIDBySl
 
 const insertArchNode = `-- name: InsertArchNode :one
 INSERT INTO arch_nodes (project_id, slug, parent_id, kind, name, description_md,
-                        metadata, linked_repo, linked_path, position)
+                        metadata, linked_repo, linked_path, position,
+                        created_by_user_id, created_by_token_id,
+                        updated_by_user_id, updated_by_token_id)
 VALUES (
     $1::uuid,
     $2::text,
@@ -244,7 +246,11 @@ VALUES (
     $7::jsonb,
     $8::text,
     $9::text,
-    $10::int
+    $10::int,
+    $11::uuid,
+    $12::uuid,
+    $11::uuid,
+    $12::uuid
 )
 RETURNING id, project_id, slug, parent_id, kind, name, description_md,
           metadata, linked_repo, linked_path, position,
@@ -262,6 +268,8 @@ type InsertArchNodeParams struct {
 	LinkedRepo    pgtype.Text
 	LinkedPath    pgtype.Text
 	Position      int32
+	AuthorUserID  *uuid.UUID
+	AuthorTokenID *uuid.UUID
 }
 
 type InsertArchNodeRow struct {
@@ -292,6 +300,8 @@ func (q *Queries) InsertArchNode(ctx context.Context, arg InsertArchNodeParams) 
 		arg.LinkedRepo,
 		arg.LinkedPath,
 		arg.Position,
+		arg.AuthorUserID,
+		arg.AuthorTokenID,
 	)
 	var i InsertArchNodeRow
 	err := row.Scan(
@@ -581,14 +591,21 @@ func (q *Queries) ListArchNodes(ctx context.Context, arg ListArchNodesParams) ([
 }
 
 const moveArchNode = `-- name: MoveArchNode :one
-UPDATE arch_nodes SET parent_id = $2 WHERE id = $1
+UPDATE arch_nodes
+SET parent_id = $1::uuid,
+    updated_by_user_id = $2::uuid,
+    updated_by_token_id = $3::uuid,
+    updated_at = now()
+WHERE id = $4::uuid
 RETURNING id, project_id, slug, parent_id, kind, name, description_md,
           metadata, linked_repo, linked_path, position, created_at, updated_at
 `
 
 type MoveArchNodeParams struct {
-	ID       uuid.UUID
-	ParentID *uuid.UUID
+	ParentID      *uuid.UUID
+	AuthorUserID  *uuid.UUID
+	AuthorTokenID *uuid.UUID
+	ID            uuid.UUID
 }
 
 type MoveArchNodeRow struct {
@@ -608,7 +625,12 @@ type MoveArchNodeRow struct {
 }
 
 func (q *Queries) MoveArchNode(ctx context.Context, arg MoveArchNodeParams) (MoveArchNodeRow, error) {
-	row := q.db.QueryRow(ctx, moveArchNode, arg.ID, arg.ParentID)
+	row := q.db.QueryRow(ctx, moveArchNode,
+		arg.ParentID,
+		arg.AuthorUserID,
+		arg.AuthorTokenID,
+		arg.ID,
+	)
 	var i MoveArchNodeRow
 	err := row.Scan(
 		&i.ID,
@@ -637,8 +659,11 @@ SET parent_id = $1::uuid,
     metadata = $5::jsonb,
     linked_repo = $6::text,
     linked_path = $7::text,
-    position = $8::int
-WHERE id = $9::uuid
+    position = $8::int,
+    updated_by_user_id = $9::uuid,
+    updated_by_token_id = $10::uuid,
+    updated_at = now()
+WHERE id = $11::uuid
 RETURNING id, project_id, slug, parent_id, kind, name, description_md,
           metadata, linked_repo, linked_path, position,
           created_at, updated_at
@@ -653,6 +678,8 @@ type UpdateArchNodeParams struct {
 	LinkedRepo    pgtype.Text
 	LinkedPath    pgtype.Text
 	Position      int32
+	AuthorUserID  *uuid.UUID
+	AuthorTokenID *uuid.UUID
 	ID            uuid.UUID
 }
 
@@ -682,6 +709,8 @@ func (q *Queries) UpdateArchNode(ctx context.Context, arg UpdateArchNodeParams) 
 		arg.LinkedRepo,
 		arg.LinkedPath,
 		arg.Position,
+		arg.AuthorUserID,
+		arg.AuthorTokenID,
 		arg.ID,
 	)
 	var i UpdateArchNodeRow
@@ -704,10 +733,27 @@ func (q *Queries) UpdateArchNode(ctx context.Context, arg UpdateArchNodeParams) 
 }
 
 const upsertArchEdge = `-- name: UpsertArchEdge :one
-INSERT INTO arch_edges (project_id, from_node_id, to_node_id, kind, label, description_md)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO arch_edges (project_id, from_node_id, to_node_id, kind, label, description_md,
+                        created_by_user_id, created_by_token_id,
+                        updated_by_user_id, updated_by_token_id)
+VALUES (
+    $1::uuid,
+    $2::uuid,
+    $3::uuid,
+    $4::text,
+    $5::text,
+    $6::text,
+    $7::uuid,
+    $8::uuid,
+    $7::uuid,
+    $8::uuid
+)
 ON CONFLICT (project_id, from_node_id, to_node_id, kind) DO UPDATE
-SET label = EXCLUDED.label, description_md = EXCLUDED.description_md
+SET label = EXCLUDED.label,
+    description_md = EXCLUDED.description_md,
+    updated_by_user_id = EXCLUDED.updated_by_user_id,
+    updated_by_token_id = EXCLUDED.updated_by_token_id,
+    updated_at = now()
 RETURNING id, project_id, from_node_id, to_node_id, kind, label, description_md, created_at, updated_at
 `
 
@@ -718,9 +764,23 @@ type UpsertArchEdgeParams struct {
 	Kind          string
 	Label         string
 	DescriptionMd string
+	AuthorUserID  *uuid.UUID
+	AuthorTokenID *uuid.UUID
 }
 
-func (q *Queries) UpsertArchEdge(ctx context.Context, arg UpsertArchEdgeParams) (ArchEdge, error) {
+type UpsertArchEdgeRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	FromNodeID    uuid.UUID
+	ToNodeID      uuid.UUID
+	Kind          string
+	Label         string
+	DescriptionMd string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertArchEdge(ctx context.Context, arg UpsertArchEdgeParams) (UpsertArchEdgeRow, error) {
 	row := q.db.QueryRow(ctx, upsertArchEdge,
 		arg.ProjectID,
 		arg.FromNodeID,
@@ -728,8 +788,10 @@ func (q *Queries) UpsertArchEdge(ctx context.Context, arg UpsertArchEdgeParams) 
 		arg.Kind,
 		arg.Label,
 		arg.DescriptionMd,
+		arg.AuthorUserID,
+		arg.AuthorTokenID,
 	)
-	var i ArchEdge
+	var i UpsertArchEdgeRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,

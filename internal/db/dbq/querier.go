@@ -16,6 +16,10 @@ type Querier interface {
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
 	ArchKindExists(ctx context.Context, arg ArchKindExistsParams) (bool, error)
 	ArchNodeCycleCheck(ctx context.Context, arg ArchNodeCycleCheckParams) (bool, error)
+	// Build the full graph snapshot for one project as a single JSONB
+	// document. Used both by the migration baseline and by the runtime
+	// flush path.
+	BuildArchSnapshot(ctx context.Context, projectID uuid.UUID) ([]byte, error)
 	// Atomic claim: same eligibility filter as NextEligibleTask, picked
 	// via SELECT … FOR UPDATE SKIP LOCKED so two concurrent agents never
 	// claim the same row. Marks the row assignee = caller, state = doing,
@@ -33,6 +37,7 @@ type Querier interface {
 	CountUsers(ctx context.Context) (int32, error)
 	DeleteArchEdge(ctx context.Context, arg DeleteArchEdgeParams) (int64, error)
 	DeleteArchKind(ctx context.Context, arg DeleteArchKindParams) (int64, error)
+	DeleteArchLock(ctx context.Context, projectID uuid.UUID) error
 	DeleteArchNode(ctx context.Context, id uuid.UUID) error
 	DeleteArchNodeLink(ctx context.Context, arg DeleteArchNodeLinkParams) error
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
@@ -42,13 +47,22 @@ type Querier interface {
 	DeleteSessionByID(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
+	ExtendArchLock(ctx context.Context, arg ExtendArchLockParams) error
 	GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow, error)
 	GetActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
 	// Resolves an architecture node chip by slug.
 	GetArchChipBySlug(ctx context.Context, arg GetArchChipBySlugParams) (GetArchChipBySlugRow, error)
+	// Arch versioning: per-project editing sessions (locks) and their
+	// snapshot revisions. The lock is the singleton "open session" per
+	// project; revisions is the append-only log of closed sessions.
+	GetArchLock(ctx context.Context, projectID uuid.UUID) (ArchLock, error)
+	// Same shape as GetArchLock but with FOR UPDATE; used inside a write
+	// transaction to atomically acquire/extend the lock.
+	GetArchLockForUpdate(ctx context.Context, projectID uuid.UUID) (ArchLock, error)
 	GetArchNodeBySlug(ctx context.Context, arg GetArchNodeBySlugParams) (GetArchNodeBySlugRow, error)
 	GetArchNodeIDBySlug(ctx context.Context, arg GetArchNodeIDBySlugParams) (uuid.UUID, error)
+	GetArchRevision(ctx context.Context, arg GetArchRevisionParams) (ArchRevision, error)
 	GetCycle(ctx context.Context, id uuid.UUID) (Cycle, error)
 	// Resolves a doc chip by its logical path within a project.
 	GetDocChipByPath(ctx context.Context, arg GetDocChipByPathParams) (GetDocChipByPathRow, error)
@@ -65,6 +79,8 @@ type Querier interface {
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
+	// Returns the project's idle threshold (override or NULL).
+	GetProjectArchIdleSeconds(ctx context.Context, projectID uuid.UUID) (pgtype.Int4, error)
 	GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (GetProjectByIDOrSlugRow, error)
 	GetProjectCycleLabel(ctx context.Context, id uuid.UUID) (string, error)
 	// Reads the body and frontmatter of a single skill-override document
@@ -84,8 +100,10 @@ type Querier interface {
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error)
+	InsertArchLock(ctx context.Context, arg InsertArchLockParams) error
 	InsertArchNode(ctx context.Context, arg InsertArchNodeParams) (InsertArchNodeRow, error)
 	InsertArchNodeLink(ctx context.Context, arg InsertArchNodeLinkParams) error
+	InsertArchRevision(ctx context.Context, arg InsertArchRevisionParams) (InsertArchRevisionRow, error)
 	InsertCycle(ctx context.Context, arg InsertCycleParams) (Cycle, error)
 	InsertDefaultArchKind(ctx context.Context, arg InsertDefaultArchKindParams) error
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
@@ -111,12 +129,20 @@ type Querier interface {
 	ListArchKinds(ctx context.Context, projectID uuid.UUID) ([]ArchNodeKind, error)
 	ListArchNodeLinks(ctx context.Context, nodeID uuid.UUID) ([]ArchNodeLink, error)
 	ListArchNodes(ctx context.Context, arg ListArchNodesParams) ([]ListArchNodesRow, error)
+	// History view: omits the (potentially large) snapshot column. Newest
+	// first. `before_version` lets the caller paginate; pass NULL to start
+	// from the top.
+	ListArchRevisions(ctx context.Context, arg ListArchRevisionsParams) ([]ListArchRevisionsRow, error)
 	ListCycles(ctx context.Context, projectID uuid.UUID) ([]Cycle, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
 	ListDocumentVersions(ctx context.Context, documentID uuid.UUID) ([]ListDocumentVersionsRow, error)
 	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]ListDocumentsRow, error)
 	ListDoneDependentsInconsistencies(ctx context.Context, projectID uuid.UUID) ([]ListDoneDependentsInconsistenciesRow, error)
+	// Returns all locks whose last write is older than the project's idle
+	// threshold. The threshold is (projects.arch_lock_idle_seconds OR the
+	// caller-supplied default). Used by the background ticker.
+	ListExpiredArchLocks(ctx context.Context, defaultIdleSeconds int32) ([]ListExpiredArchLocksRow, error)
 	ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error)
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
@@ -156,6 +182,10 @@ type Querier interface {
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LookupAPIToken(ctx context.Context, tokenHash []byte) (LookupAPITokenRow, error)
+	// Returns the highest existing version for the project, or 0 when the
+	// project has no revisions yet. Used to compute the next version on
+	// both lock acquisition (base_version) and snapshot insertion.
+	MaxArchRevisionVersion(ctx context.Context, projectID uuid.UUID) (int32, error)
 	MoveArchNode(ctx context.Context, arg MoveArchNodeParams) (MoveArchNodeRow, error)
 	// For every feature in `from_cycle` that isn't done, move it AND
 	// all its recursive descendants to `to_cycle`. Done children of
@@ -215,7 +245,7 @@ type Querier interface {
 	// "set to NULL".
 	UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsParams) (UpdateTaskFieldsRow, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
-	UpsertArchEdge(ctx context.Context, arg UpsertArchEdgeParams) (ArchEdge, error)
+	UpsertArchEdge(ctx context.Context, arg UpsertArchEdgeParams) (UpsertArchEdgeRow, error)
 	UpsertArchKind(ctx context.Context, arg UpsertArchKindParams) (ArchNodeKind, error)
 	UpsertProjectPriority(ctx context.Context, arg UpsertProjectPriorityParams) (UpsertProjectPriorityRow, error)
 	UpsertTaskCommit(ctx context.Context, arg UpsertTaskCommitParams) error

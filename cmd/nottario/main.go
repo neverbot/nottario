@@ -23,6 +23,7 @@ import (
 	// time/tzdata package docs.
 	_ "time/tzdata"
 
+	"github.com/neverbot/nottario/internal/arch"
 	"github.com/neverbot/nottario/internal/backup"
 	"github.com/neverbot/nottario/internal/config"
 	"github.com/neverbot/nottario/internal/db"
@@ -99,6 +100,15 @@ func main() {
 			logger.Error("backup goroutine exited with error", "err", err)
 		}
 	}()
+
+	// Arch versioning: configure the per-session idle threshold and
+	// start the background ticker that auto-flushes expired sessions
+	// into arch_revisions rows. The lock-acquire path in arch writes
+	// also evicts expired locks inline, but the ticker is what keeps
+	// the revisions log timely when no one is writing.
+	arch.SetIdleConfig(arch.IdleConfig{DefaultSeconds: cfg.ArchLockIdleSeconds})
+	arch.NewFlushTicker(pool, time.Duration(cfg.ArchTickSeconds)*time.Second,
+		logger.With("subsystem", "arch-flush")).Start(ctx)
 
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,

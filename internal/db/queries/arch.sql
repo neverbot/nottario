@@ -36,7 +36,9 @@ SELECT id FROM arch_nodes WHERE project_id = $1 AND slug = $2;
 
 -- name: InsertArchNode :one
 INSERT INTO arch_nodes (project_id, slug, parent_id, kind, name, description_md,
-                        metadata, linked_repo, linked_path, position)
+                        metadata, linked_repo, linked_path, position,
+                        created_by_user_id, created_by_token_id,
+                        updated_by_user_id, updated_by_token_id)
 VALUES (
     sqlc.arg('project_id')::uuid,
     sqlc.arg('slug')::text,
@@ -47,7 +49,11 @@ VALUES (
     sqlc.arg('metadata')::jsonb,
     sqlc.narg('linked_repo')::text,
     sqlc.narg('linked_path')::text,
-    sqlc.arg('position')::int
+    sqlc.arg('position')::int,
+    sqlc.narg('author_user_id')::uuid,
+    sqlc.narg('author_token_id')::uuid,
+    sqlc.narg('author_user_id')::uuid,
+    sqlc.narg('author_token_id')::uuid
 )
 RETURNING id, project_id, slug, parent_id, kind, name, description_md,
           metadata, linked_repo, linked_path, position,
@@ -62,7 +68,10 @@ SET parent_id = sqlc.narg('parent_id')::uuid,
     metadata = sqlc.arg('metadata')::jsonb,
     linked_repo = sqlc.narg('linked_repo')::text,
     linked_path = sqlc.narg('linked_path')::text,
-    position = sqlc.arg('position')::int
+    position = sqlc.arg('position')::int,
+    updated_by_user_id = sqlc.narg('author_user_id')::uuid,
+    updated_by_token_id = sqlc.narg('author_token_id')::uuid,
+    updated_at = now()
 WHERE id = sqlc.arg('id')::uuid
 RETURNING id, project_id, slug, parent_id, kind, name, description_md,
           metadata, linked_repo, linked_path, position,
@@ -93,7 +102,12 @@ SELECT COUNT(*)::int AS n FROM arch_nodes WHERE parent_id = $1;
 DELETE FROM arch_nodes WHERE id = $1;
 
 -- name: MoveArchNode :one
-UPDATE arch_nodes SET parent_id = $2 WHERE id = $1
+UPDATE arch_nodes
+SET parent_id = sqlc.narg('parent_id')::uuid,
+    updated_by_user_id = sqlc.narg('author_user_id')::uuid,
+    updated_by_token_id = sqlc.narg('author_token_id')::uuid,
+    updated_at = now()
+WHERE id = sqlc.arg('id')::uuid
 RETURNING id, project_id, slug, parent_id, kind, name, description_md,
           metadata, linked_repo, linked_path, position, created_at, updated_at;
 
@@ -119,10 +133,27 @@ SELECT EXISTS (
 ) AS hit;
 
 -- name: UpsertArchEdge :one
-INSERT INTO arch_edges (project_id, from_node_id, to_node_id, kind, label, description_md)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO arch_edges (project_id, from_node_id, to_node_id, kind, label, description_md,
+                        created_by_user_id, created_by_token_id,
+                        updated_by_user_id, updated_by_token_id)
+VALUES (
+    sqlc.arg('project_id')::uuid,
+    sqlc.arg('from_node_id')::uuid,
+    sqlc.arg('to_node_id')::uuid,
+    sqlc.arg('kind')::text,
+    sqlc.arg('label')::text,
+    sqlc.arg('description_md')::text,
+    sqlc.narg('author_user_id')::uuid,
+    sqlc.narg('author_token_id')::uuid,
+    sqlc.narg('author_user_id')::uuid,
+    sqlc.narg('author_token_id')::uuid
+)
 ON CONFLICT (project_id, from_node_id, to_node_id, kind) DO UPDATE
-SET label = EXCLUDED.label, description_md = EXCLUDED.description_md
+SET label = EXCLUDED.label,
+    description_md = EXCLUDED.description_md,
+    updated_by_user_id = EXCLUDED.updated_by_user_id,
+    updated_by_token_id = EXCLUDED.updated_by_token_id,
+    updated_at = now()
 RETURNING id, project_id, from_node_id, to_node_id, kind, label, description_md, created_at, updated_at;
 
 -- name: DeleteArchEdge :execrows

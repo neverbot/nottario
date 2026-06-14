@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/neverbot/nottario/internal/db/dbq"
@@ -71,52 +72,62 @@ func ListKinds(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]
 	return out, nil
 }
 
-// UpsertKind creates or updates a kind.
-func UpsertKind(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, k Kind) (*Kind, error) {
+// UpsertKind creates or updates a kind. Runs inside an arch session.
+func UpsertKind(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by Authorship, k Kind) (*Kind, error) {
 	if k.Key == "" || k.Label == "" {
 		return nil, errors.New("key and label are required")
 	}
-	row, err := dbq.New(pool).UpsertArchKind(ctx, dbq.UpsertArchKindParams{
-		ProjectID:   projectID,
-		Key:         k.Key,
-		Label:       k.Label,
-		Icon:        k.Icon,
-		Color:       k.Color,
-		Description: k.Description,
+	var out *Kind
+	err := withSession(ctx, pool, projectID, by, func(tx pgx.Tx, q *dbq.Queries) error {
+		row, err := q.UpsertArchKind(ctx, dbq.UpsertArchKindParams{
+			ProjectID:   projectID,
+			Key:         k.Key,
+			Label:       k.Label,
+			Icon:        k.Icon,
+			Color:       k.Color,
+			Description: k.Description,
+		})
+		if err != nil {
+			return err
+		}
+		out = &Kind{
+			ProjectID:   row.ProjectID,
+			Key:         row.Key,
+			Label:       row.Label,
+			Icon:        row.Icon,
+			Color:       row.Color,
+			Description: row.Description,
+			IsDefault:   row.IsDefault,
+			CreatedAt:   row.CreatedAt.Time,
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &Kind{
-		ProjectID:   row.ProjectID,
-		Key:         row.Key,
-		Label:       row.Label,
-		Icon:        row.Icon,
-		Color:       row.Color,
-		Description: row.Description,
-		IsDefault:   row.IsDefault,
-		CreatedAt:   row.CreatedAt.Time,
-	}, nil
+	return out, nil
 }
 
 // DeleteKind removes a kind, refusing if any node still uses it.
-func DeleteKind(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, key string) error {
-	q := dbq.New(pool)
-	count, err := q.CountNodesByKind(ctx, dbq.CountNodesByKindParams{ProjectID: projectID, Kind: key})
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return ErrKindInUse
-	}
-	rows, err := q.DeleteArchKind(ctx, dbq.DeleteArchKindParams{ProjectID: projectID, Key: key})
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return errors.New("kind not found")
-	}
-	return nil
+// Runs inside an arch session.
+func DeleteKind(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by Authorship, key string) error {
+	return withSession(ctx, pool, projectID, by, func(tx pgx.Tx, q *dbq.Queries) error {
+		count, err := q.CountNodesByKind(ctx, dbq.CountNodesByKindParams{ProjectID: projectID, Kind: key})
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrKindInUse
+		}
+		rows, err := q.DeleteArchKind(ctx, dbq.DeleteArchKindParams{ProjectID: projectID, Key: key})
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return errors.New("kind not found")
+		}
+		return nil
+	})
 }
 
 // kindExistsTx reports whether a kind key is known for the project,

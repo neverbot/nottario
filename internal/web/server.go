@@ -124,6 +124,8 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/projects/{id}/arch/edges", guard(ListEdgesHandler(archDeps)))
 	mux.Handle("POST /api/projects/{id}/arch/edges", guard(UpsertEdgeHandler(archDeps)))
 	mux.Handle("DELETE /api/projects/{id}/arch/edges/{edge_id}", guard(RemoveEdgeHandler(archDeps)))
+	mux.Handle("GET /api/projects/{id}/arch/history", guard(ListArchHistoryHandler(archDeps)))
+	mux.Handle("GET /api/projects/{id}/arch/revisions/{version}", guard(GetArchRevisionHandler(archDeps)))
 
 	docsDeps := DocsDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/docs", ListDocsHandler(docsDeps))

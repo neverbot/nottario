@@ -82,7 +82,7 @@ func TestSearch_HitsAcrossAllThreeDomains(t *testing.T) {
 	}
 
 	// Seed an arch node named "alpaca".
-	if _, err := arch.UpsertNode(ctx, fx.pool, fx.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, fx.pool, fx.projectID, arch.Authorship{UserID: fx.userID}, arch.UpsertParams{
 		Slug: "alpaca-svc", Kind: "service", Name: "alpaca service",
 	}); err != nil {
 		t.Fatalf("UpsertNode: %v", err)
@@ -129,7 +129,7 @@ func TestSearch_KindFilterNarrowsResults(t *testing.T) {
 	}, tasks.Authorship{UserID: &fx.userID}); err != nil {
 		t.Fatalf("task: %v", err)
 	}
-	if _, err := arch.UpsertNode(ctx, fx.pool, fx.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, fx.pool, fx.projectID, arch.Authorship{UserID: fx.userID}, arch.UpsertParams{
 		Slug: "alpaca-arch", Kind: "service", Name: "alpaca arch",
 	}); err != nil {
 		t.Fatalf("arch: %v", err)

@@ -90,7 +90,7 @@ func TestKinds_DefaultsAndCustom(t *testing.T) {
 	}
 
 	// UpsertKind: insert custom, then update its label.
-	custom, err := arch.UpsertKind(ctx, tc.pool, tc.projectID, arch.Kind{
+	custom, err := arch.UpsertKind(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.Kind{
 		Key: "worker", Label: "Worker", Color: "#abcdef", Description: "background job",
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func TestKinds_DefaultsAndCustom(t *testing.T) {
 		t.Fatalf("custom kind unexpected: label=%q isDefault=%v", custom.Label, custom.IsDefault)
 	}
 
-	updated, err := arch.UpsertKind(ctx, tc.pool, tc.projectID, arch.Kind{
+	updated, err := arch.UpsertKind(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.Kind{
 		Key: "worker", Label: "Background Worker", Color: "#abcdef",
 	})
 	if err != nil {
@@ -111,28 +111,28 @@ func TestKinds_DefaultsAndCustom(t *testing.T) {
 	}
 
 	// Required fields.
-	if _, err := arch.UpsertKind(ctx, tc.pool, tc.projectID, arch.Kind{Key: ""}); err == nil {
+	if _, err := arch.UpsertKind(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.Kind{Key: ""}); err == nil {
 		t.Error("UpsertKind with empty key should fail")
 	}
-	if _, err := arch.UpsertKind(ctx, tc.pool, tc.projectID, arch.Kind{Key: "ok"}); err == nil {
+	if _, err := arch.UpsertKind(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.Kind{Key: "ok"}); err == nil {
 		t.Error("UpsertKind with empty label should fail")
 	}
 
 	// Delete: unused kind goes; in-use kind refuses.
-	if err := arch.DeleteKind(ctx, tc.pool, tc.projectID, "worker"); err != nil {
+	if err := arch.DeleteKind(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "worker"); err != nil {
 		t.Fatalf("DeleteKind unused: %v", err)
 	}
 	// Missing key.
-	if err := arch.DeleteKind(ctx, tc.pool, tc.projectID, "nope"); err == nil {
+	if err := arch.DeleteKind(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "nope"); err == nil {
 		t.Error("DeleteKind on missing key should fail")
 	}
 	// In use: create a node with kind="service", then try to delete.
-	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "svc-a", Kind: "service", Name: "Svc A",
 	}); err != nil {
 		t.Fatalf("UpsertNode for in-use kind test: %v", err)
 	}
-	if err := arch.DeleteKind(ctx, tc.pool, tc.projectID, "service"); !errors.Is(err, arch.ErrKindInUse) {
+	if err := arch.DeleteKind(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "service"); !errors.Is(err, arch.ErrKindInUse) {
 		t.Fatalf("DeleteKind in-use: got %v, want ErrKindInUse", err)
 	}
 }
@@ -142,31 +142,31 @@ func TestNodes_Validation(t *testing.T) {
 	defer cancel()
 
 	// Empty slug
-	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Kind: "service", Name: "X",
 	}); !errors.Is(err, arch.ErrSlugRequired) {
 		t.Errorf("empty slug: got %v, want ErrSlugRequired", err)
 	}
 	// Bad slug
-	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "Bad Slug", Kind: "service", Name: "X",
 	}); err == nil {
 		t.Error("bad slug should fail validation")
 	}
 	// Empty name
-	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "x", Kind: "service", Name: "  ",
 	}); !errors.Is(err, arch.ErrNameRequired) {
 		t.Errorf("empty name: got %v, want ErrNameRequired", err)
 	}
 	// Unknown kind
-	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "x", Kind: "made-up", Name: "X",
 	}); !errors.Is(err, arch.ErrInvalidKind) {
 		t.Errorf("bad kind: got %v, want ErrInvalidKind", err)
 	}
 	// Missing parent
-	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "x", Kind: "service", Name: "X", ParentSlug: "ghost",
 	}); !errors.Is(err, arch.ErrParentMissing) {
 		t.Errorf("missing parent: got %v, want ErrParentMissing", err)
@@ -177,7 +177,7 @@ func TestNodes_InsertUpdateGetList(t *testing.T) {
 	ctx, tc, cancel := seedProject(t)
 	defer cancel()
 
-	root, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	root, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "sys", Kind: "system", Name: "System",
 		Metadata: map[string]any{"env": "prod"},
 	})
@@ -191,7 +191,7 @@ func TestNodes_InsertUpdateGetList(t *testing.T) {
 		t.Errorf("metadata round-trip: %v", root.Metadata)
 	}
 
-	child, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	child, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "sys.api", Kind: "service", Name: "API",
 		ParentSlug: "sys",
 	})
@@ -203,7 +203,7 @@ func TestNodes_InsertUpdateGetList(t *testing.T) {
 	}
 
 	// Update: same slug → update path (label change picked up).
-	updated, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	updated, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "sys.api", Kind: "service", Name: "API v2", ParentSlug: "sys",
 	})
 	if err != nil {
@@ -249,7 +249,7 @@ func TestNodes_HTMLEntitiesDecodedAtBoundary(t *testing.T) {
 	ctx, tc, cancel := seedProject(t)
 	defer cancel()
 
-	row, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	row, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "viewer.pages", Kind: "module",
 		Name:          "Pages &amp; Router",
 		DescriptionMD: "Routes &lt;/&gt; &amp; render &quot;leaf&quot; pages.",
@@ -271,7 +271,7 @@ func TestNodes_MoveAndCycles(t *testing.T) {
 
 	mk := func(slug, parent string) {
 		t.Helper()
-		if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+		if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 			Slug: slug, Kind: "service", Name: slug, ParentSlug: parent,
 		}); err != nil {
 			t.Fatalf("upsert %s: %v", slug, err)
@@ -285,24 +285,24 @@ func TestNodes_MoveAndCycles(t *testing.T) {
 	mk("other", "")
 
 	// Self-cycle via UpsertNode update.
-	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "a", Kind: "service", Name: "a", ParentSlug: "a",
 	}); !errors.Is(err, arch.ErrCycle) {
 		t.Errorf("self-cycle on upsert: got %v, want ErrCycle", err)
 	}
 
 	// Descendant cycle: move a under c (its grand-grand-child).
-	if _, err := arch.MoveNode(ctx, tc.pool, tc.projectID, "a", "c"); !errors.Is(err, arch.ErrCycle) {
+	if _, err := arch.MoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "a", "c"); !errors.Is(err, arch.ErrCycle) {
 		t.Errorf("descendant cycle: got %v, want ErrCycle", err)
 	}
 
 	// Self move.
-	if _, err := arch.MoveNode(ctx, tc.pool, tc.projectID, "a", "a"); !errors.Is(err, arch.ErrCycle) {
+	if _, err := arch.MoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "a", "a"); !errors.Is(err, arch.ErrCycle) {
 		t.Errorf("self move: got %v, want ErrCycle", err)
 	}
 
 	// Valid: move c under "other".
-	moved, err := arch.MoveNode(ctx, tc.pool, tc.projectID, "c", "other")
+	moved, err := arch.MoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "c", "other")
 	if err != nil {
 		t.Fatalf("MoveNode valid: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestNodes_MoveAndCycles(t *testing.T) {
 	}
 
 	// Promote to root: MoveNode with empty parent.
-	rooted, err := arch.MoveNode(ctx, tc.pool, tc.projectID, "c", "")
+	rooted, err := arch.MoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "c", "")
 	if err != nil {
 		t.Fatalf("MoveNode to root: %v", err)
 	}
@@ -320,10 +320,10 @@ func TestNodes_MoveAndCycles(t *testing.T) {
 	}
 
 	// Move missing node + missing parent.
-	if _, err := arch.MoveNode(ctx, tc.pool, tc.projectID, "ghost", ""); !errors.Is(err, arch.ErrNodeNotFound) {
+	if _, err := arch.MoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "ghost", ""); !errors.Is(err, arch.ErrNodeNotFound) {
 		t.Errorf("move ghost: got %v, want ErrNodeNotFound", err)
 	}
-	if _, err := arch.MoveNode(ctx, tc.pool, tc.projectID, "a", "ghost-parent"); !errors.Is(err, arch.ErrParentMissing) {
+	if _, err := arch.MoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "a", "ghost-parent"); !errors.Is(err, arch.ErrParentMissing) {
 		t.Errorf("move to ghost parent: got %v, want ErrParentMissing", err)
 	}
 }
@@ -334,7 +334,7 @@ func TestNodes_RemoveCascade(t *testing.T) {
 
 	mk := func(slug, parent string) {
 		t.Helper()
-		if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+		if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 			Slug: slug, Kind: "service", Name: slug, ParentSlug: parent,
 		}); err != nil {
 			t.Fatalf("upsert %s: %v", slug, err)
@@ -345,12 +345,12 @@ func TestNodes_RemoveCascade(t *testing.T) {
 	mk("sys.b", "sys")
 
 	// Without cascade, removing a parent with children fails.
-	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, "sys", false); err == nil {
+	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "sys", false); err == nil {
 		t.Error("RemoveNode without cascade on parent should fail")
 	}
 
 	// With cascade, the whole subtree disappears.
-	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, "sys", true); err != nil {
+	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "sys", true); err != nil {
 		t.Fatalf("RemoveNode cascade: %v", err)
 	}
 	left, err := arch.ListNodes(ctx, tc.pool, tc.projectID, "", false)
@@ -362,7 +362,7 @@ func TestNodes_RemoveCascade(t *testing.T) {
 	}
 
 	// Removing a missing node surfaces ErrNodeNotFound.
-	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, "ghost", false); !errors.Is(err, arch.ErrNodeNotFound) {
+	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "ghost", false); !errors.Is(err, arch.ErrNodeNotFound) {
 		t.Errorf("Remove missing: got %v, want ErrNodeNotFound", err)
 	}
 }
@@ -373,7 +373,7 @@ func TestEdges_FullCycle(t *testing.T) {
 
 	mk := func(slug string) {
 		t.Helper()
-		if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+		if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 			Slug: slug, Kind: "service", Name: slug,
 		}); err != nil {
 			t.Fatalf("upsert %s: %v", slug, err)
@@ -384,40 +384,40 @@ func TestEdges_FullCycle(t *testing.T) {
 	mk("c")
 
 	// Validation: empty slugs / empty kind / self-loop.
-	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.EdgeUpsertParams{
+	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.EdgeUpsertParams{
 		FromSlug: "", ToSlug: "b", Kind: "calls",
 	}); err == nil {
 		t.Error("empty from should fail")
 	}
-	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.EdgeUpsertParams{
+	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.EdgeUpsertParams{
 		FromSlug: "a", ToSlug: "a", Kind: "calls",
 	}); err == nil {
 		t.Error("self-loop should fail")
 	}
-	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.EdgeUpsertParams{
+	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.EdgeUpsertParams{
 		FromSlug: "a", ToSlug: "b", Kind: "",
 	}); err == nil {
 		t.Error("empty kind should fail")
 	}
-	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.EdgeUpsertParams{
+	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.EdgeUpsertParams{
 		FromSlug: "ghost", ToSlug: "a", Kind: "calls",
 	}); err == nil {
 		t.Error("missing from slug should fail")
 	}
 
 	// Insert two outgoing from "a" and one outgoing from "b".
-	eAB, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.EdgeUpsertParams{
+	eAB, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.EdgeUpsertParams{
 		FromSlug: "a", ToSlug: "b", Kind: "calls", Label: "AB",
 	})
 	if err != nil {
 		t.Fatalf("upsert a→b: %v", err)
 	}
-	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.EdgeUpsertParams{
+	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.EdgeUpsertParams{
 		FromSlug: "a", ToSlug: "c", Kind: "uses", Label: "AC",
 	}); err != nil {
 		t.Fatalf("upsert a→c: %v", err)
 	}
-	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.EdgeUpsertParams{
+	if _, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.EdgeUpsertParams{
 		FromSlug: "b", ToSlug: "c", Kind: "uses", Label: "BC",
 	}); err != nil {
 		t.Fatalf("upsert b→c: %v", err)
@@ -425,7 +425,7 @@ func TestEdges_FullCycle(t *testing.T) {
 
 	// Upsert key is (from, to, kind): replaying with the same kind
 	// updates rather than duplicates.
-	again, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.EdgeUpsertParams{
+	again, err := arch.UpsertEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.EdgeUpsertParams{
 		FromSlug: "a", ToSlug: "b", Kind: "calls", Label: "AB-v2",
 	})
 	if err != nil {
@@ -483,10 +483,10 @@ func TestEdges_FullCycle(t *testing.T) {
 	}
 
 	// Remove by id.
-	if err := arch.RemoveEdge(ctx, tc.pool, tc.projectID, eAB.ID); err != nil {
+	if err := arch.RemoveEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, eAB.ID); err != nil {
 		t.Fatalf("RemoveEdge: %v", err)
 	}
-	if err := arch.RemoveEdge(ctx, tc.pool, tc.projectID, eAB.ID); !errors.Is(err, arch.ErrEdgeNotFound) {
+	if err := arch.RemoveEdge(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, eAB.ID); !errors.Is(err, arch.ErrEdgeNotFound) {
 		t.Errorf("RemoveEdge twice: got %v, want ErrEdgeNotFound", err)
 	}
 	// Filter by an unknown node slug surfaces as an error.
@@ -495,7 +495,7 @@ func TestEdges_FullCycle(t *testing.T) {
 	}
 
 	// Cascade: removing a node deletes its edges.
-	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, "c", true); err != nil {
+	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "c", true); err != nil {
 		t.Fatalf("RemoveNode c: %v", err)
 	}
 	remaining, _ := arch.ListEdges(ctx, tc.pool, tc.projectID, arch.EdgeFilter{})
@@ -510,28 +510,28 @@ func TestLinks_DocAndTask(t *testing.T) {
 	ctx, tc, cancel := seedProject(t)
 	defer cancel()
 
-	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.UpsertParams{
+	if _, err := arch.UpsertNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, arch.UpsertParams{
 		Slug: "svc", Kind: "service", Name: "Svc",
 	}); err != nil {
 		t.Fatalf("UpsertNode: %v", err)
 	}
 
 	// Doc link round-trip.
-	if err := arch.LinkDoc(ctx, tc.pool, tc.projectID, "svc", "projects/x/readme.md"); err != nil {
+	if err := arch.LinkDoc(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "svc", "projects/x/readme.md"); err != nil {
 		t.Fatalf("LinkDoc: %v", err)
 	}
 	// LinkDoc on missing slug must error.
-	if err := arch.LinkDoc(ctx, tc.pool, tc.projectID, "ghost", "x.md"); err == nil {
+	if err := arch.LinkDoc(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "ghost", "x.md"); err == nil {
 		t.Error("LinkDoc to ghost node should fail")
 	}
 	// Empty doc path is rejected.
-	if err := arch.LinkDoc(ctx, tc.pool, tc.projectID, "svc", ""); err == nil {
+	if err := arch.LinkDoc(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "svc", ""); err == nil {
 		t.Error("LinkDoc with empty path should fail")
 	}
 
 	// Task link round-trip.
 	taskID := uuid.New()
-	if err := arch.LinkTask(ctx, tc.pool, tc.projectID, tc.projectID, taskID, "svc"); err != nil {
+	if err := arch.LinkTask(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, taskID, "svc"); err != nil {
 		t.Fatalf("LinkTask: %v", err)
 	}
 
@@ -561,10 +561,10 @@ func TestLinks_DocAndTask(t *testing.T) {
 	}
 
 	// Unlink both, list goes empty.
-	if err := arch.UnlinkDoc(ctx, tc.pool, tc.projectID, "svc", "projects/x/readme.md"); err != nil {
+	if err := arch.UnlinkDoc(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "svc", "projects/x/readme.md"); err != nil {
 		t.Fatalf("UnlinkDoc: %v", err)
 	}
-	if err := arch.UnlinkTask(ctx, tc.pool, tc.projectID, "svc", taskID); err != nil {
+	if err := arch.UnlinkTask(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "svc", taskID); err != nil {
 		t.Fatalf("UnlinkTask: %v", err)
 	}
 	left, err := arch.ListLinks(ctx, tc.pool, tc.projectID, "svc")
@@ -577,10 +577,10 @@ func TestLinks_DocAndTask(t *testing.T) {
 
 	// Cascade: deleting the node removes the links table rows (FK
 	// cascade in the schema). Re-link, delete node, verify.
-	if err := arch.LinkDoc(ctx, tc.pool, tc.projectID, "svc", "y.md"); err != nil {
+	if err := arch.LinkDoc(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "svc", "y.md"); err != nil {
 		t.Fatalf("relink: %v", err)
 	}
-	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, "svc", false); err != nil {
+	if err := arch.RemoveNode(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, "svc", false); err != nil {
 		t.Fatalf("RemoveNode: %v", err)
 	}
 	if _, err := arch.ListLinks(ctx, tc.pool, tc.projectID, "svc"); err == nil {

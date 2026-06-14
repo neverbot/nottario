@@ -9,6 +9,17 @@ import (
 	"github.com/neverbot/nottario/internal/arch"
 )
 
+// archBy resolves the MCP caller to an arch.Authorship value. Returns
+// an empty Authorship and the wrapped error when no caller is in the
+// context (auth middleware did not run).
+func archBy(ctx context.Context) (arch.Authorship, error) {
+	c, err := callerFromContext(ctx)
+	if err != nil {
+		return arch.Authorship{}, err
+	}
+	return arch.Authorship{UserID: c.UserID, TokenID: ptrUUID(c.TokenID)}, nil
+}
+
 type archProjectInput struct {
 	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
 }
@@ -112,7 +123,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		k, err := arch.UpsertKind(ctx, d.Pool, pid, arch.Kind{
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		k, err := arch.UpsertKind(ctx, d.Pool, pid, by, arch.Kind{
 			Key: in.Key, Label: in.Label, Icon: in.Icon, Color: in.Color, Description: in.Description,
 		})
 		if err != nil {
@@ -129,7 +144,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		if err := arch.DeleteKind(ctx, d.Pool, pid, in.Key); err != nil {
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := arch.DeleteKind(ctx, d.Pool, pid, by, in.Key); err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")
@@ -184,7 +203,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		n, err := arch.UpsertNode(ctx, d.Pool, pid, arch.UpsertParams{
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		n, err := arch.UpsertNode(ctx, d.Pool, pid, by, arch.UpsertParams{
 			Slug: in.Slug, ParentSlug: in.ParentSlug, Kind: in.Kind, Name: in.Name,
 			DescriptionMD: in.Description, Metadata: in.Metadata,
 			LinkedRepo: in.LinkedRepo, LinkedPath: in.LinkedPath, Position: in.Position,
@@ -203,7 +226,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		n, err := arch.MoveNode(ctx, d.Pool, pid, in.Slug, in.ParentSlug)
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		n, err := arch.MoveNode(ctx, d.Pool, pid, by, in.Slug, in.ParentSlug)
 		if err != nil {
 			return toolError(err.Error())
 		}
@@ -218,7 +245,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		if err := arch.RemoveNode(ctx, d.Pool, pid, in.Slug, in.Cascade); err != nil {
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := arch.RemoveNode(ctx, d.Pool, pid, by, in.Slug, in.Cascade); err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")
@@ -249,7 +280,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		e, err := arch.UpsertEdge(ctx, d.Pool, pid, arch.EdgeUpsertParams{
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		e, err := arch.UpsertEdge(ctx, d.Pool, pid, by, arch.EdgeUpsertParams{
 			FromSlug: in.FromSlug, ToSlug: in.ToSlug, Kind: in.Kind,
 			Label: in.Label, DescriptionMD: in.Description,
 		})
@@ -271,7 +306,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError("edge_id must be a uuid")
 		}
-		if err := arch.RemoveEdge(ctx, d.Pool, pid, eid); err != nil {
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := arch.RemoveEdge(ctx, d.Pool, pid, by, eid); err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")
@@ -288,7 +327,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if in.DocPath == "" {
 			return toolError("doc_path is required")
 		}
-		if err := arch.LinkDoc(ctx, d.Pool, pid, in.Slug, in.DocPath); err != nil {
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := arch.LinkDoc(ctx, d.Pool, pid, by, in.Slug, in.DocPath); err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")
@@ -305,7 +348,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if in.DocPath == "" {
 			return toolError("doc_path is required")
 		}
-		if err := arch.UnlinkDoc(ctx, d.Pool, pid, in.Slug, in.DocPath); err != nil {
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := arch.UnlinkDoc(ctx, d.Pool, pid, by, in.Slug, in.DocPath); err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")
@@ -326,7 +373,11 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError("task_id must be a uuid")
 		}
-		if err := arch.LinkTask(ctx, d.Pool, pid, uuid.Nil, tid, in.Slug); err != nil {
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := arch.LinkTask(ctx, d.Pool, pid, by, tid, in.Slug); err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")
@@ -347,11 +398,42 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError("task_id must be a uuid")
 		}
-		if err := arch.UnlinkTask(ctx, d.Pool, pid, in.Slug, tid); err != nil {
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := arch.UnlinkTask(ctx, d.Pool, pid, by, in.Slug, tid); err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")
 	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.arch.checkpoint",
+		Description: "Closes your current editing session into one versioned snapshot of the diagram with the provided message — like a commit message. Call this when you finish a coherent block of edits (e.g. \"added auth subsystem\"). If you forget, the diagram auto-snapshots after a configurable idle period but without a message. The session belongs to the human behind the token; parallel agents from the same human share one session.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in archCheckpointInput) (*sdk.CallToolResult, any, error) {
+		pid, err := archProject(ctx, d, in.ProjectID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		by, err := archBy(ctx)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		res, err := arch.Checkpoint(ctx, d.Pool, pid, by, in.Message)
+		if errors.Is(err, arch.ErrNoActiveSession) {
+			return toolError("no active arch session for you on this project — there is nothing to checkpoint right now")
+		}
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(res)
+	})
+}
+
+type archCheckpointInput struct {
+	archProjectInput
+	Message string `json:"message,omitempty" jsonschema:"short human-readable description of this block of changes — used as the revision title"`
 }
 
 // archProject parses the project uuid and verifies caller access.

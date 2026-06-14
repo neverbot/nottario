@@ -25,7 +25,8 @@ type EdgeUpsertParams struct {
 }
 
 // UpsertEdge creates or updates an edge keyed by (from, to, kind).
-func UpsertEdge(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p EdgeUpsertParams) (*Edge, error) {
+// Runs inside an arch session.
+func UpsertEdge(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by Authorship, p EdgeUpsertParams) (*Edge, error) {
 	if p.FromSlug == "" || p.ToSlug == "" {
 		return nil, errors.New("from and to slugs are required")
 	}
@@ -35,52 +36,55 @@ func UpsertEdge(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, p 
 	if p.FromSlug == p.ToSlug {
 		return nil, errors.New("self-loops are not allowed")
 	}
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := dbq.New(tx)
-	fromID, err := resolveSlugQ(ctx, q, projectID, p.FromSlug)
-	if err != nil {
-		return nil, err
-	}
-	toID, err := resolveSlugQ(ctx, q, projectID, p.ToSlug)
-	if err != nil {
-		return nil, err
-	}
-	row, err := q.UpsertArchEdge(ctx, dbq.UpsertArchEdgeParams{
-		ProjectID:     projectID,
-		FromNodeID:    fromID,
-		ToNodeID:      toID,
-		Kind:          p.Kind,
-		Label:         p.Label,
-		DescriptionMd: p.DescriptionMD,
+	var out *Edge
+	err := withSession(ctx, pool, projectID, by, func(tx pgx.Tx, q *dbq.Queries) error {
+		fromID, err := resolveSlugQ(ctx, q, projectID, p.FromSlug)
+		if err != nil {
+			return err
+		}
+		toID, err := resolveSlugQ(ctx, q, projectID, p.ToSlug)
+		if err != nil {
+			return err
+		}
+		row, err := q.UpsertArchEdge(ctx, dbq.UpsertArchEdgeParams{
+			ProjectID:     projectID,
+			FromNodeID:    fromID,
+			ToNodeID:      toID,
+			Kind:          p.Kind,
+			Label:         p.Label,
+			DescriptionMd: p.DescriptionMD,
+			AuthorUserID:  &by.UserID,
+			AuthorTokenID: by.TokenID,
+		})
+		if err != nil {
+			return err
+		}
+		out = &Edge{
+			ID: row.ID, ProjectID: row.ProjectID,
+			FromNodeID: row.FromNodeID, ToNodeID: row.ToNodeID,
+			Kind: row.Kind, Label: row.Label, DescriptionMD: row.DescriptionMd,
+			CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return &Edge{
-		ID: row.ID, ProjectID: row.ProjectID,
-		FromNodeID: row.FromNodeID, ToNodeID: row.ToNodeID,
-		Kind: row.Kind, Label: row.Label, DescriptionMD: row.DescriptionMd,
-		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
-	}, nil
+	return out, nil
 }
 
-// RemoveEdge deletes an edge by id.
-func RemoveEdge(ctx context.Context, pool *pgxpool.Pool, projectID, edgeID uuid.UUID) error {
-	rows, err := dbq.New(pool).DeleteArchEdge(ctx, dbq.DeleteArchEdgeParams{ProjectID: projectID, ID: edgeID})
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return ErrEdgeNotFound
-	}
-	return nil
+// RemoveEdge deletes an edge by id. Runs inside an arch session.
+func RemoveEdge(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by Authorship, edgeID uuid.UUID) error {
+	return withSession(ctx, pool, projectID, by, func(tx pgx.Tx, q *dbq.Queries) error {
+		rows, err := q.DeleteArchEdge(ctx, dbq.DeleteArchEdgeParams{ProjectID: projectID, ID: edgeID})
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return ErrEdgeNotFound
+		}
+		return nil
+	})
 }
 
 // EdgeView is the shape returned by ListEdges.

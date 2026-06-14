@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,6 +44,34 @@ func (d ArchDeps) requireAccess(ctx context.Context, c identity.Caller, projectI
 
 func (d ArchDeps) parseProject(r *http.Request) (uuid.UUID, error) {
 	return uuid.Parse(r.PathValue("id"))
+}
+
+// archBy builds an arch.Authorship from the caller. TokenID is set
+// only for token-authenticated sessions; web (cookie) sessions leave
+// it nil.
+func archBy(c identity.Caller) arch.Authorship {
+	var tok *uuid.UUID
+	if c.TokenID != uuid.Nil {
+		t := c.TokenID
+		tok = &t
+	}
+	return arch.Authorship{UserID: c.UserID, TokenID: tok}
+}
+
+// writeArchError handles LockedError (423) and falls back to the
+// generic status code for everything else.
+func writeArchError(w http.ResponseWriter, err error, fallback int) {
+	if le, ok := arch.IsLocked(err); ok {
+		writeJSON(w, http.StatusLocked, map[string]any{
+			"error":               "arch_locked",
+			"locked_by_user_id":   le.LockedByUserID,
+			"last_write_at":       le.LastWriteAt,
+			"retry_after_seconds": le.RetryAfterSeconds,
+			"message":             "another user is editing the arch diagram",
+		})
+		return
+	}
+	writeError(w, fallback, err.Error())
 }
 
 // ListKindsHandler returns the kind catalogue (seeding defaults on first use).
@@ -101,11 +130,11 @@ func UpsertKindHandler(d ArchDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		k, err := arch.UpsertKind(r.Context(), d.Pool, pid, arch.Kind{
+		k, err := arch.UpsertKind(r.Context(), d.Pool, pid, archBy(c), arch.Kind{
 			Key: req.Key, Label: req.Label, Icon: req.Icon, Color: req.Color, Description: req.Description,
 		})
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeArchError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, k)
@@ -130,7 +159,11 @@ func DeleteKindHandler(d ArchDeps) http.Handler {
 			return
 		}
 		key := r.PathValue("key")
-		if err := arch.DeleteKind(r.Context(), d.Pool, pid, key); err != nil {
+		if err := arch.DeleteKind(r.Context(), d.Pool, pid, archBy(c), key); err != nil {
+			if _, ok := arch.IsLocked(err); ok {
+				writeArchError(w, err, http.StatusBadRequest)
+				return
+			}
 			status := http.StatusBadRequest
 			if errors.Is(err, arch.ErrKindInUse) {
 				status = http.StatusConflict
@@ -176,13 +209,13 @@ func UpsertNodeHandler(d ArchDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		n, err := arch.UpsertNode(r.Context(), d.Pool, pid, arch.UpsertParams{
+		n, err := arch.UpsertNode(r.Context(), d.Pool, pid, archBy(c), arch.UpsertParams{
 			Slug: req.Slug, ParentSlug: req.ParentSlug, Kind: req.Kind, Name: req.Name,
 			DescriptionMD: req.Description, Metadata: req.Metadata,
 			LinkedRepo: req.LinkedRepo, LinkedPath: req.LinkedPath, Position: req.Position,
 		})
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeArchError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, n)
@@ -274,7 +307,11 @@ func RemoveNodeHandler(d ArchDeps) http.Handler {
 		}
 		slug := r.PathValue("slug")
 		cascade := r.URL.Query().Get("cascade") == "true"
-		if err := arch.RemoveNode(r.Context(), d.Pool, pid, slug, cascade); err != nil {
+		if err := arch.RemoveNode(r.Context(), d.Pool, pid, archBy(c), slug, cascade); err != nil {
+			if _, ok := arch.IsLocked(err); ok {
+				writeArchError(w, err, http.StatusConflict)
+				return
+			}
 			if errors.Is(err, arch.ErrNodeNotFound) {
 				writeError(w, http.StatusNotFound, "node not found")
 				return
@@ -313,9 +350,9 @@ func MoveNodeHandler(d ArchDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		n, err := arch.MoveNode(r.Context(), d.Pool, pid, slug, req.ParentSlug)
+		n, err := arch.MoveNode(r.Context(), d.Pool, pid, archBy(c), slug, req.ParentSlug)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeArchError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, n)
@@ -352,12 +389,12 @@ func UpsertEdgeHandler(d ArchDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		e, err := arch.UpsertEdge(r.Context(), d.Pool, pid, arch.EdgeUpsertParams{
+		e, err := arch.UpsertEdge(r.Context(), d.Pool, pid, archBy(c), arch.EdgeUpsertParams{
 			FromSlug: req.FromSlug, ToSlug: req.ToSlug, Kind: req.Kind,
 			Label: req.Label, DescriptionMD: req.Description,
 		})
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeArchError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, e)
@@ -418,7 +455,11 @@ func RemoveEdgeHandler(d ArchDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid edge id")
 			return
 		}
-		if err := arch.RemoveEdge(r.Context(), d.Pool, pid, eid); err != nil {
+		if err := arch.RemoveEdge(r.Context(), d.Pool, pid, archBy(c), eid); err != nil {
+			if _, ok := arch.IsLocked(err); ok {
+				writeArchError(w, err, http.StatusInternalServerError)
+				return
+			}
 			if errors.Is(err, arch.ErrEdgeNotFound) {
 				writeError(w, http.StatusNotFound, "edge not found")
 				return
@@ -458,15 +499,16 @@ func LinkNodeHandler(d ArchDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		by := archBy(c)
 		switch {
 		case req.DocPath != "":
-			if err := arch.LinkDoc(r.Context(), d.Pool, pid, slug, req.DocPath); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+			if err := arch.LinkDoc(r.Context(), d.Pool, pid, by, slug, req.DocPath); err != nil {
+				writeArchError(w, err, http.StatusBadRequest)
 				return
 			}
 		case req.TaskID != nil:
-			if err := arch.LinkTask(r.Context(), d.Pool, pid, uuid.Nil, *req.TaskID, slug); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+			if err := arch.LinkTask(r.Context(), d.Pool, pid, by, *req.TaskID, slug); err != nil {
+				writeArchError(w, err, http.StatusBadRequest)
 				return
 			}
 		default:
@@ -500,15 +542,16 @@ func UnlinkNodeHandler(d ArchDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		by := archBy(c)
 		switch {
 		case req.DocPath != "":
-			if err := arch.UnlinkDoc(r.Context(), d.Pool, pid, slug, req.DocPath); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+			if err := arch.UnlinkDoc(r.Context(), d.Pool, pid, by, slug, req.DocPath); err != nil {
+				writeArchError(w, err, http.StatusBadRequest)
 				return
 			}
 		case req.TaskID != nil:
-			if err := arch.UnlinkTask(r.Context(), d.Pool, pid, slug, *req.TaskID); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+			if err := arch.UnlinkTask(r.Context(), d.Pool, pid, by, slug, *req.TaskID); err != nil {
+				writeArchError(w, err, http.StatusBadRequest)
 				return
 			}
 		default:
@@ -516,5 +559,83 @@ func UnlinkNodeHandler(d ArchDeps) http.Handler {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+// ListArchHistoryHandler returns the project's arch revision list,
+// newest first. Query params: limit (1..500, default 50),
+// before_version (paginate; pass the oldest version of the previous
+// page).
+func ListArchHistoryHandler(d ArchDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		pid, err := d.parseProject(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := d.requireAccess(r.Context(), c, pid); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
+		q := r.URL.Query()
+		limit := 50
+		if v := q.Get("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				limit = n
+			}
+		}
+		var before *int
+		if v := q.Get("before_version"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				before = &n
+			}
+		}
+		revs, err := arch.ListRevisions(r.Context(), d.Pool, pid, limit, before)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"revisions": revs})
+	})
+}
+
+// GetArchRevisionHandler returns one revision by version, with its
+// full snapshot payload.
+func GetArchRevisionHandler(d ArchDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		pid, err := d.parseProject(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := d.requireAccess(r.Context(), c, pid); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
+		version, err := strconv.Atoi(r.PathValue("version"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "version must be an integer")
+			return
+		}
+		rev, err := arch.GetRevision(r.Context(), d.Pool, pid, version)
+		if errors.Is(err, arch.ErrRevisionNotFound) {
+			writeError(w, http.StatusNotFound, "revision not found")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, rev)
 	})
 }
