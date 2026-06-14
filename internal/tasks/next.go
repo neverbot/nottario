@@ -43,7 +43,7 @@ func Next(ctx context.Context, pool *pgxpool.Pool, f NextFilter) (*Task, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &Task{
+	t := &Task{
 		ID:               row.ID,
 		ProjectID:        row.ProjectID,
 		ParentTaskID:     row.ParentTaskID,
@@ -60,7 +60,11 @@ func Next(ctx context.Context, pool *pgxpool.Pool, f NextFilter) (*Task, error) 
 		CreatedByTokenID: row.CreatedByTokenID,
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
-	}, nil
+	}
+	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 // nonNilUUIDs ensures pgx receives an empty slice rather than a nil

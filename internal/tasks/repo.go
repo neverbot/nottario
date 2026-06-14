@@ -88,7 +88,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	if err != nil {
 		return nil, err
 	}
-	return &Task{
+	out := &Task{
 		ID:               row.ID,
 		ProjectID:        row.ProjectID,
 		ParentTaskID:     row.ParentTaskID,
@@ -106,7 +106,11 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 		CycleID:          row.CycleID,
-	}, nil
+	}
+	if err := enrichTaskViaMCP(ctx, pool, []*Task{out}); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // Get loads a task by id. Implemented via sqlc-generated dbq.GetTask
@@ -121,7 +125,7 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Task{
+	t := &Task{
 		ID:               row.ID,
 		ProjectID:        row.ProjectID,
 		ParentTaskID:     row.ParentTaskID,
@@ -139,7 +143,11 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Task, error) {
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 		CycleID:          row.CycleID,
-	}, nil
+	}
+	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 // timestampPtr returns a *time.Time when the dbq timestamp column was
@@ -233,6 +241,13 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Task, error)
 	out := make([]Task, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, taskFromListRow(r))
+	}
+	ptrs := make([]*Task, len(out))
+	for i := range out {
+		ptrs[i] = &out[i]
+	}
+	if err := enrichTaskViaMCP(ctx, pool, ptrs); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -333,6 +348,13 @@ func ListPaginated(ctx context.Context, pool *pgxpool.Pool, f ListFilter, limit 
 		last := out[len(out)-1]
 		page.NextCursor = &Cursor{Priority: last.Priority, CreatedAt: last.CreatedAt, ID: last.ID}
 	}
+	ptrs := make([]*Task, len(page.Tasks))
+	for i := range page.Tasks {
+		ptrs[i] = &page.Tasks[i]
+	}
+	if err := enrichTaskViaMCP(ctx, pool, ptrs); err != nil {
+		return Page{}, err
+	}
 	return page, nil
 }
 
@@ -388,7 +410,7 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParam
 	if err != nil {
 		return nil, err
 	}
-	return &Task{
+	t := &Task{
 		ID:               row.ID,
 		ProjectID:        row.ProjectID,
 		ParentTaskID:     row.ParentTaskID,
@@ -406,7 +428,11 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParam
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 		CycleID:          row.CycleID,
-	}, nil
+	}
+	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 func derefString(p *string) string {

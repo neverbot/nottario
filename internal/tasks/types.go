@@ -35,23 +35,24 @@ const (
 
 // Task is the central entity of the work domain.
 type Task struct {
-	ID               uuid.UUID  `json:"id"`
-	ProjectID        uuid.UUID  `json:"project_id"`
-	ParentTaskID     *uuid.UUID `json:"parent_task_id"`
-	Type             Type       `json:"type"`
-	Title            string     `json:"title"`
-	DescriptionMD    string     `json:"description"`
-	State            State      `json:"state"`
-	Priority         int        `json:"priority"`
-	AssigneeUserID   *uuid.UUID `json:"assignee_user_id"`
-	TargetRoleID     *uuid.UUID `json:"target_role_id"`
-	ActualStart      *time.Time `json:"actual_start"`
-	ActualEnd        *time.Time `json:"actual_end"`
-	CreatedByUserID  *uuid.UUID `json:"created_by_user_id"`
-	CreatedByTokenID *uuid.UUID `json:"-"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	CycleID          uuid.UUID  `json:"cycle_id"`
+	ID               uuid.UUID        `json:"id"`
+	ProjectID        uuid.UUID        `json:"project_id"`
+	ParentTaskID     *uuid.UUID       `json:"parent_task_id"`
+	Type             Type             `json:"type"`
+	Title            string           `json:"title"`
+	DescriptionMD    string           `json:"description"`
+	State            State            `json:"state"`
+	Priority         int              `json:"priority"`
+	AssigneeUserID   *uuid.UUID       `json:"assignee_user_id"`
+	TargetRoleID     *uuid.UUID       `json:"target_role_id"`
+	ActualStart      *time.Time       `json:"actual_start"`
+	ActualEnd        *time.Time       `json:"actual_end"`
+	CreatedByUserID  *uuid.UUID       `json:"created_by_user_id"`
+	CreatedByTokenID *uuid.UUID       `json:"-"`
+	ViaMCP           *identity.ViaMCP `json:"via_mcp,omitempty"`
+	CreatedAt        time.Time        `json:"created_at"`
+	UpdatedAt        time.Time        `json:"updated_at"`
+	CycleID          uuid.UUID        `json:"cycle_id"`
 }
 
 // Dependency is the directed relation "task depends on another task".

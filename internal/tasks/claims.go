@@ -79,7 +79,7 @@ func ClaimNext(ctx context.Context, pool *pgxpool.Pool, f NextFilter, callerUser
 		return nil, err
 	}
 	publishClaimed(ctx, pool, row.ProjectID, row.ID, callerUserID, time.Now())
-	return &Task{
+	t := &Task{
 		ID:               row.ID,
 		ProjectID:        row.ProjectID,
 		ParentTaskID:     row.ParentTaskID,
@@ -96,7 +96,11 @@ func ClaimNext(ctx context.Context, pool *pgxpool.Pool, f NextFilter, callerUser
 		CreatedByTokenID: row.CreatedByTokenID,
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
-	}, nil
+	}
+	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 // Claim atomically claims a SPECIFIC task by id for callerUserID.
@@ -141,7 +145,11 @@ func Claim(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, callerUserID u
 			if err := tx.Commit(ctx); err != nil {
 				return nil, err
 			}
-			return rowToTaskFromForUpdate(row), nil
+			t := rowToTaskFromForUpdate(row)
+			if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+				return nil, err
+			}
+			return t, nil
 		}
 		conflict.Reason = "task is already claimed by another user"
 		return nil, conflict

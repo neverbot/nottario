@@ -549,6 +549,16 @@ class NottarioBoardPage extends LitElement {
     .detail .meta .val { color: var(--fg); }
     .detail .meta .val .muted { color: var(--gray-5); font-style: italic; font-weight: 400; }
     .detail .meta .author-cell { display: inline-flex; align-items: center; gap: 6px; }
+    .detail .meta .author-cell .via {
+      color: var(--fg-muted);
+      font-style: italic;
+      font-size: 11px;
+    }
+    .detail .meta .author-cell .via .sep { margin-right: 4px; opacity: 0.6; }
+    .detail .meta .author-cell .via .token {
+      font-style: normal;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
     /* Inline assignee picker: keep the avatar + select on one row.
        The select gets the standard nottario-field chrome via the
        same chevron-normalisation pattern (see components/field.js). */
@@ -1797,6 +1807,34 @@ class NottarioBoardPage extends LitElement {
     return (this.tasks || []).find((t) => t.id === id) || null;
   }
 
+  // "Created by" field-line on the task detail header. Shows the
+  // creator's avatar + display name, with the agent badge / "via
+  // {token}" suffix when the task was created through an MCP token.
+  // Skipped when both creator and via_mcp are absent (very old rows
+  // pre-tracking).
+  _renderCreatedByLine(task) {
+    const creator = task.created_by_user_id ? this._memberByID(task.created_by_user_id) : null;
+    if (!creator && !task.via_mcp) return null;
+    const name = creator?.display_name || creator?.github_login || 'unknown';
+    return html`
+      <div class="field-line">
+        <span class="lbl">Created by</span>
+        <span class="val author-cell">
+          <nottario-avatar size="20"
+            src=${creator?.avatar_url || ''}
+            name=${name}
+            .agent=${task.via_mcp || null}></nottario-avatar>
+          <span>${name}</span>
+          ${
+            task.via_mcp
+              ? html`<span class="via"><span class="sep">·</span>via <span class="token">${task.via_mcp.name || 'MCP'}</span></span>`
+              : null
+          }
+        </span>
+      </div>
+    `;
+  }
+
   _renderCommit(c) {
     const sha = (c.sha || '').trim();
     const repo = (c.repo || '').trim();
@@ -1977,6 +2015,8 @@ class NottarioBoardPage extends LitElement {
                   </select>
                 </span>
               </div>
+
+              ${this._renderCreatedByLine(task)}
             </div>
           </header>
 
