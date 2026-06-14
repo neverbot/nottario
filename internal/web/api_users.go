@@ -24,7 +24,7 @@ func ListUsersHandler(d UsersDeps) http.Handler {
 				return
 			}
 		}
-		users, err := identity.ListAllUsers(r.Context(), d.Pool)
+		users, err := identity.ListAllUsersPublic(r.Context(), d.Pool)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

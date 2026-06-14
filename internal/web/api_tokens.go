@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,8 +43,29 @@ func (d TokenDeps) isProjectMember(r *http.Request, c identity.Caller, projectID
 	return len(roles) > 0, nil
 }
 
-// ListProjectTokensHandler returns every token issued for the
-// project. Any member of the project can list; non-members get 404.
+// tokenView is the per-row shape returned by /tokens. The caller's own
+// rows carry the full operational data. Other users' rows (visible to
+// instance admins only) are stripped of name and prefix: tokens are
+// personal credentials and the prefix is the leading 12 chars of the
+// plaintext — neither belongs in any payload a non-owner consumes.
+type tokenView struct {
+	ID            uuid.UUID  `json:"id"`
+	UserID        uuid.UUID  `json:"user_id"`
+	OwnedByCaller bool       `json:"owned_by_caller"`
+	Name          string     `json:"name,omitempty"`   // owner-only
+	Prefix        string     `json:"prefix,omitempty"` // owner-only
+	DefaultRoleID *uuid.UUID `json:"default_role_id"`
+	CreatedAt     time.Time  `json:"created_at"`
+	LastUsedAt    *time.Time `json:"last_used_at"`
+	RevokedAt     *time.Time `json:"revoked_at"`
+}
+
+// ListProjectTokensHandler returns the caller's own tokens for the
+// project. Instance admins additionally see every other token in the
+// project, but without the per-token identifying material (name,
+// prefix) — they get enough metadata (owner, activity, status) to
+// audit, never enough to identify or use someone else's credential.
+// Non-members get 404.
 func ListProjectTokensHandler(d TokenDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, ok := d.caller(r)
@@ -74,7 +96,28 @@ func ListProjectTokensHandler(d TokenDeps) http.Handler {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"tokens": tokens})
+		out := make([]tokenView, 0, len(tokens))
+		for _, t := range tokens {
+			owned := t.UserID == c.UserID
+			if !owned && !c.IsAdmin {
+				continue
+			}
+			v := tokenView{
+				ID:            t.ID,
+				UserID:        t.UserID,
+				OwnedByCaller: owned,
+				DefaultRoleID: t.DefaultRoleID,
+				CreatedAt:     t.CreatedAt,
+				LastUsedAt:    t.LastUsedAt,
+				RevokedAt:     t.RevokedAt,
+			}
+			if owned {
+				v.Name = t.Name
+				v.Prefix = t.Prefix
+			}
+			out = append(out, v)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"tokens": out})
 	})
 }
 

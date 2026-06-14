@@ -93,8 +93,27 @@ type UserSummary struct {
 	ProjectCount int `json:"project_count"`
 }
 
+// PublicUserSummary is the privacy-safe shape exposed to the
+// instance-wide users directory: only the fields any signed-in
+// caller has a legitimate reason to see about every other user.
+// Notably absent: is_admin (do not advertise who holds privileged
+// access), github_id (internal numeric id), last_seen_at and
+// created_at (activity / presence pattern). Keep this struct narrow
+// — any new field that is not strictly necessary for the directory
+// belongs on the per-caller /api/me endpoint instead.
+type PublicUserSummary struct {
+	ID           uuid.UUID `json:"id"`
+	GithubLogin  string    `json:"github_login"`
+	DisplayName  string    `json:"display_name"`
+	AvatarURL    string    `json:"avatar_url"`
+	ProjectCount int       `json:"project_count"`
+}
+
 // ListAllUsers returns every user on the instance plus how many
-// projects they belong to. Visible to any authenticated caller.
+// projects they belong to. The full User struct is returned (including
+// is_admin and last_seen_at) — only use this for server-side or
+// admin-scoped flows; the public REST endpoint should call
+// ListAllUsersPublic instead.
 func ListAllUsers(ctx context.Context, pool *pgxpool.Pool) ([]UserSummary, error) {
 	rows, err := dbq.New(pool).ListUsers(ctx)
 	if err != nil {
@@ -104,6 +123,26 @@ func ListAllUsers(ctx context.Context, pool *pgxpool.Pool) ([]UserSummary, error
 	for _, r := range rows {
 		u := userFromRow(r.ID, r.GithubLogin, r.GithubID, r.DisplayName, r.AvatarUrl, r.IsAdmin, r.CreatedAt, r.LastSeenAt)
 		out = append(out, UserSummary{User: u, ProjectCount: int(r.ProjectCount)})
+	}
+	return out, nil
+}
+
+// ListAllUsersPublic returns the privacy-safe directory of every user
+// on the instance, suitable for any signed-in caller.
+func ListAllUsersPublic(ctx context.Context, pool *pgxpool.Pool) ([]PublicUserSummary, error) {
+	rows, err := dbq.New(pool).ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PublicUserSummary, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, PublicUserSummary{
+			ID:           r.ID,
+			GithubLogin:  r.GithubLogin,
+			DisplayName:  r.DisplayName,
+			AvatarURL:    r.AvatarUrl,
+			ProjectCount: int(r.ProjectCount),
+		})
 	}
 	return out, nil
 }

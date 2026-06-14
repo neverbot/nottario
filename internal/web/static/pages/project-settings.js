@@ -1213,10 +1213,19 @@ class NottarioProjectSettings extends LitElement {
 
   _renderTokenRow(t) {
     const armed = this._revokeArmedId === t.id;
+    // Admins see other users' tokens with name + prefix redacted by
+    // the backend — those are credentials, not project metadata. We
+    // surface "—" for both fields and an "other user" hint so the
+    // row reads as deliberately opaque rather than broken.
+    const ownedByMe = t.owned_by_caller !== false;
+    const nameCell = ownedByMe ? html`${t.name || ''}` : html`<span class="muted">—</span>`;
+    const prefixCell = ownedByMe
+      ? html`${t.prefix}…`
+      : html`<span class="muted" title="Credentials redacted: tokens are personal to their owner.">—</span>`;
     return html`
       <tr>
-        <td>${t.name}</td>
-        <td class="mono">${t.prefix}…</td>
+        <td>${nameCell}</td>
+        <td class="mono">${prefixCell}</td>
         <td title=${t.created_at || ''}>${this._fmtDate(t.created_at)}</td>
         <td title=${t.last_used_at || ''}>${this._fmtRelativeDate(t.last_used_at)}</td>
         <td>

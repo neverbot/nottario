@@ -38,13 +38,17 @@ func registerWhoami(server *sdk.Server, d Deps) {
 			}
 			memberships = filtered
 		}
+		// Token never echoes back its own UUID. Tokens are credentials
+		// and should never travel whole over any endpoint; the only
+		// time the full token leaves the server is at issuance. The
+		// caller already authenticated with the bearer it presented;
+		// it does not need its own id repeated to do its job.
 		return jsonResult(map[string]any{
 			"user_id":      user.ID,
 			"github_login": user.GithubLogin,
 			"display_name": user.DisplayName,
 			"is_admin":     user.IsAdmin,
 			"source":       string(c.Source),
-			"token_id":     c.TokenID,
 			"memberships":  memberships,
 		})
 	})
