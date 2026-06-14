@@ -22,9 +22,9 @@ var DefaultRoleCatalogue = []Role{
 	{Key: "design", Label: "Design", Color: "#a371f7"},
 }
 
-// CreateProject persists a new project with a generated slug, seeds
-// the default role catalogue and attaches the initial repo list.
-func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, primaryLanguage, projectType string, createdByUserID uuid.UUID, repos []string) (*Project, error) {
+// CreateProject persists a new project with a generated slug and
+// seeds the default role catalogue.
+func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, primaryLanguage, projectType string, createdByUserID uuid.UUID) (*Project, error) {
 	slug, err := uniqueSlug(ctx, pool, name)
 	if err != nil {
 		return nil, err
@@ -71,19 +71,6 @@ func CreateProject(ctx context.Context, pool *pgxpool.Pool, name, description, p
 	}
 	if err := seedDefaultPriorities(ctx, tx, p.ID); err != nil {
 		return nil, err
-	}
-	for _, repo := range repos {
-		repo = strings.TrimSpace(repo)
-		if repo == "" {
-			continue
-		}
-		if err := q.InsertProjectRepo(ctx, dbq.InsertProjectRepoParams{
-			ProjectID: p.ID,
-			Repo:      repo,
-		}); err != nil {
-			return nil, fmt.Errorf("attach repo %s: %w", repo, err)
-		}
-		p.Repos = append(p.Repos, repo)
 	}
 	if _, err := q.InsertCycle(ctx, dbq.InsertCycleParams{
 		ProjectID: p.ID,
@@ -151,13 +138,6 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 			})
 		}
 	}
-	for i := range out {
-		repos, err := q.ListProjectRepos(ctx, out[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		out[i].Repos = repos
-	}
 	if err := enrichProjects(ctx, q, out); err != nil {
 		return nil, err
 	}
@@ -167,7 +147,7 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 // enrichProjects attaches Stats and Members to every project in the
 // slice using two batch queries. Best-effort: a failure attaching
 // stats does not blank the whole list (the cards degrade to
-// language/type/repos only).
+// language/type only).
 func enrichProjects(ctx context.Context, q *dbq.Queries, projects []Project) error {
 	if len(projects) == 0 {
 		return nil
@@ -232,18 +212,13 @@ func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Proj
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
 	}
-	repos, err := q.ListProjectRepos(ctx, p.ID)
-	if err != nil {
-		return nil, err
-	}
-	p.Repos = repos
 	return &p, nil
 }
 
 // UpdateProject mutates the human-editable fields. defaultView is
 // optional: when empty, the column is left untouched; otherwise it
 // must be a key from ValidDefaultViews.
-func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, description, primaryLanguage, projectType, defaultView, cycleLabel string, repos []string) (*Project, error) {
+func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, description, primaryLanguage, projectType, defaultView, cycleLabel string) (*Project, error) {
 	if defaultView != "" && !ValidDefaultViews[defaultView] {
 		return nil, errors.New("invalid default_view")
 	}
@@ -277,22 +252,6 @@ func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, 
 			CycleLabel: cycleLabel,
 		}); err != nil {
 			return nil, err
-		}
-	}
-	if repos != nil {
-		if err := q.ClearProjectRepos(ctx, id); err != nil {
-			return nil, err
-		}
-		for _, r := range repos {
-			r = strings.TrimSpace(r)
-			if r == "" {
-				continue
-			}
-			if err := q.InsertProjectRepo(ctx, dbq.InsertProjectRepoParams{
-				ProjectID: id, Repo: r,
-			}); err != nil {
-				return nil, err
-			}
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

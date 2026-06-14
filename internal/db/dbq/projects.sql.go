@@ -12,15 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const clearProjectRepos = `-- name: ClearProjectRepos :exec
-DELETE FROM project_repos WHERE project_id = $1
-`
-
-func (q *Queries) ClearProjectRepos(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearProjectRepos, projectID)
-	return err
-}
-
 const deleteProjectByID = `-- name: DeleteProjectByID :exec
 DELETE FROM projects WHERE id = $1
 `
@@ -145,22 +136,6 @@ func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) (I
 	return i, err
 }
 
-const insertProjectRepo = `-- name: InsertProjectRepo :exec
-INSERT INTO project_repos (project_id, repo)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING
-`
-
-type InsertProjectRepoParams struct {
-	ProjectID uuid.UUID
-	Repo      string
-}
-
-func (q *Queries) InsertProjectRepo(ctx context.Context, arg InsertProjectRepoParams) error {
-	_, err := q.db.Exec(ctx, insertProjectRepo, arg.ProjectID, arg.Repo)
-	return err
-}
-
 const listAllProjectMembers = `-- name: ListAllProjectMembers :many
 SELECT DISTINCT ON (m.project_id, u.id)
        m.project_id,
@@ -253,30 +228,6 @@ func (q *Queries) ListAllProjectTaskStats(ctx context.Context) ([]ListAllProject
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProjectRepos = `-- name: ListProjectRepos :many
-SELECT repo FROM project_repos WHERE project_id = $1 ORDER BY repo
-`
-
-func (q *Queries) ListProjectRepos(ctx context.Context, projectID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, listProjectRepos, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var repo string
-		if err := rows.Scan(&repo); err != nil {
-			return nil, err
-		}
-		items = append(items, repo)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

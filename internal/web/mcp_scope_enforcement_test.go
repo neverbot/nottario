@@ -38,11 +38,11 @@ func newScopeFixture(t *testing.T) *scopeFixture {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	pA, err := identity.CreateProject(ctx, pool, "ScopeA", "", "", "", u.ID, nil)
+	pA, err := identity.CreateProject(ctx, pool, "ScopeA", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject A: %v", err)
 	}
-	pB, err := identity.CreateProject(ctx, pool, "ScopeB", "", "", "", u.ID, nil)
+	pB, err := identity.CreateProject(ctx, pool, "ScopeB", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject B: %v", err)
 	}
@@ -254,11 +254,11 @@ func TestHTTP_TokenProjectScope_Enforcement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	pA, err := identity.CreateProject(ctx, pool, "HTTPScopeA", "", "", "", u.ID, nil)
+	pA, err := identity.CreateProject(ctx, pool, "HTTPScopeA", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject A: %v", err)
 	}
-	pB, err := identity.CreateProject(ctx, pool, "HTTPScopeB", "", "", "", u.ID, nil)
+	pB, err := identity.CreateProject(ctx, pool, "HTTPScopeB", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject B: %v", err)
 	}

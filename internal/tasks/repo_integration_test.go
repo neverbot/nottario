@@ -20,7 +20,7 @@ func TestTasks_CreateSetStateAndDependencyCycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "TaskProj", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "TaskProj", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestTasks_HTMLEntitiesDecodedAtBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "DecodeProj", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "DecodeProj", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}

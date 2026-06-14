@@ -32,7 +32,7 @@ func setupArch(t *testing.T) *archFixture {
 	if err != nil {
 		t.Fatalf("owner: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "Arch", "", "", "", owner.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "Arch", "", "", "", owner.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -41,7 +41,7 @@ func setupArch(t *testing.T) *archFixture {
 	// Outsider's token lives in their own project — separate scope so
 	// it can never authenticate against the owner's project under
 	// per-project token semantics.
-	outProj, err := identity.CreateProject(ctx, pool, "Arch-Out", "", "", "", outsider.ID, nil)
+	outProj, err := identity.CreateProject(ctx, pool, "Arch-Out", "", "", "", outsider.ID)
 	if err != nil {
 		t.Fatalf("outsider project: %v", err)
 	}

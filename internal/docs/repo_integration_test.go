@@ -20,7 +20,7 @@ func TestDocs_WriteReadHistoryConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "DocProj", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "DocProj", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}

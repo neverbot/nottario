@@ -59,7 +59,7 @@ func TestClaimNext_NoDoubleClaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "RaceProj", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "RaceProj", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestAddDependency_CycleRaceFree(t *testing.T) {
 	defer cancel()
 
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 9002, "cycler", "Cycler", "")
-	p, _ := identity.CreateProject(ctx, pool, "CycleProj", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "CycleProj", "", "", "", u.ID)
 	roles, _ := identity.ListRoles(ctx, pool, p.ID)
 	role := roles[0].ID
 	by := tasks.Authorship{UserID: &u.ID}
@@ -175,7 +175,7 @@ func TestSetStateDone_RollUpExactlyOnce(t *testing.T) {
 	defer cancel()
 
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 9003, "rollup", "RollUp", "")
-	p, _ := identity.CreateProject(ctx, pool, "RollupProj", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "RollupProj", "", "", "", u.ID)
 	roles, _ := identity.ListRoles(ctx, pool, p.ID)
 	role := roles[0].ID
 	by := tasks.Authorship{UserID: &u.ID}
@@ -234,7 +234,7 @@ func TestSetState_PreconditionRace(t *testing.T) {
 	defer cancel()
 
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 9004, "precond", "Precond", "")
-	p, _ := identity.CreateProject(ctx, pool, "PrecondProj", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "PrecondProj", "", "", "", u.ID)
 	roles, _ := identity.ListRoles(ctx, pool, p.ID)
 	role := roles[0].ID
 	by := tasks.Authorship{UserID: &u.ID}
@@ -295,7 +295,7 @@ func TestDocsWrite_VersionConflict(t *testing.T) {
 	defer cancel()
 
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 9005, "writer", "Writer", "")
-	p, _ := identity.CreateProject(ctx, pool, "DocProj", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "DocProj", "", "", "", u.ID)
 	by := docs.Authorship{UserID: &u.ID}
 
 	path := "projects/" + p.ID.String() + "/context/race.md"

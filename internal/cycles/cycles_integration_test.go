@@ -22,7 +22,7 @@ func TestEndCycle_BasicMove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "CycleBasic", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "CycleBasic", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestEndCycle_CascadesPartialFeature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "CyclePartial", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "CyclePartial", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestEndCycle_LeavesFullyDoneFeatureAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "CycleFullDone", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "CycleFullDone", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}

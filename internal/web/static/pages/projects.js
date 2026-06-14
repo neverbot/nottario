@@ -172,17 +172,6 @@ class NottarioProjectsPage extends LitElement {
       font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
       font-size: 11px;
     }
-    .card .repos {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
-      font-size: 11px;
-      color: var(--fg-muted);
-      max-height: calc(1.5em * 3);
-      overflow: hidden;
-    }
-    .card .repos .more { font-family: inherit; color: var(--gray-5); }
     .card .footer {
       display: flex;
       align-items: center;
@@ -265,10 +254,6 @@ class NottarioProjectsPage extends LitElement {
       description: form.description.value.trim(),
       primary_language: form.primary_language.value.trim(),
       project_type: form.project_type.value.trim(),
-      repos: form.repos.value
-        .split(/\s*,\s*|\n+/)
-        .map((s) => s.trim())
-        .filter(Boolean),
     };
     try {
       await formButton(e, async () => {
@@ -346,7 +331,6 @@ class NottarioProjectsPage extends LitElement {
         </div>
         ${this._renderStats(p)}
         ${meta.length ? html`<div class="meta">${metaWithSeps}</div>` : null}
-        ${this._renderRepos(p)}
         ${this._renderFooter(p)}
       </div>
     `;
@@ -373,19 +357,6 @@ class NottarioProjectsPage extends LitElement {
                  </span>`
             : null
         }
-      </div>
-    `;
-  }
-
-  _renderRepos(p) {
-    const repos = p.repos || [];
-    if (repos.length === 0) return null;
-    const shown = repos.slice(0, 3);
-    const extra = repos.length - shown.length;
-    return html`
-      <div class="repos">
-        ${shown.map((r) => html`<span>${r}</span>`)}
-        ${extra > 0 ? html`<span class="more">+${extra} more</span>` : null}
       </div>
     `;
   }
@@ -481,9 +452,6 @@ class NottarioProjectsPage extends LitElement {
             </nottario-field>
             <nottario-field label="Project type" hint="optional">
               <input name="project_type" placeholder="web-app, cli-tool, library…">
-            </nottario-field>
-            <nottario-field label="Repos" hint="comma or newline separated, format owner/repo">
-              <textarea name="repos" rows="3"></textarea>
             </nottario-field>
             <div class="actions-row">
               <button type="button" class="btn secondary" @click=${() => this.closeCreate()}>Cancel</button>

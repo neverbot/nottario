@@ -54,7 +54,6 @@ type Project struct {
 	CreatedByUserID *uuid.UUID      `json:"created_by_user_id"`
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
-	Repos           []string        `json:"repos"`
 	Stats           *ProjectStats   `json:"stats,omitempty"`
 	Members         []ProjectMember `json:"members,omitempty"`
 }

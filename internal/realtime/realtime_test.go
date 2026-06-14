@@ -174,7 +174,7 @@ func TestHub_RunDeliversPgNotify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("user: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "RT", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "RT", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestHub_TaskClaimedEventReachesSubscribers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("user: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "ClaimRT", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "ClaimRT", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestHub_TaskCommentCreatedEventReachesSubscribers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("user: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "CommentRT", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "CommentRT", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestHub_CycleClosedEventReachesSubscribers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("user: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "EvtProj", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "EvtProj", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -468,7 +468,7 @@ func TestSSE_NonMemberForbidden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("outsider: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "P", "", "", "", owner.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "P", "", "", "", owner.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestSSE_StreamsInitialOKAndEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("user: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "RT", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "RT", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}

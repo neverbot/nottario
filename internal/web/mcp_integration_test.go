@@ -35,7 +35,7 @@ func TestMCP_StreamableHTTPTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	proj, err := identity.CreateProject(ctx, pool, "MCPProj", "", "", "", u.ID, nil)
+	proj, err := identity.CreateProject(ctx, pool, "MCPProj", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}

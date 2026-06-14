@@ -20,15 +20,12 @@ func TestCreateProject_SeedsRolesAndPriorities(t *testing.T) {
 		t.Fatalf("UpsertFromGithub: %v created=%v", err, created)
 	}
 
-	p, err := identity.CreateProject(ctx, pool, "Demo", "A demo", "go", "service", u.ID, []string{"https://example.com/repo"})
+	p, err := identity.CreateProject(ctx, pool, "Demo", "A demo", "go", "service", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	if p.Slug == "" || p.Name != "Demo" {
 		t.Fatalf("unexpected project: %+v", p)
-	}
-	if len(p.Repos) != 1 || p.Repos[0] != "https://example.com/repo" {
-		t.Fatalf("expected attached repo, got %+v", p.Repos)
 	}
 
 	roles, err := identity.ListRoles(ctx, pool, p.ID)

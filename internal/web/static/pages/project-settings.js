@@ -592,16 +592,9 @@ class NottarioProjectSettings extends LitElement {
           <dt><strong>Project type</strong></dt><dd>${p.project_type || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Default view</strong></dt><dd>${currentView.label}</dd>
           <dt><strong>Cycle label</strong></dt><dd>${p.cycle_label || 'sprint'}</dd>
-          <dt><strong>Repositories</strong></dt>
-          <dd>${
-            p.repos && p.repos.length
-              ? html`<ul style="margin:0;padding-left:18px;font-family:ui-monospace,monospace">${p.repos.map((r) => html`<li>${r}</li>`)}</ul>`
-              : html`<span class="muted">none</span>`
-          }</dd>
         </dl>
       `;
     }
-    const reposText = (p.repos || []).join('\n');
     return html`
       <form class="general-form" @submit=${(e) => this.saveGeneral(e)}>
         <nottario-field label="Name">
@@ -631,9 +624,6 @@ class NottarioProjectSettings extends LitElement {
         </nottario-field>
         <nottario-field label="Cycle label" hint="e.g. sprint, iteration, milestone — used when auto-naming new cycles">
           <input name="cycle_label" .value=${p.cycle_label || 'sprint'} style="max-width:260px">
-        </nottario-field>
-        <nottario-field label="Repositories" hint="one per line or comma-separated, format owner/repo">
-          <textarea name="repos" rows="3" .value=${reposText}></textarea>
         </nottario-field>
         <div class="actions-row" style="justify-content:flex-end;margin-top:8px">
           <button type="submit" class="btn primary">Save changes</button>
@@ -680,10 +670,6 @@ class NottarioProjectSettings extends LitElement {
       project_type: f.project_type.value.trim(),
       default_view: f.default_view.value,
       cycle_label: f.cycle_label.value.trim(),
-      repos: f.repos.value
-        .split(/\s*,\s*|\n+/)
-        .map((s) => s.trim())
-        .filter(Boolean),
     };
     try {
       await formButton(e, async () => {

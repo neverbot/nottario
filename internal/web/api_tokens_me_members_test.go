@@ -42,7 +42,7 @@ func setupWebFixture(t *testing.T) *webFixture {
 	if err != nil {
 		t.Fatalf("owner: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "TME", "", "", "", owner.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "TME", "", "", "", owner.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -55,7 +55,7 @@ func setupWebFixture(t *testing.T) *webFixture {
 		t.Fatal("no roles seeded")
 	}
 	outsider, _, _ := identity.UpsertFromGithub(ctx, pool, 13202, "outsider-tme", "Out", "")
-	outProj, _ := identity.CreateProject(ctx, pool, "TME-Out", "", "", "", outsider.ID, nil)
+	outProj, _ := identity.CreateProject(ctx, pool, "TME-Out", "", "", "", outsider.ID)
 	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, outProj.ID, "out-token", nil)
 
 	key := []byte("test-session-key")

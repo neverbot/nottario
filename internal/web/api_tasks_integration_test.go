@@ -36,7 +36,7 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub owner: %v", err)
 	}
-	proj, err := identity.CreateProject(ctx, pool, "ApiTasks", "", "", "", owner.ID, nil)
+	proj, err := identity.CreateProject(ctx, pool, "ApiTasks", "", "", "", owner.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 	// A second user who is NOT a member of the project — exercises
 	// 403 on protected routes.
 	outsider, _, _ := identity.UpsertFromGithub(ctx, pool, 13102, "outsider", "Out", "")
-	outProj, _ := identity.CreateProject(ctx, pool, "ApiTasks-Out", "", "", "", outsider.ID, nil)
+	outProj, _ := identity.CreateProject(ctx, pool, "ApiTasks-Out", "", "", "", outsider.ID)
 	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, outProj.ID, "outsider-token", nil)
 
 	srv := NewServer(Deps{
@@ -233,7 +233,7 @@ func TestApiRolesPriorities_HTTPCRUD(t *testing.T) {
 	ctx := t.Context()
 
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 13201, "owner-rp", "Owner", "")
-	p, _ := identity.CreateProject(ctx, pool, "RPProj", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "RPProj", "", "", "", u.ID)
 	tok, _, _ := identity.IssueToken(ctx, pool, u.ID, p.ID, "rp-token", nil)
 	srv := NewServer(Deps{
 		Pool:     pool,

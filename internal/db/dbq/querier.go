@@ -22,7 +22,6 @@ type Querier interface {
 	// actual_start filled if previously null, all in one UPDATE.
 	ClaimNextEligibleTask(ctx context.Context, arg ClaimNextEligibleTaskParams) (ClaimNextEligibleTaskRow, error)
 	ClaimTask(ctx context.Context, arg ClaimTaskParams) error
-	ClearProjectRepos(ctx context.Context, projectID uuid.UUID) error
 	CloseCycle(ctx context.Context, arg CloseCycleParams) error
 	CountArchKinds(ctx context.Context, projectID uuid.UUID) (int32, error)
 	CountArchNodeChildren(ctx context.Context, parentID *uuid.UUID) (int32, error)
@@ -94,7 +93,6 @@ type Querier interface {
 	InsertDocumentVersion(ctx context.Context, arg InsertDocumentVersionParams) error
 	InsertMembership(ctx context.Context, arg InsertMembershipParams) error
 	InsertProject(ctx context.Context, arg InsertProjectParams) (InsertProjectRow, error)
-	InsertProjectRepo(ctx context.Context, arg InsertProjectRepoParams) error
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
 	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) (uuid.UUID, error)
 	InsertSession(ctx context.Context, arg InsertSessionParams) (InsertSessionRow, error)
@@ -123,7 +121,6 @@ type Querier interface {
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
 	ListProjectPriorities(ctx context.Context, projectID uuid.UUID) ([]ListProjectPrioritiesRow, error)
-	ListProjectRepos(ctx context.Context, projectID uuid.UUID) ([]string, error)
 	ListProjectRoleIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
 	ListProjectRoles(ctx context.Context, projectID uuid.UUID) ([]ListProjectRolesRow, error)
 	ListProjectTokens(ctx context.Context, projectID uuid.UUID) ([]ListProjectTokensRow, error)

@@ -29,7 +29,7 @@ func TestDocsVersioningConcurrencyAcrossHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "QAProj", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "QAProj", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}

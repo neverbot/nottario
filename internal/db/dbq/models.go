@@ -155,12 +155,6 @@ type ProjectPriority struct {
 	CreatedAt pgtype.Timestamptz
 }
 
-type ProjectRepo struct {
-	ProjectID uuid.UUID
-	Repo      string
-	AddedAt   pgtype.Timestamptz
-}
-
 type Role struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID

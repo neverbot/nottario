@@ -31,7 +31,7 @@ func newSearchServer(t *testing.T) (*httptest.Server, *http.Cookie, *http.Cookie
 	if err != nil {
 		t.Fatalf("outsider: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "S", "", "", "", owner.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "S", "", "", "", owner.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}

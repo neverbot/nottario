@@ -44,7 +44,7 @@ func seedProject(t *testing.T) (context.Context, *testProjectCtx, func()) {
 		cancel()
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "ArchProj", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "ArchProj", "", "", "", u.ID)
 	if err != nil {
 		cancel()
 		t.Fatalf("CreateProject: %v", err)

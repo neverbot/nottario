@@ -69,17 +69,6 @@ DELETE FROM projects WHERE id = $1;
 -- name: ProjectSlugExists :one
 SELECT EXISTS (SELECT 1 FROM projects WHERE slug = $1)::bool;
 
--- name: ListProjectRepos :many
-SELECT repo FROM project_repos WHERE project_id = $1 ORDER BY repo;
-
--- name: ClearProjectRepos :exec
-DELETE FROM project_repos WHERE project_id = $1;
-
--- name: InsertProjectRepo :exec
-INSERT INTO project_repos (project_id, repo)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING;
-
 -- name: ListAllProjectTaskStats :many
 -- Aggregated counts per project for the projects list cards.
 -- Feature parents are excluded — they're aggregates, not work units;

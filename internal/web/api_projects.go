@@ -40,11 +40,10 @@ func ListProjectsHandler(d ProjectDeps) http.Handler {
 }
 
 type createProjectRequest struct {
-	Name            string   `json:"name"`
-	Description     string   `json:"description"`
-	PrimaryLanguage string   `json:"primary_language"`
-	ProjectType     string   `json:"project_type"`
-	Repos           []string `json:"repos"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	PrimaryLanguage string `json:"primary_language"`
+	ProjectType     string `json:"project_type"`
 }
 
 // CreateProjectHandler creates a project. Admin-only.
@@ -68,7 +67,7 @@ func CreateProjectHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "name is required")
 			return
 		}
-		p, err := identity.CreateProject(r.Context(), d.Pool, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, c.UserID, req.Repos)
+		p, err := identity.CreateProject(r.Context(), d.Pool, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, c.UserID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -96,13 +95,12 @@ func GetProjectHandler(d ProjectDeps) http.Handler {
 }
 
 type updateProjectRequest struct {
-	Name            string   `json:"name"`
-	Description     string   `json:"description"`
-	PrimaryLanguage string   `json:"primary_language"`
-	ProjectType     string   `json:"project_type"`
-	DefaultView     string   `json:"default_view"`
-	CycleLabel      string   `json:"cycle_label"`
-	Repos           []string `json:"repos"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	PrimaryLanguage string `json:"primary_language"`
+	ProjectType     string `json:"project_type"`
+	DefaultView     string `json:"default_view"`
+	CycleLabel      string `json:"cycle_label"`
 }
 
 // UpdateProjectHandler edits a project. Admin-only.
@@ -127,7 +125,7 @@ func UpdateProjectHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		p, err := identity.UpdateProject(r.Context(), d.Pool, id, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, req.DefaultView, req.CycleLabel, req.Repos)
+		p, err := identity.UpdateProject(r.Context(), d.Pool, id, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, req.DefaultView, req.CycleLabel)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return

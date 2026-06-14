@@ -41,10 +41,10 @@ func setupHandlersFixture(t *testing.T) *handlersFixture {
 	if err != nil {
 		t.Fatalf("admin: %v", err)
 	}
-	p, _ := identity.CreateProject(ctx, pool, "Handlers", "", "", "", admin.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "Handlers", "", "", "", admin.ID)
 	adminToken, _, _ := identity.IssueToken(ctx, pool, admin.ID, p.ID, "admin", nil)
 	outsider, _, _ := identity.UpsertFromGithub(ctx, pool, 13502, "outsider-h", "Out", "")
-	outProj, _ := identity.CreateProject(ctx, pool, "Handlers-Out", "", "", "", outsider.ID, nil)
+	outProj, _ := identity.CreateProject(ctx, pool, "Handlers-Out", "", "", "", outsider.ID)
 	outsiderToken, _, _ := identity.IssueToken(ctx, pool, outsider.ID, outProj.ID, "out", nil)
 
 	srv := NewServer(Deps{
@@ -226,7 +226,7 @@ func TestApiTokens_RevokeMissing(t *testing.T) {
 	ctx := t.Context()
 	pool := testutil.NewPool(t)
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 13503, "rev", "Rev", "")
-	p, _ := identity.CreateProject(ctx, pool, "Rev", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "Rev", "", "", "", u.ID)
 	key := []byte("test-session-key")
 	sess, _ := identity.NewSession(ctx, pool, u.ID, "t", "127.0.0.1")
 	cookie := &http.Cookie{
@@ -306,7 +306,7 @@ func TestApiDocs_ListSearchHistoryDelete(t *testing.T) {
 	ctx := t.Context()
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 13504, "dh", "DH", "")
 	key := []byte("test-session-key")
-	p, _ := identity.CreateProject(ctx, pool, "DH", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "DH", "", "", "", u.ID)
 	zero := 0
 	path := "projects/" + p.ID.String() + "/notes/alpha.md"
 	doc, err := docs.Write(ctx, pool, docs.WriteParams{

@@ -37,7 +37,7 @@ func seedFixture(t *testing.T) (context.Context, *fixture, func()) {
 		cancel()
 		t.Fatalf("user: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "SP", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "SP", "", "", "", u.ID)
 	if err != nil {
 		cancel()
 		t.Fatalf("project: %v", err)
@@ -213,7 +213,7 @@ func TestSearch_ScopesToProject(t *testing.T) {
 	defer cancel()
 
 	// Second project with same content.
-	other, err := identity.CreateProject(ctx, fx.pool, "Other", "", "", "", fx.userID, nil)
+	other, err := identity.CreateProject(ctx, fx.pool, "Other", "", "", "", fx.userID)
 	if err != nil {
 		t.Fatalf("other project: %v", err)
 	}

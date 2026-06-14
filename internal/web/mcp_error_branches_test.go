@@ -512,11 +512,11 @@ func TestMCP_Tasks_NonMemberRejected(t *testing.T) {
 	if outsider.IsAdmin {
 		t.Fatalf("test assumes only the first user is admin; outsider is admin")
 	}
-	p, err := identity.CreateProject(ctx, pool, "Owned", "", "", "", owner.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "Owned", "", "", "", owner.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
-	outProj, err := identity.CreateProject(ctx, pool, "OutProj", "", "", "", outsider.ID, nil)
+	outProj, err := identity.CreateProject(ctx, pool, "OutProj", "", "", "", outsider.ID)
 	if err != nil {
 		t.Fatalf("outsider project: %v", err)
 	}

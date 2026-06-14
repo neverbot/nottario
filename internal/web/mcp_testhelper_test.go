@@ -44,7 +44,7 @@ func newMCPFixture(t *testing.T, githubID int64, login string) *mcpFixture {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "MCP "+login, "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "MCP "+login, "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}

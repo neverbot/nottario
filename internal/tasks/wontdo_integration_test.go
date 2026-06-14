@@ -23,7 +23,7 @@ func TestWontDo_Transitions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertFromGithub: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "WontDoProj", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "WontDoProj", "", "", "", u.ID)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestWontDo_DependencyPrecondition(t *testing.T) {
 	defer cancel()
 
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 9102, "deps", "Deps", "")
-	p, _ := identity.CreateProject(ctx, pool, "DepsProj", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "DepsProj", "", "", "", u.ID)
 	roles, _ := identity.ListRoles(ctx, pool, p.ID)
 	roleID := roles[0].ID
 	by := tasks.Authorship{UserID: &u.ID}
@@ -188,7 +188,7 @@ func TestWontDo_FeatureRollup(t *testing.T) {
 	defer cancel()
 
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 9103, "roll", "Roll", "")
-	p, _ := identity.CreateProject(ctx, pool, "RollProj", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "RollProj", "", "", "", u.ID)
 	roles, _ := identity.ListRoles(ctx, pool, p.ID)
 	roleID := roles[0].ID
 	by := tasks.Authorship{UserID: &u.ID}
@@ -242,7 +242,7 @@ func TestWontDo_ClaimNextSkips(t *testing.T) {
 	defer cancel()
 
 	u, _, _ := identity.UpsertFromGithub(ctx, pool, 9104, "skipper", "Skipper", "")
-	p, _ := identity.CreateProject(ctx, pool, "SkipProj", "", "", "", u.ID, nil)
+	p, _ := identity.CreateProject(ctx, pool, "SkipProj", "", "", "", u.ID)
 	roles, _ := identity.ListRoles(ctx, pool, p.ID)
 	roleID := roles[0].ID
 	by := tasks.Authorship{UserID: &u.ID}

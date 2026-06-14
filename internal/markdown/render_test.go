@@ -125,7 +125,7 @@ func seedFixture(t *testing.T) (context.Context, *fixture, func()) {
 		cancel()
 		t.Fatalf("user: %v", err)
 	}
-	p, err := identity.CreateProject(ctx, pool, "MD", "", "", "", u.ID, nil)
+	p, err := identity.CreateProject(ctx, pool, "MD", "", "", "", u.ID)
 	if err != nil {
 		cancel()
 		t.Fatalf("project: %v", err)
