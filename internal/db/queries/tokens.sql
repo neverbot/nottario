@@ -39,6 +39,15 @@ SELECT id, user_id, project_id, name, prefix, default_role_id,
 FROM api_tokens
 WHERE id = $1;
 
+-- Look up the human-readable names of one or more api_tokens by id.
+-- Used to enrich rows recorded with a token_id (comments, task
+-- creation, doc versions, cycle closes) so the UI can render an
+-- "agent of <user> via <token name>" badge without leaking the
+-- token's UUID.
+-- name: ListTokenNamesByIDs :many
+SELECT id, name FROM api_tokens
+WHERE id = ANY(sqlc.arg('ids')::uuid[]);
+
 -- name: RevokeAPIToken :execrows
 UPDATE api_tokens
 SET revoked_at = now()

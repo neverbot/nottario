@@ -142,6 +142,12 @@ type Querier interface {
 	// pass them together or all NULL for the first page. The caller
 	// requests limit+1 rows to detect has_more.
 	ListTasksPaginated(ctx context.Context, arg ListTasksPaginatedParams) ([]ListTasksPaginatedRow, error)
+	// Look up the human-readable names of one or more api_tokens by id.
+	// Used to enrich rows recorded with a token_id (comments, task
+	// creation, doc versions, cycle closes) so the UI can render an
+	// "agent of <user> via <token name>" badge without leaking the
+	// token's UUID.
+	ListTokenNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]ListTokenNamesByIDsRow, error)
 	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
 	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)

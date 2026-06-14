@@ -710,6 +710,16 @@ class NottarioBoardPage extends LitElement {
     }
     .detail .comment .meta-line .name { color: var(--fg); font-weight: 600; }
     .detail .comment .meta-line .when { color: var(--gray-5); }
+    .detail .comment .meta-line .via {
+      color: var(--fg-muted);
+      font-style: italic;
+      font-size: 11px;
+    }
+    .detail .comment .meta-line .via .sep { margin-right: 4px; opacity: 0.6; }
+    .detail .comment .meta-line .via .token {
+      font-style: normal;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
 
     .detail .add-comment {
       margin-top: 14px;
@@ -2028,11 +2038,17 @@ class NottarioBoardPage extends LitElement {
                       <div class="ava">
                         <nottario-avatar size="24"
                           src=${author?.avatar_url || ''}
-                          name=${author?.display_name || author?.github_login || 'agent'}></nottario-avatar>
+                          name=${author?.display_name || author?.github_login || 'agent'}
+                          .agent=${c.via_mcp || null}></nottario-avatar>
                       </div>
                       <div>
                         <div class="meta-line">
                           <span class="name">${author?.display_name || author?.github_login || 'agent'}</span>
+                          ${
+                            c.via_mcp
+                              ? html`<span class="via"><span class="sep">·</span>via <span class="token">${c.via_mcp.name || 'MCP'}</span></span>`
+                              : null
+                          }
                           <span class="when">${this._relTime(c.created_at)}</span>
                         </div>
                         <nottario-markdown

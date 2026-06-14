@@ -157,6 +157,41 @@ func (q *Queries) ListProjectTokens(ctx context.Context, projectID uuid.UUID) ([
 	return items, nil
 }
 
+const listTokenNamesByIDs = `-- name: ListTokenNamesByIDs :many
+SELECT id, name FROM api_tokens
+WHERE id = ANY($1::uuid[])
+`
+
+type ListTokenNamesByIDsRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Look up the human-readable names of one or more api_tokens by id.
+// Used to enrich rows recorded with a token_id (comments, task
+// creation, doc versions, cycle closes) so the UI can render an
+// "agent of <user> via <token name>" badge without leaking the
+// token's UUID.
+func (q *Queries) ListTokenNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]ListTokenNamesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listTokenNamesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTokenNamesByIDsRow{}
+	for rows.Next() {
+		var i ListTokenNamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lookupAPIToken = `-- name: LookupAPIToken :one
 SELECT t.id AS token_id, t.user_id, t.project_id, t.name AS token_name,
        t.prefix, t.default_role_id,

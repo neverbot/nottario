@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/neverbot/nottario/internal/identity"
 )
 
 // Type is a label that the human assigns to a task to clarify its
@@ -69,12 +71,13 @@ type CommitLink struct {
 
 // Comment is a markdown note attached to a task.
 type Comment struct {
-	ID            uuid.UUID  `json:"id"`
-	TaskID        uuid.UUID  `json:"task_id"`
-	AuthorUserID  *uuid.UUID `json:"author_user_id"`
-	AuthorTokenID *uuid.UUID `json:"-"`
-	BodyMD        string     `json:"body"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID            uuid.UUID        `json:"id"`
+	TaskID        uuid.UUID        `json:"task_id"`
+	AuthorUserID  *uuid.UUID       `json:"author_user_id"`
+	AuthorTokenID *uuid.UUID       `json:"-"`
+	ViaMCP        *identity.ViaMCP `json:"via_mcp,omitempty"`
+	BodyMD        string           `json:"body"`
+	CreatedAt     time.Time        `json:"created_at"`
 }
 
 // ValidType returns true when t is one of the recognised type values.
