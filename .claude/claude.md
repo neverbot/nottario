@@ -33,6 +33,53 @@ markdown, issue/PR titles and bodies, default UI strings.
 Conversation with the user can happen in any language they choose;
 artefacts written to disk must be in English regardless.
 
+## Local vs production — which Nottario am I hitting?
+
+This project has **two live Nottario instances**, and a working
+session almost always touches both. Mistaking one for the other has
+already caused confusion (canary state drift, "why did the value
+revert?", etc.); keep the distinction front-of-mind.
+
+- **Local dev container** — `http://localhost:8080`. Brought up by
+  `docker compose up -d --build nottario`. Has its own Postgres
+  volume (`nottario_db-data`). Used by:
+  - The Chrome-devtools MCP browser (`mcp__chrome-devtools__*`).
+  - Any `curl http://localhost:8080/...` from the shell.
+  - Manual smoke tests after a code change — this is the only
+    instance we can rebuild on every commit.
+- **Production Nottario** — `http://10.99.1.1:8081` (currently;
+  `claude mcp list` reports the exact URL). This is the canonical
+  task / docs / arch store and runs `ghcr.io/neverbot/nottario:latest`,
+  which CI publishes on every push to master. Used by:
+  - The MCP tools (`mcp__nottario__nottario_tasks_*`,
+    `mcp__nottario__nottario_docs_*`, `mcp__nottario__nottario_arch_*`,
+    `mcp__nottario__nottario_search`, etc.).
+
+Concrete corollaries an agent must keep in mind:
+
+1. **A `set_state` via MCP changes production**; a button click in
+   the Chrome browser changes the dev container. They are NOT the
+   same database. A task can be `wont_do` locally and `todo` in
+   production at the same time, and that's not a bug — that's two
+   different instances.
+2. **Backend changes need to ship before MCP reflects them.** After
+   a backend feature lands, the local container is up-to-date on
+   the next `docker compose up -d --build`, but the production MCP
+   still runs the previous `:latest` until CI publishes the new
+   image and the host pulls it. During that window, the MCP can
+   refuse newly-introduced values (e.g. a new enum) even though
+   the local binary accepts them. This is a deploy-lag issue, not
+   a code bug; either wait for the pull, or verify locally via
+   `curl` / Chrome until the upgrade lands.
+3. **Smoke a new feature on BOTH** when feasible: local container
+   for "does the code work", production MCP for "does the canonical
+   row reflect the change". For a behaviour-only change with no new
+   wire shape (a typo fix, a tooltip, a CSS rewrite), local is
+   enough.
+4. **Stop assuming the canary state from memory.** Every time you
+   reference "the task is in state X", re-fetch it via MCP — that
+   IS production, and that IS the truth.
+
 ## Technical invariants
 
 - **Lightweight is a first-order goal.** Single Go binary with
