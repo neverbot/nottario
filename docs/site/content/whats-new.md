@@ -12,6 +12,19 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## 2026-06-14
+
+- **Saves now acknowledge themselves.** Every form save across the
+  web — project settings, role / priority / member add, MCP page size,
+  token issuance, doc edit, project create, task create — gives
+  visible feedback the moment it lands. In-place forms flip their
+  Save button to `Saving…` (disabled) → `✓ Saved` for 1.5 seconds.
+  Row deletions, cancellations and other off-button results raise a
+  small dark toast at the bottom of the screen (`role="status"`,
+  auto-dismiss, optional Undo). Errors surface in the same toast
+  shape with a red accent. The toast and button-ack primitives live
+  in `components/toast.js` and `components/form-button.js`.
+
 ## 2026-06-12
 
 - **Brand-anchored palette + Gantt visual refresh.** The whole web
