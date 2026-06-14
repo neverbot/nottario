@@ -315,6 +315,16 @@ class NottarioProjectSettings extends LitElement {
     }
   }
 
+  // Picks a default colour for the "add role" form: walks the
+  // brand-anchored palette and returns the first one no existing
+  // role is using, falling back to the first if every colour is
+  // taken. Matches the swatches documented in docs/design/palette.md.
+  _nextRoleColor() {
+    const palette = ['#1f6feb', '#2da44e', '#bf8700', '#8250df', '#cf222e', '#bc4c00'];
+    const used = new Set((this.roles || []).map((r) => (r.color || '').toLowerCase()));
+    return palette.find((c) => !used.has(c)) || palette[0];
+  }
+
   async addRole(e) {
     const form = e.target;
     const payload = {
@@ -608,7 +618,7 @@ class NottarioProjectSettings extends LitElement {
             <input name="label" placeholder="Backend" required>
           </nottario-field>
           <nottario-field label="Color" class="narrow">
-            <input name="color" placeholder="var(--brand-blue)">
+            <input name="color" type="color" .value=${this._nextRoleColor()}>
           </nottario-field>
           <div class="add-action">
             <button type="submit" class="btn primary">Add role</button>
