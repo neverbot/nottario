@@ -30,11 +30,18 @@ const OK_HOLD_MS = 1500;
 export async function formButton(submitEvent, fn, opts = {}) {
   submitEvent.preventDefault();
   const form = submitEvent.target;
-  // The submit button is usually inside the form, but some callers
-  // pass an event whose target IS the button (e.g. a click handler
-  // on a standalone Save button). Handle both.
-  const btn =
-    form?.querySelector?.('button[type="submit"]') || (form?.tagName === 'BUTTON' ? form : null);
+  // The submit button is usually inside the form. Two fallbacks:
+  //  - a standalone click-handler whose target IS the button.
+  //  - a button placed outside the form but linked via `form="<id>"`
+  //    (HTML form-association), looked up by id in the containing
+  //    root (works in both light DOM and shadow DOM since we walk
+  //    up from the form's getRootNode()).
+  let btn = form?.querySelector?.('button[type="submit"]');
+  if (!btn && form?.id) {
+    const root = form.getRootNode?.() || document;
+    btn = root.querySelector(`button[form="${form.id}"]`);
+  }
+  if (!btn && form?.tagName === 'BUTTON') btn = form;
   if (!btn) return fn();
 
   const savingLabel = opts.savingLabel || SAVING_LABEL;

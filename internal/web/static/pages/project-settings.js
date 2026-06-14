@@ -394,21 +394,25 @@ class NottarioProjectSettings extends LitElement {
   }
 
   _renderRoleRowEditing(r) {
+    // The form spans the label cell only — Save and Cancel live in
+    // the row-actions cell where Edit / Delete used to sit, so the
+    // editing affordance doesn't fragment the row's left-to-right
+    // alignment. The form id wires submit-from-outside the form.
+    const formId = `edit-role-${r.id}`;
     return html`
       <tr class="role-edit-row" data-id=${r.id}>
         <td class="drag-handle" aria-hidden="true">⋮⋮</td>
         <td class="mono">${r.key}</td>
         <td>
-          <form @submit=${(e) => this.updateRole(e, r.id)} class="role-edit-form">
+          <form id=${formId}
+                @submit=${(e) => this.updateRole(e, r.id)}
+                class="role-edit-form">
             <input type="text"
                    .value=${this._editRoleLabel}
                    @input=${(e) => (this._editRoleLabel = e.target.value)}
                    aria-label="Role label"
                    required
                    autofocus>
-            <button type="submit" class="btn primary edit-save">Save</button>
-            <button type="button" class="btn"
-                    @click=${() => this._cancelRoleEdit()}>Cancel</button>
           </form>
         </td>
         <td>
@@ -418,7 +422,12 @@ class NottarioProjectSettings extends LitElement {
             @change=${(e) => (this._editRoleColor = e.detail.value)}>
           </nottario-color-swatches>
         </td>
-        <td></td>
+        <td class="row-actions row-actions-edit">
+          <button type="submit" form=${formId}
+                  class="btn primary edit-save">Save</button>
+          <button type="button" class="btn"
+                  @click=${() => this._cancelRoleEdit()}>Cancel</button>
+        </td>
       </tr>
     `;
   }
