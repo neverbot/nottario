@@ -206,6 +206,12 @@ Concrete corollaries an agent must keep in mind:
 - The primary branch is `master`.
 - Prefer `git add <specific>` over `git add -A` to avoid staging
   secrets or unrelated changes by accident.
+- For the full per-mode playbook (solo agent, parallel agents under
+  one human, multi-dev with PRs — worktrees, branch naming, push
+  policy, exact commands), see `internal/skill/files/methodology/git.md`
+  in this repo. The skill bundle is the source of truth; MCP agents
+  read it via `nottario.skill.read methodology/git.md`. Non-MCP
+  Claude Code sessions should read the file directly.
 
 ### Externally visible actions
 - Push, PR/issue comment, sending messages, uploading to third-party

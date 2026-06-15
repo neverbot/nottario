@@ -27,6 +27,12 @@ Tokens are **per-project**. One token = one project. Passing
 id from `whoami` and reuse it on every tool call — never let the user
 or another step override it without re-running `whoami`.
 
+After `whoami` and before any code work, also decide your **git mode**
+for the session: solo agent, one of several parallel agents under the
+same human, or one of many agents across many humans. The shape of
+your commits, branches and pushes is set by that decision. Full
+playbook: `methodology/git.md`.
+
 Deep dive: `references/identity.md`.
 
 ## 2. Locate the project
@@ -164,6 +170,9 @@ feature", "Block this until X is done").
 Call `nottario.skill.read` with the path:
 
 - `references/identity.md` — token and identity mechanics.
+- `methodology/git.md` — how to drive git across solo, parallel-agent
+  and multi-dev projects: branch choice, worktrees, push policy,
+  exact commands per mode.
 - `domains/tasks.md` — full task API surface, edge cases, pagination,
   claim conflict shape, "carry on" / "block this" / "found a bug"
   patterns.

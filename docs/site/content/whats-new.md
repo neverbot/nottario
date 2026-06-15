@@ -12,6 +12,16 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## 2026-06-15
+
+- **Skill bundle: git methodology for agents.** New file
+  `methodology/git.md` teaches agents how to drive git across the
+  three project shapes — solo agent, parallel agents under one human
+  (worktree per task), multi-dev with PRs — plus the rules that hold
+  across all three (agents never push by default, no force-push, no
+  amend on pushed commits, Conventional Commits single-line). Linked
+  from `skill.md` §1 and from `.claude/claude.md`.
+
 ## 2026-06-14
 
 - **Architecture diagram now has versioning.** Every change to nodes
