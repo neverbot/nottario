@@ -63,8 +63,12 @@ The loop when the human says "carry on" or "do the next thing":
 3. **Link commits.** `nottario.tasks.link_commit { repo, sha }` for
    every commit the task produced. Non-negotiable when the task
    yielded code — see `domains/tasks.md` for why.
-4. **Note non-obvious things.** `nottario.tasks.add_comment` for
-   trade-offs, follow-up ideas, why A over B. Future readers benefit.
+4. **Leave a closing comment.** `nottario.tasks.add_comment` BEFORE
+   `set_state done` or `wont_do`. One short paragraph for ordinary
+   tasks; for bugs, a terse Repro / Fix / Test triplet. The diff is
+   truth; the comment is the story future readers need to understand
+   the diff. Skipping this is a low-friction mistake that compounds.
+   Full rules: `domains/tasks.md` §"Always leave a closing comment".
 5. **Close.** `nottario.tasks.set_state { state: "done" }`. The
    server rejects this if a dependency is still open and returns a
    `preconditions` array — work those first.

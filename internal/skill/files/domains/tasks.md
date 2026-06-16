@@ -229,6 +229,59 @@ reader of the closed task can jump straight to the diff without
 grepping git. Tasks that are pure documentation or bug-recovery in
 the DB legitimately have no commit; everything else does.
 
+#### Always leave a closing comment
+
+Before `set_state done` (or `wont_do`, or any terminal state), call
+`nottario.tasks.add_comment` with a short summary of what actually
+happened. The diff is the truth; the closing comment is the **story**
+a future reader needs to understand the diff without reverse-
+engineering it. Skipping this is a low-friction mistake that compounds
+— months later nobody remembers why a task was closed without code,
+why `wont_do` was the right call, or what the bug actually was.
+
+What the comment must carry, by task type:
+
+- **task / chore / spike** — one paragraph: what you delivered, the
+  non-obvious decisions you made, and any follow-up you spotted but
+  did not file as its own task (a small enough loose end to live as a
+  note here instead of a new row). Link the commits inline for
+  readability even though the structured `link_commit` already exists.
+- **bug** — three sections, terse but explicit:
+  1. **Repro** — the exact steps or input that triggered the bug, in
+     past tense. Make it copy-pasteable. The bar: a future agent
+     should be able to re-trigger from this paragraph alone, without
+     reading the original report.
+  2. **Fix** — the change in one or two sentences, focusing on *why*
+     this is the right fix and not just the apparent one. If you
+     rejected an obvious alternative, mention it.
+  3. **Test** — what you ran to confirm: integration test added, manual
+     reproduction now fails to trigger, smoke test in the dev
+     container, etc. "Verified the gate is green" is not a test plan.
+- **feature** parents close automatically when their children flip to
+  `done`; you don't usually comment on the parent. Leave the closing
+  story on each child.
+- **`wont_do`** — say why. "Superseded by `<id>`", "out of scope after
+  user clarified X", "infeasible because Y". A `wont_do` with no
+  comment looks indistinguishable from "forgot about it" to anyone
+  who comes back later.
+
+```text
+nottario.tasks.add_comment {
+  task_id,
+  body: "Fix: deferred the cycle check to inside the tx (was racing\n
+  the FOR UPDATE). Repro: two concurrent `add_dependency` calls on the\n
+  same node — used to allow A→B→A intermittently. Test: new\n
+  TestAddDependency_NoCycleUnderRace in repo_integration_test.go,\n
+  10 iterations under -race. Commits abc1234, def5678."
+}
+nottario.tasks.set_state { task_id, state: "done" }
+```
+
+The pattern is **always**: link commits → add comment → set_state.
+Comment before state, not after — once a task is `done` it slips out
+of the active backlog and the comment you forgot is much less likely
+to land.
+
 #### Preconditions are enforced
 
 Closing a task (`state: "done"`) is **rejected** when the task has at
@@ -337,7 +390,7 @@ loop:
   ...do the work in the local repo...
 
   nottario.tasks.link_commit { task_id: task.id, repo, sha }
-  nottario.tasks.add_comment { task_id: task.id, body: "..." }   # optional
+  nottario.tasks.add_comment { task_id: task.id, body: "..." }   # REQUIRED — see §"Always leave a closing comment"
   nottario.tasks.set_state   { task_id: task.id, state: "done" }
 goto loop
 ```

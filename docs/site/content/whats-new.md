@@ -21,6 +21,13 @@ feature shows up here.
   across all three (agents never push by default, no force-push, no
   amend on pushed commits, Conventional Commits single-line). Linked
   from `skill.md` §1 and from `.claude/claude.md`.
+- **Closing comment is now required.** `domains/tasks.md` documents
+  the convention agents follow before flipping a task to `done` or
+  `wont_do`: a short paragraph for ordinary tasks, a terse
+  Repro / Fix / Test triplet for bugs, and a one-line "why" for
+  `wont_do`. The diff is truth; the comment is the story future
+  readers need to understand the diff without reverse-engineering
+  it.
 
 ## 2026-06-14
 
