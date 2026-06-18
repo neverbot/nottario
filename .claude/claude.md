@@ -33,52 +33,51 @@ markdown, issue/PR titles and bodies, default UI strings.
 Conversation with the user can happen in any language they choose;
 artefacts written to disk must be in English regardless.
 
-## Local vs production — which Nottario am I hitting?
+## Know which Nottario each tool hits
 
-This project has **two live Nottario instances**, and a working
-session almost always touches both. Mistaking one for the other has
-already caused confusion (canary state drift, "why did the value
-revert?", etc.); keep the distinction front-of-mind.
+A Nottario contributor can be in one of several deployment shapes,
+and the right discipline depends on which:
 
-- **Local dev container** — `http://localhost:8080`. Brought up by
-  `docker compose up -d --build nottario`. Has its own Postgres
-  volume (`nottario_db-data`). Used by:
-  - The Chrome-devtools MCP browser (`mcp__chrome-devtools__*`).
-  - Any `curl http://localhost:8080/...` from the shell.
-  - Manual smoke tests after a code change — this is the only
-    instance we can rebuild on every commit.
-- **Production Nottario** — `http://10.99.1.1:8081` (currently;
-  `claude mcp list` reports the exact URL). This is the canonical
-  task / docs / arch store and runs `ghcr.io/neverbot/nottario:latest`,
-  which CI publishes on every push to master. Used by:
-  - The MCP tools (`mcp__nottario__nottario_tasks_*`,
-    `mcp__nottario__nottario_docs_*`, `mcp__nottario__nottario_arch_*`,
-    `mcp__nottario__nottario_search`, etc.).
+- **No live instance.** You only build and run unit tests. The
+  MCP-based task discipline below does not apply; commit via plain
+  git and skip the "file new work" / "self-assign" rituals.
+- **Local dev container only.** `docker compose up -d --build
+  nottario` brings up `http://localhost:8080` with its own Postgres
+  volume. All HTTP probes (`curl`, Chrome-devtools MCP) hit this.
+- **Remote canonical instance only.** A shared team server reached
+  through `mcp__nottario__*` tools. `claude mcp list` reports the
+  exact URL.
+- **Both** — common for active contributors. Local for fast
+  rebuilds and UI smoke; remote as the canonical task / docs /
+  architecture store.
 
-Concrete corollaries an agent must keep in mind:
+Whichever shape you are in, the universal rule is: **before acting,
+name the instance the action lands on.**
 
-1. **A `set_state` via MCP changes production**; a button click in
-   the Chrome browser changes the dev container. They are NOT the
-   same database. A task can be `wont_do` locally and `todo` in
-   production at the same time, and that's not a bug — that's two
-   different instances.
-2. **Backend changes need to ship before MCP reflects them.** After
-   a backend feature lands, the local container is up-to-date on
-   the next `docker compose up -d --build`, but the production MCP
-   still runs the previous `:latest` until CI publishes the new
-   image and the host pulls it. During that window, the MCP can
-   refuse newly-introduced values (e.g. a new enum) even though
-   the local binary accepts them. This is a deploy-lag issue, not
-   a code bug; either wait for the pull, or verify locally via
-   `curl` / Chrome until the upgrade lands.
-3. **Smoke a new feature on BOTH** when feasible: local container
-   for "does the code work", production MCP for "does the canonical
-   row reflect the change". For a behaviour-only change with no new
-   wire shape (a typo fix, a tooltip, a CSS rewrite), local is
-   enough.
-4. **Stop assuming the canary state from memory.** Every time you
-   reference "the task is in state X", re-fetch it via MCP — that
-   IS production, and that IS the truth.
+If you have both a local dev container AND a remote canonical
+instance, four corollaries follow:
+
+1. **A `set_state` via the `mcp__nottario__*` tools changes the
+   remote**; a button click in a browser pointed at `localhost:8080`
+   changes the local container. They are independent databases. A
+   task can be `wont_do` locally and `todo` remotely at the same
+   time, and that's not a bug — it's two instances.
+2. **Backend changes land locally before the remote MCP reflects
+   them.** The local container rebuilds on the next
+   `docker compose up -d --build`, but the remote keeps running the
+   previous `:latest` until CI publishes the new image and the host
+   pulls it. During that window, the MCP can refuse newly-introduced
+   values (e.g. a new enum) even though the local binary accepts
+   them. This is deploy lag, not a code bug; either wait for the
+   pull, or verify locally via `curl` / Chrome until the upgrade
+   lands.
+3. **Smoke a new feature on both** when feasible: local for "does
+   the code work", remote MCP for "does the canonical row reflect
+   the change". For a behaviour-only change with no new wire shape
+   (a typo fix, a tooltip, a CSS rewrite), local is enough.
+4. **Re-fetch state every time.** Do not trust memory across calls
+   — call the MCP again before asserting a task or document is in
+   state X.
 
 ## Technical invariants
 
@@ -219,6 +218,12 @@ Concrete corollaries an agent must keep in mind:
   doesn't extend to future calls.
 
 ### Task discipline (Nottario itself)
+
+These rules apply when you track your contribution work in a live
+Nottario instance via the `mcp__nottario__*` tools. If you don't
+have an instance configured, skip this section — commit via plain
+git and use whatever backlog your fork prefers.
+
 - **Every task has a target_role.** One of backend / frontend /
   design / qa. Never null on non-feature tasks.
 - **Multi-role work → one task per role**, linked with
@@ -315,17 +320,20 @@ Concrete corollaries an agent must keep in mind:
   see `dependencies.sql`, `tasks.sql`, `arch.sql` for the patterns.
 
 ### Document sync (local files ↔ Nottario)
-- The canonical store for shared docs is Nottario (`context` kind).
-  Some docs (notably this `claude.md`) also live in the repo. Before
-  committing a local change to a doc that also lives in Nottario:
+
+Applies only if you mirror project docs into a live Nottario
+instance (`context` kind). If you don't, skip — the repo copy is
+the only source.
+
+- Some repo docs (notably this `claude.md`) may also be mirrored in
+  Nottario at path `context/claude.md`. Before committing a local
+  change to a doc that is mirrored:
   1. `nottario.docs.read` the matching path; stash `current_version`.
   2. Compare with what you have locally. If Nottario is ahead, merge.
   3. Commit locally, then `nottario.docs.write` with
      `expected_version = current_version`. On `version_conflict`,
      re-read + merge + retry.
-- This `claude.md` lives at path `context/claude.md` inside the
-  Nottario project (the project_id is the call argument, not part of
-  the path); keep it in sync.
+- The `project_id` is a call argument, not part of the path.
 
 ## Live databases are sacred — NEVER wipe them
 
