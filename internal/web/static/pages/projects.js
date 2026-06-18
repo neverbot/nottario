@@ -229,7 +229,20 @@ class NottarioProjectsPage extends LitElement {
       const res = await fetch('/api/projects');
       if (!res.ok) throw new Error('failed to load projects');
       const j = await res.json();
-      this.projects = j.projects || [];
+      const list = j.projects || [];
+      const ts = (p) => {
+        const a = p.stats && p.stats.last_activity_at;
+        const b = p.updated_at;
+        const ta = a ? new Date(a).getTime() : 0;
+        const tb = b ? new Date(b).getTime() : 0;
+        return Math.max(ta, tb);
+      };
+      list.sort((a, b) => {
+        const d = ts(b) - ts(a);
+        if (d !== 0) return d;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+      this.projects = list;
     } catch (e) {
       this.error = e.message;
       this.projects = [];
