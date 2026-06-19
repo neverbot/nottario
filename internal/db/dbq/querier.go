@@ -163,7 +163,9 @@ type Querier interface {
 	ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommitsRow, error)
 	// Optional filters: state, type, assignee, target_role, parent_task.
 	// include_children=false (default) restricts to parent IS NULL UNLESS
-	// parent_task_id is explicitly set.
+	// parent_task_id is explicitly set. open_only=true restricts to
+	// state IN ('todo','doing') and stacks on top of an explicit state filter
+	// (no-op when state is also set).
 	ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTasksRow, error)
 	// Same filters as ListTasks plus keyset cursor on (priority DESC,
 	// created_at ASC, id ASC). The cursor params are all-or-nothing:

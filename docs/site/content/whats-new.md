@@ -12,6 +12,17 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## 2026-06-20
+
+- **`nottario.tasks.list` defaults to open tasks only.** Without an
+  explicit `state` filter the MCP tool now returns just `todo` and
+  `doing` rows. Closed tasks (`done`, `wont_do`) accumulate forever
+  and would dominate every backlog walk; pass `include_closed: true`
+  to opt into the previous behaviour, or set `state='done'` /
+  `state='wont_do'` to scope to a closed bucket. The skill bundle
+  documents the rule in `domains/tasks.md` ("Token discipline" and
+  the `tasks.list` reference).
+
 ## 2026-06-19
 
 - **MCP responses are now slim by default.** The high-frequency task

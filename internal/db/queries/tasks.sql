@@ -14,7 +14,9 @@ DELETE FROM tasks WHERE id = $1;
 -- name: ListTasks :many
 -- Optional filters: state, type, assignee, target_role, parent_task.
 -- include_children=false (default) restricts to parent IS NULL UNLESS
--- parent_task_id is explicitly set.
+-- parent_task_id is explicitly set. open_only=true restricts to
+-- state IN ('todo','doing') and stacks on top of an explicit state filter
+-- (no-op when state is also set).
 SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
@@ -23,6 +25,7 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
 FROM tasks
 WHERE project_id = $1
   AND (sqlc.narg('state')::text IS NULL OR state = sqlc.narg('state')::text)
+  AND (NOT sqlc.arg('open_only')::bool OR state IN ('todo','doing'))
   AND (sqlc.narg('type')::text IS NULL OR type = sqlc.narg('type')::text)
   AND (sqlc.narg('assignee_user_id')::uuid IS NULL OR assignee_user_id = sqlc.narg('assignee_user_id')::uuid)
   AND (sqlc.narg('target_role_id')::uuid IS NULL OR target_role_id = sqlc.narg('target_role_id')::uuid)
@@ -49,6 +52,7 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
 FROM tasks
 WHERE project_id = $1
   AND (sqlc.narg('state')::text IS NULL OR state = sqlc.narg('state')::text)
+  AND (NOT sqlc.arg('open_only')::bool OR state IN ('todo','doing'))
   AND (sqlc.narg('type')::text IS NULL OR type = sqlc.narg('type')::text)
   AND (sqlc.narg('assignee_user_id')::uuid IS NULL OR assignee_user_id = sqlc.narg('assignee_user_id')::uuid)
   AND (sqlc.narg('target_role_id')::uuid IS NULL OR target_role_id = sqlc.narg('target_role_id')::uuid)

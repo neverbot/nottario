@@ -56,6 +56,12 @@ Filter parameters (all optional except `project_id`):
 - `include_children: true` — by default only top-level tasks
   (parent_task_id IS NULL) are returned; set this to flatten feature
   subtrees.
+- `include_closed: true` — by default the response is restricted to
+  **open** tasks (state `todo` or `doing`) so closed rows don't
+  dominate every walk in a long-lived project. Set this to also
+  include `done` and `wont_do`. An explicit `state` filter
+  (`state: 'done'`, `state: 'wont_do'`) always wins regardless of this
+  flag.
 - `cycle_id` (optional) — when **omitted**, all read tools
   (`tasks.list`, `tasks.next`, `tasks.claim_next`) default to the
   project's **active cycle**. Pass a specific `cycle_id` to inspect a
@@ -524,6 +530,12 @@ much as reading it once and learns nothing new.
 **Pass `include_*` to `tasks.get` deliberately.** Pulling all three
 (deps + commits + comments) on a feature parent with many children
 can return tens of KB. Ask for only what your next decision needs.
+
+**`tasks.list` returns only open tasks by default.** Closed rows
+(state `done` or `wont_do`) accumulate forever and would dominate
+every backlog walk. Pass `include_closed: true` only when you
+genuinely need them, or set an explicit `state` filter
+(`state: 'done'` / `state: 'wont_do'`) to scope to a closed bucket.
 
 ## Things you cannot do (today)
 

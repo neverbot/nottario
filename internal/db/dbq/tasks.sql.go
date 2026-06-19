@@ -395,14 +395,15 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
 FROM tasks
 WHERE project_id = $1
   AND ($2::text IS NULL OR state = $2::text)
-  AND ($3::text IS NULL OR type = $3::text)
-  AND ($4::uuid IS NULL OR assignee_user_id = $4::uuid)
-  AND ($5::uuid IS NULL OR target_role_id = $5::uuid)
-  AND ($6::uuid IS NULL OR cycle_id = $6::uuid)
+  AND (NOT $3::bool OR state IN ('todo','doing'))
+  AND ($4::text IS NULL OR type = $4::text)
+  AND ($5::uuid IS NULL OR assignee_user_id = $5::uuid)
+  AND ($6::uuid IS NULL OR target_role_id = $6::uuid)
+  AND ($7::uuid IS NULL OR cycle_id = $7::uuid)
   AND (
     CASE
-      WHEN $7::uuid IS NOT NULL THEN parent_task_id = $7::uuid
-      WHEN $8::bool THEN TRUE
+      WHEN $8::uuid IS NOT NULL THEN parent_task_id = $8::uuid
+      WHEN $9::bool THEN TRUE
       ELSE parent_task_id IS NULL
     END
   )
@@ -412,6 +413,7 @@ ORDER BY priority DESC, created_at ASC
 type ListTasksParams struct {
 	ProjectID       uuid.UUID
 	State           pgtype.Text
+	OpenOnly        bool
 	Type            pgtype.Text
 	AssigneeUserID  *uuid.UUID
 	TargetRoleID    *uuid.UUID
@@ -442,11 +444,14 @@ type ListTasksRow struct {
 
 // Optional filters: state, type, assignee, target_role, parent_task.
 // include_children=false (default) restricts to parent IS NULL UNLESS
-// parent_task_id is explicitly set.
+// parent_task_id is explicitly set. open_only=true restricts to
+// state IN ('todo','doing') and stacks on top of an explicit state filter
+// (no-op when state is also set).
 func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTasksRow, error) {
 	rows, err := q.db.Query(ctx, listTasks,
 		arg.ProjectID,
 		arg.State,
+		arg.OpenOnly,
 		arg.Type,
 		arg.AssigneeUserID,
 		arg.TargetRoleID,
@@ -499,32 +504,34 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
 FROM tasks
 WHERE project_id = $1
   AND ($2::text IS NULL OR state = $2::text)
-  AND ($3::text IS NULL OR type = $3::text)
-  AND ($4::uuid IS NULL OR assignee_user_id = $4::uuid)
-  AND ($5::uuid IS NULL OR target_role_id = $5::uuid)
-  AND ($6::uuid IS NULL OR cycle_id = $6::uuid)
+  AND (NOT $3::bool OR state IN ('todo','doing'))
+  AND ($4::text IS NULL OR type = $4::text)
+  AND ($5::uuid IS NULL OR assignee_user_id = $5::uuid)
+  AND ($6::uuid IS NULL OR target_role_id = $6::uuid)
+  AND ($7::uuid IS NULL OR cycle_id = $7::uuid)
   AND (
     CASE
-      WHEN $7::uuid IS NOT NULL THEN parent_task_id = $7::uuid
-      WHEN $8::bool THEN TRUE
+      WHEN $8::uuid IS NOT NULL THEN parent_task_id = $8::uuid
+      WHEN $9::bool THEN TRUE
       ELSE parent_task_id IS NULL
     END
   )
   AND (
-    $9::int IS NULL
-    OR priority < $9::int
-    OR (priority = $9::int AND created_at > $10::timestamptz)
-    OR (priority = $9::int
-        AND created_at = $10::timestamptz
-        AND id > $11::uuid)
+    $10::int IS NULL
+    OR priority < $10::int
+    OR (priority = $10::int AND created_at > $11::timestamptz)
+    OR (priority = $10::int
+        AND created_at = $11::timestamptz
+        AND id > $12::uuid)
   )
 ORDER BY priority DESC, created_at ASC, id ASC
-LIMIT $12::int
+LIMIT $13::int
 `
 
 type ListTasksPaginatedParams struct {
 	ProjectID       uuid.UUID
 	State           pgtype.Text
+	OpenOnly        bool
 	Type            pgtype.Text
 	AssigneeUserID  *uuid.UUID
 	TargetRoleID    *uuid.UUID
@@ -565,6 +572,7 @@ func (q *Queries) ListTasksPaginated(ctx context.Context, arg ListTasksPaginated
 	rows, err := q.db.Query(ctx, listTasksPaginated,
 		arg.ProjectID,
 		arg.State,
+		arg.OpenOnly,
 		arg.Type,
 		arg.AssigneeUserID,
 		arg.TargetRoleID,

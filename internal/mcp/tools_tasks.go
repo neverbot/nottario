@@ -106,6 +106,7 @@ type tasksListInput struct {
 	ParentTaskID    string `json:"parent_task_id,omitempty" jsonschema:"if set, list children of this feature task"`
 	CycleID         string `json:"cycle_id,omitempty" jsonschema:"optional uuid of a cycle to scope the list. When omitted, defaults to the project's active cycle. Pass 'all' to disable the filter and list across every cycle."`
 	IncludeChildren bool   `json:"include_children,omitempty" jsonschema:"if true, include tasks that have a parent_task_id (default false: top-level only)"`
+	IncludeClosed   bool   `json:"include_closed,omitempty" jsonschema:"if true, include closed tasks (state='done' or 'wont_do') in the result. Default false: only 'todo' and 'doing' tasks are returned when no explicit state filter is set. An explicit state filter (state='done', state='wont_do') always wins regardless of this flag."`
 	Limit           int    `json:"limit,omitempty" jsonschema:"page size (1..500). When omitted, uses the project's configured mcp_page_size (default 50)."`
 	Cursor          string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous call's next_cursor. Empty/omitted returns the first page."`
 	Verbose         bool   `json:"verbose,omitempty" jsonschema:"if true, include every Task field per row (description, created_by, …). Default false: rows are {id, type, title, state, priority, parent_task_id, target_role_id, assignee_user_id, updated_at}. Pass true only when you actually need the descriptions in your context — it can multiply response size by 10."`
@@ -185,7 +186,7 @@ type tasksCommentInput struct {
 func registerTasks(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.list",
-		Description: "Lists tasks in a project, optionally filtered by state, type, assignee, target role or parent feature task. Returns top-level tasks by default; pass include_children=true to flatten feature subtrees.\n\nResponse rows are SLIM by default: {id, type, title, state, priority, parent_task_id, target_role_id, assignee_user_id, updated_at}. Pass verbose=true to get every Task field per row (description, created_by, …) — only do that when you actually need the descriptions in your context, it can multiply the response size by 10.\n\nPagination is keyset-based: each call returns at most `limit` tasks (defaults to the project's `mcp_page_size`, 50 unless an admin changed it), plus `next_cursor` and `has_more`. To walk the full backlog: call repeatedly passing the previous `next_cursor` until `has_more` is false. Filters can change between pages without corrupting the walk.",
+		Description: "Lists tasks in a project, optionally filtered by state, type, assignee, target role or parent feature task. Returns top-level tasks by default; pass include_children=true to flatten feature subtrees.\n\nBy default ONLY open tasks (state='todo' or 'doing') are returned. Closed tasks (state='done', 'wont_do') accumulate forever and would dominate every walk — pass include_closed=true when you genuinely need them, or set an explicit state filter (state='done' / 'wont_do') to retrieve a specific closed bucket.\n\nResponse rows are SLIM by default: {id, type, title, state, priority, parent_task_id, target_role_id, assignee_user_id, updated_at}. Pass verbose=true to get every Task field per row (description, created_by, …) — only do that when you actually need the descriptions in your context, it can multiply the response size by 10.\n\nPagination is keyset-based: each call returns at most `limit` tasks (defaults to the project's `mcp_page_size`, 50 unless an admin changed it), plus `next_cursor` and `has_more`. To walk the full backlog: call repeatedly passing the previous `next_cursor` until `has_more` is false. Filters can change between pages without corrupting the walk.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksListInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
@@ -201,6 +202,8 @@ func registerTasks(server *sdk.Server, d Deps) {
 		f := tasks.ListFilter{ProjectID: pid, IncludeChildren: in.IncludeChildren, CycleID: cycleID}
 		if in.State != "" {
 			f.State = tasks.State(in.State)
+		} else if !in.IncludeClosed {
+			f.OpenOnly = true
 		}
 		if in.Type != "" {
 			f.Type = tasks.Type(in.Type)

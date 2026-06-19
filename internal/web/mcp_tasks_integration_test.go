@@ -268,3 +268,93 @@ func TestMCP_Tasks_SlimResponses(t *testing.T) {
 		}
 	}
 }
+
+// TestMCP_Tasks_ListClosedDefault verifies the open-only default:
+// tasks.list without filters returns only 'todo'/'doing' rows; closed
+// rows surface when the caller passes include_closed=true or an
+// explicit state filter.
+func TestMCP_Tasks_ListClosedDefault(t *testing.T) {
+	f := newMCPFixture(t, 13370, "list-closed-default")
+
+	mk := func(title, state string) string {
+		t.Helper()
+		var tk map[string]any
+		f.callJSON(t, "nottario.tasks.create", map[string]any{
+			"project_id": f.projectID, "title": title,
+		}, &tk)
+		id := tk["id"].(string)
+		if state != "todo" {
+			f.callJSON(t, "nottario.tasks.set_state", map[string]any{
+				"project_id": f.projectID, "task_id": id, "state": state,
+			}, nil)
+		}
+		return id
+	}
+	openTodo := mk("open-todo", "todo")
+	openDoing := mk("open-doing", "doing")
+	closedDone := mk("closed-done", "done")
+	closedWontDo := mk("closed-wontdo", "wont_do")
+
+	idsOf := func(rows []any) map[string]bool {
+		out := map[string]bool{}
+		for _, r := range rows {
+			row, _ := r.(map[string]any)
+			if id, ok := row["id"].(string); ok {
+				out[id] = true
+			}
+		}
+		return out
+	}
+
+	// Default list: closed rows omitted.
+	var list map[string]any
+	f.callJSON(t, "nottario.tasks.list", map[string]any{
+		"project_id": f.projectID,
+	}, &list)
+	rows, _ := list["tasks"].([]any)
+	got := idsOf(rows)
+	if !got[openTodo] || !got[openDoing] {
+		t.Errorf("default list must include open tasks, got %+v", got)
+	}
+	if got[closedDone] || got[closedWontDo] {
+		t.Errorf("default list must omit closed tasks, got %+v", got)
+	}
+
+	// include_closed=true brings them back.
+	f.callJSON(t, "nottario.tasks.list", map[string]any{
+		"project_id":     f.projectID,
+		"include_closed": true,
+	}, &list)
+	rows, _ = list["tasks"].([]any)
+	got = idsOf(rows)
+	for _, id := range []string{openTodo, openDoing, closedDone, closedWontDo} {
+		if !got[id] {
+			t.Errorf("include_closed=true must surface %s, got %+v", id, got)
+		}
+	}
+
+	// Explicit state='done' wins regardless of include_closed.
+	f.callJSON(t, "nottario.tasks.list", map[string]any{
+		"project_id": f.projectID,
+		"state":      "done",
+	}, &list)
+	rows, _ = list["tasks"].([]any)
+	got = idsOf(rows)
+	if !got[closedDone] {
+		t.Errorf("state=done must surface the done task, got %+v", got)
+	}
+	if got[openTodo] || got[openDoing] || got[closedWontDo] {
+		t.Errorf("state=done must scope to done only, got %+v", got)
+	}
+
+	// Explicit state='wont_do' surfaces the wont_do task.
+	f.callJSON(t, "nottario.tasks.list", map[string]any{
+		"project_id": f.projectID,
+		"state":      "wont_do",
+	}, &list)
+	rows, _ = list["tasks"].([]any)
+	got = idsOf(rows)
+	if !got[closedWontDo] || got[closedDone] {
+		t.Errorf("state=wont_do scope failed, got %+v", got)
+	}
+}

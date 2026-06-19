@@ -62,6 +62,12 @@ When the full object is genuinely needed (e.g. an agent reading a
 task it didn't create), pass `verbose: true` on the call to opt
 back into every field.
 
+`tasks.list` defaults to **open tasks only** (`state='todo'` or
+`'doing'`). Closed rows accumulate forever and would dominate every
+walk in a long-lived project; pass `include_closed: true` when you
+genuinely need them, or set an explicit `state` filter (e.g.
+`state='done'`) to scope to a closed bucket.
+
 `tasks.get` returns the base task in full (descriptions are the
 reason you called `get` in the first place) but **omits** the
 related collections unless you ask for them:

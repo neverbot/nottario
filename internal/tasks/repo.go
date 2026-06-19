@@ -173,6 +173,7 @@ type ListFilter struct {
 	ParentTaskID    *uuid.UUID
 	CycleID         *uuid.UUID
 	IncludeChildren bool // when false (default), only top-level tasks (parent IS NULL) are returned
+	OpenOnly        bool // when true, restrict to state IN ('todo','doing'); stacks on top of State if both set
 }
 
 // Cursor identifies the last item of a page in the (priority DESC,
@@ -230,6 +231,7 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Task, error)
 	rows, err := dbq.New(pool).ListTasks(ctx, dbq.ListTasksParams{
 		ProjectID:       f.ProjectID,
 		State:           pgtypeText(string(f.State)),
+		OpenOnly:        f.OpenOnly,
 		Type:            pgtypeText(string(f.Type)),
 		AssigneeUserID:  f.AssigneeUserID,
 		TargetRoleID:    f.TargetRoleID,
@@ -299,6 +301,7 @@ func ListPaginated(ctx context.Context, pool *pgxpool.Pool, f ListFilter, limit 
 	params := dbq.ListTasksPaginatedParams{
 		ProjectID:       f.ProjectID,
 		State:           pgtypeText(string(f.State)),
+		OpenOnly:        f.OpenOnly,
 		Type:            pgtypeText(string(f.Type)),
 		AssigneeUserID:  f.AssigneeUserID,
 		TargetRoleID:    f.TargetRoleID,
