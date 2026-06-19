@@ -21,12 +21,12 @@ func archBy(ctx context.Context) (arch.Authorship, error) {
 }
 
 type archProjectInput struct {
-	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
 }
 
 type archKindUpsertInput struct {
 	archProjectInput
-	Key         string `json:"key" jsonschema:"short identifier for the kind (snake-case, e.g. 'worker')"`
+	Key         string `json:"key" jsonschema:"snake-case identifier"`
 	Label       string `json:"label" jsonschema:"display label"`
 	Icon        string `json:"icon,omitempty"`
 	Color       string `json:"color,omitempty"`
@@ -40,43 +40,43 @@ type archKindDeleteInput struct {
 
 type archNodeRefInput struct {
 	archProjectInput
-	Slug string `json:"slug" jsonschema:"the project-scoped slug of the node"`
+	Slug string `json:"slug" jsonschema:"node slug"`
 }
 
 type archNodeListInput struct {
 	archProjectInput
-	ParentSlug string `json:"parent_slug,omitempty" jsonschema:"when set, only the direct children of this node are returned"`
-	RootOnly   bool   `json:"root_only,omitempty" jsonschema:"when true and parent_slug is empty, only top-level nodes are returned"`
+	ParentSlug string `json:"parent_slug,omitempty" jsonschema:"direct children of this node"`
+	RootOnly   bool   `json:"root_only,omitempty" jsonschema:"only top-level nodes"`
 }
 
 type archNodeUpsertInput struct {
 	archProjectInput
-	Slug        string         `json:"slug" jsonschema:"snake-case readable id, scoped to the project"`
-	ParentSlug  string         `json:"parent_slug,omitempty" jsonschema:"slug of the parent node, or empty for a root"`
-	Kind        string         `json:"kind" jsonschema:"one of the project's kind keys (system, service, module, component, external, or any custom)"`
+	Slug        string         `json:"slug" jsonschema:"snake-case id"`
+	ParentSlug  string         `json:"parent_slug,omitempty" jsonschema:"parent slug, '' for root"`
+	Kind        string         `json:"kind" jsonschema:"a kind key from arch.list_kinds"`
 	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty" jsonschema:"markdown description"`
-	Metadata    map[string]any `json:"metadata,omitempty" jsonschema:"free-form metadata (lang, framework, port, etc.)"`
-	LinkedRepo  string         `json:"linked_repo,omitempty" jsonschema:"'owner/repo' if the node maps to a GitHub repo (empty to clear)"`
-	LinkedPath  string         `json:"linked_path,omitempty" jsonschema:"path inside the linked repo (e.g. 'internal/auth')"`
-	Position    *int           `json:"position,omitempty" jsonschema:"sibling ordering"`
+	Description string         `json:"description,omitempty" jsonschema:"markdown"`
+	Metadata    map[string]any `json:"metadata,omitempty" jsonschema:"free-form metadata"`
+	LinkedRepo  string         `json:"linked_repo,omitempty" jsonschema:"'owner/repo' or '' to clear"`
+	LinkedPath  string         `json:"linked_path,omitempty" jsonschema:"path inside the linked repo"`
+	Position    *int           `json:"position,omitempty" jsonschema:"sibling order"`
 }
 
 type archNodeMoveInput struct {
 	archNodeRefInput
-	ParentSlug string `json:"parent_slug,omitempty" jsonschema:"new parent slug, or empty to become a root"`
+	ParentSlug string `json:"parent_slug,omitempty" jsonschema:"new parent slug, '' for root"`
 }
 
 type archNodeRemoveInput struct {
 	archNodeRefInput
-	Cascade bool `json:"cascade,omitempty" jsonschema:"when true, descendants are deleted; otherwise the call is rejected if children exist"`
+	Cascade bool `json:"cascade,omitempty" jsonschema:"delete the whole subtree"`
 }
 
 type archEdgeUpsertInput struct {
 	archProjectInput
 	FromSlug    string `json:"from_slug"`
 	ToSlug      string `json:"to_slug"`
-	Kind        string `json:"kind" jsonschema:"depends_on | uses | calls | reads | writes | publishes | subscribes (or custom)"`
+	Kind        string `json:"kind" jsonschema:"depends_on|uses|calls|reads|writes|publishes|subscribes (or custom)"`
 	Label       string `json:"label,omitempty"`
 	Description string `json:"description,omitempty"`
 }
@@ -84,25 +84,25 @@ type archEdgeUpsertInput struct {
 type archEdgeListInput struct {
 	archProjectInput
 	NodeSlug  string `json:"node_slug,omitempty"`
-	Direction string `json:"direction,omitempty" jsonschema:"'in', 'out' or '' for both"`
+	Direction string `json:"direction,omitempty" jsonschema:"'in','out' or ''"`
 	Kind      string `json:"kind,omitempty"`
 }
 
 type archEdgeRemoveInput struct {
 	archProjectInput
-	EdgeID string `json:"edge_id" jsonschema:"uuid of the edge to delete"`
+	EdgeID string `json:"edge_id" jsonschema:"edge uuid"`
 }
 
 type archLinkInput struct {
 	archNodeRefInput
-	DocPath string `json:"doc_path,omitempty" jsonschema:"path of a markdown document to attach"`
-	TaskID  string `json:"task_id,omitempty" jsonschema:"uuid of a task to attach"`
+	DocPath string `json:"doc_path,omitempty" jsonschema:"document path"`
+	TaskID  string `json:"task_id,omitempty" jsonschema:"task uuid"`
 }
 
 func registerArch(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.list_kinds",
-		Description: "Lists the kind catalogue of a project (system, service, module, component, external, plus custom kinds). The default catalogue is seeded the first time a project's architecture is touched.",
+		Description: "Lists the kind catalogue of a project. Defaults seeded on first use.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archProjectInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -117,7 +117,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.upsert_kind",
-		Description: "Creates or updates a kind. The skill recommends reusing one of the defaults before adding a new one.",
+		Description: "Creates or updates a kind. Reuse a default before adding new.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archKindUpsertInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -156,7 +156,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.list_nodes",
-		Description: "Lists nodes of a project, optionally filtered by parent (parent_slug) or to roots only (root_only=true).",
+		Description: "Lists nodes; filter by parent_slug or root_only.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeListInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -171,7 +171,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.get_node",
-		Description: "Fetches a node by slug, with its direct children, incident edges and attached documents/tasks.",
+		Description: "Fetches a node with its children, incident edges and linked docs/tasks.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeRefInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -197,7 +197,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.upsert_node",
-		Description: "Creates or updates a node keyed by (project_id, slug). The slug is the readable identifier you use in markdown and other tools; it must match [a-z0-9][a-z0-9._-]*. parent_slug nests this node under another; pass empty for a root. kind must already be present in the project's catalogue (see arch.list_kinds).",
+		Description: "Creates or updates a node keyed by (project_id, slug). Slug matches [a-z0-9][a-z0-9._-]*. kind must exist in arch.list_kinds.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeUpsertInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -239,7 +239,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.remove_node",
-		Description: "Deletes a node. When the node has children, pass cascade=true to delete the whole subtree.",
+		Description: "Deletes a node. cascade=true to delete the subtree.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeRemoveInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -257,7 +257,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.list_edges",
-		Description: "Lists edges of a project (with both endpoint slugs and names). Use node_slug + direction to filter to one node.",
+		Description: "Lists edges. node_slug+direction filters to one node.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archEdgeListInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -274,7 +274,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.upsert_edge",
-		Description: "Creates or updates a directed edge between two existing nodes. Self-loops are rejected. Kind is free-form but commonly 'depends_on', 'uses', 'calls', 'reads', 'writes', 'publishes', 'subscribes'.",
+		Description: "Creates or updates a directed edge. Self-loops are rejected.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archEdgeUpsertInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -318,7 +318,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.link_doc",
-		Description: "Attaches a markdown document (by path) to a node so future readers can find related context.",
+		Description: "Attaches a document (by path) to a node.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archLinkInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -339,7 +339,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.unlink_doc",
-		Description: "Removes a previous document link from a node.",
+		Description: "Removes a doc link from a node.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archLinkInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -360,7 +360,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.link_task",
-		Description: "Attaches a task (by uuid) to a node so future readers can find related work.",
+		Description: "Attaches a task (by uuid) to a node.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archLinkInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -385,7 +385,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.unlink_task",
-		Description: "Removes a previous task link from a node.",
+		Description: "Removes a task link from a node.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archLinkInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -410,7 +410,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.checkpoint",
-		Description: "Closes your current editing session into one versioned snapshot of the diagram with the provided message — like a commit message. Call this when you finish a coherent block of edits (e.g. \"added auth subsystem\"). If you forget, the diagram auto-snapshots after a configurable idle period but without a message. The session belongs to the human behind the token; parallel agents from the same human share one session.",
+		Description: "Snapshots the diagram editing session with a commit-like message. Auto-snapshots on idle if you forget.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archCheckpointInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -433,7 +433,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 type archCheckpointInput struct {
 	archProjectInput
-	Message string `json:"message,omitempty" jsonschema:"short human-readable description of this block of changes — used as the revision title"`
+	Message string `json:"message,omitempty" jsonschema:"revision title"`
 }
 
 // archProject parses the project uuid and verifies caller access.

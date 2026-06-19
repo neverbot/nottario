@@ -13,7 +13,7 @@ type WhoamiInput struct{}
 func registerWhoami(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.whoami",
-		Description: "Returns information about the authenticated agent: the underlying user, admin status, how authentication was resolved, and every (project, role) tuple the user belongs to. Always call this first to confirm credentials and discover which roles you can filter tasks by, in which projects.",
+		Description: "Identifies the caller: user, admin status, auth source, and (project, role) memberships. Call once per session.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ WhoamiInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {

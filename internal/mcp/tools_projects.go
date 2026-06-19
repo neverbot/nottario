@@ -14,13 +14,13 @@ type ListProjectsInput struct{}
 
 // GetProjectInput selects one project by uuid or slug.
 type GetProjectInput struct {
-	ProjectID string `json:"project_id" jsonschema:"the uuid or slug of the project to fetch"`
+	ProjectID string `json:"project_id" jsonschema:"project uuid or slug"`
 }
 
 func registerProjects(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.projects.list",
-		Description: "Lists projects visible to the caller. Admins see every project; other users see only the projects where they hold at least one role. Token-scoped callers see only the single project their token is bound to (other projects are out of scope by definition).",
+		Description: "Lists projects visible to the caller. Token callers see only the bound project.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ ListProjectsInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -46,7 +46,7 @@ func registerProjects(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.projects.get",
-		Description: "Fetches a single project (by uuid or slug) including its repos, primary language, project type and slug. Call this to discover available metadata before working in the project.",
+		Description: "Fetches one project (uuid or slug) with its repos, language, type and slug.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in GetProjectInput) (*sdk.CallToolResult, any, error) {
 		if in.ProjectID == "" {
 			return toolError("project_id is required")
@@ -63,7 +63,7 @@ func registerProjects(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.projects.list_priorities",
-		Description: "Lists the project's priority buckets (named priorities). Each entry has a 'key' (e.g. 'low', 'high'), a numeric 'value' that tasks store, and a 'position' for sort order. Always call this before creating a task so you choose a key from the project's vocabulary rather than guessing a numeric value.",
+		Description: "Lists priority buckets: {key, value, position}. Call before creating tasks.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in GetProjectInput) (*sdk.CallToolResult, any, error) {
 		if in.ProjectID == "" {
 			return toolError("project_id is required")
@@ -88,7 +88,7 @@ func registerProjects(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.projects.list_roles",
-		Description: "Lists the role catalogue of a project (e.g. backend, frontend, qa, design). Tool callers use these role IDs to filter tasks by role or to set the target_role of newly-created tasks.",
+		Description: "Lists the role catalogue of a project (backend, frontend, …).",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in GetProjectInput) (*sdk.CallToolResult, any, error) {
 		if in.ProjectID == "" {
 			return toolError("project_id is required")
@@ -114,7 +114,7 @@ func registerProjects(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.projects.reorder_roles",
-		Description: "Admin-only. Rewrites the top-to-bottom order of a project's roles. Pass the full ordered list of role ids; the position field is updated atomically. The Gantt view and the Roles settings page render in this order.",
+		Description: "Admin only. Atomically rewrites role order; pass the full ordered list of role ids.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in ReorderRolesInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -151,7 +151,7 @@ func registerProjects(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.projects.set_owner",
-		Description: "Admin-only. Reassigns the project's owner_user_id. The new owner inherits the owner-gated capabilities (close cycle, change settings, mutate memberships).",
+		Description: "Admin only. Reassigns the project owner.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in SetOwnerInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -201,12 +201,12 @@ func enforceProjectScopeMCP(ctx context.Context, projectID uuid.UUID) error {
 
 // ReorderRolesInput is the input for nottario.projects.reorder_roles.
 type ReorderRolesInput struct {
-	ProjectID string   `json:"project_id" jsonschema:"uuid or slug of the project"`
-	RoleIDs   []string `json:"role_ids" jsonschema:"role uuids in the desired top-to-bottom order"`
+	ProjectID string   `json:"project_id" jsonschema:"project uuid or slug"`
+	RoleIDs   []string `json:"role_ids" jsonschema:"role uuids in desired order"`
 }
 
 // SetOwnerInput is the input for nottario.projects.set_owner.
 type SetOwnerInput struct {
-	ProjectID  string `json:"project_id" jsonschema:"uuid or slug of the project"`
-	NewOwnerID string `json:"new_owner_id" jsonschema:"uuid of the user to become the new project owner"`
+	ProjectID  string `json:"project_id" jsonschema:"project uuid or slug"`
+	NewOwnerID string `json:"new_owner_id" jsonschema:"new owner user uuid"`
 }

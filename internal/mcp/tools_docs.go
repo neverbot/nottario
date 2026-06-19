@@ -14,41 +14,41 @@ import (
 // Common shape for docs tool inputs. Scope defaults to 'project' when
 // project_id is present, or 'global' when it is empty.
 type docsScopeInput struct {
-	Scope     string `json:"scope,omitempty" jsonschema:"'project' (default if project_id is set) or 'global'"`
-	ProjectID string `json:"project_id,omitempty" jsonschema:"uuid of the project (required when scope='project')"`
+	Scope     string `json:"scope,omitempty" jsonschema:"'project' (default with project_id) or 'global'"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"project uuid (required for scope=project)"`
 }
 
 type docsListInput struct {
 	docsScopeInput
-	PathPrefix string `json:"path_prefix,omitempty" jsonschema:"optional path prefix to narrow the listing"`
-	Kind       string `json:"kind,omitempty" jsonschema:"optional kind filter: 'skill', 'context' or 'note'"`
+	PathPrefix string `json:"path_prefix,omitempty" jsonschema:"path prefix filter"`
+	Kind       string `json:"kind,omitempty" jsonschema:"'skill','context','note'"`
 }
 
 type docsReadInput struct {
 	docsScopeInput
-	Path string `json:"path" jsonschema:"logical path of the document (e.g. 'projects/abc/context/glossary.md')"`
+	Path string `json:"path" jsonschema:"document logical path"`
 }
 
 type docsSearchInput struct {
 	docsScopeInput
-	Query string `json:"query" jsonschema:"full-text query (plainto_tsquery semantics)"`
-	Kind  string `json:"kind,omitempty" jsonschema:"optional kind filter"`
+	Query string `json:"query" jsonschema:"plainto_tsquery"`
+	Kind  string `json:"kind,omitempty" jsonschema:"kind filter"`
 }
 
 type docsWriteInput struct {
 	docsScopeInput
 	Path            string `json:"path" jsonschema:"logical path"`
-	Content         string `json:"content" jsonschema:"full markdown body including optional YAML frontmatter at the top"`
-	Kind            string `json:"kind,omitempty" jsonschema:"optional override; otherwise read from frontmatter or defaults to 'context'"`
-	Message         string `json:"message,omitempty" jsonschema:"short explanation of the change, stored on the version row"`
-	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"optional optimistic-concurrency check: must equal current_version (or 0 for new docs)"`
+	Content         string `json:"content" jsonschema:"full markdown body (frontmatter optional)"`
+	Kind            string `json:"kind,omitempty" jsonschema:"override; otherwise from frontmatter or 'context'"`
+	Message         string `json:"message,omitempty" jsonschema:"change message on the version row"`
+	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"must equal current_version (or 0 for new)"`
 }
 
 type docsDeleteInput struct {
 	docsScopeInput
 	Path            string `json:"path" jsonschema:"logical path"`
-	Message         string `json:"message,omitempty" jsonschema:"short explanation, stored on the version row"`
-	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"optional optimistic-concurrency check: must equal current_version"`
+	Message         string `json:"message,omitempty" jsonschema:"change message"`
+	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"must equal current_version"`
 }
 
 type docsHistoryInput struct {
@@ -59,7 +59,7 @@ type docsHistoryInput struct {
 type docsReadVersionInput struct {
 	docsScopeInput
 	Path    string `json:"path"`
-	Version int    `json:"version" jsonschema:"version number to fetch"`
+	Version int    `json:"version" jsonschema:"version number"`
 }
 
 func registerDocs(server *sdk.Server, d Deps) {
@@ -119,7 +119,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.write",
-		Description: "Creates or updates a document. Pass the full markdown including optional YAML frontmatter. Always pass expected_version: equal to the current_version returned by the most recent docs.read, or 0 when creating a new document. Omitting expected_version is DEPRECATED and logs a server-side warning — it skips the optimistic-concurrency check and risks silently overwriting concurrent edits.",
+		Description: "Creates or updates a document. Pass expected_version = current_version from a prior docs.read (0 for new). Omitting it skips the OCC check and is deprecated. On conflict returns {error:'version_conflict', current_version}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsWriteInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -158,7 +158,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.delete",
-		Description: "Soft-deletes a document. The history is preserved; rewriting the same path resurrects it. Pass expected_version equal to the current_version returned by the most recent docs.read. Omitting expected_version is DEPRECATED and logs a server-side warning.",
+		Description: "Soft-deletes a document (history preserved; rewriting resurrects). Pass expected_version = current_version. On conflict returns {error:'version_conflict', current_version}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsDeleteInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -197,7 +197,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.history",
-		Description: "Lists every version of a document (metadata only, no bodies). Use read_version to fetch a specific version body.",
+		Description: "Lists every version of a document (metadata only). Use read_version for a body.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsHistoryInput) (*sdk.CallToolResult, any, error) {
 		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
 		if err != nil {

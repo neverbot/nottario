@@ -98,95 +98,95 @@ func slimTaskList(ts []tasks.Task, verbose bool) any {
 // project") and a task_id.
 
 type tasksListInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"uuid of the project (required)"`
-	State           string `json:"state,omitempty" jsonschema:"optional filter: 'todo', 'doing', 'done' or 'wont_do'"`
-	Type            string `json:"type,omitempty" jsonschema:"optional filter: 'task','bug','chore','spike','feature'"`
-	AssigneeUserID  string `json:"assignee_user_id,omitempty" jsonschema:"optional uuid of a user to filter assigned tasks"`
-	TargetRoleID    string `json:"target_role_id,omitempty" jsonschema:"optional uuid of a role to filter target_role"`
-	ParentTaskID    string `json:"parent_task_id,omitempty" jsonschema:"if set, list children of this feature task"`
-	CycleID         string `json:"cycle_id,omitempty" jsonschema:"optional uuid of a cycle to scope the list. When omitted, defaults to the project's active cycle. Pass 'all' to disable the filter and list across every cycle."`
-	IncludeChildren bool   `json:"include_children,omitempty" jsonschema:"if true, include tasks that have a parent_task_id (default false: top-level only)"`
-	IncludeClosed   bool   `json:"include_closed,omitempty" jsonschema:"if true, include closed tasks (state='done' or 'wont_do') in the result. Default false: only 'todo' and 'doing' tasks are returned when no explicit state filter is set. An explicit state filter (state='done', state='wont_do') always wins regardless of this flag."`
-	Limit           int    `json:"limit,omitempty" jsonschema:"page size (1..500). When omitted, uses the project's configured mcp_page_size (default 50)."`
-	Cursor          string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous call's next_cursor. Empty/omitted returns the first page."`
-	Verbose         bool   `json:"verbose,omitempty" jsonschema:"if true, include every Task field per row (description, created_by, …). Default false: rows are {id, type, title, state, priority, parent_task_id, target_role_id, assignee_user_id, updated_at}. Pass true only when you actually need the descriptions in your context — it can multiply response size by 10."`
+	ProjectID       string `json:"project_id" jsonschema:"project uuid"`
+	State           string `json:"state,omitempty" jsonschema:"filter: 'todo','doing','done','wont_do'"`
+	Type            string `json:"type,omitempty" jsonschema:"filter: 'task','bug','chore','spike','feature'"`
+	AssigneeUserID  string `json:"assignee_user_id,omitempty" jsonschema:"filter by assignee uuid"`
+	TargetRoleID    string `json:"target_role_id,omitempty" jsonschema:"filter by target_role uuid"`
+	ParentTaskID    string `json:"parent_task_id,omitempty" jsonschema:"list children of this feature task"`
+	CycleID         string `json:"cycle_id,omitempty" jsonschema:"cycle uuid, or 'all' for every cycle. Omit = active cycle."`
+	IncludeChildren bool   `json:"include_children,omitempty" jsonschema:"include parented tasks too (default: top-level only)"`
+	IncludeClosed   bool   `json:"include_closed,omitempty" jsonschema:"include done/wont_do rows (default: open only). Explicit state filter overrides."`
+	Limit           int    `json:"limit,omitempty" jsonschema:"page size 1..500; omit for project's mcp_page_size"`
+	Cursor          string `json:"cursor,omitempty" jsonschema:"opaque cursor from a previous next_cursor; empty = first page"`
+	Verbose         bool   `json:"verbose,omitempty" jsonschema:"full Task per row instead of slim shape"`
 }
 
 type taskRefInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"uuid of the project the task belongs to"`
-	TaskID          string `json:"task_id" jsonschema:"uuid of the task"`
-	IncludeDeps     bool   `json:"include_deps,omitempty" jsonschema:"only for tasks.get: include the depends_on array (default false). The base task is returned in either case."`
-	IncludeCommits  bool   `json:"include_commits,omitempty" jsonschema:"only for tasks.get: include the commits array (default false)."`
-	IncludeComments bool   `json:"include_comments,omitempty" jsonschema:"only for tasks.get: include the comments array (default false). Comments can be large; only ask when you need them."`
-	Verbose         bool   `json:"verbose,omitempty" jsonschema:"only for mutating tools (tasks.claim): if true, return the full Task object. Default false: return {id, type, title, state, priority, parent_task_id, target_role_id, assignee_user_id, updated_at}. Has no effect on tasks.get, which always returns the full base task."`
+	ProjectID       string `json:"project_id" jsonschema:"project uuid"`
+	TaskID          string `json:"task_id" jsonschema:"task uuid"`
+	IncludeDeps     bool   `json:"include_deps,omitempty" jsonschema:"tasks.get: include depends_on"`
+	IncludeCommits  bool   `json:"include_commits,omitempty" jsonschema:"tasks.get: include commits"`
+	IncludeComments bool   `json:"include_comments,omitempty" jsonschema:"tasks.get: include comments (can be large)"`
+	Verbose         bool   `json:"verbose,omitempty" jsonschema:"tasks.claim: full Task instead of slim shape"`
 }
 
 type tasksNextInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"uuid of the project"`
-	CycleID        string `json:"cycle_id,omitempty" jsonschema:"optional uuid of a cycle to scope the lookup. When omitted, defaults to the project's active cycle. Pass 'all' to consider tasks across every cycle."`
-	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"optional: restrict to tasks assigned to this user"`
-	RoleID         string `json:"role_id,omitempty" jsonschema:"optional: restrict to tasks targeting this role"`
-	Verbose        bool   `json:"verbose,omitempty" jsonschema:"if true, return the full Task object. Default false: return the slim shape (id, type, title, state, priority, parent_task_id, target_role_id, assignee_user_id, updated_at)."`
+	ProjectID      string `json:"project_id" jsonschema:"project uuid"`
+	CycleID        string `json:"cycle_id,omitempty" jsonschema:"cycle uuid, or 'all'. Omit = active cycle."`
+	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"restrict to this user"`
+	RoleID         string `json:"role_id,omitempty" jsonschema:"restrict to this target role"`
+	Verbose        bool   `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
 type tasksCreateInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"uuid of the project"`
-	Title          string `json:"title" jsonschema:"short human-readable title"`
-	Description    string `json:"description,omitempty" jsonschema:"longer markdown description"`
+	ProjectID      string `json:"project_id" jsonschema:"project uuid"`
+	Title          string `json:"title" jsonschema:"short title"`
+	Description    string `json:"description,omitempty" jsonschema:"markdown body"`
 	Type           string `json:"type,omitempty" jsonschema:"'task' (default), 'bug', 'chore', 'spike' or 'feature'"`
-	Priority       *int   `json:"priority,omitempty" jsonschema:"raw 0-100 value. Prefer priority_key over this — call projects.list_priorities to discover the project's buckets."`
-	PriorityKey    string `json:"priority_key,omitempty" jsonschema:"named bucket from projects.list_priorities (e.g. 'low','medium','high','critical'). Resolved server-side to the bucket's numeric value. Takes precedence over priority only when priority is omitted."`
-	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"optional uuid of the user this task is assigned to"`
-	TargetRoleID   string `json:"target_role_id,omitempty" jsonschema:"optional uuid of the role this task is targeted at"`
-	ParentTaskID   string `json:"parent_task_id,omitempty" jsonschema:"optional uuid of a parent feature task this task is a child of"`
-	Verbose        bool   `json:"verbose,omitempty" jsonschema:"if true, return the full Task object including the description you just sent. Default false: return only the slim shape — you already know what you created."`
+	Priority       *int   `json:"priority,omitempty" jsonschema:"raw 0-100. Prefer priority_key."`
+	PriorityKey    string `json:"priority_key,omitempty" jsonschema:"bucket key from projects.list_priorities"`
+	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"assignee uuid"`
+	TargetRoleID   string `json:"target_role_id,omitempty" jsonschema:"target role uuid"`
+	ParentTaskID   string `json:"parent_task_id,omitempty" jsonschema:"parent feature task uuid"`
+	Verbose        bool   `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
 type tasksUpdateInput struct {
-	ProjectID      string  `json:"project_id" jsonschema:"uuid of the project"`
-	TaskID         string  `json:"task_id" jsonschema:"uuid of the task"`
+	ProjectID      string  `json:"project_id" jsonschema:"project uuid"`
+	TaskID         string  `json:"task_id" jsonschema:"task uuid"`
 	Title          *string `json:"title,omitempty"`
 	Description    *string `json:"description,omitempty"`
 	Type           *string `json:"type,omitempty"`
-	Priority       *int    `json:"priority,omitempty" jsonschema:"raw 0-100 value. Prefer priority_key."`
-	PriorityKey    string  `json:"priority_key,omitempty" jsonschema:"named bucket from projects.list_priorities; resolved server-side."`
-	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"uuid to set, or empty string to unset"`
-	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"uuid to set, or empty string to unset"`
-	Verbose        bool    `json:"verbose,omitempty" jsonschema:"if true, return the full Task object. Default false: slim shape."`
+	Priority       *int    `json:"priority,omitempty" jsonschema:"raw 0-100. Prefer priority_key."`
+	PriorityKey    string  `json:"priority_key,omitempty" jsonschema:"bucket key from projects.list_priorities"`
+	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"uuid, or '' to unset"`
+	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"uuid, or '' to unset"`
+	Verbose        bool    `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
 type tasksStateInput struct {
-	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
-	TaskID    string `json:"task_id" jsonschema:"uuid of the task"`
-	State     string `json:"state" jsonschema:"'todo', 'doing', 'done' or 'wont_do'"`
-	Verbose   bool   `json:"verbose,omitempty" jsonschema:"if true, return the full Task object. Default false: slim shape."`
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	TaskID    string `json:"task_id" jsonschema:"task uuid"`
+	State     string `json:"state" jsonschema:"'todo','doing','done','wont_do'"`
+	Verbose   bool   `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
 type tasksDepInput struct {
-	ProjectID   string `json:"project_id" jsonschema:"uuid of the project"`
-	TaskID      string `json:"task_id" jsonschema:"uuid of the dependent task"`
-	DependsOnID string `json:"depends_on_id" jsonschema:"uuid of the task that must be done first"`
+	ProjectID   string `json:"project_id" jsonschema:"project uuid"`
+	TaskID      string `json:"task_id" jsonschema:"dependent task uuid"`
+	DependsOnID string `json:"depends_on_id" jsonschema:"prerequisite task uuid"`
 }
 
 type tasksLinkCommitInput struct {
-	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
-	TaskID    string `json:"task_id" jsonschema:"uuid of the task"`
-	Repo      string `json:"repo" jsonschema:"'owner/repo' GitHub identifier"`
-	SHA       string `json:"sha" jsonschema:"commit SHA, full or short"`
-	Message   string `json:"message,omitempty" jsonschema:"optional commit subject for display"`
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	TaskID    string `json:"task_id" jsonschema:"task uuid"`
+	Repo      string `json:"repo" jsonschema:"'owner/repo'"`
+	SHA       string `json:"sha" jsonschema:"commit SHA"`
+	Message   string `json:"message,omitempty" jsonschema:"commit subject for display"`
 }
 
 type tasksCommentInput struct {
-	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
-	TaskID    string `json:"task_id" jsonschema:"uuid of the task"`
-	Body      string `json:"body" jsonschema:"markdown body of the comment"`
-	Verbose   bool   `json:"verbose,omitempty" jsonschema:"if true, return the full Comment object including the body you just sent. Default false: return only {id, task_id, created_at, updated_at}."`
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	TaskID    string `json:"task_id" jsonschema:"task uuid"`
+	Body      string `json:"body" jsonschema:"markdown body"`
+	Verbose   bool   `json:"verbose,omitempty" jsonschema:"full Comment with body echo"`
 }
 
 func registerTasks(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.list",
-		Description: "Lists tasks in a project, optionally filtered by state, type, assignee, target role or parent feature task. Returns top-level tasks by default; pass include_children=true to flatten feature subtrees.\n\nBy default ONLY open tasks (state='todo' or 'doing') are returned. Closed tasks (state='done', 'wont_do') accumulate forever and would dominate every walk — pass include_closed=true when you genuinely need them, or set an explicit state filter (state='done' / 'wont_do') to retrieve a specific closed bucket.\n\nResponse rows are SLIM by default: {id, type, title, state, priority, parent_task_id, target_role_id, assignee_user_id, updated_at}. Pass verbose=true to get every Task field per row (description, created_by, …) — only do that when you actually need the descriptions in your context, it can multiply the response size by 10.\n\nPagination is keyset-based: each call returns at most `limit` tasks (defaults to the project's `mcp_page_size`, 50 unless an admin changed it), plus `next_cursor` and `has_more`. To walk the full backlog: call repeatedly passing the previous `next_cursor` until `has_more` is false. Filters can change between pages without corrupting the walk.",
+		Description: "Lists tasks. Slim rows + keyset pagination ({tasks, next_cursor, has_more}). Open-only by default; pass include_closed=true or an explicit state to see done/wont_do. See skill domains/tasks.md for the full reference.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksListInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
@@ -243,7 +243,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.get",
-		Description: "Fetches a task. The base task is always returned in full (with its description). Pass include_deps=true / include_commits=true / include_comments=true to pull the related collections; each defaults to false so the response stays small when you only need the task itself. Comments and commits can be large; only ask when you need them.",
+		Description: "Fetches a task with its description. include_deps / include_commits / include_comments opt in to the related collections (default off — they can be large).",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -274,7 +274,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.claim_next",
-		Description: "Atomically picks the highest-priority eligible task and CLAIMS it for the calling user (sets assignee = caller, state = doing, actual_start = now) — all in a single Postgres UPDATE backed by SELECT ... FOR UPDATE SKIP LOCKED so two agents picking at the same time get DIFFERENT tasks. This is the SAFE pickup primitive; the older next+update+set_state pattern has a race window. Returns {task: null} when nothing is eligible. Filters: same as tasks.next (assignee_user_id, role_id).\n\nReturns the SLIM task shape by default — when you need the description, call tasks.get afterwards with the id you just got. Pass verbose=true to skip the round-trip.",
+		Description: "Atomically picks the next eligible task and assigns it to the caller (state=doing). Multi-agent safe via SELECT ... FOR UPDATE SKIP LOCKED. Returns {task: null} when nothing is eligible. Slim shape by default.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksNextInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -314,7 +314,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.claim",
-		Description: "Atomically claims a SPECIFIC task by id for the calling user (assignee = caller, state = doing). Use this when you found a candidate via tasks.list and want to take it without racing other agents. Returns the task on success, or a {error, current_state, current_assignee_user_id, preconditions[]?, pending_children_count?, reason} payload when the task is not claimable. Idempotent if the caller already owns the task in 'doing' state.\n\nReturns the SLIM task shape by default. Pass verbose=true to get the full Task object.",
+		Description: "Atomically claims a specific task by id (assignee=caller, state=doing). Returns the task on success or {error, reason, current_state, current_assignee_user_id, preconditions?, pending_children_count?} on conflict. Idempotent. Slim shape by default.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -348,7 +348,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.next",
-		Description: "PREVIEW ONLY (no side effects). Returns the next eligible task as ranked by priority + dependency satisfaction, without claiming it. Useful for inspecting what tasks.claim_next would pick, or to surface to a human before committing. To actually take the task, call nottario.tasks.claim_next (atomic) — calling next + then update + then set_state in three separate steps is racy under multi-agent load. Returns {task: null} when nothing is eligible.",
+		Description: "Preview only (no side effects): returns the next eligible task without claiming it. To take it, call tasks.claim_next (atomic). Returns {task: null} when nothing is eligible.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksNextInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
@@ -384,7 +384,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.create",
-		Description: "Creates a new task in the project. Defaults: state='todo', type='task', priority=50.\n\nReturns the SLIM task shape by default ({id, type, title, state, priority, parent_task_id, target_role_id, assignee_user_id, updated_at}) — the description you just sent is NOT echoed back. Pass verbose=true to get the full Task object.",
+		Description: "Creates a task. Defaults: state=todo, type=task, priority=50. Slim shape by default — the description you sent is not echoed back.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCreateInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -436,7 +436,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.update",
-		Description: "Updates one or more fields of a task. Pass empty string in assignee_user_id or target_role_id to unset those.\n\nReturns the SLIM task shape by default. Pass verbose=true to get the full Task object.",
+		Description: "Updates task fields. Pass '' in assignee_user_id / target_role_id to unset. Slim shape by default.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksUpdateInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -491,7 +491,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.set_state",
-		Description: "Transitions a task between 'todo', 'doing', 'done' and 'wont_do'. Manages actual_start and actual_end timestamps automatically. 'wont_do' marks the task as deliberately cancelled (we considered it and decided not to do it); it is not the same as 'done' and is reported separately. Transitions 'done' ↔ 'wont_do' are refused (both rewrite history); use 'wont_do → todo → doing → done' to revisit the decision.\n\nReturns the SLIM task shape by default. Pass verbose=true to get the full Task object.",
+		Description: "Transitions between 'todo','doing','done','wont_do' and manages actual_start/end. done↔wont_do is refused (route via todo). On precondition failure returns {error, preconditions}. Slim shape by default.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksStateInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -587,7 +587,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.add_comment",
-		Description: "Appends a markdown comment to a task. The comment is attributed to the calling token and user.\n\nReturns {id, task_id, created_at, updated_at} by default — the body you just sent is NOT echoed back. Pass verbose=true to get the full Comment object.",
+		Description: "Appends a markdown comment to a task, attributed to the calling user/token. Slim shape ({id, task_id, created_at, updated_at}) by default — body not echoed.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCommentInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -609,9 +609,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.inconsistencies",
-		Description: "Lists tasks whose state is inconsistent with the rest of the project graph. Each entry has `task_id`, a stable `reason` key and a `details` payload. Initial reason: `dependent_already_done` — a non-done task that has at least one dependent already marked done.",
+		Description: "Lists tasks in inconsistent states. Each entry: {task_id, reason, details}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in struct {
-		ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
+		ProjectID string `json:"project_id" jsonschema:"project uuid"`
 	}) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {

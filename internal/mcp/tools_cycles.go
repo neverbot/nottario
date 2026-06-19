@@ -13,25 +13,25 @@ import (
 // cyclesProjectInput is the common input for read endpoints scoped to
 // a project.
 type cyclesProjectInput struct {
-	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
 }
 
 // cycleGetInput fetches a specific cycle by id.
 type cycleGetInput struct {
-	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
-	CycleID   string `json:"cycle_id" jsonschema:"uuid of the cycle"`
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	CycleID   string `json:"cycle_id" jsonschema:"cycle uuid"`
 }
 
 // cycleEndInput closes the project's active cycle and opens the next.
 type cycleEndInput struct {
-	ProjectID string `json:"project_id" jsonschema:"uuid of the project"`
-	NextName  string `json:"next_name,omitempty" jsonschema:"optional name for the new cycle; defaults to '<cycle_label>-<N+1>'"`
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	NextName  string `json:"next_name,omitempty" jsonschema:"name for the new cycle (default: auto-numbered)"`
 }
 
 func registerCycles(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.cycles.list",
-		Description: "Lists every cycle of a project (newest first). Each entry has id, name, position, opened_at and closed_at (null when active). Exactly one cycle per project has closed_at = null.",
+		Description: "Lists every cycle of a project (newest first). closed_at is null on the active cycle.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in cyclesProjectInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
@@ -49,7 +49,7 @@ func registerCycles(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.cycles.current",
-		Description: "Returns the project's currently active cycle (the unique row with closed_at = null). Use this to discover which cycle new tasks land in by default.",
+		Description: "Returns the project's active cycle.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in cyclesProjectInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
@@ -70,7 +70,7 @@ func registerCycles(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.cycles.get",
-		Description: "Fetches a single cycle by id. The cycle must belong to the given project.",
+		Description: "Fetches a cycle by id.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in cycleGetInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
@@ -92,7 +92,7 @@ func registerCycles(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.cycles.end",
-		Description: "Closes the project's active cycle and opens the next one in a single transaction. Owner-gated (project owner or instance admin). In-flight work moves forward per cascade rules: partial feature subtrees move whole (children re-stamped), standalone non-done tasks move, done tasks stay stamped on the closing cycle. Returns {closed, next}.",
+		Description: "Owner/admin only. Closes the active cycle and opens the next atomically. In-flight tasks cascade per cycles rules. Returns {closed, next}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in cycleEndInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
