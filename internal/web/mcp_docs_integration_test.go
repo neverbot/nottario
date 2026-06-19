@@ -118,3 +118,56 @@ func TestMCP_Docs_WriteReadVersionDelete(t *testing.T) {
 		t.Error("expected read error after delete")
 	}
 }
+
+// TestMCP_Docs_ReadHeadOnly verifies the head_only flag returns a
+// preview with truncated/body_length markers instead of the full body.
+func TestMCP_Docs_ReadHeadOnly(t *testing.T) {
+	f := newMCPFixture(t, 13335, "docs-head-only")
+
+	// Body larger than the 400-char preview limit.
+	long := ""
+	for i := 0; i < 600; i++ {
+		long += "x"
+	}
+	body := "---\ntitle: Head Only Test\n---\n" + long
+	f.callJSON(t, "nottario.docs.write", map[string]any{
+		"project_id":       f.projectID,
+		"path":             "context/big.md",
+		"content":          body,
+		"expected_version": 0,
+	}, nil)
+
+	// head_only: preview only.
+	var head map[string]any
+	f.callJSON(t, "nottario.docs.read", map[string]any{
+		"project_id": f.projectID,
+		"path":       "context/big.md",
+		"head_only":  true,
+	}, &head)
+	if head["title"] != "Head Only Test" {
+		t.Errorf("head_only must include title, got %+v", head)
+	}
+	preview, _ := head["content"].(string)
+	if got := len(preview); got != 400 {
+		t.Errorf("head_only preview must be 400 chars, got %d", got)
+	}
+	if head["truncated"] != true {
+		t.Errorf("head_only must mark truncated=true when body exceeds preview, got %v", head["truncated"])
+	}
+	if blf, _ := head["body_length"].(float64); int(blf) != 600 {
+		t.Errorf("head_only body_length expected 600, got %v", head["body_length"])
+	}
+
+	// Full read returns the complete body.
+	var full map[string]any
+	f.callJSON(t, "nottario.docs.read", map[string]any{
+		"project_id": f.projectID,
+		"path":       "context/big.md",
+	}, &full)
+	if c, _ := full["content"].(string); len(c) < 600 {
+		t.Errorf("full read must return full body, got len=%d", len(c))
+	}
+	if _, ok := full["truncated"]; ok {
+		t.Errorf("full read must not include truncated key, got %+v", full)
+	}
+}

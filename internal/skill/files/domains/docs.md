@@ -87,6 +87,12 @@ Returns the full document including body, parsed frontmatter and the
 current version number. **Capture `current_version`**: you need it to
 update the document safely.
 
+Pass `head_only: true` when you only need to check "is this the right
+doc" — the response then carries the frontmatter, title, description,
+`current_version` and just the first 400 chars of `content`, with
+`truncated: true` / `body_length: N` so you know there is more. Useful
+for catalogue-style flows over many documents.
+
 ### `nottario.docs.search`
 
 Full-text search over `title`, `description` and body. Use

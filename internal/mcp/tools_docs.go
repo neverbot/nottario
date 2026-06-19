@@ -26,7 +26,8 @@ type docsListInput struct {
 
 type docsReadInput struct {
 	docsScopeInput
-	Path string `json:"path" jsonschema:"document logical path"`
+	Path     string `json:"path" jsonschema:"document logical path"`
+	HeadOnly bool   `json:"head_only,omitempty" jsonschema:"return frontmatter + first 400 chars of body (with truncated flag) instead of the full document"`
 }
 
 type docsSearchInput struct {
@@ -84,7 +85,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.read",
-		Description: "Reads a single document by path. Returns title, kind, body markdown, frontmatter and current_version.",
+		Description: "Reads a single document by path. Returns title, kind, body markdown, frontmatter and current_version. Pass head_only=true to get just the frontmatter + a 400-char preview (with truncated and body_length fields) when you only want to check the document's identity.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsReadInput) (*sdk.CallToolResult, any, error) {
 		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
 		if err != nil {
@@ -96,6 +97,30 @@ func registerDocs(server *sdk.Server, d Deps) {
 		}
 		if err != nil {
 			return toolError(err.Error())
+		}
+		if in.HeadOnly {
+			const previewLimit = 400
+			bodyLen := len(doc.ContentMD)
+			truncated := bodyLen > previewLimit
+			preview := doc.ContentMD
+			if truncated {
+				preview = doc.ContentMD[:previewLimit]
+			}
+			return jsonResult(map[string]any{
+				"id":              doc.ID,
+				"scope":           doc.Scope,
+				"project_id":      doc.ProjectID,
+				"path":            doc.Path,
+				"kind":            doc.Kind,
+				"title":           doc.Title,
+				"description":     doc.Description,
+				"frontmatter":     doc.Frontmatter,
+				"current_version": doc.CurrentVersion,
+				"updated_at":      doc.UpdatedAt,
+				"content":         preview,
+				"truncated":       truncated,
+				"body_length":     bodyLen,
+			})
 		}
 		return jsonResult(doc)
 	})
