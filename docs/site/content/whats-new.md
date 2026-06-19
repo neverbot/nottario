@@ -12,6 +12,20 @@ rolling `:latest` tag is updated on every push to master. Anything
 that changes default behaviour, adds a config knob, or removes a
 feature shows up here.
 
+## 2026-06-19
+
+- **Edit task title, description and comments from the UI.** The
+  task detail dialog now exposes a quiet `Edit` button on the title
+  and the description (revealed on hover or keyboard focus). The
+  description opens a GitHub-style `Write` / `Preview` markdown
+  editor (Ctrl/Cmd+Enter to save, Esc to cancel). Project members
+  can edit title and description; admins can also change the role
+  inline. Every comment grows an `Edit` / `Delete` action visible
+  only to its author or an admin; deletion is confirmed in place
+  without a modal. Edited fields show a quiet `(edited Xh ago by
+  @user)` marker; optimistic concurrency rejects stale writes with a
+  toast that preserves the in-progress draft.
+
 ## 2026-06-15
 
 - **Skill bundle: git methodology for agents.** New file

@@ -11,6 +11,7 @@ import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/field.js';
 import '/static/components/page-header.js';
 import '/static/components/markdown.js';
+import '/static/components/md-editor.js';
 import '/static/components/avatar.js';
 import '/static/components/task-chip.js';
 import './gantt.js';
@@ -51,6 +52,17 @@ class NottarioBoardPage extends LitElement {
     // Confirmation dialog state for the in-app delete flow (replaces
     // the browser-native confirm()).
     _endSprintOpen: { state: true },
+    // Inline edit state for the task detail dialog. _editing.field is
+    // 'title' | 'desc' | null. The drafts hold the user's in-progress
+    // buffer so a 409 stale doesn't lose their work. _savingText is set
+    // while a PATCH /text is in flight. Comment-level edit state lives
+    // in _commentEditID (the comment being edited), _commentDrafts (a
+    // {id: body} map), _commentSavingID, _commentDeletingID.
+    _edit: { state: true },
+    _commentEditID: { state: true },
+    _commentDrafts: { state: true },
+    _commentSavingID: { state: true },
+    _commentDeletingID: { state: true },
   };
 
   static styles = [
@@ -765,6 +777,108 @@ class NottarioBoardPage extends LitElement {
       color: var(--gray-5);
       font-style: italic;
     }
+
+    /* Ghost-edit buttons: quiet by default, surface on row hover or on
+       keyboard focus. Same chrome for title and section heads. */
+    .detail .ghost-edit {
+      appearance: none;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 80ms ease-out;
+    }
+    .detail .title-row:hover .ghost-edit,
+    .detail .section-head:hover .ghost-edit,
+    .detail .ghost-edit:focus-visible {
+      opacity: 1;
+    }
+    .detail .ghost-edit:hover {
+      color: var(--fg);
+      background: var(--bg-hover);
+      border-color: var(--border);
+    }
+
+    /* Title edit form */
+    .detail .title-edit { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+    .detail .title-input {
+      width: 100%;
+      font-size: 18px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--fg);
+      box-sizing: border-box;
+    }
+    .detail .title-input:focus {
+      outline: 0;
+      border-color: var(--accent);
+    }
+    .detail .title-edit-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    /* Description section head: holds eyebrow + ghost-edit on one line */
+    .detail .section-head {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin: 0 0 6px;
+    }
+    .detail .section-head .eyebrow { margin: 0; }
+
+    /* "(edited 3m ago by @name)" marker — tiny, muted */
+    .detail .edited-mark {
+      color: var(--fg-muted);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    /* Comment per-item actions: link-style buttons aligned with the
+       meta line, hidden until hover/focus so they don't add noise */
+    .detail .comment .comment-actions {
+      margin-left: auto;
+      display: inline-flex;
+      gap: 8px;
+      opacity: 0;
+      transition: opacity 80ms ease-out;
+    }
+    .detail .comment:hover .comment-actions,
+    .detail .comment .comment-actions:focus-within {
+      opacity: 1;
+    }
+    .detail .comment .link-btn {
+      appearance: none;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      font-size: 12px;
+      color: var(--fg-muted);
+      cursor: pointer;
+    }
+    .detail .comment .link-btn:hover { color: var(--fg); text-decoration: underline; }
+    .detail .comment .link-btn.danger:hover { color: var(--danger); }
+
+    /* Inline delete confirm — replaces the meta-line, body stays */
+    .detail .comment-confirm {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--fg);
+      padding: 4px 0 6px;
+    }
+    .detail .comment-confirm span { margin-right: auto; }
   `,
   ];
 
@@ -788,6 +902,11 @@ class NottarioBoardPage extends LitElement {
     this._filters = { mine: false, roles: [], types: [] };
     this._filterOpen = null;
     this._newTaskAdvanced = false;
+    this._edit = { field: null, titleDraft: '', descDraft: '' };
+    this._commentEditID = null;
+    this._commentDrafts = {};
+    this._commentSavingID = null;
+    this._commentDeletingID = null;
     new EscController(this, (e) => this._onEsc(e));
   }
 
@@ -1199,6 +1318,167 @@ class NottarioBoardPage extends LitElement {
 
   closeDetail() {
     this.selected = null;
+    this._edit = { field: null, titleDraft: '', descDraft: '' };
+    this._commentEditID = null;
+    this._commentDrafts = {};
+    this._commentSavingID = null;
+    this._commentDeletingID = null;
+  }
+
+  // --- Inline edit of task title / description / role ---------------
+  //
+  // beginEditTitle / beginEditDesc swap the title / description block
+  // to its editor form, seeded with the current value so the user can
+  // tweak rather than retype.
+  beginEditTitle() {
+    const t = this.selected?.task;
+    if (!t) return;
+    this._edit = { field: 'title', titleDraft: t.title || '', descDraft: '' };
+  }
+
+  beginEditDesc() {
+    const t = this.selected?.task;
+    if (!t) return;
+    this._edit = { field: 'desc', titleDraft: '', descDraft: t.description || '' };
+  }
+
+  cancelEditText() {
+    this._edit = { field: null, titleDraft: '', descDraft: '' };
+  }
+
+  // saveTaskText pushes the staged title / description to the backend
+  // with optimistic concurrency. On 409 stale the editor stays open
+  // with the user's buffer and we refresh the underlying selected.task
+  // so the next attempt has a fresh expected_updated_at.
+  async saveTaskText({ title, description, target_role_id, unset_target_role } = {}) {
+    const t = this.selected?.task;
+    if (!t) return;
+    const body = { expected_updated_at: t.updated_at };
+    if (title !== undefined) body.title = title;
+    if (description !== undefined) body.description = description;
+    if (target_role_id !== undefined) body.target_role_id = target_role_id;
+    if (unset_target_role) body.unset_target_role = true;
+    const r = await fetch(`/api/projects/${this.projectId}/tasks/${t.id}/text`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      this._edit = { field: null, titleDraft: '', descDraft: '' };
+      await this.loadDetail(t.id);
+      await this.load();
+      toast.success('Saved.');
+      return true;
+    }
+    if (r.status === 409) {
+      const j = await r.json().catch(() => ({}));
+      if (j.current) {
+        this.selected = { ...this.selected, task: j.current };
+      }
+      toast.error(
+        'This was just edited by someone else. Your draft is preserved — review the latest and save again.',
+      );
+      return false;
+    }
+    const j = await r.json().catch(() => ({}));
+    toast.error(`Couldn't save: ${j.error || r.statusText}`);
+    return false;
+  }
+
+  async setRole(roleID) {
+    // Empty string means "unassign" — same convention the assignee
+    // dropdown uses. Admin-only at the backend.
+    if (roleID === '') {
+      await this.saveTaskText({ unset_target_role: true });
+    } else {
+      await this.saveTaskText({ target_role_id: roleID });
+    }
+  }
+
+  // --- Inline edit / delete of comments -----------------------------
+  _canModifyComment(c) {
+    if (!this.me) return false;
+    if (this.me.is_admin) return true;
+    return !!c.author_user_id && c.author_user_id === this.me.id;
+  }
+
+  beginEditComment(c) {
+    this._commentEditID = c.id;
+    this._commentDrafts = { ...this._commentDrafts, [c.id]: c.body || '' };
+    this._commentDeletingID = null;
+  }
+
+  cancelEditComment() {
+    this._commentEditID = null;
+  }
+
+  beginDeleteComment(c) {
+    this._commentDeletingID = c.id;
+    this._commentEditID = null;
+  }
+
+  cancelDeleteComment() {
+    this._commentDeletingID = null;
+  }
+
+  async saveComment(commentID, body) {
+    const t = this.selected?.task;
+    if (!t) return;
+    const cur = (this.selected.comments || []).find((x) => x.id === commentID);
+    if (!cur) return;
+    this._commentSavingID = commentID;
+    try {
+      const r = await fetch(`/api/projects/${this.projectId}/tasks/${t.id}/comments/${commentID}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body, expected_updated_at: cur.updated_at }),
+      });
+      if (r.ok) {
+        this._commentEditID = null;
+        await this.loadDetail(t.id);
+        toast.success('Comment saved.');
+        return;
+      }
+      if (r.status === 409) {
+        const j = await r.json().catch(() => ({}));
+        if (j.current) {
+          const updated = (this.selected.comments || []).map((x) =>
+            x.id === commentID ? j.current : x,
+          );
+          this.selected = { ...this.selected, comments: updated };
+        }
+        toast.error(
+          'This comment was just edited. Your draft is preserved — review the latest and save again.',
+        );
+        return;
+      }
+      if (r.status === 404) {
+        this._commentEditID = null;
+        await this.loadDetail(t.id);
+        toast.error('That comment was deleted.');
+        return;
+      }
+      const j = await r.json().catch(() => ({}));
+      toast.error(`Couldn't save comment: ${j.error || r.statusText}`);
+    } finally {
+      this._commentSavingID = null;
+    }
+  }
+
+  async confirmDeleteComment(commentID) {
+    const t = this.selected?.task;
+    if (!t) return;
+    const r = await fetch(`/api/projects/${this.projectId}/tasks/${t.id}/comments/${commentID}`, {
+      method: 'DELETE',
+    });
+    if (r.status === 204) {
+      this._commentDeletingID = null;
+      await this.loadDetail(t.id);
+      toast.success('Comment deleted.');
+      return;
+    }
+    const j = await r.json().catch(() => ({}));
+    toast.error(`Couldn't delete: ${j.error || r.statusText}`);
   }
 
   async setState(taskID, state) {
@@ -1895,6 +2175,96 @@ class NottarioBoardPage extends LitElement {
     return d.toLocaleDateString();
   }
 
+  // Renders "(edited 5m ago by @name)" below a task field or comment
+  // body. Returns nothing when the field was never edited.
+  _renderEditedMarker(editedAt, editedByUserID) {
+    if (!editedAt) return null;
+    const editor = this._memberByID(editedByUserID);
+    const name = editor?.display_name || editor?.github_login || 'someone';
+    const abs = new Date(editedAt).toLocaleString();
+    return html`<div class="edited-mark" title=${abs}>(edited ${this._relTime(editedAt)} by ${name})</div>`;
+  }
+
+  // Renders a single comment, including the per-comment action menu
+  // (Edit / Delete, when the caller is the author or an admin), the
+  // inline delete confirm, and the inline edit using the md-editor.
+  _renderComment(c) {
+    const author = this._memberByID(c.author_user_id);
+    const editing = this._commentEditID === c.id;
+    const deleting = this._commentDeletingID === c.id;
+    const saving = this._commentSavingID === c.id;
+    const canModify = this._canModifyComment(c);
+    return html`
+      <div class="comment">
+        <div class="ava">
+          <nottario-avatar size="24"
+            src=${author?.avatar_url || ''}
+            name=${author?.display_name || author?.github_login || 'agent'}
+            .agent=${c.via_mcp || null}></nottario-avatar>
+        </div>
+        <div>
+          ${
+            deleting
+              ? html`
+                <div class="comment-confirm" role="alert">
+                  <span>Delete this comment?</span>
+                  <button class="btn secondary"
+                          @click=${() => this.cancelDeleteComment()}>Cancel</button>
+                  <button class="btn danger"
+                          @click=${() => this.confirmDeleteComment(c.id)}>Delete</button>
+                </div>
+              `
+              : html`
+                <div class="meta-line">
+                  <span class="name">${author?.display_name || author?.github_login || 'agent'}</span>
+                  ${
+                    c.via_mcp
+                      ? html`<span class="via"><span class="sep">·</span>via <span class="token">${c.via_mcp.name || 'MCP'}</span></span>`
+                      : null
+                  }
+                  <span class="when">${this._relTime(c.created_at)}</span>
+                  ${
+                    canModify && !editing
+                      ? html`
+                        <span class="comment-actions">
+                          <button class="link-btn"
+                                  title="Edit comment"
+                                  @click=${() => this.beginEditComment(c)}>Edit</button>
+                          <button class="link-btn danger"
+                                  title="Delete comment"
+                                  @click=${() => this.beginDeleteComment(c)}>Delete</button>
+                        </span>
+                      `
+                      : null
+                  }
+                </div>
+              `
+          }
+          ${
+            editing
+              ? html`
+                <nottario-md-editor
+                  project-id=${this.projectId}
+                  .value=${this._commentDrafts[c.id] ?? c.body ?? ''}
+                  .saving=${saving}
+                  placeholder="Edit comment…"
+                  @input=${(e) => {
+                    this._commentDrafts = { ...this._commentDrafts, [c.id]: e.target.value };
+                  }}
+                  @submit=${(e) => this.saveComment(c.id, e.detail.value)}
+                  @cancel=${() => this.cancelEditComment()}>
+                </nottario-md-editor>
+              `
+              : html`<nottario-markdown
+                       project-id=${this.projectId}
+                       .source=${c.body || ''}></nottario-markdown>`
+          }
+          ${this._renderEditedMarker(c.edited_at, c.edited_by_user_id)}
+        </div>
+      </div>
+    `;
+  }
+
   renderDetail() {
     const { task, deps, commits, comments } = this.selected;
     const role = task.target_role_id ? this.roleByID(task.target_role_id) : null;
@@ -1912,7 +2282,41 @@ class NottarioBoardPage extends LitElement {
         <div class="panel detail">
           <header class="head">
             <div class="title-row">
-              <h3 id="task-dialog-title">${task.title}</h3>
+              ${
+                this._edit.field === 'title'
+                  ? html`
+                    <div class="title-edit">
+                      <input class="title-input"
+                             .value=${this._edit.titleDraft}
+                             aria-label="Task title"
+                             @input=${(e) => {
+                               this._edit = { ...this._edit, titleDraft: e.target.value };
+                             }}
+                             @keydown=${(e) => {
+                               if (e.key === 'Escape') {
+                                 e.preventDefault();
+                                 this.cancelEditText();
+                               } else if (e.key === 'Enter' && !e.shiftKey) {
+                                 e.preventDefault();
+                                 this.saveTaskText({ title: this._edit.titleDraft });
+                               }
+                             }}>
+                      <div class="title-edit-actions">
+                        <button class="btn secondary"
+                                @click=${() => this.cancelEditText()}>Cancel</button>
+                        <button class="btn primary"
+                                @click=${() => this.saveTaskText({ title: this._edit.titleDraft })}>Save</button>
+                      </div>
+                    </div>
+                  `
+                  : html`
+                    <h3 id="task-dialog-title">${task.title}</h3>
+                    <button class="ghost-edit"
+                            title="Edit title"
+                            aria-label="Edit title"
+                            @click=${() => this.beginEditTitle()}>Edit</button>
+                  `
+              }
               <div class="title-actions">
                 <button class="icon-btn danger" title="Delete task" aria-label="Delete task"
                         @click=${async () => {
@@ -1990,7 +2394,22 @@ class NottarioBoardPage extends LitElement {
 
               <div class="field-line">
                 <span class="lbl">Role</span>
-                <span class="val">${role ? role.label : html`<span class="muted">none</span>`}</span>
+                ${
+                  this.me?.is_admin
+                    ? html`
+                      <span class="val">
+                        <select @change=${(e) => this.setRole(e.target.value)}>
+                          <option value="" ?selected=${!task.target_role_id}>— none —</option>
+                          ${(this.roles || []).map(
+                            (r) => html`
+                              <option value=${r.id} ?selected=${r.id === task.target_role_id}>${r.label}</option>
+                            `,
+                          )}
+                        </select>
+                      </span>
+                    `
+                    : html`<span class="val">${role ? role.label : html`<span class="muted">none</span>`}</span>`
+                }
               </div>
 
               <div class="field-line">
@@ -2021,17 +2440,46 @@ class NottarioBoardPage extends LitElement {
           </header>
 
           <div class="body">
-            ${
-              task.description
-                ? html`
-              <section>
-                <nottario-markdown
-                  project-id=${this.projectId}
-                  .source=${task.description}></nottario-markdown>
-              </section>
-            `
-                : null
-            }
+            <section class="desc-section">
+              <div class="section-head">
+                <h4 class="eyebrow">Description</h4>
+                ${
+                  this._edit.field !== 'desc'
+                    ? html`<button class="ghost-edit"
+                              title="Edit description"
+                              aria-label="Edit description"
+                              @click=${() => this.beginEditDesc()}>Edit</button>`
+                    : null
+                }
+              </div>
+              ${
+                this._edit.field === 'desc'
+                  ? html`
+                    <nottario-md-editor
+                      project-id=${this.projectId}
+                      .value=${this._edit.descDraft}
+                      placeholder="Describe the task in markdown…"
+                      @input=${(e) => {
+                        // The editor emits @submit on save, but we keep the
+                        // draft in sync so a 409 stale re-render preserves
+                        // it. The <textarea> bubbles 'input' through the
+                        // shadow boundary because composed:true is the
+                        // browser default for input events.
+                        this._edit = { ...this._edit, descDraft: e.target.value };
+                      }}
+                      @submit=${(e) => this.saveTaskText({ description: e.detail.value })}
+                      @cancel=${() => this.cancelEditText()}>
+                    </nottario-md-editor>
+                  `
+                  : task.description
+                    ? html`<nottario-markdown
+                              project-id=${this.projectId}
+                              .source=${task.description}></nottario-markdown>`
+                    : html`<p class="empty">No description.</p>`
+              }
+              ${this._renderEditedMarker(task.edited_at, task.edited_by_user_id)}
+            </section>
+
 
             ${
               deps.length
@@ -2071,33 +2519,7 @@ class NottarioBoardPage extends LitElement {
               ${
                 comments.length === 0
                   ? html`<p class="empty">No comments yet.</p>`
-                  : comments.map((c) => {
-                      const author = this._memberByID(c.author_user_id);
-                      return html`
-                    <div class="comment">
-                      <div class="ava">
-                        <nottario-avatar size="24"
-                          src=${author?.avatar_url || ''}
-                          name=${author?.display_name || author?.github_login || 'agent'}
-                          .agent=${c.via_mcp || null}></nottario-avatar>
-                      </div>
-                      <div>
-                        <div class="meta-line">
-                          <span class="name">${author?.display_name || author?.github_login || 'agent'}</span>
-                          ${
-                            c.via_mcp
-                              ? html`<span class="via"><span class="sep">·</span>via <span class="token">${c.via_mcp.name || 'MCP'}</span></span>`
-                              : null
-                          }
-                          <span class="when">${this._relTime(c.created_at)}</span>
-                        </div>
-                        <nottario-markdown
-                          project-id=${this.projectId}
-                          .source=${c.body || ''}></nottario-markdown>
-                      </div>
-                    </div>
-                  `;
-                    })
+                  : comments.map((c) => this._renderComment(c))
               }
 
               <form class="add-comment"
