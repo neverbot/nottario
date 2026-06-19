@@ -139,3 +139,107 @@ func TestMCP_Arch_NodesAndEdgesFullCycle(t *testing.T) {
 		t.Errorf("expected only sys.db remaining, got %+v", afterRemove.Nodes)
 	}
 }
+
+// TestMCP_Arch_ListSlimDefaults verifies that list_nodes and list_edges
+// omit description / metadata / linked_repo / linked_path by default
+// and surface them on verbose=true.
+func TestMCP_Arch_ListSlimDefaults(t *testing.T) {
+	f := newMCPFixture(t, 13322, "arch-slim-list")
+
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id": f.projectID,
+		"slug":       "a", "kind": "service", "name": "A",
+		"description": "this big description should NOT come back",
+		"linked_repo": "neverbot/nottario", "linked_path": "internal/a",
+		"metadata": map[string]any{"lang": "go"},
+	}, nil)
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id": f.projectID,
+		"slug":       "b", "kind": "service", "name": "B",
+	}, nil)
+	f.callJSON(t, "nottario.arch.upsert_edge", map[string]any{
+		"project_id": f.projectID,
+		"from_slug":  "a", "to_slug": "b", "kind": "uses",
+		"description": "edge description should NOT come back",
+	}, nil)
+
+	// Default list_nodes — slim.
+	var listed map[string]any
+	f.callJSON(t, "nottario.arch.list_nodes", map[string]any{
+		"project_id": f.projectID,
+	}, &listed)
+	rows, _ := listed["nodes"].([]any)
+	if len(rows) == 0 {
+		t.Fatalf("list_nodes returned no rows")
+	}
+	for _, r := range rows {
+		row, _ := r.(map[string]any)
+		for _, k := range []string{"description", "metadata", "linked_repo", "linked_path", "created_at"} {
+			if _, ok := row[k]; ok {
+				t.Errorf("slim list_nodes row must omit %q, got %+v", k, row)
+			}
+		}
+		for _, k := range []string{"id", "slug", "kind", "name", "updated_at"} {
+			if _, ok := row[k]; !ok {
+				t.Errorf("slim list_nodes row must include %q, got %+v", k, row)
+			}
+		}
+	}
+
+	// Verbose list_nodes — description is back.
+	f.callJSON(t, "nottario.arch.list_nodes", map[string]any{
+		"project_id": f.projectID,
+		"verbose":    true,
+	}, &listed)
+	rows, _ = listed["nodes"].([]any)
+	foundDesc := false
+	for _, r := range rows {
+		row, _ := r.(map[string]any)
+		if d, ok := row["description"].(string); ok && d != "" {
+			foundDesc = true
+		}
+	}
+	if !foundDesc {
+		t.Errorf("verbose list_nodes must surface description, got rows=%+v", rows)
+	}
+
+	// Default list_edges — slim.
+	var edges map[string]any
+	f.callJSON(t, "nottario.arch.list_edges", map[string]any{
+		"project_id": f.projectID,
+	}, &edges)
+	erows, _ := edges["edges"].([]any)
+	if len(erows) == 0 {
+		t.Fatalf("list_edges returned no rows")
+	}
+	for _, e := range erows {
+		row, _ := e.(map[string]any)
+		for _, k := range []string{"description", "from_name", "to_name", "created_at"} {
+			if _, ok := row[k]; ok {
+				t.Errorf("slim list_edges row must omit %q, got %+v", k, row)
+			}
+		}
+		for _, k := range []string{"id", "from_slug", "to_slug", "kind", "updated_at"} {
+			if _, ok := row[k]; !ok {
+				t.Errorf("slim list_edges row must include %q, got %+v", k, row)
+			}
+		}
+	}
+
+	// Verbose list_edges — description is back.
+	f.callJSON(t, "nottario.arch.list_edges", map[string]any{
+		"project_id": f.projectID,
+		"verbose":    true,
+	}, &edges)
+	erows, _ = edges["edges"].([]any)
+	foundEdgeDesc := false
+	for _, e := range erows {
+		row, _ := e.(map[string]any)
+		if d, ok := row["description"].(string); ok && d != "" {
+			foundEdgeDesc = true
+		}
+	}
+	if !foundEdgeDesc {
+		t.Errorf("verbose list_edges must surface description, got rows=%+v", erows)
+	}
+}

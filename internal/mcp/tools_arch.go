@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -47,6 +48,7 @@ type archNodeListInput struct {
 	archProjectInput
 	ParentSlug string `json:"parent_slug,omitempty" jsonschema:"direct children of this node"`
 	RootOnly   bool   `json:"root_only,omitempty" jsonschema:"only top-level nodes"`
+	Verbose    bool   `json:"verbose,omitempty" jsonschema:"full Node per row instead of slim shape"`
 }
 
 type archNodeUpsertInput struct {
@@ -86,6 +88,7 @@ type archEdgeListInput struct {
 	NodeSlug  string `json:"node_slug,omitempty"`
 	Direction string `json:"direction,omitempty" jsonschema:"'in','out' or ''"`
 	Kind      string `json:"kind,omitempty"`
+	Verbose   bool   `json:"verbose,omitempty" jsonschema:"full Edge per row instead of slim shape"`
 }
 
 type archEdgeRemoveInput struct {
@@ -156,7 +159,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.list_nodes",
-		Description: "Lists nodes; filter by parent_slug or root_only.",
+		Description: "Lists nodes (slim by default: id, slug, parent_id, kind, name, position, updated_at). Filter by parent_slug or root_only. Pass verbose=true for the full Node.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeListInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -166,7 +169,7 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(map[string]any{"nodes": ns})
+		return jsonResult(map[string]any{"nodes": slimNodeList(ns, in.Verbose)})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -257,7 +260,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.list_edges",
-		Description: "Lists edges. node_slug+direction filters to one node.",
+		Description: "Lists edges (slim by default: id, from_slug, to_slug, kind, label, updated_at). node_slug+direction filters to one node. Pass verbose=true for the full Edge.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archEdgeListInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -269,7 +272,7 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(map[string]any{"edges": es})
+		return jsonResult(map[string]any{"edges": slimEdgeList(es, in.Verbose)})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -434,6 +437,54 @@ func registerArch(server *sdk.Server, d Deps) {
 type archCheckpointInput struct {
 	archProjectInput
 	Message string `json:"message,omitempty" jsonschema:"revision title"`
+}
+
+type slimNode struct {
+	ID        uuid.UUID  `json:"id"`
+	Slug      string     `json:"slug"`
+	ParentID  *uuid.UUID `json:"parent_id"`
+	Kind      string     `json:"kind"`
+	Name      string     `json:"name"`
+	Position  int        `json:"position"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+type slimEdge struct {
+	ID        uuid.UUID `json:"id"`
+	FromSlug  string    `json:"from_slug"`
+	ToSlug    string    `json:"to_slug"`
+	Kind      string    `json:"kind"`
+	Label     string    `json:"label,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func slimNodeList(ns []arch.Node, verbose bool) any {
+	if verbose {
+		return ns
+	}
+	out := make([]slimNode, 0, len(ns))
+	for _, n := range ns {
+		out = append(out, slimNode{
+			ID: n.ID, Slug: n.Slug, ParentID: n.ParentID,
+			Kind: n.Kind, Name: n.Name, Position: n.Position,
+			UpdatedAt: n.UpdatedAt,
+		})
+	}
+	return out
+}
+
+func slimEdgeList(es []arch.EdgeView, verbose bool) any {
+	if verbose {
+		return es
+	}
+	out := make([]slimEdge, 0, len(es))
+	for _, e := range es {
+		out = append(out, slimEdge{
+			ID: e.ID, FromSlug: e.FromSlug, ToSlug: e.ToSlug,
+			Kind: e.Kind, Label: e.Label, UpdatedAt: e.UpdatedAt,
+		})
+	}
+	return out
 }
 
 // archProject parses the project uuid and verifies caller access.

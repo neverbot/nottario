@@ -129,6 +129,8 @@ Lists nodes. With no filter, returns every node. Useful filters:
 - `root_only=true` — only top-level nodes (typical first call).
 - `parent_slug="backend"` — direct children of one node.
 
+Rows are **slim** by default: `{id, slug, parent_id, kind, name, position, updated_at}`. The description, metadata, linked_repo and linked_path are omitted so a tree walk doesn't pay tokens for prose. Call `arch.get_node` for the full view, or pass `verbose: true` on the list call when you really need the description echoed per row.
+
 ### `nottario.arch.get_node`
 
 Returns a node plus its **direct children**, **all incident edges**
@@ -177,6 +179,8 @@ the call fails.
 
 Create, delete and inspect edges. `list_edges` accepts `node_slug` +
 `direction` ("in", "out", or "" for both) and `kind` for filtering.
+
+`list_edges` rows are **slim** by default: `{id, from_slug, to_slug, kind, label, updated_at}` — `description`, `from_name`, `to_name` and `created_at` are omitted. Pass `verbose: true` for the full `EdgeView`.
 
 ### `nottario.arch.link_doc` / `unlink_doc` / `link_task` / `unlink_task`
 
