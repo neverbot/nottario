@@ -537,6 +537,13 @@ every backlog walk. Pass `include_closed: true` only when you
 genuinely need them, or set an explicit `state` filter
 (`state: 'done'` / `state: 'wont_do'`) to scope to a closed bucket.
 
+**`nottario.search` is slim by default and capped at 20.** The
+hits carry the highlighted `description_html` snippet but not the
+raw `description` fallback that the web UI consumes — your context
+only needs one. Default limit is 20, max 100. Raise it only when
+you genuinely need a wider sweep, and pass `verbose: true` only when
+you want the raw description back (rare).
+
 ## Things you cannot do (today)
 
 - Delete a comment via MCP (the web UI can; agents cannot).

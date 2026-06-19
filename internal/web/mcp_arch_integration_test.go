@@ -317,8 +317,8 @@ func TestMCP_Arch_UpsertSlimAck(t *testing.T) {
 	// upsert_node slim default — no description echoed.
 	var node map[string]any
 	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
-		"project_id":  f.projectID,
-		"slug":        "n1", "kind": "service", "name": "N1",
+		"project_id": f.projectID,
+		"slug":       "n1", "kind": "service", "name": "N1",
 		"description": "should not come back",
 		"metadata":    map[string]any{"lang": "go"},
 	}, &node)
@@ -354,8 +354,8 @@ func TestMCP_Arch_UpsertSlimAck(t *testing.T) {
 	}, nil)
 	var edge map[string]any
 	f.callJSON(t, "nottario.arch.upsert_edge", map[string]any{
-		"project_id":  f.projectID,
-		"from_slug":   "n1", "to_slug": "n2", "kind": "uses",
+		"project_id": f.projectID,
+		"from_slug":  "n1", "to_slug": "n2", "kind": "uses",
 		"description": "edge desc should not echo",
 	}, &edge)
 	if _, ok := edge["description"]; ok {
@@ -386,8 +386,8 @@ func TestMCP_Arch_UpsertSlimAck(t *testing.T) {
 	// upsert_kind slim.
 	var kind map[string]any
 	f.callJSON(t, "nottario.arch.upsert_kind", map[string]any{
-		"project_id":  f.projectID,
-		"key":         "queue", "label": "Queue",
+		"project_id": f.projectID,
+		"key":        "queue", "label": "Queue",
 		"description": "queue kind description",
 	}, &kind)
 	if _, ok := kind["description"]; ok {

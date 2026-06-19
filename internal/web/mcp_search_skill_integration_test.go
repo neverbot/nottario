@@ -17,6 +17,7 @@ func TestMCP_Search(t *testing.T) {
 	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
 		"project_id": f.projectID,
 		"slug":       "thingamajig", "kind": "service", "name": "thingamajig",
+		"description": "the thingamajig service handles widget orchestration",
 	}, nil)
 
 	var hits struct {
@@ -28,6 +29,32 @@ func TestMCP_Search(t *testing.T) {
 	}, &hits)
 	if len(hits.Hits) == 0 {
 		t.Error("search returned 0 hits for known content")
+	}
+	// Slim default: no raw description fallback on any hit.
+	for i, h := range hits.Hits {
+		if _, ok := h["description"]; ok {
+			t.Errorf("slim search hit %d must omit 'description', got %+v", i, h)
+		}
+	}
+
+	// verbose=true brings the raw description back.
+	var verbose struct {
+		Hits []map[string]any `json:"hits"`
+	}
+	f.callJSON(t, "nottario.search", map[string]any{
+		"project_id": f.projectID,
+		"query":      "thingamajig",
+		"verbose":    true,
+	}, &verbose)
+	hasDescField := false
+	for _, h := range verbose.Hits {
+		if _, ok := h["description"]; ok {
+			hasDescField = true
+			break
+		}
+	}
+	if !hasDescField {
+		t.Errorf("verbose search must surface 'description', got hits=%+v", verbose.Hits)
 	}
 }
 
