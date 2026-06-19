@@ -358,6 +358,36 @@ arch.list_nodes { root_only: true }
 If the top-level set surprises you (missing a service you know
 exists, contains something deprecated), fix it.
 
+## Token discipline
+
+The arch surface follows the same slim-by-default discipline as tasks.
+Keep your traffic small.
+
+**`list_nodes` and `list_edges` are slim by default.** Rows carry only
+the keys you need to keep walking the graph (`id`, `slug`, `parent_id`,
+`kind`, `name`, `position`, `updated_at` for nodes; `id`, `from_slug`,
+`to_slug`, `kind`, `label`, `updated_at` for edges). The
+`description_md`, `metadata`, `linked_repo`, `linked_path` and the
+`from_name` / `to_name` mirrors are omitted. Pass `verbose: true` only
+when you genuinely need the full shape (rare during a walk).
+
+**`get_node` opts in to children/edges/links.** The base node is
+returned in full (description included — that's why you called `get`)
+but the related collections cost extra tokens and are off by default.
+Pass `include_children: true`, `include_edges: true`, `include_links:
+true` only for the ones you actually need next.
+
+**Mutations return a slim ack by default.** `upsert_node`,
+`upsert_edge`, `move_node` and `upsert_kind` echo back only the keys
+you need to chain the next call — not the description you just sent.
+Pass `verbose: true` when you want the full object (rare; usually you
+already know what you wrote).
+
+**Don't re-`get_node` the same slug in a session.** If you just
+upserted it, you already have the state. The skill bundle is stable —
+reading `domains/architecture.md` twice in one session learns nothing
+new.
+
 ## Anti-patterns to avoid
 
 - **Don't model every function as a node.** The architecture is a
