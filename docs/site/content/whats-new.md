@@ -14,6 +14,24 @@ feature shows up here.
 
 ## 2026-06-20
 
+- **More MCP responses slimmed down.** `arch.list_nodes` and
+  `arch.list_edges` now return a slim shape per row (no description,
+  metadata, linked_repo, linked_path, from_name/to_name) and accept
+  `verbose: true` to opt back into the full object. `arch.get_node`
+  no longer eagerly packs children, edges and links into every
+  response — pass `include_children`, `include_edges` or
+  `include_links` opt-in flags for the slices you need. The arch
+  mutations (`upsert_node`, `upsert_edge`, `move_node`, `upsert_kind`)
+  return a slim ack by default with `verbose: true` for the full
+  object. `nottario.search` drops the raw `description` fallback from
+  each hit (the highlighted `description_html` snippet is what
+  matters), lowers the default limit from 50 to 20 (max 100), and
+  accepts `verbose: true` to keep the raw description. `docs.read`
+  gains `head_only: true` returning frontmatter plus a 400-char
+  preview (with `truncated` and `body_length` markers) for catalogue
+  flows that just need to confirm the document's identity. The skill
+  bundle documents the new defaults in `domains/architecture.md`
+  ("Token discipline") and `domains/docs.md`.
 - **`nottario.tasks.list` defaults to open tasks only.** Without an
   explicit `state` filter the MCP tool now returns just `todo` and
   `doing` rows. Closed tasks (`done`, `wont_do`) accumulate forever
