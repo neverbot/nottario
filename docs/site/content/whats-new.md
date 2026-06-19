@@ -12,6 +12,13 @@ are cut on demand.
 
 ## 2026-06-20
 
+- **New `nottario.tasks.close` MCP tool.** Atomic close that bundles
+  `link_commit` + `add_comment` + `set_state` into one transaction.
+  On precondition failure the whole thing rolls back. Slim ack
+  `{task, comment_id?, linked_commit_count}`; `verbose: true` for the
+  full Task. Skill bundle now teaches `tasks.close` as the canonical
+  close and explicitly forbids "starting work" / "claimed" pickup
+  comments.
 - **Arch and search MCP responses slimmed.** `arch.list_nodes` /
   `list_edges` return slim rows; `arch.get_node` opts in to
   children/edges/links via `include_*`; `upsert_*` and `move_node`

@@ -59,20 +59,25 @@ The loop when the human says "carry on" or "do the next thing":
    `assignee = you`, `state = doing` in a single SQL transaction
    (`SELECT … FOR UPDATE SKIP LOCKED`). Safe to run from many agents
    in parallel. Returns `{task: null}` when nothing is eligible.
+   **Do not** add a comment like "starting this" / "claimed" / "I'm
+   on it" — the `state=doing` IS the record. Empty pickup comments
+   cost tokens on every future read of the task.
 2. **Do the work** in the local repo. Nottario does not store code.
-3. **Link commits.** `nottario.tasks.link_commit { repo, sha }` for
-   every commit the task produced. Non-negotiable when the task
-   yielded code — see `domains/tasks.md` for why.
-4. **Leave a closing comment.** `nottario.tasks.add_comment` BEFORE
-   `set_state done` or `wont_do`. One short paragraph for ordinary
-   tasks; for bugs, a terse Repro / Fix / Test triplet. The diff is
-   truth; the comment is the story future readers need to understand
-   the diff. Skipping this is a low-friction mistake that compounds.
-   Full rules: `domains/tasks.md` §"Always leave a closing comment".
-5. **Close.** `nottario.tasks.set_state { state: "done" }`. The
-   server rejects this if a dependency is still open and returns a
-   `preconditions` array — work those first.
-6. **Close the loop** (see below), then go back to step 1.
+3. **Close in one call.** `nottario.tasks.close { state: 'done',
+   comment: '...', commits: [{repo, sha}, ...] }` runs the closing
+   comment, the commit links and the state transition atomically.
+   On precondition failure the whole thing rolls back (no orphaned
+   comment, no orphaned commit links). For ordinary tasks the
+   closing comment is one sentence + the commit sha; for bugs, a
+   terse Repro / Fix / Test triplet. The diff is truth; the comment
+   is the story future readers need to understand the diff. Full
+   rules: `domains/tasks.md` §"Always leave a closing comment".
+4. **Close the loop** (see below), then go back to step 1.
+
+The pre-`tasks.close` pattern (separate `link_commit` + `add_comment`
++ `set_state`) still works — `tasks.close` is the preferred path
+because it's one round-trip and rolls back cleanly on precondition
+failure.
 
 When the human narrows the pickup ("the next task about topic X" or
 "work on this id"), discover candidates with `nottario.tasks.list` and

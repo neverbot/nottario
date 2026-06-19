@@ -602,6 +602,22 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := setStateTx(ctx, tx, id, s); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return Get(ctx, pool, id)
+}
+
+// setStateTx is the in-transaction state transition logic shared by
+// SetState and Close. The caller owns the transaction (Begin /
+// Rollback / Commit) and any post-commit fetch. Returns ErrNotFound,
+// *ErrInvalidStateTransition or *UnresolvedPreconditionsError on
+// validation failures; any of those should be surfaced to the API
+// caller as-is and trigger a rollback.
+func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State) error {
 	q := dbq.New(tx)
 
 	// Lock the task row for the rest of this transaction. AddDependency
@@ -611,10 +627,10 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 	// waits or finds the task already in 'done'.
 	header, err := q.LockTaskTypeAndParent(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
+		return ErrNotFound
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Enforce the two cross-terminal transitions we never allow. Every
@@ -622,10 +638,10 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 	// task to doing, reopen a doing to todo, etc.) keep working.
 	currentState := State(header.State)
 	if currentState == StateDone && s == StateWontDo {
-		return nil, &ErrInvalidStateTransition{From: currentState, To: s}
+		return &ErrInvalidStateTransition{From: currentState, To: s}
 	}
 	if currentState == StateWontDo && s == StateDone {
-		return nil, &ErrInvalidStateTransition{From: currentState, To: s}
+		return &ErrInvalidStateTransition{From: currentState, To: s}
 	}
 
 	// When closing a non-feature task as done, require every direct
@@ -637,7 +653,7 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 	if s == StateDone && header.Type != "feature" {
 		rows, err := q.ListUnresolvedPreconditions(ctx, id)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if len(rows) > 0 {
 			unresolved := make([]PreconditionRef, 0, len(rows))
@@ -648,7 +664,7 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 					State: State(r.State),
 				})
 			}
-			return nil, &UnresolvedPreconditionsError{TaskID: id, Preconditions: unresolved}
+			return &UnresolvedPreconditionsError{TaskID: id, Preconditions: unresolved}
 		}
 	}
 
@@ -663,7 +679,7 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 		err = q.SetTaskWontDo(ctx, id)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Bubble a closed-state upward inside the same transaction so two
@@ -672,14 +688,10 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 	// (see CountNonDoneChildren).
 	if IsClosed(s) {
 		if err := rollUpParentDoneTx(ctx, tx, header.ParentTaskID); err != nil {
-			return nil, err
+			return err
 		}
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return Get(ctx, pool, id)
+	return nil
 }
 
 // rollUpParentDoneTx walks the parent chain inside the given

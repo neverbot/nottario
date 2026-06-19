@@ -183,6 +183,21 @@ type tasksCommentInput struct {
 	Verbose   bool   `json:"verbose,omitempty" jsonschema:"full Comment with body echo"`
 }
 
+type tasksCloseCommitInput struct {
+	Repo    string `json:"repo" jsonschema:"'owner/repo'"`
+	SHA     string `json:"sha" jsonschema:"commit SHA"`
+	Message string `json:"message,omitempty" jsonschema:"commit subject"`
+}
+
+type tasksCloseInput struct {
+	ProjectID string                  `json:"project_id" jsonschema:"project uuid"`
+	TaskID    string                  `json:"task_id" jsonschema:"task uuid"`
+	State     string                  `json:"state,omitempty" jsonschema:"'done' (default) or 'wont_do'"`
+	Comment   string                  `json:"comment,omitempty" jsonschema:"optional closing comment (markdown body)"`
+	Commits   []tasksCloseCommitInput `json:"commits,omitempty" jsonschema:"optional commit links to attach before the transition"`
+	Verbose   bool                    `json:"verbose,omitempty" jsonschema:"full Task instead of slim ack"`
+}
+
 func registerTasks(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.list",
@@ -520,6 +535,60 @@ func registerTasks(server *sdk.Server, d Deps) {
 			return toolError(err.Error())
 		}
 		return jsonResult(taskPayload(t, in.Verbose))
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.tasks.close",
+		Description: "Atomic close: attaches commits, adds a closing comment and transitions state in one transaction. state defaults to 'done' ('wont_do' also accepted). On precondition failure rolls back the comment and links too. Slim ack {id, state, updated_at, comment_id?, linked_commit_count}; verbose=true returns the full Task.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCloseInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := requireProjectAccess(ctx, d, pid); err != nil {
+			return toolError(err.Error())
+		}
+		state := in.State
+		if state == "" {
+			state = string(tasks.StateDone)
+		}
+		commits := make([]tasks.CloseCommit, 0, len(in.Commits))
+		for _, cm := range in.Commits {
+			commits = append(commits, tasks.CloseCommit{Repo: cm.Repo, SHA: cm.SHA, Message: cm.Message})
+		}
+		res, err := tasks.Close(ctx, d.Pool, tid, tasks.CloseParams{
+			State:   tasks.State(state),
+			Comment: in.Comment,
+			Commits: commits,
+		}, authorshipFor(c))
+		if err != nil {
+			var uerr *tasks.UnresolvedPreconditionsError
+			if errors.As(err, &uerr) {
+				return jsonResult(map[string]any{
+					"error":         uerr.Error(),
+					"preconditions": uerr.Preconditions,
+				})
+			}
+			var terr *tasks.ErrInvalidStateTransition
+			if errors.As(err, &terr) {
+				return jsonResult(map[string]any{
+					"error":      terr.Error(),
+					"from_state": string(terr.From),
+					"to_state":   string(terr.To),
+				})
+			}
+			return toolError(err.Error())
+		}
+		out := map[string]any{
+			"task":                taskPayload(res.Task, in.Verbose),
+			"comment_id":          res.CommentID,
+			"linked_commit_count": res.LinkedCommit,
+		}
+		return jsonResult(out)
 	})
 
 	sdk.AddTool(server, &sdk.Tool{

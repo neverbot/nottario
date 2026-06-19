@@ -269,6 +269,140 @@ func TestMCP_Tasks_SlimResponses(t *testing.T) {
 	}
 }
 
+// TestMCP_Tasks_CloseCombined verifies the new tasks.close tool:
+// happy path (comment + commits + state=done), wont_do, precondition
+// rollback, bare close, and verbose=true.
+func TestMCP_Tasks_CloseCombined(t *testing.T) {
+	f := newMCPFixture(t, 13380, "tasks-close")
+
+	mk := func(title string) string {
+		t.Helper()
+		var tk map[string]any
+		f.callJSON(t, "nottario.tasks.create", map[string]any{
+			"project_id": f.projectID, "title": title,
+		}, &tk)
+		return tk["id"].(string)
+	}
+
+	// Happy path: close with comment + 2 commits.
+	id := mk("happy close")
+	var res map[string]any
+	f.callJSON(t, "nottario.tasks.close", map[string]any{
+		"project_id": f.projectID, "task_id": id,
+		"state":   "done",
+		"comment": "closing summary: shipped",
+		"commits": []map[string]any{
+			{"repo": "neverbot/nottario", "sha": "deadbeef", "message": "feat: x"},
+			{"repo": "neverbot/nottario", "sha": "cafef00d"},
+		},
+	}, &res)
+	task, _ := res["task"].(map[string]any)
+	if task["state"] != "done" {
+		t.Errorf("close happy path: state=%v want done", task["state"])
+	}
+	if res["comment_id"] == nil || res["comment_id"] == "" {
+		t.Errorf("close happy path: comment_id missing, got %v", res["comment_id"])
+	}
+	if c, _ := res["linked_commit_count"].(float64); int(c) != 2 {
+		t.Errorf("close happy path: linked_commit_count=%v want 2", res["linked_commit_count"])
+	}
+
+	// Verify side effects persisted.
+	var got map[string]any
+	f.callJSON(t, "nottario.tasks.get", map[string]any{
+		"project_id": f.projectID, "task_id": id,
+		"include_commits":  true,
+		"include_comments": true,
+	}, &got)
+	commits, _ := got["commits"].([]any)
+	comments, _ := got["comments"].([]any)
+	if len(commits) != 2 {
+		t.Errorf("expected 2 linked commits after close, got %d", len(commits))
+	}
+	if len(comments) != 1 {
+		t.Errorf("expected 1 comment after close, got %d", len(comments))
+	}
+
+	// wont_do.
+	id2 := mk("wont do")
+	f.callJSON(t, "nottario.tasks.close", map[string]any{
+		"project_id": f.projectID, "task_id": id2,
+		"state":   "wont_do",
+		"comment": "out of scope",
+	}, &res)
+	task, _ = res["task"].(map[string]any)
+	if task["state"] != "wont_do" {
+		t.Errorf("close wont_do: state=%v", task["state"])
+	}
+
+	// Precondition rollback: blocker stays open → close fails AND
+	// the comment/commits don't land.
+	blocker := mk("blocker")
+	blocked := mk("blocked")
+	f.callJSON(t, "nottario.tasks.add_dependency", map[string]any{
+		"project_id": f.projectID, "task_id": blocked, "depends_on_id": blocker,
+	}, nil)
+	var preErr map[string]any
+	f.callJSON(t, "nottario.tasks.close", map[string]any{
+		"project_id": f.projectID, "task_id": blocked,
+		"state":   "done",
+		"comment": "should NOT land",
+		"commits": []map[string]any{
+			{"repo": "neverbot/nottario", "sha": "shouldnotland"},
+		},
+	}, &preErr)
+	if _, ok := preErr["preconditions"]; !ok {
+		t.Errorf("expected preconditions error, got %+v", preErr)
+	}
+	// Verify the blocked task carries no comment / no commit after the
+	// failed close — the whole tx rolled back.
+	var blockedState map[string]any
+	f.callJSON(t, "nottario.tasks.get", map[string]any{
+		"project_id": f.projectID, "task_id": blocked,
+		"include_commits":  true,
+		"include_comments": true,
+	}, &blockedState)
+	if c, _ := blockedState["comments"].([]any); len(c) != 0 {
+		t.Errorf("failed close must not leak comments, got %d", len(c))
+	}
+	if c, _ := blockedState["commits"].([]any); len(c) != 0 {
+		t.Errorf("failed close must not leak commits, got %d", len(c))
+	}
+
+	// Bare close (only state) — equivalent to set_state.
+	bare := mk("bare close")
+	f.callJSON(t, "nottario.tasks.close", map[string]any{
+		"project_id": f.projectID, "task_id": bare,
+		"state": "done",
+	}, &res)
+	task, _ = res["task"].(map[string]any)
+	if task["state"] != "done" {
+		t.Errorf("bare close: state=%v", task["state"])
+	}
+	if c, _ := res["linked_commit_count"].(float64); int(c) != 0 {
+		t.Errorf("bare close: linked_commit_count=%v want 0", res["linked_commit_count"])
+	}
+	if res["comment_id"] != nil {
+		t.Errorf("bare close: comment_id must be nil when no comment, got %v", res["comment_id"])
+	}
+
+	// verbose=true returns the full Task (description echoed).
+	full := mk("verbose close")
+	f.callJSON(t, "nottario.tasks.update", map[string]any{
+		"project_id": f.projectID, "task_id": full,
+		"description": "this description should come back on verbose close",
+	}, nil)
+	f.callJSON(t, "nottario.tasks.close", map[string]any{
+		"project_id": f.projectID, "task_id": full,
+		"state":   "done",
+		"verbose": true,
+	}, &res)
+	task, _ = res["task"].(map[string]any)
+	if task["description"] == nil || task["description"] == "" {
+		t.Errorf("verbose close: expected description echoed, got %+v", task)
+	}
+}
+
 // TestMCP_Tasks_ListClosedDefault verifies the open-only default:
 // tasks.list without filters returns only 'todo'/'doing' rows; closed
 // rows surface when the caller passes include_closed=true or an

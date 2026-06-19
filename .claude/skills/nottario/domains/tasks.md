@@ -218,6 +218,36 @@ The only correct way to move a task between states. It manages
 - `doing` → fills `actual_start` (only if currently null).
 - `done` → fills `actual_end` and preserves any earlier `actual_start`.
 
+For terminal transitions (`done` and `wont_do`) prefer
+`nottario.tasks.close` over `set_state` — it bundles the closing
+comment and the commit links into the same transaction, so a
+precondition failure cannot leave an orphan comment behind. See
+`tasks.close` below.
+
+### `nottario.tasks.close`
+
+Atomic close: attaches commits, adds a closing comment and
+transitions state, all in one Postgres transaction.
+
+```
+nottario.tasks.close {
+  task_id,
+  state: "done",                                  # or "wont_do"
+  comment: "Repro:... Fix:... Test:... abc1234.", # optional, see §"Always leave a closing comment"
+  commits: [
+    { repo: "neverbot/nottario", sha: "abc1234", message: "feat: x" },
+    { repo: "neverbot/nottario", sha: "def5678" }
+  ]
+}
+```
+
+Response (slim by default): `{task, comment_id?, linked_commit_count}`.
+`verbose: true` returns the full Task instead of the slim ack.
+
+On precondition failure the response shape is the same as
+`set_state` (`{error, preconditions}`) and the whole transaction
+rolls back — no orphan comment, no orphan commit link.
+
 #### Closing-the-loop checklist
 
 After every `set_state done`, run the three checks from `skill.md` §4:
@@ -278,22 +308,30 @@ What the comment must carry, by task type:
   comment looks indistinguishable from "forgot about it" to anyone
   who comes back later.
 
+**The canonical close** is one call:
+
 ```text
-nottario.tasks.add_comment {
+nottario.tasks.close {
   task_id,
-  body: "Fix: deferred the cycle check to inside the tx (was racing\n
-  the FOR UPDATE). Repro: two concurrent `add_dependency` calls on the\n
-  same node — used to allow A→B→A intermittently. Test: new\n
-  TestAddDependency_NoCycleUnderRace in repo_integration_test.go,\n
-  10 iterations under -race. Commits abc1234, def5678."
+  state: "done",
+  comment: "Fix: deferred the cycle check to inside the tx (was racing the FOR UPDATE). Repro: two concurrent add_dependency calls — used to allow A→B→A intermittently. Test: TestAddDependency_NoCycleUnderRace, 10 iterations under -race.",
+  commits: [
+    { repo: "neverbot/nottario", sha: "abc1234" },
+    { repo: "neverbot/nottario", sha: "def5678" }
+  ]
 }
-nottario.tasks.set_state { task_id, state: "done" }
 ```
 
-The pattern is **always**: link commits → add comment → set_state.
-Comment before state, not after — once a task is `done` it slips out
-of the active backlog and the comment you forgot is much less likely
-to land.
+`tasks.close` runs the commit links, the comment and the state
+transition inside one Postgres transaction. On a precondition failure
+(`state=done` blocked by an open dependency) the whole thing rolls
+back — no orphan comment, no orphan commit link. That is the reason
+to prefer it over the legacy three-call pattern (`link_commit` +
+`add_comment` + `set_state`), which is still supported but leaves the
+caller to clean up the half-applied state itself.
+
+For ordinary close-as-no-code paths (a `wont_do`, a documentation
+task) just drop `commits` and the comment carries the story.
 
 #### Preconditions are enforced
 
@@ -402,9 +440,12 @@ loop:
 
   ...do the work in the local repo...
 
-  nottario.tasks.link_commit { task_id: task.id, repo, sha }
-  nottario.tasks.add_comment { task_id: task.id, body: "..." }   # REQUIRED — see §"Always leave a closing comment"
-  nottario.tasks.set_state   { task_id: task.id, state: "done" }
+  nottario.tasks.close {
+    task_id: task.id,
+    state: "done",
+    comment: "...",                              # REQUIRED — see §"Always leave a closing comment"
+    commits: [{ repo, sha }, ...]                # whatever the work produced
+  }
 goto loop
 ```
 
@@ -517,6 +558,23 @@ For an ordinary task: one sentence of "why" + the commit sha. A
 multi-paragraph "Fix" block is a sign the work belongs in the commit
 message or a separate doc, not in a Nottario comment that every future
 agent will re-read.
+
+**No pickup comments.** Right after `tasks.claim` or `claim_next`,
+some agents reflexively add a comment like "starting this", "claimed",
+"picking it up", "I'm on it". Do not. The `state=doing` IS the record
+that pickup happened; the assignee field carries who. The empty
+comment adds no signal and costs tokens on every future read of the
+task. Comment only when you have something a future reader actually
+needs: a closing summary, a mid-work decision you had to make, a
+discovered blocker.
+
+**Close in one call when possible.** `tasks.close` collapses
+`link_commit` + `add_comment` + `set_state` into a single round-trip
+with one response. The slim ack is `{task, comment_id?,
+linked_commit_count}` — you don't pay for repeated Task echoes between
+the three legacy calls. Falling back to the three-call form is only
+worth it when the work was so big you genuinely need to write the
+comment in stages.
 
 **Don't re-`tasks.get` what you already know.** If the previous tool
 call returned a task with `id` X and `updated_at` Y, don't fetch it
