@@ -69,6 +69,18 @@ export const buttonStyles = css`
     padding: 0;
   }
 
+  /* Compact pill variant — smaller than the standard .btn (28px tall
+     vs 30px), fully rounded so it reads as a content-anchored
+     control rather than a primary action. Used today by the cycle
+     switcher in the board topbar; pair with .secondary (the default)
+     for the white-fill look. */
+  .btn.pill {
+    height: 28px;
+    border-radius: 999px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
   /* Stand-alone compact icon button. Used in dialog/section headers
      where a row of actions sits NEXT to a title (close, delete,
      refresh). Smaller (28×28) and lighter than .btn.icon so the

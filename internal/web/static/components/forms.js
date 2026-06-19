@@ -1,7 +1,7 @@
 import { css } from '/static/vendor/lit/lit.js';
 
 // Shared form-level chrome that lives OUTSIDE the per-field wrapper
-// `<nottario-field>` (see ./field.js). Compose into a component's
+// <nottario-field> (see ./field.js). Compose into a component's
 // `static styles`:
 //
 //   static styles = [formStyles, css`…page-specific…`];
@@ -14,15 +14,24 @@ import { css } from '/static/vendor/lit/lit.js';
 //   - the global `<input type="number">` spinner kill (each browser
 //     paints it with its own OS chrome that never matches our 1px
 //     hairline border).
+//   - `.checkbox-label` — inline checkbox + muted label, for "Advanced"
+//     style helper toggles inside forms.
+//   - `.inline-field` — bare-input chrome (border + focus ring) for
+//     table cells and inline rename forms that don't want the full
+//     <nottario-field> labelled wrapper.
 //
-// The per-control chrome that `<nottario-field>` paints on slotted
+// The per-control chrome that <nottario-field> paints on slotted
 // inputs/selects (border, padding, focus ring, normalized chevron)
-// lives in `field.js`. For places that need the same chrome WITHOUT
-// `<nottario-field>` — bare selects in meta panels, inline editors,
-// etc. — import `selectStyles` and apply class `select` to the
-// element directly. Keeps the chrome defined in one place even
-// though the shadow boundaries prevent ::slotted from reaching
-// outside `<nottario-field>`.
+// lives in field.js. For places that need the same chrome WITHOUT
+// <nottario-field>, import `selectStyles` (below) and apply class
+// `select`, or import `formStyles` and apply class `inline-field`.
+// Keeps the chrome defined in one place even though the shadow
+// boundaries prevent ::slotted from reaching outside <nottario-field>.
+//
+// IMPORTANT: never put backticks inside comments within a css`...`
+// tagged template literal — backticks terminate the literal early and
+// silently break the stylesheet. Same rule applies to html`...`. The
+// CLAUDE.md "Pre-commit gate" section documents this footgun.
 export const formStyles = css`
   .actions-row {
     margin-top: 16px;
@@ -51,14 +60,55 @@ export const formStyles = css`
     margin: 0;
   }
   input[type="number"] { -moz-appearance: textfield; }
+
+  /* Inline checkbox + label, sized for muted helper toggles
+     such as "Advanced (enables feature type)" in the new-task
+     dialog. Apply to a label.checkbox-label wrapping the input
+     and the visible text. */
+  label.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--fg-muted);
+    cursor: pointer;
+  }
+  label.checkbox-label input { margin: 0; }
+
+  /* Bare-input chrome — same border + focus ring as the chrome that
+     nottario-field paints on slotted inputs, but applied directly to
+     an input.inline-field so the same look reaches table-cell editors
+     and inline rename forms WITHOUT wrapping each in nottario-field
+     (which would add a label row and break the row layout). One
+     canonical definition; keep this in sync with the nottario-field
+     slot styles. */
+  .inline-field {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    font: inherit;
+    box-sizing: border-box;
+  }
+  .inline-field:focus,
+  .inline-field:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 0;
+    border-color: var(--accent);
+  }
+  .inline-field:disabled {
+    color: var(--fg-muted);
+    background: var(--bg-subtle);
+    cursor: not-allowed;
+  }
 `;
 
-// Bare-select chrome — matches the chevron + border + focus ring
-// that `<nottario-field>` paints on slotted selects, but applied
-// directly to a `<select class="select">` so the same look reaches
-// contexts that don't wrap in `<nottario-field>` (meta panels, inline
-// editors, table-row controls). One canonical definition; if it needs
-// tweaking, tweak here AND in field.js together.
+// Bare-select chrome — matches the chevron + border + focus ring that
+// nottario-field paints on slotted selects, but applied directly to a
+// select.select so the same look reaches contexts that don't wrap in
+// nottario-field (meta panels, inline editors, table-row controls).
+// One canonical definition; if it needs tweaking, tweak here AND in
+// field.js together.
 export const selectStyles = css`
   .select {
     appearance: none;

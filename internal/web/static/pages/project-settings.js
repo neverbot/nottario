@@ -75,43 +75,26 @@ class NottarioProjectSettings extends LitElement {
        in the Label cell, the swatch picker in the Color cell. The
        form is a real <form> so Enter submits and formButton can ack
        on Save. */
+    /* Role edit row layout. The actual input chrome lives in
+       .inline-field (forms.js); only the flex layout is
+       page-specific here. */
     .role-edit-row .role-edit-form {
       display: flex;
       gap: 8px;
       align-items: center;
     }
-    .role-edit-row .role-edit-form input[type="text"] {
-      flex: 1;
-      min-width: 0;
-      padding: 4px 8px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
-      font: inherit;
-    }
-    .role-edit-row .role-edit-form input[type="text"]:focus-visible {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
-    }
+    .role-edit-row .role-edit-form .inline-field { flex: 1; min-width: 0; }
     .role-edit-row .role-edit-form .btn {
       padding: 4px 10px;
       font-size: 13px;
     }
 
-    /* Inline-edit number input inside table cells. Matches the
-       .field input chrome so the priorities table doesn't look like
-       a different design language. */
+    /* Numeric-only width + tabular alignment for priority values.
+       The border + focus ring come from .inline-field (forms.js). */
     .inline-num {
       width: 84px;
-      padding: 4px 8px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: #fff;
-      font: inherit;
       font-variant-numeric: tabular-nums;
-      box-sizing: border-box;
     }
-    .inline-num:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 
     .mono { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
 
@@ -399,6 +382,7 @@ class NottarioProjectSettings extends LitElement {
                 @submit=${(e) => this.updateRole(e, r.id)}
                 class="role-edit-form">
             <input type="text"
+                   class="inline-field"
                    .value=${this._editRoleLabel}
                    @input=${(e) => (this._editRoleLabel = e.target.value)}
                    aria-label="Role label"
@@ -799,7 +783,7 @@ class NottarioProjectSettings extends LitElement {
                   this.me?.is_admin
                     ? html`<input type="number" min="0" max="100" .value=${String(p.value)}
                           @change=${(e) => this.upsertPriority(p.key, e.target.value, p.position)}
-                          class="inline-num">`
+                          class="inline-field inline-num">`
                     : p.value
                 }
               </td>

@@ -15,6 +15,7 @@ import '/static/components/md-editor.js';
 import '/static/components/avatar.js';
 import '/static/components/task-chip.js';
 import { chevronDownIcon, closeIcon, trashIcon } from '/static/components/icons.js';
+import '/static/components/chip-filter.js';
 import './gantt.js';
 
 class NottarioBoardPage extends LitElement {
@@ -44,7 +45,6 @@ class NottarioBoardPage extends LitElement {
     // roles/types are arrays so they survive Lit dirty-checks across
     // hash updates. Filter dropdowns track their own open state.
     _filters: { state: true },
-    _filterOpen: { state: true },
     // Set when the user picks Advanced in the new-task dialog: only
     // then is the `feature` type selectable (features have different
     // semantics — parent roll-up — and the modal shouldn't expose
@@ -77,7 +77,9 @@ class NottarioBoardPage extends LitElement {
     :host { display: block; }
     .spacer { flex: 1; }
 
-    /* ---- Cycle switcher (header cluster) ---- */
+    /* ---- Cycle switcher (header cluster). The trigger button uses
+       the shared .btn.pill chrome (buttons.js); only the wrapper
+       layout + the inline muted/caret text are page-specific. ---- */
     .cycle-switcher {
       position: relative;
       display: inline-flex;
@@ -86,24 +88,8 @@ class NottarioBoardPage extends LitElement {
       font-size: 12px;
       color: var(--fg-muted);
     }
-    .cycle-switcher .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      height: 28px;
-      padding: 0 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: #fff;
-      color: var(--fg);
-      font: inherit;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-    }
-    .cycle-switcher .pill:hover { border-color: var(--border-strong); }
-    .cycle-switcher .pill .caret { color: var(--fg-muted); font-size: 10px; }
-    .cycle-switcher .pill .muted { color: var(--gray-5); font-weight: 400; }
+    .cycle-switcher .btn .caret { color: var(--fg-muted); font-size: 10px; }
+    .cycle-switcher .btn .muted { color: var(--gray-5); font-weight: 400; }
     /* Cycle switcher popup — uses shared .popover.list chrome
        (surfaces.js). Only anchor + width are page-specific here. */
     .cycle-dropdown {
@@ -156,37 +142,8 @@ class NottarioBoardPage extends LitElement {
       gap: 8px;
       margin-bottom: 12px;
     }
-    .filter-chip {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      height: 26px;
-      padding: 0 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: #fff;
-      color: var(--fg);
-      font: inherit;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-    }
-    .filter-chip:hover { border-color: var(--border-strong); }
-    .filter-chip.active {
-      background: var(--tint-blue);
-      border-color: var(--accent);
-      color: var(--tint-blue-fg);
-    }
-    .filter-chip .count {
-      background: var(--accent);
-      color: #fff;
-      border-radius: 999px;
-      padding: 1px 6px;
-      font-size: 10px;
-      font-weight: 600;
-    }
-    .filter-chip svg { width: 10px; height: 10px; }
+    /* "Clear" link next to the filter chips. The chip chrome itself
+       lives in <nottario-chip-filter>; only this aux button stays. */
     .filter-clear {
       background: transparent;
       border: 0;
@@ -197,25 +154,6 @@ class NottarioBoardPage extends LitElement {
       padding: 4px 6px;
     }
     .filter-clear:hover { color: var(--fg); text-decoration: underline; }
-    /* Filter chip popup — uses shared .popover chrome (surfaces.js).
-       Only anchor + width + inner padding are page-specific. */
-    .filter-menu {
-      top: calc(100% + 4px);
-      left: 0;
-      min-width: 180px;
-      padding: 4px;
-    }
-    .filter-menu label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: 400;
-    }
-    .filter-menu label:hover { background: var(--bg-hover); }
-    .filter-menu input[type="checkbox"] { margin: 0; }
 
     .columns {
       display: grid;
@@ -830,7 +768,6 @@ class NottarioBoardPage extends LitElement {
     this._cycleDropdownOpen = false;
     this._endSprintOpen = false;
     this._filters = { mine: false, roles: [], types: [] };
-    this._filterOpen = null;
     this._newTaskAdvanced = false;
     this._edit = { field: null, titleDraft: '', descDraft: '' };
     this._commentEditID = null;
@@ -963,27 +900,22 @@ class NottarioBoardPage extends LitElement {
     history.replaceState(null, '', url);
   }
 
-  _toggleFilterMenu(kind) {
-    this._filterOpen = this._filterOpen === kind ? null : kind;
-  }
-
-  _toggleMine() {
-    this._filters = { ...this._filters, mine: !this._filters.mine };
+  // Filter state changes flow through these helpers so the URL stays
+  // in sync via _persistFilters(). The <nottario-chip-filter> children
+  // own popover open/close state internally, so the page no longer
+  // tracks _filterOpen.
+  _setMine(checked) {
+    this._filters = { ...this._filters, mine: !!checked };
     this._persistFilters();
   }
 
-  _toggleFilterValue(kind, value) {
-    const list = (this._filters[kind] || []).slice();
-    const i = list.indexOf(value);
-    if (i >= 0) list.splice(i, 1);
-    else list.push(value);
-    this._filters = { ...this._filters, [kind]: list };
+  _setFilterValues(kind, values) {
+    this._filters = { ...this._filters, [kind]: values };
     this._persistFilters();
   }
 
   _clearFilters() {
     this._filters = { mine: false, roles: [], types: [] };
-    this._filterOpen = null;
     this._persistFilters();
   }
 
@@ -1629,7 +1561,7 @@ class NottarioBoardPage extends LitElement {
     const list = this.cycles || [];
     return html`
       <div slot="actions" class="cycle-switcher">
-        <button class="pill"
+        <button class="btn secondary pill"
                 aria-haspopup="listbox"
                 aria-expanded=${this._cycleDropdownOpen ? 'true' : 'false'}
                 @click=${() => this._toggleCycleDropdown()}>
@@ -1846,73 +1778,39 @@ class NottarioBoardPage extends LitElement {
   _renderFilters() {
     const f = this._filters || {};
     const total = this._filterCount();
+    const roleOptions = (this.roles || []).map((r) => ({ value: r.id, label: r.label }));
+    const typeOptions = ['task', 'bug', 'chore', 'spike', 'feature'].map((t) => ({
+      value: t,
+      label: t,
+    }));
     return html`
-      <div class="filters" @click=${(e) => e.stopPropagation()}>
+      <div class="filters">
         ${
           this.me
             ? html`
-          <button class=${`filter-chip${f.mine ? ' active' : ''}`}
-                  @click=${() => this._toggleMine()}>Mine</button>
-        `
+              <nottario-chip-filter
+                label="Mine"
+                mode="toggle"
+                .checked=${!!f.mine}
+                @change=${(e) => this._setMine(e.detail.checked)}></nottario-chip-filter>
+            `
             : null
         }
-        <div style="position:relative">
-          <button class=${`filter-chip${f.roles?.length ? ' active' : ''}`}
-                  @click=${() => this._toggleFilterMenu('roles')}>
-            Role
-            ${f.roles?.length ? html`<span class="count">${f.roles.length}</span>` : null}
-            ${chevronDownIcon()}
-          </button>
-          ${
-            this._filterOpen === 'roles'
-              ? html`
-            <div class="popover filter-menu">
-              ${this.roles.map(
-                (r) => html`
-                <label>
-                  <input type="checkbox"
-                         ?checked=${f.roles?.includes(r.id)}
-                         @change=${() => this._toggleFilterValue('roles', r.id)}>
-                  ${r.label}
-                </label>
-              `,
-              )}
-            </div>
-          `
-              : null
-          }
-        </div>
-        <div style="position:relative">
-          <button class=${`filter-chip${f.types?.length ? ' active' : ''}`}
-                  @click=${() => this._toggleFilterMenu('types')}>
-            Type
-            ${f.types?.length ? html`<span class="count">${f.types.length}</span>` : null}
-            ${chevronDownIcon()}
-          </button>
-          ${
-            this._filterOpen === 'types'
-              ? html`
-            <div class="popover filter-menu">
-              ${['task', 'bug', 'chore', 'spike', 'feature'].map(
-                (t) => html`
-                <label>
-                  <input type="checkbox"
-                         ?checked=${f.types?.includes(t)}
-                         @change=${() => this._toggleFilterValue('types', t)}>
-                  ${t}
-                </label>
-              `,
-              )}
-            </div>
-          `
-              : null
-          }
-        </div>
+        <nottario-chip-filter
+          label="Role"
+          mode="multi"
+          .values=${f.roles || []}
+          .options=${roleOptions}
+          @change=${(e) => this._setFilterValues('roles', e.detail.values)}></nottario-chip-filter>
+        <nottario-chip-filter
+          label="Type"
+          mode="multi"
+          .values=${f.types || []}
+          .options=${typeOptions}
+          @change=${(e) => this._setFilterValues('types', e.detail.values)}></nottario-chip-filter>
         ${
           total > 0
-            ? html`
-          <button class="filter-clear" @click=${() => this._clearFilters()}>Clear</button>
-        `
+            ? html`<button class="filter-clear" @click=${() => this._clearFilters()}>Clear</button>`
             : null
         }
       </div>
@@ -1991,7 +1889,7 @@ class NottarioBoardPage extends LitElement {
               </select>
             </nottario-field>
             <div class="actions-row">
-              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-muted);cursor:pointer;margin-right:auto">
+              <label class="checkbox-label" style="margin-right:auto">
                 <input type="checkbox"
                        ?checked=${this._newTaskAdvanced}
                        @change=${(e) => (this._newTaskAdvanced = e.target.checked)}>
