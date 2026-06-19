@@ -5,8 +5,8 @@ import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
 import { confirm } from '/static/components/confirm-dialog.js';
 import { buttonStyles } from '/static/components/buttons.js';
-import { dialogStyles } from '/static/components/surfaces.js';
-import { formStyles } from '/static/components/forms.js';
+import { dialogStyles, popoverStyles } from '/static/components/surfaces.js';
+import { formStyles, selectStyles } from '/static/components/forms.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/field.js';
 import '/static/components/page-header.js';
@@ -14,6 +14,7 @@ import '/static/components/markdown.js';
 import '/static/components/md-editor.js';
 import '/static/components/avatar.js';
 import '/static/components/task-chip.js';
+import { chevronDownIcon, closeIcon, trashIcon } from '/static/components/icons.js';
 import './gantt.js';
 
 class NottarioBoardPage extends LitElement {
@@ -68,7 +69,9 @@ class NottarioBoardPage extends LitElement {
   static styles = [
     buttonStyles,
     dialogStyles,
+    popoverStyles,
     formStyles,
+    selectStyles,
     badgeStyles,
     css`
     :host { display: block; }
@@ -101,21 +104,12 @@ class NottarioBoardPage extends LitElement {
     .cycle-switcher .pill:hover { border-color: var(--border-strong); }
     .cycle-switcher .pill .caret { color: var(--fg-muted); font-size: 10px; }
     .cycle-switcher .pill .muted { color: var(--gray-5); font-weight: 400; }
+    /* Cycle switcher popup — uses shared .popover.list chrome
+       (surfaces.js). Only anchor + width are page-specific here. */
     .cycle-dropdown {
-      position: absolute;
       top: 32px;
       left: 0;
-      z-index: 30;
-      margin: 0;
-      padding: 4px 0;
-      list-style: none;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
       min-width: 220px;
-      max-height: 320px;
-      overflow-y: auto;
     }
     .cycle-dropdown li {
       display: flex;
@@ -203,17 +197,13 @@ class NottarioBoardPage extends LitElement {
       padding: 4px 6px;
     }
     .filter-clear:hover { color: var(--fg); text-decoration: underline; }
+    /* Filter chip popup — uses shared .popover chrome (surfaces.js).
+       Only anchor + width + inner padding are page-specific. */
     .filter-menu {
-      position: absolute;
       top: calc(100% + 4px);
       left: 0;
       min-width: 180px;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      box-shadow: 0 6px 16px rgba(31, 35, 40, 0.12);
       padding: 4px;
-      z-index: 30;
     }
     .filter-menu label {
       display: flex;
@@ -507,39 +497,6 @@ class NottarioBoardPage extends LitElement {
       gap: 4px;
       flex: 0 0 auto;
     }
-    /* Hover-revealed icon button — same chrome as docs reader trash
-       and project-settings row delete. */
-    .detail .head .icon-btn {
-      width: 28px;
-      height: 28px;
-      padding: 0;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--gray-5);
-      background: transparent;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      cursor: pointer;
-      font: inherit;
-    }
-    .detail .head .icon-btn svg { display: block; }
-    .detail .head .icon-btn:hover {
-      color: var(--fg);
-      background: var(--bg-subtle);
-      border-color: var(--border);
-    }
-    .detail .head .icon-btn:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 1px;
-    }
-    .detail .head .icon-btn.danger:hover,
-    .detail .head .icon-btn.danger:focus-visible {
-      color: var(--danger);
-      background: var(--tint-red);
-      border-color: rgba(207, 34, 46, 0.4);
-    }
-
     /* Meta strip: one row of inline label+value pairs separated by
        a thin dot. Wraps on narrow viewports but stays compact at
        720px. */
@@ -571,30 +528,14 @@ class NottarioBoardPage extends LitElement {
       font-style: normal;
       font-family: ui-monospace, SFMono-Regular, monospace;
     }
-    /* Inline assignee picker: keep the avatar + select on one row.
-       The select gets the standard nottario-field chrome via the
-       same chevron-normalisation pattern (see components/field.js). */
-    .detail .meta .assignee-edit {
+    /* Inline-control wrapper: lays out an adornment (e.g. avatar) next
+       to a <select class="select">. The select chrome itself lives in
+       components/forms.js → selectStyles, shared by every meta-row
+       dropdown (assignee, role, priority) so they all read identical. */
+    .detail .meta .inline-control {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-    }
-    .detail .meta .assignee-edit select {
-      padding: 4px 28px 4px 8px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font: inherit;
-      font-size: 12px;
-      background: #fff;
-      appearance: none;
-      -webkit-appearance: none;
-      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%2359636e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
-    }
-    .detail .meta .assignee-edit select:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
     }
 
     /* State control as compact segmented pill — three buttons share a
@@ -625,17 +566,6 @@ class NottarioBoardPage extends LitElement {
       font-weight: 600;
     }
     .detail .state-control button.active:hover { background: var(--success-hover); }
-
-    /* Priority dropdown — same chrome as the new-task dialog's
-       select, narrow enough not to dominate the meta row. */
-    .detail .meta select.priority {
-      padding: 2px 22px 2px 8px;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      font: inherit;
-      font-size: 12px;
-      background: var(--bg);
-    }
 
     /* Body sections — description, deps, commits, comments. Eyebrow
        headings echo the docs rail / profile pattern. */
@@ -1710,7 +1640,7 @@ class NottarioBoardPage extends LitElement {
         ${
           this._cycleDropdownOpen
             ? html`
-          <ul class="cycle-dropdown" role="listbox">
+          <ul class="popover list cycle-dropdown" role="listbox">
             ${list.map(
               (c) => html`
               <li role="option"
@@ -1931,12 +1861,12 @@ class NottarioBoardPage extends LitElement {
                   @click=${() => this._toggleFilterMenu('roles')}>
             Role
             ${f.roles?.length ? html`<span class="count">${f.roles.length}</span>` : null}
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            ${chevronDownIcon()}
           </button>
           ${
             this._filterOpen === 'roles'
               ? html`
-            <div class="filter-menu">
+            <div class="popover filter-menu">
               ${this.roles.map(
                 (r) => html`
                 <label>
@@ -1957,12 +1887,12 @@ class NottarioBoardPage extends LitElement {
                   @click=${() => this._toggleFilterMenu('types')}>
             Type
             ${f.types?.length ? html`<span class="count">${f.types.length}</span>` : null}
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            ${chevronDownIcon()}
           </button>
           ${
             this._filterOpen === 'types'
               ? html`
-            <div class="filter-menu">
+            <div class="popover filter-menu">
               ${['task', 'bug', 'chore', 'spike', 'feature'].map(
                 (t) => html`
                 <label>
@@ -2328,17 +2258,11 @@ class NottarioBoardPage extends LitElement {
                           });
                           if (ok) this.deleteTask(task.id);
                         }}>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M6 2.5h4M3 4.5h10M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2M6.8 7v4M9.2 7v4"
-                          stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
+                  ${trashIcon()}
                 </button>
                 <button class="icon-btn" title="Close (Esc)" aria-label="Close"
                         @click=${() => this.closeDetail()}>
-                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                    <path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor"
-                          stroke-width="1.6" stroke-linecap="round"/>
-                  </svg>
+                  ${closeIcon()}
                 </button>
               </div>
             </div>
@@ -2377,7 +2301,7 @@ class NottarioBoardPage extends LitElement {
 
               <div class="field-line">
                 <span class="lbl">Priority</span>
-                <select class="priority"
+                <select class="select"
                         @change=${(e) => this.setPriority(task.id, e.target.value)}>
                   ${[...this.priorities]
                     .sort((a, b) => b.value - a.value)
@@ -2398,7 +2322,8 @@ class NottarioBoardPage extends LitElement {
                   this.me?.is_admin
                     ? html`
                       <span class="val">
-                        <select @change=${(e) => this.setRole(e.target.value)}>
+                        <select class="select"
+                                @change=${(e) => this.setRole(e.target.value)}>
                           <option value="" ?selected=${!task.target_role_id}>— none —</option>
                           ${(this.roles || []).map(
                             (r) => html`
@@ -2414,7 +2339,7 @@ class NottarioBoardPage extends LitElement {
 
               <div class="field-line">
                 <span class="lbl">Assignee</span>
-                <span class="val assignee-edit">
+                <span class="val inline-control">
                   ${
                     assignee && assignee.avatar_url
                       ? html`<nottario-avatar size="20"
@@ -2422,7 +2347,8 @@ class NottarioBoardPage extends LitElement {
                               name=${assignee.display_name || assignee.github_login || ''}></nottario-avatar>`
                       : null
                   }
-                  <select @change=${(e) => this.setAssignee(task.id, e.target.value)}>
+                  <select class="select"
+                          @change=${(e) => this.setAssignee(task.id, e.target.value)}>
                     <option value="" ?selected=${!task.assignee_user_id}>— unassigned —</option>
                     ${[...new Map((this.members || []).map((m) => [m.user_id, m])).values()].map(
                       (m) => html`

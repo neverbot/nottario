@@ -117,3 +117,45 @@ export const dialogStyles = css`
   }
   .dialog .panel h3 { margin: 0 0 16px 0; }
 `;
+
+// popoverStyles: a floating panel anchored to a trigger button. The
+// SAME chrome (white bg, hairline border, soft shadow, modest radius)
+// for every absolutely-positioned menu / dropdown / suggestion list in
+// the app — so cycle switcher, kanban filter menus, search results,
+// future @-mention popups, … all line up. Stacking context lives in
+// one place so two popovers never disagree about z-index.
+//
+//   .popover         the floating panel itself; the caller still owns
+//                    position (top/left or right/inset) and width
+//   .popover.list    pads as 0 4px so child <li>/labels span edge-to-edge
+//   .popover-item    optional helper for hover-highlighted rows inside;
+//                    use it or roll your own — both can coexist
+export const popoverStyles = css`
+  .popover {
+    position: absolute;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+    z-index: 30;
+    box-sizing: border-box;
+  }
+  .popover.list {
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  .popover-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--fg);
+    border-radius: 4px;
+  }
+  .popover-item:hover { background: var(--bg-hover); }
+`;

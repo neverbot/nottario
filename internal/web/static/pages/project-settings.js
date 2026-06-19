@@ -2,12 +2,13 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
-import { formStyles } from '/static/components/forms.js';
+import { formStyles, selectStyles } from '/static/components/forms.js';
 import { badgeStyles } from '/static/components/badges.js';
 import { EscController } from '/static/components/esc.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
 import { confirm } from '/static/components/confirm-dialog.js';
+import { pencilIcon, trashIcon } from '/static/components/icons.js';
 import { tableActionStyles } from '/static/components/table-actions.js';
 import { addRowStyles } from '/static/components/add-row.js';
 import '/static/components/color-swatches.js';
@@ -54,6 +55,7 @@ class NottarioProjectSettings extends LitElement {
     tableStyles,
     dialogStyles,
     formStyles,
+    selectStyles,
     badgeStyles,
     tableActionStyles,
     addRowStyles,
@@ -134,13 +136,6 @@ class NottarioProjectSettings extends LitElement {
       font-weight: 600;
       color: var(--fg);
       min-width: 60px;
-    }
-    .owner-row select {
-      padding: 4px 8px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: #fff;
-      font: inherit;
     }
     tr[draggable] { cursor: grab; }
     tr.dragging { opacity: 0.45; }
@@ -378,11 +373,7 @@ class NottarioProjectSettings extends LitElement {
               ? html`
               <button class="edit" title="Edit role" aria-label="Edit role"
                       @click=${() => this._startRoleEdit(r)}>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z"
-                        stroke="currentColor" stroke-width="1.4"
-                        stroke-linejoin="round" stroke-linecap="round"/>
-                </svg>
+                ${pencilIcon()}
               </button>
               <button class="delete" title="Delete role" aria-label="Delete role"
                       @click=${() => this.deleteRole(r.id)}>✕</button>`
@@ -909,7 +900,7 @@ class NottarioProjectSettings extends LitElement {
           ? html`
         <div class="owner-row">
           <span class="lbl">Owner</span>
-          <select @change=${(e) => this._setOwner(e.target.value)}>
+          <select class="select" @change=${(e) => this._setOwner(e.target.value)}>
             ${this._uniqueMembers().map(
               (m) => html`
               <option value=${m.user_id} ?selected=${m.user_id === this.project.owner_user_id}>

@@ -5,6 +5,7 @@ import { formStyles } from '/static/components/forms.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
 import { confirm } from '/static/components/confirm-dialog.js';
+import { trashIcon } from '/static/components/icons.js';
 import '/static/components/field.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
@@ -1033,10 +1034,7 @@ class NottarioDocsPage extends LitElement {
                 ? null
                 : html`
               <button class="delete" title="Delete document" aria-label="Delete document" @click=${() => this.del()}>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M6 2.5h4M3 4.5h10M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2M6.8 7v4M9.2 7v4"
-                        stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+                ${trashIcon()}
               </button>
             `
             }

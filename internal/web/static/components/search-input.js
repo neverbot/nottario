@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { closeIcon } from '/static/components/icons.js';
 
 // <nottario-search-input
 //   placeholder="Filter or search..."
@@ -179,10 +180,7 @@ class NottarioSearchInput extends LitElement {
             ? html`
           <button class="clear" title="Clear (Esc)" aria-label="Clear search"
                   @click=${this._clear}>
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M3 3 L9 9 M9 3 L3 9" stroke="currentColor"
-                    stroke-width="1.6" stroke-linecap="round"/>
-            </svg>
+            ${closeIcon()}
           </button>
         `
             : null

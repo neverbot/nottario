@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { popoverStyles } from '/static/components/surfaces.js';
 
 // <nottario-search-box> is a topbar input + dropdown of results.
 // It needs a projectId to scope the search; when null it shows a
@@ -15,7 +16,9 @@ class NottarioSearchBox extends LitElement {
     error: { state: true },
   };
 
-  static styles = css`
+  static styles = [
+    popoverStyles,
+    css`
     /* Project rule: every Lit shadow root explicitly sets
        box-sizing on host AND descendants because global resets do
        not penetrate. */
@@ -71,19 +74,14 @@ class NottarioSearchBox extends LitElement {
       pointer-events: none;
     }
     :host(:focus-within) .kbd-hint { display: none; }
+    /* Topbar search results — uses the shared .popover chrome
+       (surfaces.js). Only anchor + width are page-specific. */
     .panel {
-      position: absolute;
       top: calc(100% + 4px);
       left: 0;
       right: 0;
-      background: #fff;
-      color: var(--fg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.18);
       max-height: 60vh;
       overflow: auto;
-      z-index: 20;
     }
     /* Result group header — replaces the per-row pill as the
        primary signal of "what kind of thing am I looking at". The
@@ -198,7 +196,8 @@ class NottarioSearchBox extends LitElement {
       font-family: inherit;
     }
     .retry-btn:hover { background: var(--tint-red); }
-  `;
+  `,
+  ];
 
   constructor() {
     super();
@@ -392,7 +391,7 @@ class NottarioSearchBox extends LitElement {
       ${
         this.open && this.query
           ? html`
-        <div class="panel" id="search-listbox" role="listbox">
+        <div class="popover panel" id="search-listbox" role="listbox">
           ${
             this.error
               ? html`

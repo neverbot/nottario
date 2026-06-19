@@ -68,4 +68,41 @@ export const buttonStyles = css`
     width: 30px;
     padding: 0;
   }
+
+  /* Stand-alone compact icon button. Used in dialog/section headers
+     where a row of actions sits NEXT to a title (close, delete,
+     refresh). Smaller (28×28) and lighter than .btn.icon so the
+     title carries the visual weight. Add .danger for destructive
+     actions; tint matches .btn.danger.
+     Apply: <button class="icon-btn"> or <button class="icon-btn danger"> */
+  .icon-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray-5);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .icon-btn svg { display: block; }
+  .icon-btn:hover {
+    color: var(--fg);
+    background: var(--bg-subtle);
+    border-color: var(--border);
+  }
+  .icon-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .icon-btn.danger:hover,
+  .icon-btn.danger:focus-visible {
+    color: var(--danger);
+    background: var(--tint-red);
+    border-color: rgba(207, 34, 46, 0.4);
+  }
 `;
