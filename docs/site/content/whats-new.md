@@ -14,6 +14,21 @@ feature shows up here.
 
 ## 2026-06-19
 
+- **MCP responses are now slim by default.** The high-frequency task
+  tools (`tasks.create`, `tasks.update`, `tasks.set_state`,
+  `tasks.claim`, `tasks.claim_next`, `tasks.next`, `tasks.add_comment`)
+  and `tasks.list` return only the fields needed to chain the next
+  call — `id`, `title`, `state`, `priority`, `updated_at`,
+  role/assignee — and no longer echo back the description or comment
+  body. `tasks.get` returns the base task in full but **omits**
+  `depends_on`, `commits` and `comments` unless the caller passes
+  `include_deps`, `include_commits` or `include_comments`. Pass
+  `verbose: true` on the mutations to opt back into the full Task
+  shape. This change cut a typical "claim → comment → done" loop
+  from ~5 KB of MCP traffic to ~600 B; sessions that hammer Nottario
+  via Claude Code should see a drop in token bill. The skill bundle
+  ships a new **"Token discipline"** section in `domains/tasks.md`
+  with the full rules.
 - **Edit task title, description and comments from the UI.** The
   task detail dialog now exposes a quiet `Edit` button on the title
   and the description (revealed on hover or keyboard focus). The

@@ -57,6 +57,13 @@ Both pre-loaded paths are snapshots: re-copy the files when you
 upgrade the server. The MCP path is the only one that stays in
 sync automatically.
 
+The bundle's `domains/tasks.md` includes a **Token discipline**
+section: how to keep the MCP traffic small (slim responses are now
+default, `verbose: true` is opt-in, closing comments are one line
+per item, don't re-`tasks.get` what you already have). Read it once
+when starting a session — it pays for itself within a few tool
+calls.
+
 ## Anatomy of a skill
 
 Every file starts with a tiny YAML front-matter block declaring

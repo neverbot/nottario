@@ -49,6 +49,38 @@ The MCP server exposes one tool per natural verb. Highlights:
 `nottario.tasks.next` exists as a read-only preview but does not
 claim — prefer `claim_next` to avoid races.
 
+## Response shape
+
+The tools return **slim** payloads by default. A mutation like
+`tasks.create`, `tasks.set_state` or `tasks.add_comment` returns only
+the fields an agent needs to chain the next call — `id`, `title`,
+`state`, `priority`, `updated_at`, role/assignee — and does **not**
+echo back the description or comment body the agent just sent.
+`tasks.list` rows follow the same rule.
+
+When the full object is genuinely needed (e.g. an agent reading a
+task it didn't create), pass `verbose: true` on the call to opt
+back into every field.
+
+`tasks.get` returns the base task in full (descriptions are the
+reason you called `get` in the first place) but **omits** the
+related collections unless you ask for them:
+
+```
+nottario.tasks.get {
+  project_id, task_id,
+  include_deps: true,
+  include_commits: true,
+  include_comments: true,
+}
+```
+
+Each flag defaults to false. The motivation is plain: comment lists
+and per-row descriptions are the largest payloads in the API, and an
+agent that doesn't need them shouldn't pay tokens for them. A typical
+"claim → comment → done" loop now sits in ~600 B of MCP traffic
+instead of ~5 KB.
+
 ## Skills: on-demand vs pre-loaded
 
 Nottario ships a skill bundle aimed at agents (operating rules,
