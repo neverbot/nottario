@@ -159,6 +159,13 @@ entities defensively when it receives them, but the cleanest fix is
 to never encode in the first place. The same rule applies to
 `tasks.update`.
 
+**Do not pre-escape quotes or backslashes either.** The MCP transport
+JSON-encodes the value for you. Write quotes as quotes and newlines
+as real line breaks — never `\"` or the two-character sequence `\n`.
+Pre-escaped forms are stored verbatim and render with the backslash
+visible everywhere. The string you would *type* into a human-facing
+form is the string you send to the tool.
+
 #### One task per role
 
 When a unit of work spans multiple roles (e.g. backend migration +
