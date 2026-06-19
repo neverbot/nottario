@@ -481,9 +481,53 @@ nottario.tasks.add_dependency {
 
 `tasks.next` will then skip B until A is `done`.
 
+## Token discipline
+
+Every byte the MCP returns to you is billed to the human running
+this session. Keep your traffic small.
+
+**Default responses are slim.** As of the current build, the high-
+frequency mutations (`tasks.create`, `tasks.update`, `tasks.set_state`,
+`tasks.claim`, `tasks.claim_next`, `tasks.next`, `tasks.add_comment`)
+and `tasks.list` return only the fields you need to chain the next
+call — id, title, state, priority, role/assignee, updated_at — NOT
+the description or comment body you just sent. `tasks.get` returns the
+full base task but OMITS dependencies, commits and comments unless you
+opt in with `include_deps`, `include_commits`, `include_comments`.
+
+**When NOT to pass `verbose: true`.** Almost always. The slim shape
+carries everything you need to pick the next call (id for routing,
+updated_at for optimistic concurrency, state for the gate). Only pass
+`verbose: true` when you specifically need the description back in
+your context — e.g. an agent is reading a task it didn't create.
+
+**Closing comments are one line per item.** The commit message + the
+diff carry the detail; the closing comment is a pointer, not a
+story. For a bug:
+
+> Repro: <symptom in 6-10 words>. Fix: <one short sentence>. Test: <name + count>. Commit: <sha>.
+
+For an ordinary task: one sentence of "why" + the commit sha. A
+multi-paragraph "Fix" block is a sign the work belongs in the commit
+message or a separate doc, not in a Nottario comment that every future
+agent will re-read.
+
+**Don't re-`tasks.get` what you already know.** If the previous tool
+call returned a task with `id` X and `updated_at` Y, don't fetch it
+again to confirm — pass those values straight into the next call. The
+same goes for `whoami` and `projects.list`: once per session.
+
+**Don't re-read a skill page you already loaded this session.** The
+content is stable; reading `skill/domains/tasks.md` twice costs as
+much as reading it once and learns nothing new.
+
+**Pass `include_*` to `tasks.get` deliberately.** Pulling all three
+(deps + commits + comments) on a feature parent with many children
+can return tens of KB. Ask for only what your next decision needs.
+
 ## Things you cannot do (today)
 
-- Delete a comment.
+- Delete a comment via MCP (the web UI can; agents cannot).
 - Edit historic actual_start/actual_end.
 - Modify the project, role catalogue or memberships (admin-only,
   done via the web UI).
