@@ -307,3 +307,93 @@ func TestMCP_Arch_GetNodeIncludeDefaults(t *testing.T) {
 		t.Errorf("include_links must surface the doc link, got %+v", links)
 	}
 }
+
+// TestMCP_Arch_UpsertSlimAck verifies upsert_node, upsert_edge,
+// move_node and upsert_kind return slim acks by default and full
+// objects on verbose=true.
+func TestMCP_Arch_UpsertSlimAck(t *testing.T) {
+	f := newMCPFixture(t, 13324, "arch-slim-ack")
+
+	// upsert_node slim default — no description echoed.
+	var node map[string]any
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id":  f.projectID,
+		"slug":        "n1", "kind": "service", "name": "N1",
+		"description": "should not come back",
+		"metadata":    map[string]any{"lang": "go"},
+	}, &node)
+	for _, k := range []string{"description", "metadata", "linked_repo", "linked_path", "created_at"} {
+		if _, ok := node[k]; ok {
+			t.Errorf("upsert_node slim must omit %q, got %+v", k, node)
+		}
+	}
+	for _, k := range []string{"id", "slug", "kind", "name", "updated_at"} {
+		if _, ok := node[k]; !ok {
+			t.Errorf("upsert_node slim must include %q, got %+v", k, node)
+		}
+	}
+
+	// upsert_node verbose — description echoed.
+	var verboseNode map[string]any
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id":  f.projectID,
+		"slug":        "n1",
+		"kind":        "service",
+		"name":        "N1",
+		"description": "echo me back",
+		"verbose":     true,
+	}, &verboseNode)
+	if verboseNode["description"] != "echo me back" {
+		t.Errorf("upsert_node verbose must echo description, got %v", verboseNode["description"])
+	}
+
+	// upsert_edge slim.
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id": f.projectID,
+		"slug":       "n2", "kind": "service", "name": "N2",
+	}, nil)
+	var edge map[string]any
+	f.callJSON(t, "nottario.arch.upsert_edge", map[string]any{
+		"project_id":  f.projectID,
+		"from_slug":   "n1", "to_slug": "n2", "kind": "uses",
+		"description": "edge desc should not echo",
+	}, &edge)
+	if _, ok := edge["description"]; ok {
+		t.Errorf("upsert_edge slim must omit description, got %+v", edge)
+	}
+	if _, ok := edge["id"]; !ok {
+		t.Errorf("upsert_edge slim must include id, got %+v", edge)
+	}
+
+	// move_node slim.
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id": f.projectID,
+		"slug":       "parent", "kind": "system", "name": "Parent",
+	}, nil)
+	var moved map[string]any
+	f.callJSON(t, "nottario.arch.move_node", map[string]any{
+		"project_id":  f.projectID,
+		"slug":        "n1",
+		"parent_slug": "parent",
+	}, &moved)
+	if _, ok := moved["description"]; ok {
+		t.Errorf("move_node slim must omit description, got %+v", moved)
+	}
+	if moved["slug"] != "n1" {
+		t.Errorf("move_node slim must include slug, got %+v", moved)
+	}
+
+	// upsert_kind slim.
+	var kind map[string]any
+	f.callJSON(t, "nottario.arch.upsert_kind", map[string]any{
+		"project_id":  f.projectID,
+		"key":         "queue", "label": "Queue",
+		"description": "queue kind description",
+	}, &kind)
+	if _, ok := kind["description"]; ok {
+		t.Errorf("upsert_kind slim must omit description, got %+v", kind)
+	}
+	if kind["key"] != "queue" {
+		t.Errorf("upsert_kind slim must include key, got %+v", kind)
+	}
+}

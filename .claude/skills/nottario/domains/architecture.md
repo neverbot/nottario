@@ -172,6 +172,12 @@ nottario.arch.upsert_node {
 The first time you touch architecture in a project, the default kind
 catalogue is seeded automatically.
 
+Mutations return a **slim ack** by default ({id, slug, kind, name,
+updated_at} for nodes; {id, kind, label, updated_at} for edges;
+{key, project_id, label} for kinds) — the description you sent is not
+echoed back. Pass `verbose: true` when you really need the full
+object back in your context.
+
 **Send `name` and `description` as plain UTF-8.** Do not HTML-encode
 ampersands, angle brackets or quotes — `Pages & Router`, not
 `Pages &amp; Router`. The web UI escapes these for display, so an

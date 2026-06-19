@@ -32,6 +32,7 @@ type archKindUpsertInput struct {
 	Icon        string `json:"icon,omitempty"`
 	Color       string `json:"color,omitempty"`
 	Description string `json:"description,omitempty"`
+	Verbose     bool   `json:"verbose,omitempty" jsonschema:"full Kind instead of slim ack"`
 }
 
 type archKindDeleteInput struct {
@@ -65,11 +66,13 @@ type archNodeUpsertInput struct {
 	LinkedRepo  string         `json:"linked_repo,omitempty" jsonschema:"'owner/repo' or '' to clear"`
 	LinkedPath  string         `json:"linked_path,omitempty" jsonschema:"path inside the linked repo"`
 	Position    *int           `json:"position,omitempty" jsonschema:"sibling order"`
+	Verbose     bool           `json:"verbose,omitempty" jsonschema:"full Node instead of slim ack"`
 }
 
 type archNodeMoveInput struct {
 	archNodeRefInput
 	ParentSlug string `json:"parent_slug,omitempty" jsonschema:"new parent slug, '' for root"`
+	Verbose    bool   `json:"verbose,omitempty" jsonschema:"full Node instead of slim ack"`
 }
 
 type archNodeRemoveInput struct {
@@ -84,6 +87,7 @@ type archEdgeUpsertInput struct {
 	Kind        string `json:"kind" jsonschema:"depends_on|uses|calls|reads|writes|publishes|subscribes (or custom)"`
 	Label       string `json:"label,omitempty"`
 	Description string `json:"description,omitempty"`
+	Verbose     bool   `json:"verbose,omitempty" jsonschema:"full Edge instead of slim ack"`
 }
 
 type archEdgeListInput struct {
@@ -123,7 +127,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.upsert_kind",
-		Description: "Creates or updates a kind. Reuse a default before adding new.",
+		Description: "Creates or updates a kind. Reuse a default before adding new. Slim ack by default; pass verbose=true for the full Kind.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archKindUpsertInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -139,7 +143,7 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(k)
+		return jsonResult(kindPayload(k, in.Verbose))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -208,7 +212,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.upsert_node",
-		Description: "Creates or updates a node keyed by (project_id, slug). Slug matches [a-z0-9][a-z0-9._-]*. kind must exist in arch.list_kinds.",
+		Description: "Creates or updates a node keyed by (project_id, slug). Slug matches [a-z0-9][a-z0-9._-]*. kind must exist in arch.list_kinds. Slim ack by default — description not echoed; pass verbose=true for the full Node.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeUpsertInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -226,12 +230,12 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(n)
+		return jsonResult(nodePayload(n, in.Verbose))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.move_node",
-		Description: "Reparents a node. Pass parent_slug='' to make it a root. Cycles are rejected.",
+		Description: "Reparents a node. Pass parent_slug='' to make it a root. Cycles are rejected. Slim ack by default.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeMoveInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -245,7 +249,7 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(n)
+		return jsonResult(nodePayload(n, in.Verbose))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -285,7 +289,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.upsert_edge",
-		Description: "Creates or updates a directed edge. Self-loops are rejected.",
+		Description: "Creates or updates a directed edge. Self-loops are rejected. Slim ack by default — description not echoed.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archEdgeUpsertInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -302,7 +306,7 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(e)
+		return jsonResult(edgePayload(e, in.Verbose))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -479,6 +483,42 @@ func slimNodeList(ns []arch.Node, verbose bool) any {
 		})
 	}
 	return out
+}
+
+type slimKindAck struct {
+	Key       string    `json:"key"`
+	ProjectID uuid.UUID `json:"project_id"`
+	Label     string    `json:"label"`
+}
+
+func nodePayload(n *arch.Node, verbose bool) any {
+	if verbose {
+		return n
+	}
+	return slimNode{
+		ID: n.ID, Slug: n.Slug, ParentID: n.ParentID,
+		Kind: n.Kind, Name: n.Name, Position: n.Position,
+		UpdatedAt: n.UpdatedAt,
+	}
+}
+
+func edgePayload(e *arch.Edge, verbose bool) any {
+	if verbose {
+		return e
+	}
+	return map[string]any{
+		"id":         e.ID,
+		"kind":       e.Kind,
+		"label":      e.Label,
+		"updated_at": e.UpdatedAt,
+	}
+}
+
+func kindPayload(k *arch.Kind, verbose bool) any {
+	if verbose {
+		return k
+	}
+	return slimKindAck{Key: k.Key, ProjectID: k.ProjectID, Label: k.Label}
 }
 
 func slimEdgeList(es []arch.EdgeView, verbose bool) any {
