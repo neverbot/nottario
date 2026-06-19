@@ -193,7 +193,8 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
        created_by_user_id, created_by_token_id,
-       created_at, updated_at, cycle_id
+       created_at, updated_at, cycle_id,
+       edited_at, edited_by_user_id
 FROM tasks
 WHERE id = $1
 `
@@ -216,6 +217,8 @@ type GetTaskRow struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CycleID          uuid.UUID
+	EditedAt         pgtype.Timestamptz
+	EditedByUserID   *uuid.UUID
 }
 
 func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error) {
@@ -239,6 +242,8 @@ func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CycleID,
+		&i.EditedAt,
+		&i.EditedByUserID,
 	)
 	return i, err
 }
@@ -856,7 +861,8 @@ RETURNING id, project_id, parent_task_id, type, title, description_md,
           state, priority, assignee_user_id, target_role_id,
           actual_start, actual_end,
           created_by_user_id, created_by_token_id,
-          created_at, updated_at, cycle_id
+          created_at, updated_at, cycle_id,
+          edited_at, edited_by_user_id
 `
 
 type UpdateTaskFieldsParams struct {
@@ -889,6 +895,8 @@ type UpdateTaskFieldsRow struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CycleID          uuid.UUID
+	EditedAt         pgtype.Timestamptz
+	EditedByUserID   *uuid.UUID
 }
 
 // Optional fields: title, description, type, priority, assignee_user_id,
@@ -926,6 +934,117 @@ func (q *Queries) UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CycleID,
+		&i.EditedAt,
+		&i.EditedByUserID,
+	)
+	return i, err
+}
+
+const updateTaskText = `-- name: UpdateTaskText :one
+UPDATE tasks SET
+  title = COALESCE($2::text, title),
+  description_md = COALESCE($3::text, description_md),
+  target_role_id = CASE
+    WHEN $4::bool THEN NULL
+    WHEN $5::uuid IS NOT NULL THEN $5::uuid
+    ELSE target_role_id
+  END,
+  edited_at = CASE
+    WHEN ($2::text IS NOT NULL AND $2::text <> title)
+      OR ($3::text IS NOT NULL AND $3::text <> description_md)
+      THEN now()
+    ELSE edited_at
+  END,
+  edited_by_user_id = CASE
+    WHEN ($2::text IS NOT NULL AND $2::text <> title)
+      OR ($3::text IS NOT NULL AND $3::text <> description_md)
+      THEN $6::uuid
+    ELSE edited_by_user_id
+  END,
+  updated_at = now()
+WHERE id = $1
+  AND ($7::timestamptz IS NULL
+       OR updated_at = $7::timestamptz)
+RETURNING id, project_id, parent_task_id, type, title, description_md,
+          state, priority, assignee_user_id, target_role_id,
+          actual_start, actual_end,
+          created_by_user_id, created_by_token_id,
+          created_at, updated_at, cycle_id,
+          edited_at, edited_by_user_id
+`
+
+type UpdateTaskTextParams struct {
+	ID                uuid.UUID
+	Title             pgtype.Text
+	DescriptionMd     pgtype.Text
+	UnsetTargetRole   bool
+	TargetRoleID      *uuid.UUID
+	CallerUserID      uuid.UUID
+	ExpectedUpdatedAt pgtype.Timestamptz
+}
+
+type UpdateTaskTextRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	ParentTaskID     *uuid.UUID
+	Type             string
+	Title            string
+	DescriptionMd    string
+	State            string
+	Priority         int32
+	AssigneeUserID   *uuid.UUID
+	TargetRoleID     *uuid.UUID
+	ActualStart      pgtype.Timestamptz
+	ActualEnd        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	CycleID          uuid.UUID
+	EditedAt         pgtype.Timestamptz
+	EditedByUserID   *uuid.UUID
+}
+
+// Human-edit path for title / description / target_role with
+// optimistic concurrency. The caller echoes the `updated_at` it saw;
+// if the row has moved on since, the WHERE clause matches nothing and
+// the caller treats it as a 409 (return value is empty).
+//
+// A NULL `expected_updated_at` skips the check (admin tooling /
+// migration use-case). Sets edited_at + edited_by_user_id whenever
+// title or description actually change; role-only edits don't count
+// as a "text edit" so they don't bump the edited marker.
+func (q *Queries) UpdateTaskText(ctx context.Context, arg UpdateTaskTextParams) (UpdateTaskTextRow, error) {
+	row := q.db.QueryRow(ctx, updateTaskText,
+		arg.ID,
+		arg.Title,
+		arg.DescriptionMd,
+		arg.UnsetTargetRole,
+		arg.TargetRoleID,
+		arg.CallerUserID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i UpdateTaskTextRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ParentTaskID,
+		&i.Type,
+		&i.Title,
+		&i.DescriptionMd,
+		&i.State,
+		&i.Priority,
+		&i.AssigneeUserID,
+		&i.TargetRoleID,
+		&i.ActualStart,
+		&i.ActualEnd,
+		&i.CreatedByUserID,
+		&i.CreatedByTokenID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CycleID,
+		&i.EditedAt,
+		&i.EditedByUserID,
 	)
 	return i, err
 }

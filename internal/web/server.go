@@ -156,6 +156,9 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}/dependencies/{dep_id}", guard(RemoveDependencyHandler(tasks)))
 	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/commits", guard(LinkCommitHandler(tasks)))
 	mux.Handle("POST /api/projects/{id}/tasks/{task_id}/comments", guard(AddCommentHandler(tasks)))
+	mux.Handle("PATCH /api/projects/{id}/tasks/{task_id}/text", guard(EditTaskTextHandler(tasks)))
+	mux.Handle("PATCH /api/projects/{id}/tasks/{task_id}/comments/{comment_id}", guard(EditCommentHandler(tasks)))
+	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}/comments/{comment_id}", guard(DeleteCommentHandler(tasks)))
 
 	return mux
 }

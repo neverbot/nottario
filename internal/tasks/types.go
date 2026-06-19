@@ -53,6 +53,8 @@ type Task struct {
 	CreatedAt        time.Time        `json:"created_at"`
 	UpdatedAt        time.Time        `json:"updated_at"`
 	CycleID          uuid.UUID        `json:"cycle_id"`
+	EditedAt         *time.Time       `json:"edited_at,omitempty"`
+	EditedByUserID   *uuid.UUID       `json:"edited_by_user_id,omitempty"`
 }
 
 // Dependency is the directed relation "task depends on another task".
@@ -72,13 +74,16 @@ type CommitLink struct {
 
 // Comment is a markdown note attached to a task.
 type Comment struct {
-	ID            uuid.UUID        `json:"id"`
-	TaskID        uuid.UUID        `json:"task_id"`
-	AuthorUserID  *uuid.UUID       `json:"author_user_id"`
-	AuthorTokenID *uuid.UUID       `json:"-"`
-	ViaMCP        *identity.ViaMCP `json:"via_mcp,omitempty"`
-	BodyMD        string           `json:"body"`
-	CreatedAt     time.Time        `json:"created_at"`
+	ID             uuid.UUID        `json:"id"`
+	TaskID         uuid.UUID        `json:"task_id"`
+	AuthorUserID   *uuid.UUID       `json:"author_user_id"`
+	AuthorTokenID  *uuid.UUID       `json:"-"`
+	ViaMCP         *identity.ViaMCP `json:"via_mcp,omitempty"`
+	BodyMD         string           `json:"body"`
+	CreatedAt      time.Time        `json:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at"`
+	EditedAt       *time.Time       `json:"edited_at,omitempty"`
+	EditedByUserID *uuid.UUID       `json:"edited_by_user_id,omitempty"`
 }
 
 // ValidType returns true when t is one of the recognised type values.

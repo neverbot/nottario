@@ -143,6 +143,8 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Task, error) {
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 		CycleID:          row.CycleID,
+		EditedAt:         timestampPtr(row.EditedAt),
+		EditedByUserID:   row.EditedByUserID,
 	}
 	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
 		return nil, err
@@ -428,6 +430,94 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParam
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 		CycleID:          row.CycleID,
+		EditedAt:         timestampPtr(row.EditedAt),
+		EditedByUserID:   row.EditedByUserID,
+	}
+	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// ErrConflict signals that an optimistic-concurrency check failed —
+// the row the caller tried to edit moved on since they last loaded
+// it. Surfaces as HTTP 409 in the web layer.
+var ErrConflict = errors.New("stale: row was edited concurrently")
+
+// UpdateTextParams carries the inputs for UpdateText. expected_updated_at
+// is required (zero means "no check", reserved for admin tooling).
+type UpdateTextParams struct {
+	Title             *string
+	DescriptionMD     *string
+	TargetRoleID      *uuid.UUID
+	UnsetTargetRole   bool
+	CallerUserID      uuid.UUID
+	ExpectedUpdatedAt time.Time
+}
+
+// UpdateText edits the title / description / target_role of a task with
+// optimistic concurrency. Returns ErrConflict if expected_updated_at
+// doesn't match the row's current updated_at (someone else moved the
+// row). Sets edited_at / edited_by_user_id when the title or description
+// actually changes.
+func UpdateText(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateTextParams) (*Task, error) {
+	if p.Title != nil {
+		t := html.UnescapeString(*p.Title)
+		p.Title = &t
+	}
+	if p.DescriptionMD != nil {
+		d := html.UnescapeString(*p.DescriptionMD)
+		p.DescriptionMD = &d
+	}
+	if p.TargetRoleID != nil {
+		q := dbq.New(pool)
+		projectID, err := q.ProjectIDForTask(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateTaskAssignments(ctx, pool, projectID, p.TargetRoleID, nil); err != nil {
+			return nil, err
+		}
+	}
+	expected := pgtype.Timestamptz{}
+	if !p.ExpectedUpdatedAt.IsZero() {
+		expected = pgtype.Timestamptz{Time: p.ExpectedUpdatedAt, Valid: true}
+	}
+	row, err := dbq.New(pool).UpdateTaskText(ctx, dbq.UpdateTaskTextParams{
+		ID:                id,
+		Title:             pgtype.Text{Valid: p.Title != nil, String: derefString(p.Title)},
+		DescriptionMd:     pgtype.Text{Valid: p.DescriptionMD != nil, String: derefString(p.DescriptionMD)},
+		UnsetTargetRole:   p.UnsetTargetRole,
+		TargetRoleID:      p.TargetRoleID,
+		CallerUserID:      p.CallerUserID,
+		ExpectedUpdatedAt: expected,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrConflict
+	}
+	if err != nil {
+		return nil, err
+	}
+	t := &Task{
+		ID:               row.ID,
+		ProjectID:        row.ProjectID,
+		ParentTaskID:     row.ParentTaskID,
+		Type:             Type(row.Type),
+		Title:            row.Title,
+		DescriptionMD:    row.DescriptionMd,
+		State:            State(row.State),
+		Priority:         int(row.Priority),
+		AssigneeUserID:   row.AssigneeUserID,
+		TargetRoleID:     row.TargetRoleID,
+		ActualStart:      timestampPtr(row.ActualStart),
+		ActualEnd:        timestampPtr(row.ActualEnd),
+		CreatedByUserID:  row.CreatedByUserID,
+		CreatedByTokenID: row.CreatedByTokenID,
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+		CycleID:          row.CycleID,
+		EditedAt:         timestampPtr(row.EditedAt),
+		EditedByUserID:   row.EditedByUserID,
 	}
 	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
 		return nil, err

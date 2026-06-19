@@ -46,6 +46,7 @@ type Querier interface {
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
 	DeleteSessionByID(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteTaskComment(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
 	ExtendArchLock(ctx context.Context, arg ExtendArchLockParams) error
 	GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow, error)
@@ -96,6 +97,7 @@ type Querier interface {
 	// query is scoped to a single project to keep the result deterministic
 	// when the same prefix matches across projects.
 	GetTaskChipByShortID(ctx context.Context, arg GetTaskChipByShortIDParams) (GetTaskChipByShortIDRow, error)
+	GetTaskComment(ctx context.Context, id uuid.UUID) (GetTaskCommentRow, error)
 	GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error)
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
@@ -115,7 +117,7 @@ type Querier interface {
 	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) (uuid.UUID, error)
 	InsertSession(ctx context.Context, arg InsertSessionParams) (InsertSessionRow, error)
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
-	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (TaskComment, error)
+	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (InsertTaskCommentRow, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error)
 	// Lightweight roster across every project, deduped (a user with
 	// multiple roles in the same project appears once). Used by the
@@ -157,7 +159,7 @@ type Querier interface {
 	// overrides; returned paths still include the 'global/skills/' prefix
 	// and the caller trims it.
 	ListSkillOverridePaths(ctx context.Context, pathPrefix string) ([]string, error)
-	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]TaskComment, error)
+	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommentsRow, error)
 	ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommitsRow, error)
 	// Optional filters: state, type, assignee, target_role, parent_task.
 	// include_children=false (default) restricts to parent IS NULL UNLESS
@@ -239,11 +241,28 @@ type Querier interface {
 	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error
 	UpdateProjectMCPPageSize(ctx context.Context, arg UpdateProjectMCPPageSizeParams) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (UpdateProjectRoleRow, error)
+	// Edits a comment body with optimistic concurrency. Returns the updated
+	// row when the expected `updated_at` matches the row's current value;
+	// returns no rows otherwise so the caller can answer 409.
+	//
+	// Sets edited_at / edited_by_user_id whenever the body actually
+	// changes (a no-op edit doesn't paint the row as edited).
+	UpdateTaskComment(ctx context.Context, arg UpdateTaskCommentParams) (UpdateTaskCommentRow, error)
 	// Optional fields: title, description, type, priority, assignee_user_id,
 	// target_role_id. assignee/target_role have an explicit "unset"
 	// boolean because COALESCE alone can't distinguish "leave alone" from
 	// "set to NULL".
 	UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsParams) (UpdateTaskFieldsRow, error)
+	// Human-edit path for title / description / target_role with
+	// optimistic concurrency. The caller echoes the `updated_at` it saw;
+	// if the row has moved on since, the WHERE clause matches nothing and
+	// the caller treats it as a 409 (return value is empty).
+	//
+	// A NULL `expected_updated_at` skips the check (admin tooling /
+	// migration use-case). Sets edited_at + edited_by_user_id whenever
+	// title or description actually change; role-only edits don't count
+	// as a "text edit" so they don't bump the edited marker.
+	UpdateTaskText(ctx context.Context, arg UpdateTaskTextParams) (UpdateTaskTextRow, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
 	UpsertArchEdge(ctx context.Context, arg UpsertArchEdgeParams) (UpsertArchEdgeRow, error)
 	UpsertArchKind(ctx context.Context, arg UpsertArchKindParams) (ArchNodeKind, error)

@@ -226,15 +226,20 @@ type Task struct {
 	UpdatedAt        pgtype.Timestamptz
 	SearchVector     interface{}
 	CycleID          uuid.UUID
+	EditedAt         pgtype.Timestamptz
+	EditedByUserID   *uuid.UUID
 }
 
 type TaskComment struct {
-	ID            uuid.UUID
-	TaskID        uuid.UUID
-	AuthorUserID  *uuid.UUID
-	AuthorTokenID *uuid.UUID
-	BodyMd        string
-	CreatedAt     pgtype.Timestamptz
+	ID             uuid.UUID
+	TaskID         uuid.UUID
+	AuthorUserID   *uuid.UUID
+	AuthorTokenID  *uuid.UUID
+	BodyMd         string
+	CreatedAt      pgtype.Timestamptz
+	EditedAt       pgtype.Timestamptz
+	EditedByUserID *uuid.UUID
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type TaskCommit struct {

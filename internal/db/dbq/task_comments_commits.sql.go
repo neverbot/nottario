@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteTaskComment = `-- name: DeleteTaskComment :execrows
+DELETE FROM task_comments WHERE id = $1
+`
+
+func (q *Queries) DeleteTaskComment(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTaskComment, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteTaskCommit = `-- name: DeleteTaskCommit :exec
 DELETE FROM task_commits WHERE task_id = $1 AND repo = $2 AND sha = $3
 `
@@ -27,10 +39,47 @@ func (q *Queries) DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitPara
 	return err
 }
 
+const getTaskComment = `-- name: GetTaskComment :one
+SELECT id, task_id, author_user_id, author_token_id, body_md,
+       created_at, updated_at, edited_at, edited_by_user_id
+FROM task_comments
+WHERE id = $1
+`
+
+type GetTaskCommentRow struct {
+	ID             uuid.UUID
+	TaskID         uuid.UUID
+	AuthorUserID   *uuid.UUID
+	AuthorTokenID  *uuid.UUID
+	BodyMd         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	EditedAt       pgtype.Timestamptz
+	EditedByUserID *uuid.UUID
+}
+
+func (q *Queries) GetTaskComment(ctx context.Context, id uuid.UUID) (GetTaskCommentRow, error) {
+	row := q.db.QueryRow(ctx, getTaskComment, id)
+	var i GetTaskCommentRow
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.AuthorUserID,
+		&i.AuthorTokenID,
+		&i.BodyMd,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EditedAt,
+		&i.EditedByUserID,
+	)
+	return i, err
+}
+
 const insertTaskComment = `-- name: InsertTaskComment :one
 INSERT INTO task_comments (task_id, author_user_id, author_token_id, body_md)
 VALUES ($1, $2, $3, $4)
-RETURNING id, task_id, author_user_id, author_token_id, body_md, created_at
+RETURNING id, task_id, author_user_id, author_token_id, body_md,
+          created_at, updated_at, edited_at, edited_by_user_id
 `
 
 type InsertTaskCommentParams struct {
@@ -40,14 +89,26 @@ type InsertTaskCommentParams struct {
 	BodyMd        string
 }
 
-func (q *Queries) InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (TaskComment, error) {
+type InsertTaskCommentRow struct {
+	ID             uuid.UUID
+	TaskID         uuid.UUID
+	AuthorUserID   *uuid.UUID
+	AuthorTokenID  *uuid.UUID
+	BodyMd         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	EditedAt       pgtype.Timestamptz
+	EditedByUserID *uuid.UUID
+}
+
+func (q *Queries) InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (InsertTaskCommentRow, error) {
 	row := q.db.QueryRow(ctx, insertTaskComment,
 		arg.TaskID,
 		arg.AuthorUserID,
 		arg.AuthorTokenID,
 		arg.BodyMd,
 	)
-	var i TaskComment
+	var i InsertTaskCommentRow
 	err := row.Scan(
 		&i.ID,
 		&i.TaskID,
@@ -55,26 +116,42 @@ func (q *Queries) InsertTaskComment(ctx context.Context, arg InsertTaskCommentPa
 		&i.AuthorTokenID,
 		&i.BodyMd,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EditedAt,
+		&i.EditedByUserID,
 	)
 	return i, err
 }
 
 const listTaskComments = `-- name: ListTaskComments :many
-SELECT id, task_id, author_user_id, author_token_id, body_md, created_at
+SELECT id, task_id, author_user_id, author_token_id, body_md,
+       created_at, updated_at, edited_at, edited_by_user_id
 FROM task_comments
 WHERE task_id = $1
 ORDER BY created_at ASC
 `
 
-func (q *Queries) ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]TaskComment, error) {
+type ListTaskCommentsRow struct {
+	ID             uuid.UUID
+	TaskID         uuid.UUID
+	AuthorUserID   *uuid.UUID
+	AuthorTokenID  *uuid.UUID
+	BodyMd         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	EditedAt       pgtype.Timestamptz
+	EditedByUserID *uuid.UUID
+}
+
+func (q *Queries) ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommentsRow, error) {
 	rows, err := q.db.Query(ctx, listTaskComments, taskID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []TaskComment{}
+	items := []ListTaskCommentsRow{}
 	for rows.Next() {
-		var i TaskComment
+		var i ListTaskCommentsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TaskID,
@@ -82,6 +159,9 @@ func (q *Queries) ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]Tas
 			&i.AuthorTokenID,
 			&i.BodyMd,
 			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EditedAt,
+			&i.EditedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -132,6 +212,68 @@ func (q *Queries) ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]List
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateTaskComment = `-- name: UpdateTaskComment :one
+UPDATE task_comments SET
+  body_md = $2::text,
+  edited_at = CASE WHEN $2::text <> body_md THEN now() ELSE edited_at END,
+  edited_by_user_id = CASE WHEN $2::text <> body_md
+                           THEN $3::uuid
+                           ELSE edited_by_user_id END,
+  updated_at = now()
+WHERE id = $1
+  AND ($4::timestamptz IS NULL
+       OR updated_at = $4::timestamptz)
+RETURNING id, task_id, author_user_id, author_token_id, body_md,
+          created_at, updated_at, edited_at, edited_by_user_id
+`
+
+type UpdateTaskCommentParams struct {
+	ID                uuid.UUID
+	BodyMd            string
+	CallerUserID      uuid.UUID
+	ExpectedUpdatedAt pgtype.Timestamptz
+}
+
+type UpdateTaskCommentRow struct {
+	ID             uuid.UUID
+	TaskID         uuid.UUID
+	AuthorUserID   *uuid.UUID
+	AuthorTokenID  *uuid.UUID
+	BodyMd         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	EditedAt       pgtype.Timestamptz
+	EditedByUserID *uuid.UUID
+}
+
+// Edits a comment body with optimistic concurrency. Returns the updated
+// row when the expected `updated_at` matches the row's current value;
+// returns no rows otherwise so the caller can answer 409.
+//
+// Sets edited_at / edited_by_user_id whenever the body actually
+// changes (a no-op edit doesn't paint the row as edited).
+func (q *Queries) UpdateTaskComment(ctx context.Context, arg UpdateTaskCommentParams) (UpdateTaskCommentRow, error) {
+	row := q.db.QueryRow(ctx, updateTaskComment,
+		arg.ID,
+		arg.BodyMd,
+		arg.CallerUserID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i UpdateTaskCommentRow
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.AuthorUserID,
+		&i.AuthorTokenID,
+		&i.BodyMd,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.EditedAt,
+		&i.EditedByUserID,
+	)
+	return i, err
 }
 
 const upsertTaskCommit = `-- name: UpsertTaskCommit :exec

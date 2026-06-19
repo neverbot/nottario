@@ -3,7 +3,8 @@ SELECT id, project_id, parent_task_id, type, title, description_md,
        state, priority, assignee_user_id, target_role_id,
        actual_start, actual_end,
        created_by_user_id, created_by_token_id,
-       created_at, updated_at, cycle_id
+       created_at, updated_at, cycle_id,
+       edited_at, edited_by_user_id
 FROM tasks
 WHERE id = $1;
 
@@ -96,7 +97,49 @@ RETURNING id, project_id, parent_task_id, type, title, description_md,
           state, priority, assignee_user_id, target_role_id,
           actual_start, actual_end,
           created_by_user_id, created_by_token_id,
-          created_at, updated_at, cycle_id;
+          created_at, updated_at, cycle_id,
+          edited_at, edited_by_user_id;
+
+-- name: UpdateTaskText :one
+-- Human-edit path for title / description / target_role with
+-- optimistic concurrency. The caller echoes the `updated_at` it saw;
+-- if the row has moved on since, the WHERE clause matches nothing and
+-- the caller treats it as a 409 (return value is empty).
+--
+-- A NULL `expected_updated_at` skips the check (admin tooling /
+-- migration use-case). Sets edited_at + edited_by_user_id whenever
+-- title or description actually change; role-only edits don't count
+-- as a "text edit" so they don't bump the edited marker.
+UPDATE tasks SET
+  title = COALESCE(sqlc.narg('title')::text, title),
+  description_md = COALESCE(sqlc.narg('description_md')::text, description_md),
+  target_role_id = CASE
+    WHEN sqlc.arg('unset_target_role')::bool THEN NULL
+    WHEN sqlc.narg('target_role_id')::uuid IS NOT NULL THEN sqlc.narg('target_role_id')::uuid
+    ELSE target_role_id
+  END,
+  edited_at = CASE
+    WHEN (sqlc.narg('title')::text IS NOT NULL AND sqlc.narg('title')::text <> title)
+      OR (sqlc.narg('description_md')::text IS NOT NULL AND sqlc.narg('description_md')::text <> description_md)
+      THEN now()
+    ELSE edited_at
+  END,
+  edited_by_user_id = CASE
+    WHEN (sqlc.narg('title')::text IS NOT NULL AND sqlc.narg('title')::text <> title)
+      OR (sqlc.narg('description_md')::text IS NOT NULL AND sqlc.narg('description_md')::text <> description_md)
+      THEN sqlc.arg('caller_user_id')::uuid
+    ELSE edited_by_user_id
+  END,
+  updated_at = now()
+WHERE id = $1
+  AND (sqlc.narg('expected_updated_at')::timestamptz IS NULL
+       OR updated_at = sqlc.narg('expected_updated_at')::timestamptz)
+RETURNING id, project_id, parent_task_id, type, title, description_md,
+          state, priority, assignee_user_id, target_role_id,
+          actual_start, actual_end,
+          created_by_user_id, created_by_token_id,
+          created_at, updated_at, cycle_id,
+          edited_at, edited_by_user_id;
 
 -- name: NextEligibleTask :one
 -- Preview: returns the next pickable task without claiming it. Same
