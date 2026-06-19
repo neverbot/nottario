@@ -133,9 +133,23 @@ Rows are **slim** by default: `{id, slug, parent_id, kind, name, position, updat
 
 ### `nottario.arch.get_node`
 
-Returns a node plus its **direct children**, **all incident edges**
-(in and out), and any attached docs/tasks. Use it after picking a
-node from `list_nodes` to dive in.
+Returns the base node (full shape, with description) and, opt-in,
+its **direct children**, **incident edges** (in and out) and attached
+docs/tasks:
+
+```text
+nottario.arch.get_node {
+  project_id, slug,
+  include_children: true,
+  include_edges: true,
+  include_links: true,
+}
+```
+
+Each `include_*` flag defaults to `false` — children and edges in
+particular can be a non-trivial slice of the graph; only ask for what
+your next decision needs. Children and edges come back in the same
+slim shape as `list_nodes` / `list_edges`.
 
 ### `nottario.arch.upsert_node`
 

@@ -243,3 +243,67 @@ func TestMCP_Arch_ListSlimDefaults(t *testing.T) {
 		t.Errorf("verbose list_edges must surface description, got rows=%+v", erows)
 	}
 }
+
+// TestMCP_Arch_GetNodeIncludeDefaults verifies get_node returns the
+// base node only by default; children / edges / links surface when the
+// matching include_* flag is set.
+func TestMCP_Arch_GetNodeIncludeDefaults(t *testing.T) {
+	f := newMCPFixture(t, 13323, "arch-get-node-include")
+
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id": f.projectID,
+		"slug":       "root", "kind": "system", "name": "Root",
+	}, nil)
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id": f.projectID,
+		"slug":       "root.child", "kind": "service", "name": "Child",
+		"parent_slug": "root",
+	}, nil)
+	f.callJSON(t, "nottario.arch.upsert_node", map[string]any{
+		"project_id": f.projectID,
+		"slug":       "other", "kind": "external", "name": "Other",
+	}, nil)
+	f.callJSON(t, "nottario.arch.upsert_edge", map[string]any{
+		"project_id": f.projectID,
+		"from_slug":  "root", "to_slug": "other", "kind": "uses",
+	}, nil)
+	f.callJSON(t, "nottario.arch.link_doc", map[string]any{
+		"project_id": f.projectID,
+		"slug":       "root", "doc_path": "context/root.md",
+	}, nil)
+
+	// Default get_node: base node only.
+	var def map[string]any
+	f.callJSON(t, "nottario.arch.get_node", map[string]any{
+		"project_id": f.projectID, "slug": "root",
+	}, &def)
+	if _, ok := def["node"]; !ok {
+		t.Errorf("get_node default must include 'node', got %+v", def)
+	}
+	for _, k := range []string{"children", "edges", "links"} {
+		if _, ok := def[k]; ok {
+			t.Errorf("get_node default must omit %q, got %+v", k, def)
+		}
+	}
+
+	// All include_* flags surface their collections.
+	var full map[string]any
+	f.callJSON(t, "nottario.arch.get_node", map[string]any{
+		"project_id": f.projectID, "slug": "root",
+		"include_children": true,
+		"include_edges":    true,
+		"include_links":    true,
+	}, &full)
+	children, _ := full["children"].([]any)
+	if len(children) != 1 {
+		t.Errorf("include_children must surface root.child, got %+v", children)
+	}
+	edges, _ := full["edges"].([]any)
+	if len(edges) != 1 {
+		t.Errorf("include_edges must surface the uses edge, got %+v", edges)
+	}
+	links, _ := full["links"].([]any)
+	if len(links) != 1 {
+		t.Errorf("include_links must surface the doc link, got %+v", links)
+	}
+}

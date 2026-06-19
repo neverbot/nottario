@@ -41,7 +41,10 @@ type archKindDeleteInput struct {
 
 type archNodeRefInput struct {
 	archProjectInput
-	Slug string `json:"slug" jsonschema:"node slug"`
+	Slug            string `json:"slug" jsonschema:"node slug"`
+	IncludeChildren bool   `json:"include_children,omitempty" jsonschema:"get_node: include children (default off)"`
+	IncludeEdges    bool   `json:"include_edges,omitempty" jsonschema:"get_node: include incident edges (default off)"`
+	IncludeLinks    bool   `json:"include_links,omitempty" jsonschema:"get_node: include doc/task links (default off)"`
 }
 
 type archNodeListInput struct {
@@ -174,7 +177,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.get_node",
-		Description: "Fetches a node with its children, incident edges and linked docs/tasks.",
+		Description: "Fetches a node with its description. include_children / include_edges / include_links opt in to the related collections (each default off — they can be large).",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeRefInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -187,15 +190,20 @@ func registerArch(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		children, _ := arch.ListNodes(ctx, d.Pool, pid, in.Slug, false)
-		edges, _ := arch.ListEdges(ctx, d.Pool, pid, arch.EdgeFilter{NodeSlug: in.Slug})
-		links, _ := arch.ListLinks(ctx, d.Pool, pid, in.Slug)
-		return jsonResult(map[string]any{
-			"node":     n,
-			"children": children,
-			"edges":    edges,
-			"links":    links,
-		})
+		out := map[string]any{"node": n}
+		if in.IncludeChildren {
+			children, _ := arch.ListNodes(ctx, d.Pool, pid, in.Slug, false)
+			out["children"] = slimNodeList(children, false)
+		}
+		if in.IncludeEdges {
+			edges, _ := arch.ListEdges(ctx, d.Pool, pid, arch.EdgeFilter{NodeSlug: in.Slug})
+			out["edges"] = slimEdgeList(edges, false)
+		}
+		if in.IncludeLinks {
+			links, _ := arch.ListLinks(ctx, d.Pool, pid, in.Slug)
+			out["links"] = links
+		}
+		return jsonResult(out)
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
