@@ -129,7 +129,7 @@ Lists nodes. With no filter, returns every node. Useful filters:
 - `root_only=true` — only top-level nodes (typical first call).
 - `parent_slug="backend"` — direct children of one node.
 
-Rows are **slim** by default: `{id, slug, parent_id, kind, name, position, updated_at}`. The description, metadata, linked_repo and linked_path are omitted so a tree walk doesn't pay tokens for prose. Call `arch.get_node` for the full view, or pass `verbose: true` on the list call when you really need the description echoed per row.
+Rows are **slim** by default: `{id, slug, parent_id, kind, name, position, updated_at}`. The description, metadata, linked_repo and linked_path are omitted so a tree walk stays small. Call `arch.get_node` for the full view, or pass `verbose: true` on the list call when you really need the description echoed per row.
 
 ### `nottario.arch.get_node`
 
@@ -358,10 +358,10 @@ arch.list_nodes { root_only: true }
 If the top-level set surprises you (missing a service you know
 exists, contains something deprecated), fix it.
 
-## Token discipline
+## Response discipline
 
 The arch surface follows the same slim-by-default discipline as tasks.
-Keep your traffic small.
+Keep your responses small.
 
 **`list_nodes` and `list_edges` are slim by default.** Rows carry only
 the keys you need to keep walking the graph (`id`, `slug`, `parent_id`,
@@ -373,9 +373,9 @@ when you genuinely need the full shape (rare during a walk).
 
 **`get_node` opts in to children/edges/links.** The base node is
 returned in full (description included — that's why you called `get`)
-but the related collections cost extra tokens and are off by default.
-Pass `include_children: true`, `include_edges: true`, `include_links:
-true` only for the ones you actually need next.
+but the related collections are off by default. Pass
+`include_children: true`, `include_edges: true`, `include_links: true`
+only for the ones you actually need next.
 
 **Mutations return a slim ack by default.** `upsert_node`,
 `upsert_edge`, `move_node` and `upsert_kind` echo back only the keys

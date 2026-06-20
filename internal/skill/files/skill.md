@@ -61,7 +61,7 @@ The loop when the human says "carry on" or "do the next thing":
    in parallel. Returns `{task: null}` when nothing is eligible.
    **Do not** add a comment like "starting this" / "claimed" / "I'm
    on it" — the `state=doing` IS the record. Empty pickup comments
-   cost tokens on every future read of the task.
+   add noise every future reader has to skim past.
 2. **Do the work** in the local repo. Nottario does not store code.
 3. **Close in one call.** `nottario.tasks.close { state: 'done',
    comment: '...', commits: [{repo, sha}, ...] }` runs the closing
@@ -173,12 +173,12 @@ feature", "Block this until X is done").
   Short comments are cheap; missing context is expensive.
 - **Never `set_state done` if the task is not actually finished.** Use
   a comment to record mid-way state instead.
-- **Respect the token budget.** MCP responses are SLIM by default
+- **Keep responses small.** MCP responses are SLIM by default
   (mutations omit description / body, `tasks.get` omits deps/commits/
   comments unless you ask). Closing comments are one line, not a
   paragraph — the commit message and the diff carry the detail.
   Don't re-`tasks.get` what you already have in memory; don't re-read
-  a skill page this session. See `domains/tasks.md` → "Token
+  a skill page this session. See `domains/tasks.md` → "Response
   discipline" for the full rules.
 
 ## Deeper guides
@@ -263,8 +263,8 @@ on the next install call, if it matches what you already have on
 disk, skip the download entirely.
 
 The bundle content **never flows through your MCP response context**
-— only the URL + descriptor does. That's the design: the agent reads
-~200 tokens, the bytes go straight from server to disk.
+— only the URL + descriptor does. The bytes go straight from server
+to disk.
 
 ## Overrides
 

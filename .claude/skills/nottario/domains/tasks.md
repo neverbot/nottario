@@ -528,10 +528,10 @@ nottario.tasks.add_dependency {
 
 `tasks.next` will then skip B until A is `done`.
 
-## Token discipline
+## Response discipline
 
-Every byte the MCP returns to you is billed to the human running
-this session. Keep your traffic small.
+Keep MCP responses small. Default to the slim shapes; opt in to
+heavier ones deliberately.
 
 **Default responses are slim.** As of the current build, the high-
 frequency mutations (`tasks.create`, `tasks.update`, `tasks.set_state`,
@@ -563,8 +563,8 @@ agent will re-read.
 some agents reflexively add a comment like "starting this", "claimed",
 "picking it up", "I'm on it". Do not. The `state=doing` IS the record
 that pickup happened; the assignee field carries who. The empty
-comment adds no signal and costs tokens on every future read of the
-task. Comment only when you have something a future reader actually
+comment adds no signal and is noise every future reader has to skim
+past. Comment only when you have something a future reader actually
 needs: a closing summary, a mid-work decision you had to make, a
 discovered blocker.
 
@@ -573,8 +573,8 @@ discovered blocker.
 with one response. The slim ack is `{task, comment_id?,
 linked_commit_count}` — you don't pay for repeated Task echoes between
 the three legacy calls. Falling back to the three-call form is only
-worth it when the work was so big you genuinely need to write the
-comment in stages.
+worth it when the work was big enough that the closing comment
+genuinely needs to be written in stages.
 
 **Don't re-`tasks.get` what you already know.** If the previous tool
 call returned a task with `id` X and `updated_at` Y, don't fetch it
@@ -587,7 +587,7 @@ much as reading it once and learns nothing new.
 
 **Pass `include_*` to `tasks.get` deliberately.** Pulling all three
 (deps + commits + comments) on a feature parent with many children
-can return tens of KB. Ask for only what your next decision needs.
+returns a large payload. Ask for only what your next decision needs.
 
 **`tasks.list` returns only open tasks by default.** Closed rows
 (state `done` or `wont_do`) accumulate forever and would dominate

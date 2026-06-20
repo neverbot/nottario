@@ -66,7 +66,7 @@ parent's cycle_id. Move the whole feature instead.
 
 `nottario.cycles.end { project_id, next_name? }`. Requires owner.
 
-## Token discipline
+## Response discipline
 
 Cycles is a small domain — most of its discipline comes from how
 **other** tools default to the active cycle.
@@ -74,8 +74,8 @@ Cycles is a small domain — most of its discipline comes from how
 **Don't pass `cycle_id` when you mean "current".** `tasks.list`,
 `tasks.next`, `tasks.claim_next` and `tasks.list_priorities` all
 default to the project's active cycle when `cycle_id` is omitted.
-Sending it explicitly costs you ~50 tokens of uuid + the round-trip
-to `cycles.current` you used to look it up. Just omit it.
+Sending it explicitly only adds noise to the call and likely a
+round-trip to `cycles.current` you used to look it up. Just omit it.
 
 **`cycles.current` once per session, max.** The active cycle changes
 at most once per sprint cadence (weeks). Cache its id locally if you
