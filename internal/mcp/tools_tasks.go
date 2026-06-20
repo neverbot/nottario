@@ -289,7 +289,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.claim_next",
-		Description: "Atomically picks the next eligible task and assigns it to the caller (state=doing). Multi-agent safe via SELECT ... FOR UPDATE SKIP LOCKED. Returns {task: null} when nothing is eligible. Slim shape by default.",
+		Description: "Atomic claim of the next eligible task (assignee=caller, state=doing). Multi-agent safe. {task: null} when nothing eligible. Slim shape.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksNextInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -329,7 +329,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.claim",
-		Description: "Atomically claims a specific task by id (assignee=caller, state=doing). Returns the task on success or {error, reason, current_state, current_assignee_user_id, preconditions?, pending_children_count?} on conflict. Idempotent. Slim shape by default.",
+		Description: "Atomic claim by id (assignee=caller, state=doing). Returns task on success or {error, reason, current_state, ...} on conflict. Idempotent. Slim shape by default.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -506,7 +506,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.set_state",
-		Description: "Transitions between 'todo','doing','done','wont_do' and manages actual_start/end. done↔wont_do is refused (route via todo). On precondition failure returns {error, preconditions}. Slim shape by default.",
+		Description: "Transitions state; manages actual_start/end. done↔wont_do refused (route via todo). Precondition failure returns {error, preconditions}. Slim shape. Prefer tasks.close for terminal transitions.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksStateInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -539,7 +539,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.close",
-		Description: "Atomic close: attaches commits, adds a closing comment and transitions state in one transaction. state defaults to 'done' ('wont_do' also accepted). On precondition failure rolls back the comment and links too. Slim ack {id, state, updated_at, comment_id?, linked_commit_count}; verbose=true returns the full Task.",
+		Description: "Atomic close: commit links + closing comment + state (default 'done', also 'wont_do') in one tx. Precondition failure rolls everything back. Ack: {task, comment_id?, linked_commit_count}. Prefer over the legacy 3-call pattern.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCloseInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {

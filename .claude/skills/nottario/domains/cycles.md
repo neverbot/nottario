@@ -65,3 +65,30 @@ parent's cycle_id. Move the whole feature instead.
 ### "End this sprint"
 
 `nottario.cycles.end { project_id, next_name? }`. Requires owner.
+
+## Token discipline
+
+Cycles is a small domain — most of its discipline comes from how
+**other** tools default to the active cycle.
+
+**Don't pass `cycle_id` when you mean "current".** `tasks.list`,
+`tasks.next`, `tasks.claim_next` and `tasks.list_priorities` all
+default to the project's active cycle when `cycle_id` is omitted.
+Sending it explicitly costs you ~50 tokens of uuid + the round-trip
+to `cycles.current` you used to look it up. Just omit it.
+
+**`cycles.current` once per session, max.** The active cycle changes
+at most once per sprint cadence (weeks). Cache its id locally if you
+need to mention it in prose; do not re-fetch each turn.
+
+**Pass `cycle_id: "all"` deliberately.** It disables the active-cycle
+default and lets `tasks.list` walk every cycle the project ever had.
+Useful for "find this task somewhere in the history" but expensive on
+long-lived projects — always combine with `state` or `assignee_user_id`
+to keep the result set small.
+
+**`cycles.end` is high-impact and rare.** One call closes the cycle,
+moves in-flight work and opens the next. The response carries the
+`{closed, next}` pair — that's a single tool call's worth of cost for
+something that happens weekly. No special discipline needed beyond
+"don't call it speculatively".

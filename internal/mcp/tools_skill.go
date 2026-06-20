@@ -30,7 +30,7 @@ const skillInstallInstructions = "Fetch the zip from download_url using any HTTP
 func registerSkill(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.skill.install",
-		Description: "Returns a signed download URL for the Nottario skill bundle as a single zip, plus install instructions. The agent fetches the URL out-of-band with any HTTP tool it has, unzips into the client's skill directory, and restarts the client to pick up the new bundle. The bundle content does NOT flow through this tool's response — the URL is the payload.",
+		Description: "Returns {download_url, format, bundle_version, install} for the skill bundle zip. The agent fetches the URL (5-min HMAC TTL, no Authorization needed), unzips into install.preferred_dir, and reminds the human to restart their client. Bundle bytes never traverse the MCP response.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ SkillInstallInput) (*sdk.CallToolResult, any, error) {
 		version, err := skill.BundleVersion(ctx, d.Pool)
 		if err != nil {

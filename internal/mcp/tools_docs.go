@@ -85,7 +85,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.read",
-		Description: "Reads a single document by path. Returns title, kind, body markdown, frontmatter and current_version. Pass head_only=true to get just the frontmatter + a 400-char preview (with truncated and body_length fields) when you only want to check the document's identity.",
+		Description: "Reads a document: title, kind, body, frontmatter, current_version. head_only=true returns frontmatter + 400-char preview with {truncated, body_length} for catalogue checks.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsReadInput) (*sdk.CallToolResult, any, error) {
 		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
 		if err != nil {
@@ -144,7 +144,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.write",
-		Description: "Creates or updates a document. Pass expected_version = current_version from a prior docs.read (0 for new). Omitting it skips the OCC check and is deprecated. On conflict returns {error:'version_conflict', current_version}.",
+		Description: "Creates/updates a document. Pass expected_version = current_version (0 for new). Conflict returns {error:'version_conflict', current_version}. Omitting expected_version is deprecated.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsWriteInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {

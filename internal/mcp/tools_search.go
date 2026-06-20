@@ -52,7 +52,7 @@ func toSlimHits(hits []search.Hit) []slimHit {
 func registerSearch(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.search",
-		Description: "Full-text search across tasks, documents and arch nodes. Hits are slim by default (no raw description; highlighted snippet only). Default limit 20 (max 100). Pass verbose=true to keep the raw description fallback.",
+		Description: "Full-text search across tasks/docs/arch. Slim hits (snippet only, no raw description). Default limit 20, max 100. verbose=true keeps the raw description.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in searchInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {

@@ -212,7 +212,7 @@ func registerArch(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.arch.upsert_node",
-		Description: "Creates or updates a node keyed by (project_id, slug). Slug matches [a-z0-9][a-z0-9._-]*. kind must exist in arch.list_kinds. Slim ack by default — description not echoed; pass verbose=true for the full Node.",
+		Description: "Creates or updates a node keyed by (project_id, slug). Slug: [a-z0-9][a-z0-9._-]*. kind must exist in arch.list_kinds. Slim ack; verbose=true for full Node.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in archNodeUpsertInput) (*sdk.CallToolResult, any, error) {
 		pid, err := archProject(ctx, d, in.ProjectID)
 		if err != nil {

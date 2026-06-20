@@ -259,6 +259,41 @@ This `claude.md`-style sync flow is the same one called out in the
 project's own `claude.md` under **Document sync (local files ↔
 Nottario)** — keep them aligned if either changes.
 
+## Token discipline
+
+Every byte the MCP returns to you is billed to the human running the
+session. Keep your traffic small.
+
+**`docs.list` is body-less.** It returns only path / title / kind /
+description / current_version / updated_at per document — no
+markdown body. To get a body you `docs.read` the specific path.
+This is by design: a docs listing in a large project would otherwise
+be tens of KB of bodies you'll never look at.
+
+**`docs.read { head_only: true }` for catalogue checks.** When you
+only need to confirm "is this the doc I want" (right title, right
+kind, right frontmatter), pass `head_only: true`. The response then
+carries the frontmatter + the first 400 chars of `content` plus
+`truncated: true` / `body_length: N` markers. Switch to a full
+`docs.read` only when you've decided to actually work with the body.
+
+**Skip `verbose: true` on `docs.search`.** The slim hit already
+carries the highlighted snippet (`description_html`). The raw
+`description` fallback is for the web UI; in an agent context it's
+~400 chars of duplicated text per hit. Default limit is 20, max 100
+— raise it only when a wider sweep is genuinely needed.
+
+**Always pass `expected_version` on writes.** Not a token rule but a
+correctness one — without it the server falls back to last-writer-
+wins and may silently overwrite a concurrent change. The 4-byte
+integer you save by omitting it is not worth the recovery time when
+two agents clobber each other.
+
+**Don't re-`docs.read` what you just wrote.** `docs.write` returns
+the document including the new `current_version`. Cache that and pass
+it to the next write. Re-reading the same body you just sent buys
+nothing and pays the full body in tokens.
+
 ## Things you cannot do (today)
 
 - Edit a comment or version body retroactively.
