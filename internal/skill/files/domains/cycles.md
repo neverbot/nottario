@@ -66,7 +66,7 @@ parent's cycle_id. Move the whole feature instead.
 
 `nottario.cycles.end { project_id, next_name? }`. Requires owner.
 
-## Response discipline
+## Token discipline
 
 Cycles is a small domain — most of its discipline comes from how
 **other** tools default to the active cycle.

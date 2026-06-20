@@ -178,7 +178,7 @@ feature", "Block this until X is done").
   comments unless you ask). Closing comments are one line, not a
   paragraph — the commit message and the diff carry the detail.
   Don't re-`tasks.get` what you already have in memory; don't re-read
-  a skill page this session. See `domains/tasks.md` → "Response
+  a skill page this session. See `domains/tasks.md` → "Token
   discipline" for the full rules.
 
 ## Deeper guides

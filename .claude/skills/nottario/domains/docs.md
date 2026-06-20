@@ -259,7 +259,7 @@ This `claude.md`-style sync flow is the same one called out in the
 project's own `claude.md` under **Document sync (local files ↔
 Nottario)** — keep them aligned if either changes.
 
-## Response discipline
+## Token discipline
 
 Keep MCP responses small. Default to the slim shapes; opt in to
 heavier ones deliberately.

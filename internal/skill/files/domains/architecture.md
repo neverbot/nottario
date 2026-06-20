@@ -358,7 +358,7 @@ arch.list_nodes { root_only: true }
 If the top-level set surprises you (missing a service you know
 exists, contains something deprecated), fix it.
 
-## Response discipline
+## Token discipline
 
 The arch surface follows the same slim-by-default discipline as tasks.
 Keep your responses small.

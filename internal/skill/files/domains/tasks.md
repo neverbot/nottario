@@ -528,7 +528,7 @@ nottario.tasks.add_dependency {
 
 `tasks.next` will then skip B until A is `done`.
 
-## Response discipline
+## Token discipline
 
 Keep MCP responses small. Default to the slim shapes; opt in to
 heavier ones deliberately.
