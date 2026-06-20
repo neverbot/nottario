@@ -16,7 +16,9 @@ package skill
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -127,6 +129,30 @@ func List(ctx context.Context, pool *pgxpool.Pool) ([]Entry, error) {
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 	return entries, nil
+}
+
+// BundleVersion returns a stable sha256 hash over the resolved bundle
+// content (overrides applied), formatted as "sha256:<hex>". Two
+// servers serving the same logical bundle agree on the same string;
+// flipping a single byte in any included file changes it. Used as a
+// quick "have I already synced this?" check on the client side.
+func BundleVersion(ctx context.Context, pool *pgxpool.Pool) (string, error) {
+	entries, err := List(ctx, pool)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	for _, e := range entries {
+		body, _, err := Read(ctx, pool, e.Path)
+		if err != nil {
+			return "", err
+		}
+		// Length-prefix each (path, body) so re-ordering or splitting
+		// can never collide with another arrangement.
+		_, _ = fmt.Fprintf(h, "%d\x00%s\x00%d\x00", len(e.Path), e.Path, len(body))
+		_, _ = h.Write(body)
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // readOverride looks up the document at global/skills/<path>. When

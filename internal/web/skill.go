@@ -40,11 +40,32 @@ func SkillHandler(pool *pgxpool.Pool) http.Handler {
 }
 
 // SkillZipHandler streams the entire current skill tree (with
-// overrides applied) as a single zip archive. Convenient for users
-// who want to drop the skill into ~/.claude/skills/nottario/
-// offline or as a backup.
-func SkillZipHandler(pool *pgxpool.Pool) http.Handler {
+// overrides applied) as a single zip archive. Two auth modes:
+//
+//   - Bearer token (existing): for the web UI and arbitrary scripts
+//     that already hold credentials.
+//   - Signed query params (?exp=&sig=): for agents that fetched a
+//     time-bound URL from `nottario.skill.install`. The signature is
+//     HMAC-SHA256 keyed by the server's session signing key, with a
+//     5-minute TTL embedded in `exp`.
+//
+// When neither is supplied the handler stays unauthenticated, matching
+// historical behaviour. Tighten in a follow-up if we ever decide the
+// bundle is sensitive — for now it isn't.
+func SkillZipHandler(pool *pgxpool.Pool, sessionKey []byte) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		exp := r.URL.Query().Get("exp")
+		sig := r.URL.Query().Get("sig")
+		if exp != "" || sig != "" {
+			// Caller opted into the signed-URL path. Validate strictly:
+			// a malformed or expired URL must NOT silently fall back to
+			// "no auth required".
+			if !skill.VerifyZipSig(sessionKey, exp, sig) {
+				http.Error(w, "invalid or expired signature", http.StatusUnauthorized)
+				return
+			}
+		}
+
 		entries, err := skill.List(r.Context(), pool)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -1,9 +1,12 @@
 package web
 
 import (
+	"archive/zip"
+	"bytes"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
-
-	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // `nottario.search` and `nottario.skill.*` are small families and
@@ -58,37 +61,69 @@ func TestMCP_Search(t *testing.T) {
 	}
 }
 
-func TestMCP_Skill(t *testing.T) {
+func TestMCP_SkillInstall(t *testing.T) {
 	f := newMCPFixture(t, 13341, "skill")
 
-	var list struct {
-		Files []map[string]any `json:"files"`
+	var resp struct {
+		DownloadURL   string         `json:"download_url"`
+		Format        string         `json:"format"`
+		BundleVersion string         `json:"bundle_version"`
+		Install       map[string]any `json:"install"`
 	}
-	f.callJSON(t, "nottario.skill.list", map[string]any{}, &list)
-	if len(list.Files) == 0 {
-		t.Fatal("skill.list returned 0 files")
+	f.callJSON(t, "nottario.skill.install", map[string]any{}, &resp)
+
+	if resp.Format != "zip" {
+		t.Errorf("format = %q, want zip", resp.Format)
+	}
+	if !strings.HasPrefix(resp.BundleVersion, "sha256:") || len(resp.BundleVersion) < 16 {
+		t.Errorf("bundle_version looks wrong: %q", resp.BundleVersion)
+	}
+	if resp.DownloadURL == "" || !strings.Contains(resp.DownloadURL, "sig=") || !strings.Contains(resp.DownloadURL, "exp=") {
+		t.Errorf("download_url missing sig/exp: %q", resp.DownloadURL)
+	}
+	for _, k := range []string{"name", "preferred_dir", "fallback_dir", "instructions"} {
+		if _, ok := resp.Install[k]; !ok {
+			t.Errorf("install map missing %q: %+v", k, resp.Install)
+		}
 	}
 
-	// Read the first file by its path. skill.read returns the raw
-	// markdown as a single TextContent block (not JSON), so we read
-	// it directly off the SDK call result.
-	first := list.Files[0]
-	path, _ := first["path"].(string)
-	if path == "" {
-		t.Fatalf("first file has no path: %+v", first)
-	}
-	res, err := f.session.CallTool(f.ctx, &sdk.CallToolParams{
-		Name:      "nottario.skill.read",
-		Arguments: map[string]any{"path": path},
-	})
+	// Fetch the signed URL — it should return a valid zip without any
+	// Authorization header.
+	httpResp, err := http.Get(resp.DownloadURL)
 	if err != nil {
-		t.Fatalf("skill.read: %v", err)
+		t.Fatalf("GET %s: %v", resp.DownloadURL, err)
 	}
-	if len(res.Content) == 0 {
-		t.Fatalf("skill.read empty content")
+	defer httpResp.Body.Close()
+	if httpResp.StatusCode != 200 {
+		t.Fatalf("signed URL returned %d, want 200", httpResp.StatusCode)
 	}
-	tc, _ := res.Content[0].(*sdk.TextContent)
-	if tc == nil || tc.Text == "" {
-		t.Errorf("skill.read returned empty content for %s", path)
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("response is not a valid zip: %v", err)
+	}
+	foundSkillMD := false
+	for _, e := range zr.File {
+		if e.Name == "skill.md" {
+			foundSkillMD = true
+			break
+		}
+	}
+	if !foundSkillMD {
+		t.Errorf("zip is missing skill.md")
+	}
+
+	// Tampered signature → 401.
+	tampered := strings.Replace(resp.DownloadURL, "sig=", "sig=ff", 1)
+	httpResp, err = http.Get(tampered)
+	if err != nil {
+		t.Fatalf("GET tampered: %v", err)
+	}
+	_ = httpResp.Body.Close()
+	if httpResp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("tampered URL returned %d, want 401", httpResp.StatusCode)
 	}
 }

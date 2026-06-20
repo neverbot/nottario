@@ -183,7 +183,8 @@ feature", "Block this until X is done").
 
 ## Deeper guides
 
-Call `nottario.skill.read` with the path:
+These pages all live inside the same bundle you installed; open them
+from your local skills directory once they are on disk:
 
 - `references/identity.md` — token and identity mechanics.
 - `methodology/git.md` — how to drive git across solo, parallel-agent
@@ -197,29 +198,84 @@ Call `nottario.skill.read` with the path:
 - `domains/architecture.md` — the textual architecture diagram:
   nodes, edges, kinds, when to touch it, when to leave it alone.
 
-## Overrides and snapshots
+## Installing and updating the bundle
 
-The skill is bundled with the binary; this is what shipped. Each
-instance can **override or extend** any file without rebuilding: an
-admin (or an agent with admin permissions) writes a document with
+The bundle ships as a single zip and you install it once per project
+checkout. Call `nottario.skill.install` to get back a small JSON
+descriptor:
+
+```text
+{
+  "download_url": "https://<host>/skill.zip?exp=…&sig=…",
+  "format": "zip",
+  "bundle_version": "sha256:…",
+  "install": {
+    "name": "nottario",
+    "preferred_dir": "<workspace>/.claude/skills/nottario",
+    "fallback_dir":  "~/.claude/skills/nottario",
+    "instructions":  "…"
+  }
+}
+```
+
+What to do with it (the response carries this prose too — keep it
+authoritative):
+
+1. **Fetch** the `download_url` with whatever HTTP tool your host has.
+   The URL carries an embedded signature with a 5-minute TTL, so no
+   `Authorization` header is needed. Examples:
+   ```bash
+   curl -fSL "$URL" -o /tmp/nottario-skill.zip
+   ```
+   ```powershell
+   Invoke-WebRequest -Uri $URL -OutFile $env:TEMP\nottario-skill.zip
+   ```
+   ```python
+   urllib.request.urlretrieve(url, "/tmp/nottario-skill.zip")
+   ```
+2. **Extract** the zip into `preferred_dir`, overwriting existing
+   files. If your environment can't write to a workspace path, fall
+   back to `fallback_dir`. Create the directory if it doesn't exist.
+   ```bash
+   mkdir -p "$DIR" && unzip -qo /tmp/nottario-skill.zip -d "$DIR"
+   ```
+   ```powershell
+   New-Item -ItemType Directory -Force -Path $DIR | Out-Null
+   Expand-Archive -Path "$env:TEMP\nottario-skill.zip" -DestinationPath $DIR -Force
+   ```
+3. **Restart your client.** Claude Code and similar clients load the
+   skill bundle at session start — the new content is picked up next
+   time you open a session in that workspace. **Tell the human about
+   this explicitly** when you finish the install ("I've updated the
+   Nottario skill bundle in `<dir>`. Restart this Claude Code session
+   for the new content to take effect."). The human cannot infer it
+   from your tool output and will otherwise carry on under the old
+   rules.
+
+`bundle_version` is a stable sha256 over the resolved bundle. Stash
+it next to the installed files (e.g. write it into a small manifest);
+on the next install call, if it matches what you already have on
+disk, skip the download entirely.
+
+The bundle content **never flows through your MCP response context**
+— only the URL + descriptor does. That's the design: the agent reads
+~200 tokens, the bytes go straight from server to disk.
+
+## Overrides
+
+Each instance can **override or extend** any file without rebuilding:
+an admin (or an agent with admin permissions) writes a document with
 `scope=global`, `kind=skill`, `path=global/skills/<file>`. The next
-call to `nottario.skill.read` resolves to the override; otherwise the
-embedded copy is served. `nottario.skill.list` includes both, tagging
-each entry with `origin: "embedded" | "global"`.
+`skill.install` snapshot includes the override transparently —
+overrides change `bundle_version`, so the next sync picks them up.
 
 Use this to tighten a shipped file for your team, or to add bundle-
 absent files (`by-language/go.md`, `by-role/security.md`,
 `recipes/deploying-to-our-k8s.md`).
-
-A snapshot of the current bundle (overrides applied) is available as a
-zip at `GET /skill.zip` — useful to mirror the skill into a local
-install or back up.
 
 For pre-loaded installs, prefer the workspace path
 `<repo>/.claude/skills/nottario/` (commit it; every contributor who
 clones the repo gets the rules for free, scoped to that repo). Fall
 back to `~/.claude/skills/nottario/` only when you work on the
 project across multiple unrelated checkouts or do not want to version
-the bundle in any specific repo. The on-demand path you are reading
-right now (`nottario.skill.read`) is always available too and stays
-in sync with the server.
+the bundle in any specific repo.

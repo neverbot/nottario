@@ -209,13 +209,6 @@ func TestMCP_Projects_ErrorBranches(t *testing.T) {
 	}
 }
 
-// ---- skill ----
-
-func TestMCP_Skill_Unknown(t *testing.T) {
-	f := newMCPFixture(t, 14040, "errskill")
-	f.callExpectErr(t, "nottario.skill.read", map[string]any{"path": "no-such-file.md"})
-}
-
 // ---- search ----
 
 func TestMCP_Search_BadProjectID(t *testing.T) {

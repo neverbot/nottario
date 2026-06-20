@@ -12,6 +12,16 @@ are cut on demand.
 
 ## 2026-06-20
 
+- **BREAKING — skill bundle install collapsed into one tool.**
+  `nottario.skill.list` and `nottario.skill.read` are gone. The new
+  `nottario.skill.install` returns a small JSON descriptor with a
+  short-lived signed URL for the bundle as a single zip, plus an
+  install plan and a `bundle_version` hash. The bundle content no
+  longer flows through the MCP response — the agent fetches the URL
+  out of band with any HTTP tool, unzips into
+  `<workspace>/.claude/skills/nottario/` (or `~/.claude/skills/...`
+  as fallback), and restarts the client. A typical first sync drops
+  from ~20-30k tokens to ~200.
 - **New `nottario.tasks.close` MCP tool.** Atomic close that bundles
   `link_commit` + `add_comment` + `set_state` into one transaction.
   On precondition failure the whole thing rolls back. Slim ack

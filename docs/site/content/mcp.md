@@ -43,8 +43,8 @@ The MCP server exposes one tool per natural verb. Highlights:
 - `nottario.arch.upsert_node`, `nottario.arch.upsert_edge` —
   maintain the architecture graph.
 - `nottario.search` — full-text across tasks, docs and arch nodes.
-- `nottario.skill.list`, `nottario.skill.read` — the on-demand
-  skill bundle (see below).
+- `nottario.skill.install` — returns a signed URL + install plan for
+  the skill bundle zip (see below).
 
 `nottario.tasks.next` exists as a read-only preview but does not
 claim — prefer `claim_next` to avoid races.
@@ -87,35 +87,24 @@ agent that doesn't need them shouldn't pay tokens for them. A typical
 "claim → comment → done" loop now sits in ~600 B of MCP traffic
 instead of ~5 KB.
 
-## Skills: on-demand vs pre-loaded
+## Skills: zip-and-install
 
-Nottario ships a skill bundle aimed at agents (operating rules,
-task discipline, sqlc conventions). Three install paths, in order of
-preference:
+Nottario ships a skill bundle aimed at agents (operating rules, task
+discipline, sqlc conventions). Installation is a single tool call:
 
-1. **On-demand via MCP** *(recommended default)*. Once the agent is
-   wired up, it can call `nottario.skill.list` to see what's
-   available and `nottario.skill.read` to pull a specific file. No
-   local install needed and the bundle is always the version the
-   server is running.
-2. **Workspace-scoped install** *(when you want pre-load and you're
-   working in a checkout of the tracked repo)*. Drop the contents of
-   `internal/skill/files/` into `<repo>/.claude/skills/nottario/`,
-   commit it, and Claude Code picks it up automatically whenever the
-   workspace is opened. The skill stays scoped to that repo so it
-   does not pollute unrelated sessions, and every contributor who
-   clones gets the rules for free.
-3. **Home install** *(fallback for multi-repo workflows or when you
-   don't want to version the bundle)*. Drop the same contents into
-   `~/.claude/skills/nottario/`. The skill loads on every Claude
-   Code session regardless of cwd, which is convenient but loud
-   when you also work on repos that have nothing to do with
-   Nottario.
+`nottario.skill.install` returns a small JSON descriptor with a
+short-lived signed URL for the bundle zip, the install plan, and a
+`bundle_version` hash for cache short-circuiting. The bundle content
+**does not flow through the response** — the agent fetches the URL
+out of band and unzips into the local skill directory using whatever
+HTTP and unzip tools its host exposes. Prefer
+`<repo>/.claude/skills/nottario/` (workspace-scoped, committed
+alongside the code); fall back to `~/.claude/skills/nottario/` when
+you work across unrelated checkouts.
 
-The three paths are equivalent in content. The MCP path is the only
-one that auto-updates with the server; the other two are snapshots.
-Pick workspace over home whenever the repo is a real checkout,
-because the scope matches the work.
+Restart the client (Claude Code, …) after a sync — the bundle is read
+at session start. See [Agent skills](/skills/) for the response shape
+and copy-pasteable fetch/extract commands per platform.
 
 ## Authentication
 

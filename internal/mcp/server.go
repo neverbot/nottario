@@ -12,8 +12,9 @@ import (
 
 // Deps wires the dependencies the MCP server needs.
 type Deps struct {
-	Pool     *pgxpool.Pool
-	Resolver *identity.Resolver
+	Pool       *pgxpool.Pool
+	Resolver   *identity.Resolver
+	SessionKey []byte // for signing short-lived /skill.zip download URLs
 }
 
 // Handler returns an http.Handler that authenticates the incoming
@@ -48,7 +49,9 @@ func Handler(d Deps) http.Handler {
 			http.Error(w, `{"error":"missing or invalid Authorization token"}`, http.StatusUnauthorized)
 			return
 		}
-		streamable.ServeHTTP(w, r.WithContext(withCaller(r.Context(), c)))
+		ctx := withCaller(r.Context(), c)
+		ctx = withExternalBaseURL(ctx, externalBaseURLFromRequest(r))
+		streamable.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

@@ -94,7 +94,11 @@ func NewServer(d Deps) http.Handler {
 	// resolved against the documents table inside the handler.
 	mux.Handle("GET /skill", SkillHandler(d.Pool))
 	mux.Handle("GET /skill/", SkillHandler(d.Pool))
-	mux.Handle("GET /skill.zip", SkillZipHandler(d.Pool))
+	var sessionKey []byte
+	if d.Resolver != nil {
+		sessionKey = d.Resolver.SessionKey
+	}
+	mux.Handle("GET /skill.zip", SkillZipHandler(d.Pool, sessionKey))
 
 	// Real-time event stream for the web UI (and any future SSE client).
 	if d.Hub != nil {
@@ -104,7 +108,7 @@ func NewServer(d Deps) http.Handler {
 	// MCP endpoint — Streamable HTTP transport with Bearer-token auth.
 	// Methods are enumerated explicitly so this route does not conflict
 	// with the SPA catch-all on GET /.
-	mcpHandler := mcpserver.Handler(mcpserver.Deps{Pool: d.Pool, Resolver: d.Resolver})
+	mcpHandler := mcpserver.Handler(mcpserver.Deps{Pool: d.Pool, Resolver: d.Resolver, SessionKey: sessionKey})
 	for _, method := range []string{"GET", "POST", "DELETE", "OPTIONS"} {
 		mux.Handle(method+" /mcp", mcpHandler)
 		mux.Handle(method+" /mcp/", mcpHandler)
