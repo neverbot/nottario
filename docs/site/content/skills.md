@@ -49,8 +49,8 @@ The signed URL is valid for five minutes and needs no
 exposes (`curl`, `wget`, PowerShell's `Invoke-WebRequest`, Python's
 `urllib`, Node's `fetch`, …), saves the zip, then extracts it into the
 client's skill directory. **Pre-loaded installs are the only mode** —
-the bundle lives on disk because Claude Code (and similar clients)
-load skills at session start.
+the bundle lives on disk because most agent hosts (Claude Code and
+similar clients) load skills at session start.
 
 Workspace path is preferred (`<repo>/.claude/skills/nottario/` —
 scoped to one repo and committed alongside the code so every
@@ -63,8 +63,10 @@ overrides applied). Stash it next to the installed files; on the next
 install call, if it matches what is on disk, skip the download
 entirely.
 
-The session has to be restarted after a sync — Claude Code reads
-the skill bundle once at session start and does not re-scan.
+The session has to be restarted after a sync — most agent hosts read
+the skill bundle once at session start and do not re-scan. The agent
+should remind the human of this explicitly when it finishes the
+install, naming the host application if it knows which one it is.
 
 ## Anatomy of a skill
 

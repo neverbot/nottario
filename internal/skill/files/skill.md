@@ -243,14 +243,19 @@ authoritative):
    New-Item -ItemType Directory -Force -Path $DIR | Out-Null
    Expand-Archive -Path "$env:TEMP\nottario-skill.zip" -DestinationPath $DIR -Force
    ```
-3. **Restart your client.** Claude Code and similar clients load the
-   skill bundle at session start — the new content is picked up next
-   time you open a session in that workspace. **Tell the human about
-   this explicitly** when you finish the install ("I've updated the
-   Nottario skill bundle in `<dir>`. Restart this Claude Code session
-   for the new content to take effect."). The human cannot infer it
-   from your tool output and will otherwise carry on under the old
-   rules.
+3. **Restart your host application** — whatever agent runtime is
+   actually loading you (Claude Code, another IDE plugin, a custom
+   harness, anything that reads `.claude/skills/` or an equivalent
+   skill directory at startup). Most agent runtimes read the skill
+   bundle once when the session opens and do not re-scan, so the new
+   content only takes effect after a fresh session. **Tell the human
+   about this explicitly** when you finish the install — they cannot
+   infer it from your tool output. Wording like "I've updated the
+   Nottario skill bundle in `<dir>`. Restart whatever agent
+   application is loading me (Claude Code or whichever client you
+   are using) so the new rules take effect." Pick the actual name
+   when you know it; otherwise leave it generic. Do not assume Claude
+   Code specifically.
 
 `bundle_version` is a stable sha256 over the resolved bundle. Stash
 it next to the installed files (e.g. write it into a small manifest);

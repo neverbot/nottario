@@ -102,8 +102,9 @@ HTTP and unzip tools its host exposes. Prefer
 alongside the code); fall back to `~/.claude/skills/nottario/` when
 you work across unrelated checkouts.
 
-Restart the client (Claude Code, …) after a sync — the bundle is read
-at session start. See [Agent skills](/skills/) for the response shape
+Restart the host application (Claude Code or whichever agent client
+you use) after a sync — most clients load the bundle once at session
+start. See [Agent skills](/skills/) for the response shape
 and copy-pasteable fetch/extract commands per platform.
 
 ## Authentication
