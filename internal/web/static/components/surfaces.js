@@ -134,6 +134,7 @@ export const popoverStyles = css`
   .popover {
     position: absolute;
     background: var(--bg);
+    color: var(--fg);
     border: 1px solid var(--border);
     border-radius: 6px;
     box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
