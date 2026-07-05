@@ -8,6 +8,7 @@ import (
 	"github.com/neverbot/nottario/internal/identity"
 	mcpserver "github.com/neverbot/nottario/internal/mcp"
 	"github.com/neverbot/nottario/internal/realtime"
+	"github.com/neverbot/nottario/internal/selfupdate"
 )
 
 // Deps wires the http server with its collaborators.
@@ -16,6 +17,12 @@ type Deps struct {
 	Resolver    *identity.Resolver
 	OAuthConfig identity.OAuthConfig
 	Hub         *realtime.Hub
+	// SelfUpdateState is nil when SELF_UPDATE_CHECK_ENABLED=false;
+	// the /api/version/status endpoint reports check_enabled=false
+	// in that case. SelfUpdateUpstream is echoed back regardless so
+	// operators can confirm the pointer.
+	SelfUpdateState    *selfupdate.State
+	SelfUpdateUpstream string
 }
 
 // NewServer returns an http.Handler wiring all M1 routes.
@@ -40,6 +47,11 @@ func NewServer(d Deps) http.Handler {
 
 	mux.Handle("GET /healthz", HealthzHandler())
 	mux.Handle("GET /version", VersionHandler())
+	mux.Handle("GET /api/version/status", VersionStatusHandler(VersionStatusDeps{
+		Resolver: d.Resolver,
+		State:    d.SelfUpdateState,
+		Upstream: d.SelfUpdateUpstream,
+	}))
 	// SPA catch-all: any GET that does not match a more specific route
 	// is served the embedded index.html so the client-side router can
 	// resolve the path (handles direct page loads and refreshes for

@@ -24,6 +24,9 @@ this page documents every knob.
 | `NOTTARIO_BACKUP_DIR` | no | (disabled) | Mount-friendly path where periodic `pg_dump` backups land. Empty = no backups. |
 | `NOTTARIO_BACKUP_AT` | no | `03:00` | Time of day for the daily backup, `HH:MM` 24h local time. |
 | `NOTTARIO_BACKUP_KEEP_DAYS` | no | `7` | Delete dumps older than this many days after each successful run. |
+| `SELF_UPDATE_CHECK_ENABLED` | no | `true` | Poll the upstream GitHub repository once a day and surface an admin-only banner when a newer commit lands on master. `false` skips the outbound request entirely. |
+| `SELF_UPDATE_CHECK_INTERVAL` | no | `24h` | Go duration between checks. Clamped up to `1h` — the anonymous GitHub API has a 60 req/h/IP limit that leaves plenty of headroom, but there's nothing to gain from a tighter cadence. |
+| `SELF_UPDATE_UPSTREAM` | no | `neverbot/nottario` | GitHub `owner/repo` to compare against. Change if you run a fork so the banner points at your own tree. |
 
 ## Secret files
 
@@ -69,3 +72,26 @@ the previous container running (Compose health check), so a bad
 upgrade does not lose data. If you pin to a `vX.Y.Z` tag instead of
 `:latest`, upgrades are explicit: bump the tag in your
 `compose.yml` and `pull`+`up`.
+
+### Update notifications
+
+To keep you from having to check GitHub yourself, an in-process
+poller compares the commit SHA baked into the running binary against
+the current `refs/heads/master` on the upstream repository. When
+they differ, an admin-only banner appears under the topbar with the
+exact `docker compose pull && docker compose up -d` command needed
+to update. The poller never touches the container — it is purely
+informational.
+
+The check runs once at startup and then every
+`SELF_UPDATE_CHECK_INTERVAL` (default 24h). It calls the anonymous
+GitHub REST API (`https://api.github.com/repos/{upstream}/commits/master`)
+with no authentication and a 5-second timeout; failures are logged
+at warn level and the previous known-good state is preserved. Only
+admins receive the `update_available: true` signal — regular
+members can't run `docker compose pull` and there's no reason to
+expose the running SHA to them.
+
+To turn it off entirely (air-gapped hosts, privacy preferences),
+set `SELF_UPDATE_CHECK_ENABLED=false`. To point at a fork, set
+`SELF_UPDATE_UPSTREAM=your/fork`.

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"time"
+
 	"github.com/joho/godotenv"
 )
 
@@ -48,6 +50,17 @@ type Config struct {
 	// expired locks.
 	ArchLockIdleSeconds int
 	ArchTickSeconds     int
+
+	// Self-update poller. When SelfUpdateEnabled is true (the
+	// default), an in-process goroutine polls the upstream GitHub
+	// repository once every SelfUpdateInterval and exposes the
+	// result on /api/version/status so an admin banner can surface
+	// "a newer image is available". Set SELF_UPDATE_CHECK_ENABLED=
+	// false to skip the outbound request entirely (air-gapped or
+	// privacy-conscious deployments).
+	SelfUpdateEnabled  bool
+	SelfUpdateInterval time.Duration
+	SelfUpdateUpstream string
 }
 
 // LoadDotEnv reads a .env file from the working directory if it
@@ -128,7 +141,36 @@ func Load() (*Config, error) {
 		cfg.ArchTickSeconds = v
 	}
 
+	cfg.SelfUpdateEnabled = getenvBool("SELF_UPDATE_CHECK_ENABLED", true)
+	cfg.SelfUpdateInterval = 24 * time.Hour
+	if s := os.Getenv("SELF_UPDATE_CHECK_INTERVAL"); s != "" {
+		v, err := time.ParseDuration(s)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("SELF_UPDATE_CHECK_INTERVAL must be a positive Go duration, got %q", s)
+		}
+		cfg.SelfUpdateInterval = v
+	}
+	cfg.SelfUpdateUpstream = getenv("SELF_UPDATE_UPSTREAM", "neverbot/nottario")
+
 	return cfg, nil
+}
+
+// getenvBool parses truthy env values. Accepts "1"/"true"/"yes"/"on"
+// as true and "0"/"false"/"no"/"off" as false, case-insensitive.
+// Anything else (including empty) returns fallback so a typo does
+// not silently flip a default.
+func getenvBool(key string, fallback bool) bool {
+	v, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+	return fallback
 }
 
 func getenv(key, fallback string) string {

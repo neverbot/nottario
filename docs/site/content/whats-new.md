@@ -10,6 +10,15 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-07-05
+
+- **Self-hosted admins now see an "update available" banner** when a
+  newer commit lands on upstream master. The check runs in-process
+  every 24 hours (configurable via `SELF_UPDATE_CHECK_INTERVAL`);
+  disable with `SELF_UPDATE_CHECK_ENABLED=false`. See the
+  [update notifications](/self-hosting/#update-notifications)
+  reference.
+
 ## 2026-06-20
 
 - **BREAKING — skill bundle install collapsed into one tool.**

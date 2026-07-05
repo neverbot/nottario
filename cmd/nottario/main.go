@@ -29,6 +29,7 @@ import (
 	"github.com/neverbot/nottario/internal/db"
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/realtime"
+	"github.com/neverbot/nottario/internal/selfupdate"
 	"github.com/neverbot/nottario/internal/tasks"
 	"github.com/neverbot/nottario/internal/version"
 	"github.com/neverbot/nottario/internal/web"
@@ -110,13 +111,32 @@ func main() {
 	arch.NewFlushTicker(pool, time.Duration(cfg.ArchTickSeconds)*time.Second,
 		logger.With("subsystem", "arch-flush")).Start(ctx)
 
+	// Self-update poller: optional. When disabled the state is nil
+	// and the /api/version/status endpoint reports check_enabled=
+	// false, so the frontend never shows the "update available"
+	// banner.
+	var selfUpdateState *selfupdate.State
+	if cfg.SelfUpdateEnabled {
+		p := selfupdate.New(selfupdate.Config{
+			Upstream: cfg.SelfUpdateUpstream,
+			Interval: cfg.SelfUpdateInterval,
+			Logger:   logger.With("subsystem", "selfupdate"),
+		})
+		selfUpdateState = p.State()
+		go p.Start(ctx)
+	} else {
+		logger.Info("self-update poller disabled (SELF_UPDATE_CHECK_ENABLED=false)")
+	}
+
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: web.NewServer(web.Deps{
-			Pool:        pool,
-			Resolver:    resolver,
-			OAuthConfig: oauthCfg,
-			Hub:         hub,
+			Pool:               pool,
+			Resolver:           resolver,
+			OAuthConfig:        oauthCfg,
+			Hub:                hub,
+			SelfUpdateState:    selfUpdateState,
+			SelfUpdateUpstream: cfg.SelfUpdateUpstream,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
