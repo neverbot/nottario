@@ -106,23 +106,44 @@ class NottarioProfilePage extends LitElement {
     .row:last-child { border-bottom: none; }
     .row .value { flex: 1; font-size: 13px; color: var(--fg); }
 
-    /* Notification prefs are their own section body (no card wrapper).
-       Sits flush under the h2 like a settings block on GitHub. */
-    .prefs {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 4px 2px;
+    /* Notification prefs live inside the shared .surface primitive so
+       the block carries the same visual weight as the identity card
+       and the token/memberships tables below. Rows separate with a
+       hairline; each row is [label + hint muted] on the left and the
+       toggle right-aligned on its own column so the labels read as
+       full sentences. */
+    .prefs.surface {
+      padding: 0;
+      overflow: hidden;
     }
     .prefs .pref {
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr auto;
       align-items: center;
-      gap: 8px;
-      font-size: 13px;
+      gap: 16px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--gray-2);
+      cursor: pointer;
+    }
+    .prefs .pref:first-child { border-top: none; }
+    .prefs .pref:hover { background: var(--bg-subtle); }
+    .prefs .pref .label {
+      font-size: 14px;
       color: var(--fg);
+      font-weight: 500;
+    }
+    .prefs .pref .hint {
+      display: block;
+      font-size: 12px;
+      color: var(--fg-muted);
+      font-weight: 400;
+      margin-top: 2px;
     }
     .prefs .pref input[type="checkbox"] {
       accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+      margin: 0;
     }
 
     /* Token table: same data-table shape as memberships, tuned columns. */
@@ -382,28 +403,22 @@ class NottarioProfilePage extends LitElement {
         ${
           this._prefs
             ? html`
-              <div class="prefs">
-                <label class="pref">
-                  <input type="checkbox"
-                         .checked=${!!this._prefs.task_assigned}
-                         ?disabled=${this._prefsSaving}
-                         @change=${() => this._togglePref('task_assigned')}>
-                  Someone assigns me to a task
-                </label>
-                <label class="pref">
-                  <input type="checkbox"
-                         .checked=${!!this._prefs.task_commented}
-                         ?disabled=${this._prefsSaving}
-                         @change=${() => this._togglePref('task_commented')}>
-                  Someone comments on a task I'm assigned to or created
-                </label>
-                <label class="pref">
-                  <input type="checkbox"
-                         .checked=${!!this._prefs.task_closed}
-                         ?disabled=${this._prefsSaving}
-                         @change=${() => this._togglePref('task_closed')}>
-                  A task I'm assigned to or created is closed
-                </label>
+              <div class="prefs surface">
+                ${this._renderPref(
+                  'task_assigned',
+                  'Someone assigns me to a task',
+                  'Fires when another user changes the assignee to you.',
+                )}
+                ${this._renderPref(
+                  'task_commented',
+                  "Someone comments on a task I'm assigned to or created",
+                  'Excludes your own comments.',
+                )}
+                ${this._renderPref(
+                  'task_closed',
+                  "A task I'm assigned to or created is closed",
+                  "Fires when someone else transitions it to done or won't do.",
+                )}
               </div>
             `
             : html`<div class="empty">Loading…</div>`
@@ -423,6 +438,25 @@ class NottarioProfilePage extends LitElement {
           </div>
         </div>
       </div>
+    `;
+  }
+
+  // Row renderer for the Notifications section. Two columns:
+  // - Label + hint muted (label reads as a sentence; hint carries the
+  //   caveat like "excludes your own comments").
+  // - Toggle right-aligned so the eye lands on the label first.
+  _renderPref(key, label, hint) {
+    return html`
+      <label class="pref">
+        <span>
+          <span class="label">${label}</span>
+          <span class="hint">${hint}</span>
+        </span>
+        <input type="checkbox"
+               .checked=${!!this._prefs?.[key]}
+               ?disabled=${this._prefsSaving}
+               @change=${() => this._togglePref(key)}>
+      </label>
     `;
   }
 
