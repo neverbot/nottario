@@ -2315,7 +2315,7 @@ class NottarioBoardPage extends LitElement {
                     (id) => html`
                     <nottario-task-chip
                       project-id=${this.projectId}
-                      .task=${this._taskByID(id) || { ID: id, Title: id.slice(0, 8) + ' (not loaded)' }}>
+                      .task=${this._taskByID(id) || { id, title: id.slice(0, 8) + ' (not loaded)' }}>
                     </nottario-task-chip>
                   `,
                   )}
