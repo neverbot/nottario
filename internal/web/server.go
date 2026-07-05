@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neverbot/nottario/internal/identity"
 	mcpserver "github.com/neverbot/nottario/internal/mcp"
+	"github.com/neverbot/nottario/internal/notifications"
 	"github.com/neverbot/nottario/internal/realtime"
 	"github.com/neverbot/nottario/internal/selfupdate"
 )
@@ -23,6 +24,12 @@ type Deps struct {
 	// operators can confirm the pointer.
 	SelfUpdateState    *selfupdate.State
 	SelfUpdateUpstream string
+	// Notifier is nil-safe; a nil Notifier means notifications are
+	// off and every OnXxx call is a no-op. NotificationsEnabled
+	// is echoed in the /api/notifications/unread_count response so
+	// the frontend can hide the bell when the feature is disabled.
+	Notifier             *notifications.Notifier
+	NotificationsEnabled bool
 }
 
 // NewServer returns an http.Handler wiring all M1 routes.
@@ -158,7 +165,7 @@ func NewServer(d Deps) http.Handler {
 	searchDeps := SearchDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/search", SearchHandler(searchDeps))
 
-	tasks := TaskDeps{Pool: d.Pool, Resolver: d.Resolver}
+	tasks := TaskDeps{Pool: d.Pool, Resolver: d.Resolver, Notifier: d.Notifier}
 	mux.Handle("GET /api/projects/{id}/tasks", guard(ListTasksHandler(tasks)))
 	mux.Handle("POST /api/projects/{id}/tasks", guard(CreateTaskHandler(tasks)))
 	mux.Handle("GET /api/projects/{id}/tasks/next", guard(NextTaskHandler(tasks)))

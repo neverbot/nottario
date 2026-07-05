@@ -28,6 +28,7 @@ import (
 	"github.com/neverbot/nottario/internal/config"
 	"github.com/neverbot/nottario/internal/db"
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/notifications"
 	"github.com/neverbot/nottario/internal/realtime"
 	"github.com/neverbot/nottario/internal/selfupdate"
 	"github.com/neverbot/nottario/internal/tasks"
@@ -128,15 +129,24 @@ func main() {
 		logger.Info("self-update poller disabled (SELF_UPDATE_CHECK_ENABLED=false)")
 	}
 
+	notifier := notifications.New(pool, hub,
+		logger.With("subsystem", "notifications"),
+		cfg.NotificationsEnabled)
+	if !cfg.NotificationsEnabled {
+		logger.Info("notifications disabled (NOTIFICATIONS_ENABLED=false)")
+	}
+
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: web.NewServer(web.Deps{
-			Pool:               pool,
-			Resolver:           resolver,
-			OAuthConfig:        oauthCfg,
-			Hub:                hub,
-			SelfUpdateState:    selfUpdateState,
-			SelfUpdateUpstream: cfg.SelfUpdateUpstream,
+			Pool:                 pool,
+			Resolver:             resolver,
+			OAuthConfig:          oauthCfg,
+			Hub:                  hub,
+			SelfUpdateState:      selfUpdateState,
+			SelfUpdateUpstream:   cfg.SelfUpdateUpstream,
+			Notifier:             notifier,
+			NotificationsEnabled: cfg.NotificationsEnabled,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

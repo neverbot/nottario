@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/notifications"
 	"github.com/neverbot/nottario/internal/tasks"
 )
 
@@ -16,6 +17,10 @@ import (
 type TaskDeps struct {
 	Pool     *pgxpool.Pool
 	Resolver *identity.Resolver
+	// Notifier is called AFTER task writes commit so the notification
+	// path is off the write critical section. Nil-safe: a zero Notifier
+	// or a nil pointer produces no rows.
+	Notifier *notifications.Notifier
 }
 
 func (d TaskDeps) caller(r *http.Request) (identity.Caller, bool) {
@@ -23,6 +28,18 @@ func (d TaskDeps) caller(r *http.Request) (identity.Caller, bool) {
 		return c, true
 	}
 	return d.Resolver.ResolveToken(r)
+}
+
+// actorFrom returns the caller's user id as *uuid.UUID for the
+// Notifier's actor argument. Nil when the caller is anonymous or
+// when the user id is zero (shouldn't happen for authenticated
+// requests but keeps the helper defensive).
+func actorFrom(c identity.Caller) *uuid.UUID {
+	if c.UserID == uuid.Nil {
+		return nil
+	}
+	uid := c.UserID
+	return &uid
 }
 
 func (d TaskDeps) authorship(c identity.Caller) tasks.Authorship {
@@ -350,6 +367,10 @@ func UpdateTaskHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		// Snapshot the task BEFORE the write so the Notifier can tell
+		// if the assignee actually changed (silent same-value updates
+		// must not notify).
+		prev, _ := tasks.Get(r.Context(), d.Pool, tid)
 		t, err := tasks.Update(r.Context(), d.Pool, tid, tasks.UpdateParams{
 			Title:           req.Title,
 			DescriptionMD:   req.Description,
@@ -363,6 +384,10 @@ func UpdateTaskHandler(d TaskDeps) http.Handler {
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if d.Notifier != nil {
+			actor := actorFrom(c)
+			d.Notifier.OnAssigneeChanged(r.Context(), prev, t, actor)
 		}
 		writeJSON(w, http.StatusOK, t)
 	})
@@ -399,6 +424,9 @@ func SetTaskStateHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		// Snapshot state pre-write so the Notifier can tell whether
+		// the transition actually crossed into a closed state.
+		prev, _ := tasks.Get(r.Context(), d.Pool, tid)
 		t, err := tasks.SetState(r.Context(), d.Pool, tid, req.State)
 		if err != nil {
 			// Surface the unresolved-precondition detail to clients so
@@ -424,6 +452,14 @@ func SetTaskStateHandler(d TaskDeps) http.Handler {
 			}
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if d.Notifier != nil {
+			prevState := tasks.State("")
+			if prev != nil {
+				prevState = prev.State
+			}
+			actor := actorFrom(c)
+			d.Notifier.OnStateChanged(r.Context(), t, prevState, actor)
 		}
 		writeJSON(w, http.StatusOK, t)
 	})
@@ -673,6 +709,12 @@ func AddCommentHandler(d TaskDeps) http.Handler {
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if d.Notifier != nil {
+			if task, gerr := tasks.Get(r.Context(), d.Pool, tid); gerr == nil {
+				actor := actorFrom(c)
+				d.Notifier.OnComment(r.Context(), task, actor)
+			}
 		}
 		writeJSON(w, http.StatusCreated, cm)
 	})

@@ -80,6 +80,12 @@ func (h *Hub) Subscribe(projectID uuid.UUID) (<-chan Event, func()) {
 	return s.ch, cancel
 }
 
+// Publish fans an in-process event out to interested subscribers.
+// Use this for events that don't flow through Postgres LISTEN/NOTIFY
+// (e.g. per-user notification pings that are generated in Go and
+// have no matching DB trigger). Non-blocking.
+func (h *Hub) Publish(ev Event) { h.publish(ev) }
+
 // publish fans an event out to interested subscribers. Non-blocking.
 func (h *Hub) publish(ev Event) {
 	h.mu.Lock()
