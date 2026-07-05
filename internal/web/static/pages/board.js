@@ -14,7 +14,7 @@ import '/static/components/markdown.js';
 import '/static/components/md-editor.js';
 import '/static/components/avatar.js';
 import '/static/components/task-chip.js';
-import { chevronDownIcon, closeIcon, trashIcon } from '/static/components/icons.js';
+import { closeIcon, trashIcon } from '/static/components/icons.js';
 import '/static/components/chip-filter.js';
 import './gantt.js';
 
@@ -756,6 +756,13 @@ class NottarioBoardPage extends LitElement {
     this.view = 'kanban';
     this.project = null;
     this.tasks = [];
+    // Cross-cycle task cache. `this.tasks` only holds rows for the
+    // active cycle, so a deep-linked task or a dependency that lives
+    // in another cycle is invisible to _taskByID. When we discover
+    // such a reference we fetch it once and stash it here; the map
+    // survives cycle switches on purpose so back-and-forth navigation
+    // doesn't re-fetch what we already resolved.
+    this._resolvedTasks = new Map();
     this.roles = [];
     this.members = [];
     this.showCreate = false;
@@ -880,8 +887,28 @@ class NottarioBoardPage extends LitElement {
     };
     const taskId = h.get('task');
     if (!taskId) return;
-    const t = (this.tasks || []).find((x) => x.id === taskId);
-    if (t) this.open(t);
+    // Open by id regardless of whether the task lives in the currently
+    // loaded cycle. `this.tasks` is cycle-scoped, but `loadDetail`
+    // hits `/api/projects/:pid/tasks/:tid` which resolves by id
+    // straight out of the DB. Skip if the same task is already open
+    // (e.g. after a filter/hash edit that isn't a task change).
+    if (this.selected?.task?.id === taskId) return;
+    const local = (this.tasks || []).find((x) => x.id === taskId);
+    if (local) {
+      this.open(local);
+    } else {
+      // Seed a placeholder so the dialog renders while the fetch is
+      // in flight — otherwise the panel is invisible for the round
+      // trip. The real task overrides this the moment loadDetail
+      // resolves.
+      this.selected = {
+        task: { id: taskId, title: '' },
+        deps: [],
+        commits: [],
+        comments: [],
+      };
+      this.loadDetail(taskId);
+    }
   }
 
   // Write the current filter state back to the URL hash so reloads
@@ -1176,7 +1203,36 @@ class NottarioBoardPage extends LitElement {
         commits: j.commits || [],
         comments: j.comments || [],
       };
+      this._resolveReferencedTasks(this.selected.deps);
     }
+  }
+
+  // Fetch task metadata for referenced ids (typically dependencies)
+  // that aren't in the currently-loaded cycle. Populates
+  // `_resolvedTasks` so the deps chips can render title + state
+  // instead of the "(not loaded)" fallback. One request per missing
+  // id, in parallel — deps lists are usually ≤5 so a batch endpoint
+  // isn't worth the surface. Fetch failures are swallowed silently;
+  // the chip keeps its fallback and remains clickable.
+  async _resolveReferencedTasks(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    const missing = ids.filter((id) => id && !this._taskByID(id) && !this._resolvedTasks.has(id));
+    if (missing.length === 0) return;
+    const results = await Promise.all(
+      missing.map((id) =>
+        fetch(`/api/projects/${this.projectId}/tasks/${id}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    );
+    let changed = false;
+    results.forEach((j, i) => {
+      if (j?.task) {
+        this._resolvedTasks.set(missing[i], j.task);
+        changed = true;
+      }
+    });
+    if (changed) this.requestUpdate();
   }
 
   closeDetail() {
@@ -1913,7 +1969,7 @@ class NottarioBoardPage extends LitElement {
   }
 
   _taskByID(id) {
-    return (this.tasks || []).find((t) => t.id === id) || null;
+    return (this.tasks || []).find((t) => t.id === id) || this._resolvedTasks.get(id) || null;
   }
 
   // "Created by" field-line on the task detail header. Shows the
