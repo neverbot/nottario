@@ -318,7 +318,7 @@ class NottarioSearchBox extends LitElement {
   // unrelated to hits flipped (loading, selectedIndex, etc.).
   updated(changedProperties) {
     if (!changedProperties.has('hits')) return;
-    if (!this.hits || !this.hits.length) return;
+    if (!this.hits?.length) return;
     const root = this.shadowRoot;
     if (!root) return;
     this.hits.forEach((h, i) => {
@@ -359,7 +359,7 @@ class NottarioSearchBox extends LitElement {
   // `updated()` innerHTML painter both keep operating on the flat
   // `this.hits` array.
   _groupedHits() {
-    if (!this.hits || !this.hits.length) return [];
+    if (!this.hits?.length) return [];
     const buckets = { task: [], document: [], arch_node: [] };
     this.hits.forEach((hit, flatIndex) => {
       if (buckets[hit.kind]) buckets[hit.kind].push({ hit, flatIndex });

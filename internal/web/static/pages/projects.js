@@ -231,7 +231,7 @@ class NottarioProjectsPage extends LitElement {
       const j = await res.json();
       const list = j.projects || [];
       const ts = (p) => {
-        const a = p.stats && p.stats.last_activity_at;
+        const a = p.stats?.last_activity_at;
         const b = p.updated_at;
         const ta = a ? new Date(a).getTime() : 0;
         const tb = b ? new Date(b).getTime() : 0;

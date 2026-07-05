@@ -899,7 +899,7 @@ class NottarioDocsPage extends LitElement {
             : html`
           ${order.map((kind) => {
             const items = groups[kind];
-            if (!items || !items.length) return null;
+            if (!items?.length) return null;
             return html`
               <div class="group">
                 <div class="group-eyebrow">${kind}</div>
@@ -1041,7 +1041,7 @@ class NottarioDocsPage extends LitElement {
           </div>
         </div>
         <div class="reader-meta">
-          ${segs.map((p, i) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
+          ${segs.map((p) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
           <span class="crumb-seg last">${last}</span>
           <span class="sep">·</span>
           <button class=${`version-btn ${this.historyOpen ? 'open' : ''}`}

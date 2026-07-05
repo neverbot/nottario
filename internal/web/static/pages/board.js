@@ -1022,7 +1022,7 @@ class NottarioBoardPage extends LitElement {
   // tasks.next exposes over MCP — so the empty `doing` column shows
   // exactly what an agent would pick up next.
   _nextEligible() {
-    if (!this.tasks || !this.tasks.length) return null;
+    if (!this.tasks?.length) return null;
     const taskByID = new Map(this.tasks.map((t) => [t.id, t]));
     const blocked = new Set();
     for (const d of this.deps || []) {
@@ -1042,7 +1042,7 @@ class NottarioBoardPage extends LitElement {
   }
 
   _priorityLabel(value) {
-    if (!this.priorities || !this.priorities.length) return `p${value}`;
+    if (!this.priorities?.length) return `p${value}`;
     const exact = this.priorities.find((p) => p.value === value);
     if (exact) return exact.key;
     return `p${value}`;
@@ -1053,7 +1053,7 @@ class NottarioBoardPage extends LitElement {
   // land between buckets (e.g. someone set a raw integer via SQL or
   // the legacy number input).
   _nearestBucketKey(value) {
-    if (!this.priorities || !this.priorities.length) return '';
+    if (!this.priorities?.length) return '';
     let best = this.priorities[0];
     let bestDiff = Math.abs(best.value - value);
     for (let i = 1; i < this.priorities.length; i++) {
@@ -1161,11 +1161,11 @@ class NottarioBoardPage extends LitElement {
     if (f.mine && this.me) {
       items = items.filter((t) => t.assignee_user_id === this.me.id);
     }
-    if (f.roles && f.roles.length) {
+    if (f.roles?.length) {
       const set = new Set(f.roles);
       items = items.filter((t) => set.has(t.target_role_id));
     }
-    if (f.types && f.types.length) {
+    if (f.types?.length) {
       const set = new Set(f.types);
       items = items.filter((t) => set.has(t.type));
     }
@@ -2295,7 +2295,7 @@ class NottarioBoardPage extends LitElement {
                 <span class="lbl">Assignee</span>
                 <span class="val inline-control">
                   ${
-                    assignee && assignee.avatar_url
+                    assignee?.avatar_url
                       ? html`<nottario-avatar size="20"
                               src=${assignee.avatar_url}
                               name=${assignee.display_name || assignee.github_login || ''}></nottario-avatar>`

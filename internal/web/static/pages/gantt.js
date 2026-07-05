@@ -527,7 +527,7 @@ class NottarioGantt extends LitElement {
       // stage gains a real width. updated() won't fire again unless a
       // reactive property changes, so the ResizeObserver is the only
       // signal we get when layout finally settles after navigation.
-      if (!this._initialCenterDone && w && this.tasks && this.tasks.length) {
+      if (!this._initialCenterDone && w && this.tasks?.length) {
         this._centerOnNow();
       }
     };
@@ -539,12 +539,12 @@ class NottarioGantt extends LitElement {
   }
 
   updated(c) {
-    if (c && c.has && c.has('projectId')) {
+    if (c?.has?.('projectId')) {
       this.load();
       this._subscribe();
       this._initialCenterDone = false; // re-centre when project changes
     }
-    if (c && c.has && c.has('cycleId') && !c.has('projectId')) {
+    if (c?.has?.('cycleId') && !c.has('projectId')) {
       // Switching cycle within the same project: re-fetch tasks and
       // re-centre. Closed sprints have NOW outside the populated
       // range, but `_centerOnNow` still puts the line in the middle
@@ -826,7 +826,7 @@ class NottarioGantt extends LitElement {
   }
 
   _priorityLabel(value) {
-    if (this.priorities && this.priorities.length) {
+    if (this.priorities?.length) {
       const exact = this.priorities.find((p) => p.value === value);
       if (exact) return exact.key;
     }
@@ -1037,7 +1037,7 @@ class NottarioGantt extends LitElement {
       let p = taskByIDForSucc.get(t.parent_task_id);
       while (p) {
         const parentSuccs = depSuccessors.get(p.id);
-        if (parentSuccs && parentSuccs.length) {
+        if (parentSuccs?.length) {
           if (!depSuccessors.has(t.id)) depSuccessors.set(t.id, []);
           const list = depSuccessors.get(t.id);
           for (const s of parentSuccs) if (!list.includes(s)) list.push(s);
@@ -1153,7 +1153,7 @@ class NottarioGantt extends LitElement {
     {
       const isHiddenByFold = (taskID) => {
         let cur = taskByIDForSucc.get(taskID);
-        while (cur && cur.parent_task_id) {
+        while (cur?.parent_task_id) {
           if (this.foldedFeatures.has(cur.parent_task_id)) return true;
           cur = taskByIDForSucc.get(cur.parent_task_id);
         }
@@ -1299,7 +1299,7 @@ class NottarioGantt extends LitElement {
     const hiddenByFold = new Set();
     for (const fid of this.foldedFeatures) {
       const f = taskByID.get(fid);
-      if (!f || f.type !== 'feature') continue;
+      if (f?.type !== 'feature') continue;
       collectDescendants(fid, hiddenByFold);
     }
 
@@ -1344,7 +1344,7 @@ class NottarioGantt extends LitElement {
     const featureAggregates = new Map(); // featureID -> {from, to, bi, crossRole, roleColors}
     for (const fid of this.foldedFeatures) {
       const feat = taskByID.get(fid);
-      if (!feat || feat.type !== 'feature') continue;
+      if (feat?.type !== 'feature') continue;
       const desc = collectDescendants(fid, new Set());
       if (!desc.size) continue;
       // Aggregate position uses the feature's OWN slot, not the
@@ -1592,9 +1592,6 @@ class NottarioGantt extends LitElement {
     // hairline between bands, not from zebra alternation (cleaner,
     // tableroom density à la GitHub). The features band still has
     // its own slightly darker fill so it reads as a parent row.
-    const bandFill = displayBands.map((b) =>
-      b.role.id === '__features__' ? 'var(--gantt-band-features)' : 'var(--gantt-band-1)',
-    );
 
     // Selection-aware predicates: when nothing is selected every bar
     // and arrow renders at full strength. Otherwise the connected
@@ -1738,7 +1735,6 @@ class NottarioGantt extends LitElement {
             const labelX = user ? avatarX + avatarSize + 6 : p.from + 8;
             const labelMaxChars = Math.max(6, Math.floor((p.to - labelX - 6) / 7));
             if (p.kind === 'feature-agg') {
-              const childCount = (childrenByParent.get(t.id) || []).length;
               const dots = p.roleColors || [];
               const dotR = 4;
               const dotGap = 4;
@@ -1784,7 +1780,6 @@ class NottarioGantt extends LitElement {
                 )}
               `;
             }
-            const isFeatureUnfolded = t.type === 'feature' && !this.foldedFeatures.has(t.id);
             // Childless features and (defensive) any feature reaching here render as normal.
             const taskDimmed = hasSelection && !this._selectedSet.has(t.id);
             const taskAppeared = this._justAppeared?.has(t.id) ? ' just-appeared' : '';
@@ -1827,7 +1822,7 @@ class NottarioGantt extends LitElement {
                     tabindex="0">
               </rect>
               ${
-                user && user.avatar_url
+                user?.avatar_url
                   ? svg`
                 <g transform=${`translate(${avatarX}, ${avatarY})`} style="pointer-events:none">
                   <image href=${user.avatar_url}
@@ -1886,7 +1881,6 @@ class NottarioGantt extends LitElement {
     pastSlotW,
     pastSlot,
     presentX,
-    presentWidth,
     futureStartX,
     futureColumnWidth,
     futureX,
@@ -1979,7 +1973,7 @@ class NottarioGantt extends LitElement {
   // just because the rect received keyboard focus.
   _onBarHover(_e, task, barX, barY) {
     const prior = this._hover;
-    const cursor = prior && prior.task && prior.task.id === task.id ? prior.cursor : null;
+    const cursor = prior?.task && prior.task.id === task.id ? prior.cursor : null;
     this._hover = { task, barX, barY, cursor };
     this._pointerBarID = task.id;
   }

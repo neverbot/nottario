@@ -251,7 +251,7 @@ class NottarioArchGraph extends LitElement {
     this._expanded = new Set(exp ? exp.split(',').filter(Boolean) : []);
     this._focus = h.get('focus') || '';
     const slug = h.get('node');
-    if (slug && this.allNodes && this.allNodes[slug]) {
+    if (slug && this.allNodes?.[slug]) {
       this.selectedSlug = slug;
       this.loadDetail(slug);
     }
@@ -259,7 +259,7 @@ class NottarioArchGraph extends LitElement {
   _writeHash() {
     const parts = [];
     if (this.selectedSlug) parts.push('node=' + encodeURIComponent(this.selectedSlug));
-    if (this._expanded && this._expanded.size) {
+    if (this._expanded?.size) {
       parts.push('expand=' + [...this._expanded].join(','));
     }
     if (this._focus) parts.push('focus=' + this._focus);

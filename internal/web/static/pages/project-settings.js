@@ -8,7 +8,7 @@ import { EscController } from '/static/components/esc.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
 import { confirm } from '/static/components/confirm-dialog.js';
-import { pencilIcon, trashIcon } from '/static/components/icons.js';
+import { pencilIcon } from '/static/components/icons.js';
 import { tableActionStyles } from '/static/components/table-actions.js';
 import { addRowStyles } from '/static/components/add-row.js';
 import '/static/components/color-swatches.js';

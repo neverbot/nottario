@@ -540,7 +540,7 @@ class NottarioArchPage extends LitElement {
   _ancestorSlugs(slug) {
     const out = [];
     let cur = this.nodeBySlug[slug];
-    while (cur && cur.parent_id) {
+    while (cur?.parent_id) {
       const parent = Object.values(this.nodeBySlug).find((n) => n.id === cur.parent_id);
       if (!parent) break;
       out.push(parent.slug);
@@ -777,7 +777,7 @@ class NottarioArchPage extends LitElement {
             : null
         }
         ${
-          children && children.length
+          children?.length
             ? html`
           <div class="section">
             <h4>Children (${children.length})</h4>

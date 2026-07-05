@@ -615,7 +615,7 @@ class NottarioArchCanvas extends LitElement {
       const project = (id) => {
         if (visibleIDs.has(id)) return id;
         let w = byID.get(id);
-        while (w && w.node.parent_id) {
+        while (w?.node.parent_id) {
           if (visibleIDs.has(w.node.parent_id)) return w.node.parent_id;
           w = byID.get(w.node.parent_id);
         }
@@ -1319,7 +1319,7 @@ class NottarioArchCanvas extends LitElement {
   }
 
   _renderEdgeLabel(routed, dim, obs) {
-    if (!routed || !routed.edge.label) return null;
+    if (!routed?.edge.label) return null;
     const label = routed.edge.label;
     const textWidth = Math.max(24, label.length * 6.5);
     const pillW = textWidth + 10;
@@ -1378,7 +1378,7 @@ class NottarioArchCanvas extends LitElement {
     const isDim = (id) => hi !== null && !hi.has(id);
     const isHighlightedEdge = (e) => {
       if (this.highlightEdge) return e.id === this.highlightEdge;
-      return hi !== null && hi.has(e.from_node_id) && hi.has(e.to_node_id);
+      return hi?.has(e.from_node_id) && hi.has(e.to_node_id);
     };
     const isAccentedEdge = (e) =>
       (this._hover && (e.from_node_id === this._hover || e.to_node_id === this._hover)) ||
