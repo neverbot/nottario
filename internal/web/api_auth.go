@@ -51,6 +51,31 @@ func LogoutHandler(deps AuthDeps) http.Handler {
 	})
 }
 
+// MeTokensHandler returns every API token the caller has issued,
+// across every project. Populates the cross-project tokens table on
+// `/me`. 401 anonymous; no admin bypass — this is a personal view.
+func MeTokensHandler(deps AuthDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := deps.Resolver.ResolveSession(r)
+		if !ok {
+			if c2, ok2 := deps.Resolver.ResolveToken(r); ok2 {
+				c = c2
+				ok = true
+			}
+		}
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		rows, err := identity.ListUserTokens(r.Context(), deps.Pool, c.UserID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"tokens": rows})
+	})
+}
+
 // MeHandler returns the current caller, or 401 if anonymous.
 func MeHandler(deps AuthDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

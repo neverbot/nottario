@@ -187,6 +187,11 @@ type Querier interface {
 	ListTokenNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]ListTokenNamesByIDsRow, error)
 	ListUnresolvedPreconditions(ctx context.Context, taskID uuid.UUID) ([]ListUnresolvedPreconditionsRow, error)
 	ListUserRoleIDsInProject(ctx context.Context, arg ListUserRoleIDsInProjectParams) ([]uuid.UUID, error)
+	// Every token the given user has issued, across every project they
+	// belong to. Joined to projects so the /me page can render a
+	// project-name column without a second round-trip. Revoked tokens
+	// are included so the audit view is honest.
+	ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
 	LockActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error

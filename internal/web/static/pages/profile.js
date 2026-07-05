@@ -13,6 +13,10 @@ class NottarioProfilePage extends LitElement {
     _prefs: { state: true },
     _prefsSaving: { state: true },
     _prefsDisabled: { state: true },
+    // Cross-project API tokens loaded from /api/me/tokens.
+    _tokens: { state: true },
+    _tokensLoading: { state: true },
+    _revoking: { state: true },
   };
 
   static styles = [
@@ -86,7 +90,6 @@ class NottarioProfilePage extends LitElement {
     }
     table.memberships a.project-link:hover { text-decoration: underline; }
 
-    .settings-list,
     .account-list {
       background: #fff;
       border: 1px solid var(--border);
@@ -101,23 +104,15 @@ class NottarioProfilePage extends LitElement {
       border-bottom: 1px solid var(--gray-2);
     }
     .row:last-child { border-bottom: none; }
-    .row .label {
-      flex: 0 0 180px;
-      font-weight: 500;
-      color: var(--fg);
-      font-size: 14px;
-    }
     .row .value { flex: 1; font-size: 13px; color: var(--fg); }
-    .row .value.muted { color: var(--fg-muted); font-style: italic; }
-    .row a.tokens-link {
-      color: var(--accent);
-      text-decoration: none;
-    }
-    .row a.tokens-link:hover { text-decoration: underline; }
+
+    /* Notification prefs are their own section body (no card wrapper).
+       Sits flush under the h2 like a settings block on GitHub. */
     .prefs {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
+      padding: 4px 2px;
     }
     .prefs .pref {
       display: flex;
@@ -129,6 +124,43 @@ class NottarioProfilePage extends LitElement {
     .prefs .pref input[type="checkbox"] {
       accent-color: var(--accent);
     }
+
+    /* Token table: same data-table shape as memberships, tuned columns. */
+    table.tokens code {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      color: var(--fg-muted);
+      background: var(--gray-2);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    table.tokens td.row-actions,
+    table.tokens th.row-actions {
+      text-align: right;
+    }
+    table.tokens tr.revoked td { color: var(--fg-muted); }
+    table.tokens tr.revoked td a.project-link { color: var(--fg-muted); }
+    table.tokens a.project-link {
+      color: var(--fg);
+      font-weight: 500;
+      text-decoration: none;
+    }
+    table.tokens a.project-link:hover { text-decoration: underline; }
+    .badge.revoked {
+      background: var(--gray-2);
+      color: var(--fg-muted);
+      border: 1px solid var(--border);
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    /* Small ghost button used in the token row's Revoke action. */
+    .btn.ghost.sm {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
     /* sign-out reuses the shared .btn.danger from components/buttons.js */
 
     .empty {
@@ -138,6 +170,12 @@ class NottarioProfilePage extends LitElement {
       background: #fff;
       border: 1px dashed var(--border);
       border-radius: 8px;
+    }
+    .empty strong {
+      display: block;
+      color: var(--fg);
+      font-size: 14px;
+      margin-bottom: 4px;
     }
     .error { color: var(--danger); margin-bottom: 12px; font-size: 13px; }
   `,
@@ -149,11 +187,46 @@ class NottarioProfilePage extends LitElement {
     this._prefs = null;
     this._prefsSaving = false;
     this._prefsDisabled = false;
+    this._tokens = null;
+    this._tokensLoading = false;
+    this._revoking = null;
   }
 
   connectedCallback() {
     super.connectedCallback();
     this._loadPrefs();
+    this._loadTokens();
+  }
+
+  async _loadTokens() {
+    this._tokensLoading = true;
+    try {
+      const r = await fetch('/api/me/tokens');
+      if (!r.ok) return;
+      const j = await r.json();
+      this._tokens = j.tokens || [];
+    } finally {
+      this._tokensLoading = false;
+    }
+  }
+
+  async _revokeToken(token) {
+    // Confirm inline: revoke is destructive across projects and the row
+    // is small enough that a modal would be over-engineered. window.
+    // confirm is intentionally low-drama here.
+    if (!window.confirm(`Revoke "${token.name}" on ${token.project_name}? This cannot be undone.`))
+      return;
+    this._revoking = token.id;
+    try {
+      const r = await fetch(`/api/projects/${token.project_id}/tokens/${token.id}`, {
+        method: 'DELETE',
+      });
+      if (r.ok) {
+        await this._loadTokens();
+      }
+    } finally {
+      this._revoking = null;
+    }
   }
 
   async _loadPrefs() {
@@ -201,16 +274,16 @@ class NottarioProfilePage extends LitElement {
     for (const m of memberships) {
       if (!byProject.has(m.project_id)) {
         byProject.set(m.project_id, {
-          ProjectID: m.project_id,
-          ProjectSlug: m.project_slug,
-          ProjectName: m.project_name,
+          project_id: m.project_id,
+          project_slug: m.project_slug,
+          project_name: m.project_name,
           roles: [],
         });
       }
       byProject.get(m.project_id).roles.push({
-        Label: m.role_label,
-        Color: m.role_color,
-        Position: m.role_position,
+        label: m.role_label,
+        color: m.role_color,
+        position: m.role_position,
       });
     }
     return Array.from(byProject.values())
@@ -218,7 +291,7 @@ class NottarioProfilePage extends LitElement {
         p.roles.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
         return p;
       })
-      .sort((a, b) => a.project_name.localeCompare(b.project_name));
+      .sort((a, b) => (a.project_name || '').localeCompare(b.project_name || ''));
   }
 
   async _logout() {
@@ -301,72 +374,49 @@ class NottarioProfilePage extends LitElement {
           `
         }
 
-        <h2>Settings</h2>
-        <div class="settings-list">
-          <div class="row">
-            <div class="label">Theme</div>
-            <div class="value muted">Coming soon.</div>
-          </div>
-          ${
-            this._prefsDisabled
-              ? null
-              : html`
-          <div class="row">
-            <div class="label">Notifications</div>
-            <div class="value">
-              ${
-                this._prefs
-                  ? html`
-                <div class="prefs">
-                  <label class="pref">
-                    <input type="checkbox"
-                           .checked=${!!this._prefs.task_assigned}
-                           ?disabled=${this._prefsSaving}
-                           @change=${() => this._togglePref('task_assigned')}>
-                    Someone assigns me to a task
-                  </label>
-                  <label class="pref">
-                    <input type="checkbox"
-                           .checked=${!!this._prefs.task_commented}
-                           ?disabled=${this._prefsSaving}
-                           @change=${() => this._togglePref('task_commented')}>
-                    Someone comments on a task I'm assigned to or created
-                  </label>
-                  <label class="pref">
-                    <input type="checkbox"
-                           .checked=${!!this._prefs.task_closed}
-                           ?disabled=${this._prefsSaving}
-                           @change=${() => this._togglePref('task_closed')}>
-                    A task I'm assigned to or created is closed
-                  </label>
-                </div>
-              `
-                  : html`<span class="muted">Loading…</span>`
-              }
-            </div>
-          </div>
-          `
-          }
-          <div class="row">
-            <div class="label">Default landing</div>
-            <div class="value muted">Coming soon.</div>
-          </div>
-        </div>
+        ${
+          this._prefsDisabled
+            ? null
+            : html`
+        <h2>Notifications</h2>
+        ${
+          this._prefs
+            ? html`
+              <div class="prefs">
+                <label class="pref">
+                  <input type="checkbox"
+                         .checked=${!!this._prefs.task_assigned}
+                         ?disabled=${this._prefsSaving}
+                         @change=${() => this._togglePref('task_assigned')}>
+                  Someone assigns me to a task
+                </label>
+                <label class="pref">
+                  <input type="checkbox"
+                         .checked=${!!this._prefs.task_commented}
+                         ?disabled=${this._prefsSaving}
+                         @change=${() => this._togglePref('task_commented')}>
+                  Someone comments on a task I'm assigned to or created
+                </label>
+                <label class="pref">
+                  <input type="checkbox"
+                         .checked=${!!this._prefs.task_closed}
+                         ?disabled=${this._prefsSaving}
+                         @change=${() => this._togglePref('task_closed')}>
+                  A task I'm assigned to or created is closed
+                </label>
+              </div>
+            `
+            : html`<div class="empty">Loading…</div>`
+        }
+        `
+        }
 
-        <h2>Account</h2>
+        <h2>API tokens</h2>
+        ${this._renderTokens()}
+
+        <h2>Session</h2>
         <div class="account-list">
           <div class="row">
-            <div class="label">API tokens</div>
-            <div class="value">
-              <a class="tokens-link" href="/"
-                 @click=${(e) => {
-                   e.preventDefault();
-                   window.nottarioNavigate('/');
-                 }}>Manage tokens in a project's Settings →</a>
-            </div>
-          </div>
-          <div class="row">
-            <div class="label">Session</div>
             <div class="value">
               <button class="btn danger" @click=${() => this._logout()}>Sign out</button>
             </div>
@@ -374,6 +424,85 @@ class NottarioProfilePage extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  _renderTokens() {
+    if (this._tokens === null) {
+      return html`<div class="empty">Loading…</div>`;
+    }
+    if (this._tokens.length === 0) {
+      return html`
+        <div class="empty">
+          <strong>No API tokens yet.</strong>
+          Head to a project's Settings → Tokens to issue one for an agent.
+        </div>
+      `;
+    }
+    return html`
+      <table class="data-table tokens">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Project</th>
+            <th>Prefix</th>
+            <th>Created</th>
+            <th>Last used</th>
+            <th class="row-actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${this._tokens.map((t) => this._renderTokenRow(t))}
+        </tbody>
+      </table>
+    `;
+  }
+
+  _renderTokenRow(t) {
+    const created = t.created_at ? new Date(t.created_at).toLocaleDateString() : '';
+    const lastUsed = t.last_used_at ? this._relTime(t.last_used_at) : '—';
+    const revoked = !!t.revoked_at;
+    return html`
+      <tr class=${revoked ? 'revoked' : ''}>
+        <td>${t.name}</td>
+        <td>
+          <a class="project-link" href=${`/projects/${t.project_id}`}
+             @click=${(e) => {
+               e.preventDefault();
+               window.nottarioNavigate(`/projects/${t.project_id}`);
+             }}>${t.project_name}</a>
+        </td>
+        <td><code>${t.prefix}…</code></td>
+        <td>${created}</td>
+        <td>${lastUsed}</td>
+        <td class="row-actions">
+          ${
+            revoked
+              ? html`<span class="badge revoked">revoked</span>`
+              : html`
+              <button class="btn ghost danger sm"
+                      ?disabled=${this._revoking === t.id}
+                      @click=${() => this._revokeToken(t)}>Revoke</button>
+            `
+          }
+        </td>
+      </tr>
+    `;
+  }
+
+  _relTime(iso) {
+    const then = new Date(iso).getTime();
+    if (!Number.isFinite(then)) return '';
+    const diff = Date.now() - then;
+    if (diff < 60_000) return 'just now';
+    const m = Math.floor(diff / 60_000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d}d ago`;
+    const w = Math.floor(d / 7);
+    if (w < 12) return `${w}w ago`;
+    return new Date(iso).toLocaleDateString();
   }
 }
 

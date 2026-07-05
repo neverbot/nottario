@@ -114,6 +114,49 @@ func ListProjectTokens(ctx context.Context, pool *pgxpool.Pool, projectID uuid.U
 	return out, nil
 }
 
+// UserTokenRow is a token row enriched with its project name for the
+// cross-project `/me` tokens view. Separate type from APIToken because
+// APIToken is used elsewhere and shouldn't grow project fields.
+type UserTokenRow struct {
+	ID            uuid.UUID  `json:"id"`
+	UserID        uuid.UUID  `json:"user_id"`
+	ProjectID     uuid.UUID  `json:"project_id"`
+	ProjectName   string     `json:"project_name"`
+	ProjectSlug   string     `json:"project_slug"`
+	Name          string     `json:"name"`
+	Prefix        string     `json:"prefix"`
+	DefaultRoleID *uuid.UUID `json:"default_role_id"`
+	CreatedAt     time.Time  `json:"created_at"`
+	LastUsedAt    *time.Time `json:"last_used_at"`
+	RevokedAt     *time.Time `json:"revoked_at"`
+}
+
+// ListUserTokens returns every token the given user has issued, across
+// every project. Powers the cross-project tokens table under `/me`.
+func ListUserTokens(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]UserTokenRow, error) {
+	rows, err := dbq.New(pool).ListUserTokens(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UserTokenRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, UserTokenRow{
+			ID:            r.ID,
+			UserID:        r.UserID,
+			ProjectID:     r.ProjectID,
+			ProjectName:   r.ProjectName,
+			ProjectSlug:   r.ProjectSlug,
+			Name:          r.Name,
+			Prefix:        r.Prefix,
+			DefaultRoleID: r.DefaultRoleID,
+			CreatedAt:     r.CreatedAt.Time,
+			LastUsedAt:    timeOrNil(r.LastUsedAt),
+			RevokedAt:     timeOrNil(r.RevokedAt),
+		})
+	}
+	return out, nil
+}
+
 // GetToken fetches a token by id. Returns ErrTokenInvalid if missing.
 // Used by the revoke handler to validate the token belongs to the
 // project in the URL before running the authz check.

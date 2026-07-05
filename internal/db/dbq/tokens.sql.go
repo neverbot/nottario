@@ -192,6 +192,66 @@ func (q *Queries) ListTokenNamesByIDs(ctx context.Context, ids []uuid.UUID) ([]L
 	return items, nil
 }
 
+const listUserTokens = `-- name: ListUserTokens :many
+SELECT t.id, t.user_id, t.project_id, t.name, t.prefix,
+       t.default_role_id, t.created_at, t.last_used_at, t.revoked_at,
+       p.name AS project_name, p.slug AS project_slug
+FROM api_tokens t
+JOIN projects p ON p.id = t.project_id
+WHERE t.user_id = $1::uuid
+ORDER BY p.name ASC, t.created_at DESC
+`
+
+type ListUserTokensRow struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	ProjectID     uuid.UUID
+	Name          string
+	Prefix        string
+	DefaultRoleID *uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	LastUsedAt    pgtype.Timestamptz
+	RevokedAt     pgtype.Timestamptz
+	ProjectName   string
+	ProjectSlug   string
+}
+
+// Every token the given user has issued, across every project they
+// belong to. Joined to projects so the /me page can render a
+// project-name column without a second round-trip. Revoked tokens
+// are included so the audit view is honest.
+func (q *Queries) ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error) {
+	rows, err := q.db.Query(ctx, listUserTokens, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserTokensRow{}
+	for rows.Next() {
+		var i ListUserTokensRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Prefix,
+			&i.DefaultRoleID,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+			&i.RevokedAt,
+			&i.ProjectName,
+			&i.ProjectSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lookupAPIToken = `-- name: LookupAPIToken :one
 SELECT t.id AS token_id, t.user_id, t.project_id, t.name AS token_name,
        t.prefix, t.default_role_id,
