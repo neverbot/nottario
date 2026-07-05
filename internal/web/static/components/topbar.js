@@ -389,7 +389,7 @@ class NottarioTopbar extends LitElement {
         </nav>
         <div class="spacer"></div>
         <div class="right">
-          <nottario-search-box project-id=${proj || ''}></nottario-search-box>
+          ${proj ? html`<nottario-search-box project-id=${proj}></nottario-search-box>` : null}
           <nottario-notifications-bell .me=${this.me}></nottario-notifications-bell>
           <div class="menu-wrap">
             <button class="user-trigger"
