@@ -9,11 +9,18 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 // main content area.
 //
 // Product-register design: neutral palette (bg-subtle + 1px border),
-// no side-stripe, no accent color, no animation. The command needed
-// to update lives inline as `<code>` so it can be copy-pasted with a
-// single triple-click. The two 7-char SHAs are exposed as a tooltip
-// on the leading icon, not as body text — the operator only needs
-// them for confirmation, not as primary reading.
+// no side-stripe, no accent color, no animation. The banner never
+// prescribes a specific upgrade command — self-hosters may run any
+// combination of `docker compose`, k8s, systemd wrappers, Ansible,
+// etc. — and instead links to the canonical documentation page
+// that covers each shape. The two 7-char SHAs are exposed as a
+// tooltip on the leading icon, not as body text — the operator
+// only needs them for confirmation, not as primary reading.
+//
+// Both doc links hardcode the canonical neverbot.github.io host
+// because the docs site is not co-hosted with the Nottario instance
+// and there is no runtime way to discover a fork's own docs URL. A
+// fork operator can PR an env-var override once they hit this.
 //
 // Dismiss persistence keys off the LATEST sha (not the current time
 // or a boolean) so that once a NEW upstream commit lands, the banner
@@ -54,24 +61,20 @@ class NottarioUpdateBanner extends LitElement {
     .icon svg { display: block; }
 
     .msg { line-height: 1.4; }
-    .msg strong { font-weight: 600; margin-right: 4px; }
-    .msg code {
-      display: inline-block;
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      font-size: 12px;
-      background: var(--gray-2);
-      padding: 1px 6px;
-      border-radius: 4px;
-      color: var(--fg);
-      margin-left: 4px;
-    }
+    .msg strong { font-weight: 600; }
 
-    .changelog {
+    .actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .actions a {
       color: var(--accent);
       text-decoration: none;
       font-size: 13px;
+      white-space: nowrap;
     }
-    .changelog:hover { text-decoration: underline; }
+    .actions a:hover { text-decoration: underline; }
 
     .dismiss {
       display: inline-flex;
@@ -150,8 +153,6 @@ class NottarioUpdateBanner extends LitElement {
 
     const running = this._shortSha(s.running?.sha);
     const latest = this._shortSha(latestSha);
-    const upstream = s.upstream || 'neverbot/nottario';
-    const commitsURL = `https://github.com/${upstream}/commits/master`;
     const shaTitle = running && latest ? `${running} → ${latest}` : '';
 
     return html`
@@ -163,12 +164,15 @@ class NottarioUpdateBanner extends LitElement {
         </span>
         <span class="msg">
           <strong>Update available.</strong>
-          Run: <code>docker compose pull &amp;&amp; docker compose up -d</code>
         </span>
-        <a class="changelog"
-           href=${commitsURL}
-           target="_blank"
-           rel="noopener noreferrer">Changelog</a>
+        <span class="actions">
+          <a href="https://neverbot.github.io/nottario/whats-new/"
+             target="_blank"
+             rel="noopener noreferrer">What's new</a>
+          <a href="https://neverbot.github.io/nottario/self-hosting/#upgrade-flow"
+             target="_blank"
+             rel="noopener noreferrer">How to upgrade</a>
+        </span>
         <button class="dismiss"
                 type="button"
                 title="Dismiss for this session"
