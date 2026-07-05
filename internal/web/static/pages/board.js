@@ -526,59 +526,60 @@ class NottarioBoardPage extends LitElement {
     }
 
     .detail .commits-list {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .detail .commits-list .commit {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      padding: 6px 10px;
-      background: var(--bg-subtle);
       border: 1px solid var(--border);
       border-radius: 6px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .detail .commits-list .commit {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: baseline;
+      padding: 8px 12px;
+      border-top: 1px solid var(--gray-2);
+      background: transparent;
       color: var(--fg);
       text-decoration: none;
       font-size: 13px;
-      transition: background-color 0.1s, border-color 0.1s;
+      transition: background-color 0.1s;
     }
-    .detail .commits-list a.commit:hover {
-      background: var(--bg);
-      border-color: var(--accent);
-    }
+    .detail .commits-list .commit:first-child { border-top: none; }
+    .detail .commits-list a.commit:hover { background: var(--bg-subtle); }
     .detail .commits-list a.commit:hover .sha { text-decoration: underline; }
-    .detail .commits-list .commit .top {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-      min-width: 0;
-    }
     .detail .commits-list .commit .sha {
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 12px;
       color: var(--accent);
-      flex: 0 0 auto;
     }
     .detail .commits-list .commit .msg {
-      flex: 1 1 auto;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--fg);
     }
-    .detail .commits-list .commit .meta {
+    .detail .commits-list .commit .when {
       font-size: 11px;
       color: var(--fg-muted);
-      display: flex;
-      gap: 6px;
-      align-items: baseline;
+      font-variant-numeric: tabular-nums;
     }
-    .detail .commits-list .commit .meta .repo {
+    /* Repo suffix in the section eyebrow when all commits share one repo. */
+    .detail section .eyebrow .eyebrow-repo {
       font-family: ui-monospace, SFMono-Regular, monospace;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--fg-muted);
+      font-weight: 500;
     }
-    .detail .commits-list .commit .meta .sep { opacity: 0.5; }
+    /* Per-row repo suffix (only rendered when commits mix repos). */
+    .detail .commits-list .commit .row-repo {
+      grid-column: 1 / -1;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      color: var(--fg-muted);
+      margin-top: -2px;
+    }
 
     /* Comments thread — each row has a small leading avatar column. */
     .detail .comment {
@@ -1943,7 +1944,13 @@ class NottarioBoardPage extends LitElement {
     `;
   }
 
-  _renderCommit(c) {
+  // Render one commit row inside the commits list. `showRepo` is passed
+  // by the section: when all linked commits share a single repo we hoist
+  // that label to the section eyebrow and drop it from each row (the
+  // usual case — nearly every task links commits from one repo). When
+  // repos mix we render the repo as a small suffix on each row so the
+  // reader can tell them apart.
+  _renderCommit(c, showRepo) {
     const sha = (c.sha || '').trim();
     const repo = (c.repo || '').trim();
     const shortSha = sha.slice(0, 7);
@@ -1953,19 +1960,12 @@ class NottarioBoardPage extends LitElement {
     const repoOK = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo);
     const url = repoOK && sha ? `https://github.com/${repo}/commit/${sha}` : null;
     const when = c.added_at ? this._commitRelTime(c.added_at) : '';
-    const meta = html`
-      <div class="meta">
-        ${repo ? html`<span class="repo">${repo}</span>` : null}
-        ${repo && when ? html`<span class="sep">·</span>` : null}
-        ${when ? html`<span class="when" title=${new Date(c.added_at).toLocaleString()}>${when}</span>` : null}
-      </div>
-    `;
+    const whenTitle = c.added_at ? new Date(c.added_at).toLocaleString() : '';
     const inner = html`
-      <div class="top">
-        <span class="sha">${shortSha}</span>
-        ${c.message ? html`<span class="msg" title=${c.message}>${c.message}</span>` : null}
-      </div>
-      ${repo || when ? meta : null}
+      <span class="sha">${shortSha}</span>
+      <span class="msg" title=${c.message || ''}>${c.message || '—'}</span>
+      <span class="when" title=${whenTitle}>${when}</span>
+      ${showRepo && repo ? html`<span class="row-repo">${repo}</span>` : null}
     `;
     if (url) {
       return html`<a class="commit" href=${url} target="_blank" rel="noopener noreferrer">${inner}</a>`;
@@ -2325,18 +2325,31 @@ class NottarioBoardPage extends LitElement {
                 : null
             }
 
+            ${(() => {
+              // Hoist the repo label to the section eyebrow when every
+              // linked commit shares a single repo (the common case).
+              // Falls back to per-row repo suffixes when the set is
+              // mixed. Empty set = no repo label, empty state below.
+              const repos = new Set(commits.map((c) => c.repo).filter(Boolean));
+              const singleRepo = repos.size === 1 ? [...repos][0] : null;
+              const showRepoPerRow = repos.size > 1;
+              return html`
             <section>
-              <h4 class="eyebrow">Commits</h4>
+              <h4 class="eyebrow">
+                Commits${singleRepo ? html`<span class="eyebrow-repo"> — ${singleRepo}</span>` : ''}
+              </h4>
               ${
                 commits.length === 0
                   ? html`<p class="empty">No commits linked.</p>`
                   : html`
                   <div class="commits-list">
-                    ${commits.map((c) => this._renderCommit(c))}
+                    ${commits.map((c) => this._renderCommit(c, showRepoPerRow))}
                   </div>
                 `
               }
             </section>
+            `;
+            })()}
 
             <section>
               <h4 class="eyebrow">Comments</h4>
