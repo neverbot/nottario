@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { defaultPathFor } from './views.js';
 import './components/topbar.js';
+import './components/update-banner.js';
 import './pages/login.js';
 import './pages/projects.js';
 import './pages/project-settings.js';
@@ -212,6 +213,7 @@ class NottarioShell extends LitElement {
            m?.focus();
          }}>Skip to main content</a>
       ${this.renderTopbar()}
+      ${this.me ? html`<nottario-update-banner .me=${this.me}></nottario-update-banner>` : null}
       <main id="main-content" tabindex="-1">${this.renderBody()}</main>
     `;
   }
