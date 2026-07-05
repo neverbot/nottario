@@ -355,8 +355,13 @@ class NottarioNotificationsBell extends LitElement {
               aria-label=${hasUnread ? `Notifications, ${this._unread} unread` : 'Notifications'}
               title=${hasUnread ? `${this._unread} unread` : 'Notifications'}
               @click=${this._toggle}>
-        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M8 1.5A5.5 5.5 0 0 0 2.5 7v2.086L1.22 10.366A.75.75 0 0 0 1.75 11.75h12.5a.75.75 0 0 0 .53-1.28L13.5 9.087V7A5.5 5.5 0 0 0 8 1.5Zm-2 11.75a2 2 0 1 0 4 0h-4Z"/>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M4 5.33a4 4 0 0 1 8 0c0 4.67 2 6 2 6H2s2-1.33 2-6"
+                stroke="currentColor" stroke-width="1.3"
+                stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M6.87 14a1.29 1.29 0 0 0 2.27 0"
+                stroke="currentColor" stroke-width="1.3"
+                stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         ${hasUnread ? html`<span class="dot" aria-hidden="true"></span>` : null}
       </button>
