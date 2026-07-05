@@ -2018,7 +2018,7 @@ class NottarioBoardPage extends LitElement {
     const when = c.added_at ? this._commitRelTime(c.added_at) : '';
     const whenTitle = c.added_at ? new Date(c.added_at).toLocaleString() : '';
     const inner = html`
-      <span class="sha">${shortSha}</span>
+      <span class="sha" title=${sha}>${shortSha}</span>
       <span class="msg" title=${c.message || ''}>${c.message || '—'}</span>
       <span class="when" title=${whenTitle}>${when}</span>
       ${showRepo && repo ? html`<span class="row-repo">${repo}</span>` : null}
