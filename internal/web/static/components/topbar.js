@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { badgeStyles } from './badges.js';
 import './avatar.js';
+import './notifications-bell.js';
 import '../pages/search.js';
 
 // <nottario-topbar> renders the persistent app-shell topbar that wraps
@@ -389,6 +390,7 @@ class NottarioTopbar extends LitElement {
         <div class="spacer"></div>
         <div class="right">
           <nottario-search-box project-id=${proj || ''}></nottario-search-box>
+          <nottario-notifications-bell .me=${this.me}></nottario-notifications-bell>
           <div class="menu-wrap">
             <button class="user-trigger"
                     aria-haspopup="menu"

@@ -9,6 +9,10 @@ class NottarioProfilePage extends LitElement {
   static properties = {
     me: { type: Object },
     error: { state: true },
+    // Notification prefs live inline; loaded on mount, PATCH on toggle.
+    _prefs: { state: true },
+    _prefsSaving: { state: true },
+    _prefsDisabled: { state: true },
   };
 
   static styles = [
@@ -110,6 +114,21 @@ class NottarioProfilePage extends LitElement {
       text-decoration: none;
     }
     .row a.tokens-link:hover { text-decoration: underline; }
+    .prefs {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .prefs .pref {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--fg);
+    }
+    .prefs .pref input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
     /* sign-out reuses the shared .btn.danger from components/buttons.js */
 
     .empty {
@@ -127,6 +146,53 @@ class NottarioProfilePage extends LitElement {
   constructor() {
     super();
     this.error = '';
+    this._prefs = null;
+    this._prefsSaving = false;
+    this._prefsDisabled = false;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._loadPrefs();
+  }
+
+  async _loadPrefs() {
+    try {
+      // Piggyback on the unread_count endpoint to detect the kill
+      // switch; we don't want to render toggles if the whole feature
+      // is off. When the poller reports disabled: true we hide the
+      // prefs block entirely so the surface matches the bell.
+      const cr = await fetch('/api/notifications/unread_count');
+      if (cr.ok) {
+        const j = await cr.json();
+        if (j.disabled) {
+          this._prefsDisabled = true;
+          return;
+        }
+      }
+      const r = await fetch('/api/me/notification_preferences');
+      if (!r.ok) return;
+      this._prefs = await r.json();
+    } catch (_) {
+      // Silent: keep the placeholder legible until the request lands.
+    }
+  }
+
+  async _togglePref(key) {
+    if (this._prefsSaving || !this._prefs) return;
+    const next = { ...this._prefs, [key]: !this._prefs[key] };
+    this._prefsSaving = true;
+    try {
+      const r = await fetch('/api/me/notification_preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: next[key] }),
+      });
+      if (!r.ok) return;
+      this._prefs = await r.json();
+    } finally {
+      this._prefsSaving = false;
+    }
   }
 
   _groupedMemberships() {
@@ -241,10 +307,46 @@ class NottarioProfilePage extends LitElement {
             <div class="label">Theme</div>
             <div class="value muted">Coming soon.</div>
           </div>
+          ${
+            this._prefsDisabled
+              ? null
+              : html`
           <div class="row">
             <div class="label">Notifications</div>
-            <div class="value muted">Coming with the per-user notifications feature.</div>
+            <div class="value">
+              ${
+                this._prefs
+                  ? html`
+                <div class="prefs">
+                  <label class="pref">
+                    <input type="checkbox"
+                           .checked=${!!this._prefs.task_assigned}
+                           ?disabled=${this._prefsSaving}
+                           @change=${() => this._togglePref('task_assigned')}>
+                    Someone assigns me to a task
+                  </label>
+                  <label class="pref">
+                    <input type="checkbox"
+                           .checked=${!!this._prefs.task_commented}
+                           ?disabled=${this._prefsSaving}
+                           @change=${() => this._togglePref('task_commented')}>
+                    Someone comments on a task I'm assigned to or created
+                  </label>
+                  <label class="pref">
+                    <input type="checkbox"
+                           .checked=${!!this._prefs.task_closed}
+                           ?disabled=${this._prefsSaving}
+                           @change=${() => this._togglePref('task_closed')}>
+                    A task I'm assigned to or created is closed
+                  </label>
+                </div>
+              `
+                  : html`<span class="muted">Loading…</span>`
+              }
+            </div>
           </div>
+          `
+          }
           <div class="row">
             <div class="label">Default landing</div>
             <div class="value muted">Coming soon.</div>
