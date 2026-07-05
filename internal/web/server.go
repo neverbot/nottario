@@ -74,6 +74,14 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/me", MeHandler(auth))
 	mux.Handle("GET /api/users", ListUsersHandler(UsersDeps{Pool: d.Pool, Resolver: d.Resolver}))
 
+	notif := NotificationsDeps{Pool: d.Pool, Resolver: d.Resolver, Enabled: d.NotificationsEnabled}
+	mux.Handle("GET /api/notifications", ListNotificationsHandler(notif))
+	mux.Handle("GET /api/notifications/unread_count", UnreadCountHandler(notif))
+	mux.Handle("POST /api/notifications/read", MarkReadHandler(notif))
+	mux.Handle("POST /api/notifications/read_all", MarkAllReadHandler(notif))
+	mux.Handle("GET /api/me/notification_preferences", GetPreferencesHandler(notif))
+	mux.Handle("PATCH /api/me/notification_preferences", PatchPreferencesHandler(notif))
+
 	proj := ProjectDeps{Pool: d.Pool, Resolver: d.Resolver}
 	guard := func(h http.Handler) http.Handler { return withProjectScopeGuard(d.Resolver, h) }
 	mux.Handle("GET /api/projects", ListProjectsHandler(proj))

@@ -12,6 +12,13 @@ are cut on demand.
 
 ## 2026-07-05
 
+- **Per-user notifications system.** Every user now sees a bell in the
+  topbar with an unread indicator, a drawer listing task events that
+  concern them (someone assigned them a task, someone commented on a
+  task they're assigned to or created, a task they're assigned to or
+  created was closed), and a preferences block under `/me` to opt out
+  per kind. Self-hosters can turn the whole system off with
+  `NOTIFICATIONS_ENABLED=false`.
 - **Self-hosted admins now see an "update available" banner** when a
   newer commit lands on upstream master. The check runs in-process
   every 24 hours (configurable via `SELF_UPDATE_CHECK_INTERVAL`);
