@@ -161,6 +161,18 @@ type Membership struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type Notification struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	ProjectID   uuid.UUID
+	Kind        string
+	TaskID      *uuid.UUID
+	ActorUserID *uuid.UUID
+	Body        string
+	CreatedAt   pgtype.Timestamptz
+	ReadAt      pgtype.Timestamptz
+}
+
 type Project struct {
 	ID                  uuid.UUID
 	Slug                string
@@ -258,12 +270,13 @@ type TaskDependency struct {
 }
 
 type User struct {
-	ID          uuid.UUID
-	GithubLogin string
-	GithubID    int64
-	DisplayName string
-	AvatarUrl   pgtype.Text
-	IsAdmin     bool
-	CreatedAt   pgtype.Timestamptz
-	LastSeenAt  pgtype.Timestamptz
+	ID                      uuid.UUID
+	GithubLogin             string
+	GithubID                int64
+	DisplayName             string
+	AvatarUrl               pgtype.Text
+	IsAdmin                 bool
+	CreatedAt               pgtype.Timestamptz
+	LastSeenAt              pgtype.Timestamptz
+	NotificationPreferences []byte
 }

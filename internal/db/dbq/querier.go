@@ -34,6 +34,7 @@ type Querier interface {
 	// as "closed enough" — a feature whose remaining children were all
 	// cancelled deliberately should roll up to done.
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
+	CountUnread(ctx context.Context, userID uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)
 	DeleteArchEdge(ctx context.Context, arg DeleteArchEdgeParams) (int64, error)
 	DeleteArchKind(ctx context.Context, arg DeleteArchKindParams) (int64, error)
@@ -78,6 +79,7 @@ type Querier interface {
 	GetDocumentForDelete(ctx context.Context, arg GetDocumentForDeleteParams) (GetDocumentForDeleteRow, error)
 	GetDocumentVersion(ctx context.Context, arg GetDocumentVersionParams) (DocumentVersion, error)
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
+	GetPreferences(ctx context.Context, userID uuid.UUID) ([]byte, error)
 	GetPriorityClosestTo50(ctx context.Context, projectID uuid.UUID) (int32, error)
 	GetPriorityValue(ctx context.Context, arg GetPriorityValueParams) (int32, error)
 	// Returns the project's idle threshold (override or NULL).
@@ -112,6 +114,7 @@ type Querier interface {
 	InsertDocument(ctx context.Context, arg InsertDocumentParams) (InsertDocumentRow, error)
 	InsertDocumentVersion(ctx context.Context, arg InsertDocumentVersionParams) error
 	InsertMembership(ctx context.Context, arg InsertMembershipParams) error
+	InsertNotification(ctx context.Context, arg InsertNotificationParams) (Notification, error)
 	InsertProject(ctx context.Context, arg InsertProjectParams) (InsertProjectRow, error)
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
 	InsertSeedRole(ctx context.Context, arg InsertSeedRoleParams) (uuid.UUID, error)
@@ -146,6 +149,10 @@ type Querier interface {
 	// caller-supplied default). Used by the background ticker.
 	ListExpiredArchLocks(ctx context.Context, defaultIdleSeconds int32) ([]ListExpiredArchLocksRow, error)
 	ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error)
+	// Keyset paginated by (created_at DESC, id ASC). Pass after_created_at
+	// and after_id from a previous page's tail row; NULL on the first page.
+	// Requests limit+1 so the caller can detect has_more (last row dropped).
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
 	ListProjectPriorities(ctx context.Context, projectID uuid.UUID) ([]ListProjectPrioritiesRow, error)
@@ -186,6 +193,8 @@ type Querier interface {
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LookupAPIToken(ctx context.Context, tokenHash []byte) (LookupAPITokenRow, error)
+	MarkAllRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	MarkRead(ctx context.Context, arg MarkReadParams) (int64, error)
 	// Returns the highest existing version for the project, or 0 when the
 	// project has no revisions yet. Used to compute the next version on
 	// both lock acquisition (base_version) and snapshot insertion.
@@ -238,6 +247,7 @@ type Querier interface {
 	UnifiedSearch(ctx context.Context, arg UnifiedSearchParams) ([]UnifiedSearchRow, error)
 	UpdateArchNode(ctx context.Context, arg UpdateArchNodeParams) (UpdateArchNodeRow, error)
 	UpdateDocument(ctx context.Context, arg UpdateDocumentParams) (UpdateDocumentRow, error)
+	UpdatePreferences(ctx context.Context, arg UpdatePreferencesParams) error
 	UpdateProjectCycleLabel(ctx context.Context, arg UpdateProjectCycleLabelParams) error
 	UpdateProjectDefaultView(ctx context.Context, arg UpdateProjectDefaultViewParams) error
 	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error

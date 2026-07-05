@@ -61,6 +61,15 @@ type Config struct {
 	SelfUpdateEnabled  bool
 	SelfUpdateInterval time.Duration
 	SelfUpdateUpstream string
+
+	// Notifications system. When NotificationsEnabled is true (the
+	// default) the app produces per-user notifications for the
+	// events documented in /self-hosting and exposes the drawer +
+	// preferences UI. When false the bell disappears, endpoints
+	// refuse writes and return empty reads, and no rows are
+	// inserted — useful for stripped-down deployments that don't
+	// want the persistence overhead.
+	NotificationsEnabled bool
 }
 
 // LoadDotEnv reads a .env file from the working directory if it
@@ -151,6 +160,8 @@ func Load() (*Config, error) {
 		cfg.SelfUpdateInterval = v
 	}
 	cfg.SelfUpdateUpstream = getenv("SELF_UPDATE_UPSTREAM", "neverbot/nottario")
+
+	cfg.NotificationsEnabled = getenvBool("NOTIFICATIONS_ENABLED", true)
 
 	return cfg, nil
 }

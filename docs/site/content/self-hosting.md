@@ -27,6 +27,7 @@ this page documents every knob.
 | `SELF_UPDATE_CHECK_ENABLED` | no | `true` | Poll the upstream GitHub repository once a day and surface an admin-only banner when a newer commit lands on master. `false` skips the outbound request entirely. |
 | `SELF_UPDATE_CHECK_INTERVAL` | no | `24h` | Go duration between checks. Clamped up to `1h` — the anonymous GitHub API has a 60 req/h/IP limit that leaves plenty of headroom, but there's nothing to gain from a tighter cadence. |
 | `SELF_UPDATE_UPSTREAM` | no | `neverbot/nottario` | GitHub `owner/repo` to compare against. Change if you run a fork so the banner points at your own tree. |
+| `NOTIFICATIONS_ENABLED` | no | `true` | Produce per-user notifications (bell in the topbar, drawer, preferences under `/me`). `false` hides the bell, refuses writes, and returns empty reads — no rows are inserted. Existing rows are preserved so the feature can be flipped back on without loss. |
 
 ## Secret files
 
