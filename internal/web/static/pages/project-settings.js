@@ -463,7 +463,16 @@ class NottarioProjectSettings extends LitElement {
       const res = await fetch(`/api/projects/${this.projectId}/roles/${id}`, {
         method: 'DELETE',
       });
-      if (!res.ok) throw new Error('delete failed');
+      if (!res.ok) {
+        // Surface the server's JSON `error` field when present so
+        // FK/precondition failures don't collapse to "delete failed".
+        let msg = `HTTP ${res.status}`;
+        try {
+          const j = await res.json();
+          if (j && j.error) msg = j.error;
+        } catch (_) {}
+        throw new Error(msg);
+      }
       await this.load();
       toast.success('Role removed.');
     } catch (err) {
