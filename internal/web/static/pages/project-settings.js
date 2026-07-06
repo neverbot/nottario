@@ -9,6 +9,7 @@ import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
 import { confirm } from '/static/components/confirm-dialog.js';
 import { pencilIcon } from '/static/components/icons.js';
+import { copyToClipboard } from '/static/utils/clipboard.js';
 import { tableActionStyles } from '/static/components/table-actions.js';
 import { addRowStyles } from '/static/components/add-row.js';
 import '/static/components/color-swatches.js';
@@ -230,9 +231,21 @@ class NottarioProjectSettings extends LitElement {
       border: 1px dashed var(--border);
       border-radius: 8px;
     }
-    /* Copy-success ack: the same button briefly swaps to a
-       check-mark + "Copied" so the user knows the click landed. */
-    .copy-ack { color: var(--success); font-weight: 600; }
+    /* Copy ack: the same button briefly swaps chrome so the user
+       sees the click landed. Two states — success flips the button
+       to the filled success chrome (green fill, white text);
+       failure keeps the secondary chrome but tints the label red
+       and widens the message so the fallback (select-all on the
+       visible text) is discoverable. Both states preserve the
+       button footprint — no layout shift. */
+    .btn.copy-ok {
+      background: var(--success);
+      border-color: rgba(31, 35, 40, 0.15);
+      color: var(--fg-on-accent);
+    }
+    .btn.copy-ok:hover { background: var(--success-hover); }
+    .btn.copy-err { color: var(--danger); border-color: rgba(207, 34, 46, 0.35); }
+    .btn.copy-err:hover { background: var(--tint-red); border-color: var(--danger); }
   `,
   ];
 
@@ -1060,18 +1073,15 @@ class NottarioProjectSettings extends LitElement {
   }
 
   async _copyAndAck(text, which) {
-    try {
-      await navigator.clipboard.writeText(text);
-      this._copyAck = which;
-      // Brief confirmation; clears so the button text returns to
-      // its rest state and the user can click again if needed.
-      setTimeout(() => {
-        if (this._copyAck === which) this._copyAck = null;
-      }, 1500);
-    } catch (_) {
-      // Clipboard failed — leave the ack off; the user can fall back
-      // to selecting the visible text manually (user-select: all).
-    }
+    const ok = await copyToClipboard(text);
+    this._copyAck = { which, ok };
+    // Success clears fast (1.5s); failure lingers longer (3s) so the
+    // user has time to read the fallback instruction ("select the
+    // text above") before the button reverts.
+    const hold = ok ? 1500 : 3000;
+    setTimeout(() => {
+      if (this._copyAck && this._copyAck.which === which) this._copyAck = null;
+    }, hold);
   }
 
   async _loadTokens() {
@@ -1243,10 +1253,18 @@ class NottarioProjectSettings extends LitElement {
   --transport http \\
   --header "Authorization: Bearer ${secret}" \\
   --scope local`;
-      const copyTokenLabel =
-        this._copyAck === 'token' ? html`<span class="copy-ack">✓ Copied</span>` : 'Copy token';
-      const copySnippetLabel =
-        this._copyAck === 'snippet' ? html`<span class="copy-ack">✓ Copied</span>` : 'Copy snippet';
+      const ackFor = (w) => (this._copyAck && this._copyAck.which === w ? this._copyAck : null);
+      const btnClass = (w) => {
+        const a = ackFor(w);
+        if (!a) return 'btn secondary';
+        return a.ok ? 'btn secondary copy-ok' : 'btn secondary copy-err';
+      };
+      const btnLabel = (w, rest) => {
+        const a = ackFor(w);
+        if (!a) return rest;
+        if (a.ok) return '✓ Copied';
+        return 'Couldn’t copy — select the text above';
+      };
       return html`
         <div class="dialog">
           <div class="panel wide">
@@ -1258,10 +1276,10 @@ class NottarioProjectSettings extends LitElement {
             <p class="helper" style="margin:14px 0 4px">Install in Claude Code:</p>
             <div class="snippet">${snippet}</div>
             <div class="actions-row" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-              <button class="btn secondary"
-                      @click=${() => this._copyAndAck(secret, 'token')}>${copyTokenLabel}</button>
-              <button class="btn secondary"
-                      @click=${() => this._copyAndAck(snippet, 'snippet')}>${copySnippetLabel}</button>
+              <button class=${btnClass('token')}
+                      @click=${() => this._copyAndAck(secret, 'token')}>${btnLabel('token', 'Copy token')}</button>
+              <button class=${btnClass('snippet')}
+                      @click=${() => this._copyAndAck(snippet, 'snippet')}>${btnLabel('snippet', 'Copy snippet')}</button>
               <button class="btn primary" @click=${() => this._closeTokenDialog()}>Done</button>
             </div>
           </div>
