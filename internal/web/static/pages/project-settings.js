@@ -201,27 +201,16 @@ class NottarioProjectSettings extends LitElement {
     .status.revoked { color: var(--fg-muted); font-weight: 400; }
     /* Inline revoke confirm: replaces the native window.confirm()
        so the confirm flow stays inside the table row, on-brand and
-       scannable. */
+       scannable. Buttons themselves use the shared .btn / .btn.danger
+       classes; only the wrapper layout is local. */
     .revoke-confirm {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--fg-muted);
+      gap: 8px;
+      font-size: 13px;
+      color: var(--fg);
     }
-    .revoke-confirm strong { color: var(--fg); font-weight: 500; }
-    .revoke-confirm button {
-      padding: 2px 8px;
-      font-size: 12px;
-      line-height: 1.4;
-      border-radius: 4px;
-    }
-    .revoke-confirm .yes {
-      background: var(--danger);
-      color: var(--fg-on-accent);
-      border-color: var(--danger);
-    }
-    .revoke-confirm .yes:hover { background: var(--danger-hover); }
+    .revoke-confirm strong { font-weight: 500; }
     /* Non-member empty state — tokenised. */
     .tokens-locked {
       padding: 24px;
@@ -1226,11 +1215,12 @@ class NottarioProjectSettings extends LitElement {
               ? null
               : armed
                 ? html`
-                  <span class="revoke-confirm">
+                  <span class="revoke-confirm" role="alert">
                     <strong>Revoke?</strong>
-                    <button class="yes"
-                            @click=${() => this._revokeToken(t.id)}>Yes</button>
-                    <button @click=${() => this._cancelRevoke()}>Cancel</button>
+                    <button class="btn secondary"
+                            @click=${() => this._cancelRevoke()}>Cancel</button>
+                    <button class="btn danger"
+                            @click=${() => this._revokeToken(t.id)}>Revoke</button>
                   </span>`
                 : html`
                   <button class="delete" title="Revoke token" aria-label="Revoke token"
