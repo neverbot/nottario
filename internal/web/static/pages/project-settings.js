@@ -943,16 +943,25 @@ class NottarioProjectSettings extends LitElement {
                   </div>
                 </td>
                 <td>
-                  ${m.role_color ? html`<span class="color-dot" style=${`background:${m.role_color}`}></span>` : ''}
-                  ${m.role_label}
+                  ${
+                    m.role_id
+                      ? html`${m.role_color ? html`<span class="color-dot" style=${`background:${m.role_color}`}></span>` : ''}${m.role_label}`
+                      : html`<span class="muted">No roles yet</span>`
+                  }
                 </td>
                 ${
                   admin
                     ? html`
                   <td class="row-actions">
-                    <button class="delete"
-                            title="Remove this role from ${m.display_name || m.github_login}"
-                            @click=${() => this.removeMember(m.user_id, m.role_id)}>×</button>
+                    ${
+                      m.role_id
+                        ? html`<button class="delete"
+                                       title="Unassign this role from ${m.display_name || m.github_login} (the user stays in the project)"
+                                       @click=${() => this.unassignRole(m.user_id, m.role_id)}>×</button>`
+                        : html`<button class="delete"
+                                       title="Remove ${m.display_name || m.github_login} from the project"
+                                       @click=${() => this.removeMemberEntirely(m.user_id, m.display_name || m.github_login)}>×</button>`
+                    }
                   </td>
                 `
                     : null
@@ -988,7 +997,7 @@ class NottarioProjectSettings extends LitElement {
           </div>
         </form>
         <p class="helper" style="margin-top:12px">
-          A user can hold multiple roles in a project — add the same user with a different role to grant both. Removing the last role of a user takes them out of the project entirely.
+          A user can hold multiple roles in a project — add the same user with a different role to grant both. Unassigning a role leaves the user in the project without any role; use the × on a "No roles yet" row to remove them entirely.
         </p>
       `
           : html`
@@ -1311,11 +1320,11 @@ class NottarioProjectSettings extends LitElement {
     `;
   }
 
-  async removeMember(userID, roleID) {
+  async unassignRole(userID, roleID) {
     const ok = await confirm({
-      title: 'Remove this membership?',
-      body: 'The user keeps any other role memberships in this project.',
-      confirmLabel: 'Remove',
+      title: 'Unassign this role?',
+      body: 'The user keeps any other role assignments and stays in the project even if this was their last role.',
+      confirmLabel: 'Unassign',
       danger: true,
     });
     if (!ok) return;
@@ -1323,9 +1332,30 @@ class NottarioProjectSettings extends LitElement {
       const res = await fetch(`/api/projects/${this.projectId}/members/${userID}/${roleID}`, {
         method: 'DELETE',
       });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'unassign failed');
+      await this.load();
+      toast.success('Role unassigned.');
+    } catch (err) {
+      this.error = err.message;
+      toast.error(`Couldn't unassign role: ${err.message}`);
+    }
+  }
+
+  async removeMemberEntirely(userID, displayName) {
+    const ok = await confirm({
+      title: `Remove ${displayName} from the project?`,
+      body: 'They lose access to this project entirely. Any tasks assigned to them keep their assignee — this only touches memberships.',
+      confirmLabel: 'Remove from project',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/members/${userID}`, {
+        method: 'DELETE',
+      });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'remove failed');
       await this.load();
-      toast.success('Member removed.');
+      toast.success('Member removed from project.');
     } catch (err) {
       this.error = err.message;
       toast.error(`Couldn't remove member: ${err.message}`);

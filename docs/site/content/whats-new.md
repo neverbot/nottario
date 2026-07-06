@@ -10,6 +10,14 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-07-07
+
+- **Deleting a role no longer kicks its holders out of the project.**
+  Membership and role assignment are now separate tables; the
+  members panel gains a "No roles yet" state and a dedicated "remove
+  from project" action, so replacing the role catalogue is a safe
+  editorial operation instead of a data-loss trap.
+
 ## 2026-07-05
 
 - **Per-user notifications system.** Every user now sees a bell in the
