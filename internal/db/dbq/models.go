@@ -157,6 +157,12 @@ type InstanceMetum struct {
 type Membership struct {
 	UserID    uuid.UUID
 	ProjectID uuid.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
+type MembershipRole struct {
+	UserID    uuid.UUID
+	ProjectID uuid.UUID
 	RoleID    uuid.UUID
 	CreatedAt pgtype.Timestamptz
 }

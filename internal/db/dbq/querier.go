@@ -16,6 +16,8 @@ type Querier interface {
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
 	ArchKindExists(ctx context.Context, arg ArchKindExistsParams) (bool, error)
 	ArchNodeCycleCheck(ctx context.Context, arg ArchNodeCycleCheckParams) (bool, error)
+	// Grants a specific role to a member. Idempotent.
+	AssignRole(ctx context.Context, arg AssignRoleParams) error
 	// Build the full graph snapshot for one project as a single JSONB
 	// document. Used both by the migration baseline and by the runtime
 	// flush path.
@@ -41,7 +43,6 @@ type Querier interface {
 	DeleteArchLock(ctx context.Context, projectID uuid.UUID) error
 	DeleteArchNode(ctx context.Context, id uuid.UUID) error
 	DeleteArchNodeLink(ctx context.Context, arg DeleteArchNodeLinkParams) error
-	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
 	DeleteProjectByID(ctx context.Context, id uuid.UUID) error
 	DeleteProjectPriority(ctx context.Context, arg DeleteProjectPriorityParams) (int64, error)
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
@@ -49,6 +50,10 @@ type Querier interface {
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskComment(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
+	// Idempotent: marks the user as a member of the project. Role
+	// assignments live in a separate table so a membership without any
+	// roles is a legal state.
+	EnsureMembership(ctx context.Context, arg EnsureMembershipParams) error
 	ExtendArchLock(ctx context.Context, arg ExtendArchLockParams) error
 	GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow, error)
 	GetActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
@@ -113,7 +118,6 @@ type Querier interface {
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
 	InsertDocument(ctx context.Context, arg InsertDocumentParams) (InsertDocumentRow, error)
 	InsertDocumentVersion(ctx context.Context, arg InsertDocumentVersionParams) error
-	InsertMembership(ctx context.Context, arg InsertMembershipParams) error
 	InsertNotification(ctx context.Context, arg InsertNotificationParams) (Notification, error)
 	InsertProject(ctx context.Context, arg InsertProjectParams) (InsertProjectRow, error)
 	InsertProjectRole(ctx context.Context, arg InsertProjectRoleParams) (InsertProjectRoleRow, error)
@@ -148,12 +152,18 @@ type Querier interface {
 	// threshold. The threshold is (projects.arch_lock_idle_seconds OR the
 	// caller-supplied default). Used by the background ticker.
 	ListExpiredArchLocks(ctx context.Context, defaultIdleSeconds int32) ([]ListExpiredArchLocksRow, error)
+	// One row per (project, role) the user holds. Projects where the
+	// user has zero roles are omitted here on purpose — this feeds the
+	// role-scoped whoami view; use ListProjectIDsForUser to enumerate
+	// project membership regardless of roles.
 	ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error)
 	// Keyset paginated by (created_at DESC, id ASC). Pass after_created_at
 	// and after_id from a previous page's tail row; NULL on the first page.
 	// Requests limit+1 so the caller can detect has_more (last row dropped).
 	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
+	// One row per (member, role). A member with no role assignments
+	// still appears once, with role columns NULL, via LEFT JOIN.
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
 	ListProjectPriorities(ctx context.Context, projectID uuid.UUID) ([]ListProjectPrioritiesRow, error)
 	ListProjectRoleIDs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
@@ -222,6 +232,9 @@ type Querier interface {
 	ProjectSlugExists(ctx context.Context, slug string) (bool, error)
 	ReadDocument(ctx context.Context, arg ReadDocumentParams) (ReadDocumentRow, error)
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
+	// Removes the user from the project entirely; their role assignments
+	// cascade away via membership_roles_membership_fkey.
+	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
 	RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) (int64, error)
 	RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error)
 	// Multi-config tsquery: simple || english || spanish, matching the
@@ -242,6 +255,10 @@ type Querier interface {
 	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
+	// Revokes a specific role from a member. The membership row itself
+	// stays — dropping the last role does NOT remove the member from
+	// the project.
+	UnassignRole(ctx context.Context, arg UnassignRoleParams) error
 	// Each domain returns the same shape, plus title_headline /
 	// description_headline computed with ts_headline. The headline
 	// options use rare sentinel strings («MARK» / «/MARK») instead of

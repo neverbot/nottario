@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -9,36 +10,65 @@ import (
 	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
-// MemberRow is a denormalised membership entry for display: it
-// flattens the user, role and timestamps so the UI can render a
-// table in a single pass.
+// MemberRow is a denormalised (member, role) entry for display.
+// A member with zero role assignments appears once with RoleID == nil
+// and the role_* fields empty — the presence of the row still tells
+// the UI the user belongs to the project.
 type MemberRow struct {
-	UserID      uuid.UUID `json:"user_id"`
-	GithubLogin string    `json:"github_login"`
-	DisplayName string    `json:"display_name"`
-	AvatarURL   string    `json:"avatar_url"`
-	IsAdmin     bool      `json:"is_admin"`
-	RoleID      uuid.UUID `json:"role_id"`
-	RoleKey     string    `json:"role_key"`
-	RoleLabel   string    `json:"role_label"`
-	RoleColor   string    `json:"role_color"`
+	UserID      uuid.UUID  `json:"user_id"`
+	GithubLogin string     `json:"github_login"`
+	DisplayName string     `json:"display_name"`
+	AvatarURL   string     `json:"avatar_url"`
+	IsAdmin     bool       `json:"is_admin"`
+	RoleID      *uuid.UUID `json:"role_id,omitempty"`
+	RoleKey     string     `json:"role_key,omitempty"`
+	RoleLabel   string     `json:"role_label,omitempty"`
+	RoleColor   string     `json:"role_color,omitempty"`
 }
 
-// AddMembership grants role to user within project.
+// AddMembership makes user a member of project and grants them role.
+// Idempotent on both halves. The two writes happen in a transaction
+// so a partially-populated state (member without the requested role,
+// or role assignment without a member row) never surfaces.
 func AddMembership(ctx context.Context, pool *pgxpool.Pool, userID, projectID, roleID uuid.UUID) error {
-	return dbq.New(pool).InsertMembership(ctx, dbq.InsertMembershipParams{
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
+	if err := q.EnsureMembership(ctx, dbq.EnsureMembershipParams{
+		UserID: userID, ProjectID: projectID,
+	}); err != nil {
+		return fmt.Errorf("ensure membership: %w", err)
+	}
+	if err := q.AssignRole(ctx, dbq.AssignRoleParams{
 		UserID: userID, ProjectID: projectID, RoleID: roleID,
-	})
+	}); err != nil {
+		return fmt.Errorf("assign role: %w", err)
+	}
+	return tx.Commit(ctx)
 }
 
-// RemoveMembership revokes role from user within project.
+// RemoveMembership revokes a single role from a user within a project.
+// The member row itself stays — dropping the last role does NOT remove
+// the user from the project. Use RemoveMember for that.
 func RemoveMembership(ctx context.Context, pool *pgxpool.Pool, userID, projectID, roleID uuid.UUID) error {
-	return dbq.New(pool).DeleteMembership(ctx, dbq.DeleteMembershipParams{
+	return dbq.New(pool).UnassignRole(ctx, dbq.UnassignRoleParams{
 		UserID: userID, ProjectID: projectID, RoleID: roleID,
 	})
 }
 
-// ListMembers returns every (user, role) tuple in the project.
+// RemoveMember removes the user from the project entirely; their role
+// assignments cascade away via the composite FK on membership_roles.
+func RemoveMember(ctx context.Context, pool *pgxpool.Pool, userID, projectID uuid.UUID) error {
+	return dbq.New(pool).RemoveMembership(ctx, dbq.RemoveMembershipParams{
+		UserID: userID, ProjectID: projectID,
+	})
+}
+
+// ListMembers returns every (user, role) tuple in the project. A member
+// with no roles still appears exactly once, with RoleID == nil.
 func ListMembers(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID) ([]MemberRow, error) {
 	rows, err := dbq.New(pool).ListProjectMembers(ctx, projectID)
 	if err != nil {
@@ -76,8 +106,9 @@ type UserMembership struct {
 }
 
 // ListUserMemberships returns every (project, role) tuple the user
-// belongs to, across all projects. Ordered by project slug then role
-// position so the response is deterministic.
+// holds, across all projects. Projects the user belongs to without any
+// role assignments are omitted here — they still count for access
+// (see IsProjectMember), but they don't feed the role-scoped views.
 func ListUserMemberships(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]UserMembership, error) {
 	rows, err := dbq.New(pool).ListMembershipsForUser(ctx, userID)
 	if err != nil {
@@ -100,6 +131,7 @@ func ListUserMemberships(ctx context.Context, pool *pgxpool.Pool, userID uuid.UU
 }
 
 // UserRoleIDs returns the role uuids the user holds in the project.
+// Returns an empty slice for a member with no role assignments.
 func UserRoleIDs(ctx context.Context, pool *pgxpool.Pool, userID, projectID uuid.UUID) ([]uuid.UUID, error) {
 	return dbq.New(pool).ListUserRoleIDsInProject(ctx, dbq.ListUserRoleIDsInProjectParams{
 		UserID: userID, ProjectID: projectID,

@@ -11,46 +11,52 @@ import (
 	"github.com/google/uuid"
 )
 
-const deleteMembership = `-- name: DeleteMembership :exec
-DELETE FROM memberships
-WHERE user_id = $1 AND project_id = $2 AND role_id = $3
-`
-
-type DeleteMembershipParams struct {
-	UserID    uuid.UUID
-	ProjectID uuid.UUID
-	RoleID    uuid.UUID
-}
-
-func (q *Queries) DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error {
-	_, err := q.db.Exec(ctx, deleteMembership, arg.UserID, arg.ProjectID, arg.RoleID)
-	return err
-}
-
-const insertMembership = `-- name: InsertMembership :exec
-INSERT INTO memberships (user_id, project_id, role_id)
+const assignRole = `-- name: AssignRole :exec
+INSERT INTO membership_roles (user_id, project_id, role_id)
 VALUES ($1, $2, $3)
 ON CONFLICT DO NOTHING
 `
 
-type InsertMembershipParams struct {
+type AssignRoleParams struct {
 	UserID    uuid.UUID
 	ProjectID uuid.UUID
 	RoleID    uuid.UUID
 }
 
-func (q *Queries) InsertMembership(ctx context.Context, arg InsertMembershipParams) error {
-	_, err := q.db.Exec(ctx, insertMembership, arg.UserID, arg.ProjectID, arg.RoleID)
+// Grants a specific role to a member. Idempotent.
+func (q *Queries) AssignRole(ctx context.Context, arg AssignRoleParams) error {
+	_, err := q.db.Exec(ctx, assignRole, arg.UserID, arg.ProjectID, arg.RoleID)
+	return err
+}
+
+const ensureMembership = `-- name: EnsureMembership :exec
+INSERT INTO memberships (user_id, project_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type EnsureMembershipParams struct {
+	UserID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Idempotent: marks the user as a member of the project. Role
+// assignments live in a separate table so a membership without any
+// roles is a legal state.
+func (q *Queries) EnsureMembership(ctx context.Context, arg EnsureMembershipParams) error {
+	_, err := q.db.Exec(ctx, ensureMembership, arg.UserID, arg.ProjectID)
 	return err
 }
 
 const listMembershipsForUser = `-- name: ListMembershipsForUser :many
 SELECT p.id AS project_id, p.slug AS project_slug, p.name AS project_name,
-       r.id AS role_id, r.key AS role_key, r.label AS role_label,
+       mr.role_id, r.key AS role_key, r.label AS role_label,
        COALESCE(r.color, '')::text AS role_color, r.position AS role_position
 FROM memberships m
 JOIN projects p ON p.id = m.project_id
-JOIN roles    r ON r.id = m.role_id
+JOIN membership_roles mr
+     ON mr.user_id = m.user_id AND mr.project_id = m.project_id
+JOIN roles r ON r.id = mr.role_id
 WHERE m.user_id = $1
 ORDER BY p.slug, r.position, r.label
 `
@@ -66,6 +72,10 @@ type ListMembershipsForUserRow struct {
 	RolePosition int32
 }
 
+// One row per (project, role) the user holds. Projects where the
+// user has zero roles are omitted here on purpose — this feeds the
+// role-scoped whoami view; use ListProjectIDsForUser to enumerate
+// project membership regardless of roles.
 func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsForUserRow, error) {
 	rows, err := q.db.Query(ctx, listMembershipsForUser, userID)
 	if err != nil {
@@ -98,13 +108,17 @@ func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) 
 const listProjectMembers = `-- name: ListProjectMembers :many
 SELECT u.id AS user_id, u.github_login, u.display_name,
        COALESCE(u.avatar_url, '')::text AS avatar_url, u.is_admin,
-       r.id AS role_id, r.key AS role_key, r.label AS role_label,
-       COALESCE(r.color, '')::text AS role_color
+       mr.role_id AS role_id,
+       COALESCE(r.key, '')::text     AS role_key,
+       COALESCE(r.label, '')::text   AS role_label,
+       COALESCE(r.color, '')::text   AS role_color
 FROM memberships m
 JOIN users u ON u.id = m.user_id
-JOIN roles r ON r.id = m.role_id
+LEFT JOIN membership_roles mr
+       ON mr.user_id = m.user_id AND mr.project_id = m.project_id
+LEFT JOIN roles r ON r.id = mr.role_id
 WHERE m.project_id = $1
-ORDER BY u.display_name, r.label
+ORDER BY u.display_name, r.position NULLS LAST, r.label
 `
 
 type ListProjectMembersRow struct {
@@ -113,12 +127,14 @@ type ListProjectMembersRow struct {
 	DisplayName string
 	AvatarUrl   string
 	IsAdmin     bool
-	RoleID      uuid.UUID
+	RoleID      *uuid.UUID
 	RoleKey     string
 	RoleLabel   string
 	RoleColor   string
 }
 
+// One row per (member, role). A member with no role assignments
+// still appears once, with role columns NULL, via LEFT JOIN.
 func (q *Queries) ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error) {
 	rows, err := q.db.Query(ctx, listProjectMembers, projectID)
 	if err != nil {
@@ -150,7 +166,7 @@ func (q *Queries) ListProjectMembers(ctx context.Context, projectID uuid.UUID) (
 }
 
 const listUserRoleIDsInProject = `-- name: ListUserRoleIDsInProject :many
-SELECT role_id FROM memberships
+SELECT role_id FROM membership_roles
 WHERE user_id = $1 AND project_id = $2
 `
 
@@ -177,4 +193,40 @@ func (q *Queries) ListUserRoleIDsInProject(ctx context.Context, arg ListUserRole
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeMembership = `-- name: RemoveMembership :exec
+DELETE FROM memberships
+WHERE user_id = $1 AND project_id = $2
+`
+
+type RemoveMembershipParams struct {
+	UserID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Removes the user from the project entirely; their role assignments
+// cascade away via membership_roles_membership_fkey.
+func (q *Queries) RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error {
+	_, err := q.db.Exec(ctx, removeMembership, arg.UserID, arg.ProjectID)
+	return err
+}
+
+const unassignRole = `-- name: UnassignRole :exec
+DELETE FROM membership_roles
+WHERE user_id = $1 AND project_id = $2 AND role_id = $3
+`
+
+type UnassignRoleParams struct {
+	UserID    uuid.UUID
+	ProjectID uuid.UUID
+	RoleID    uuid.UUID
+}
+
+// Revokes a specific role from a member. The membership row itself
+// stays — dropping the last role does NOT remove the member from
+// the project.
+func (q *Queries) UnassignRole(ctx context.Context, arg UnassignRoleParams) error {
+	_, err := q.db.Exec(ctx, unassignRole, arg.UserID, arg.ProjectID, arg.RoleID)
+	return err
 }

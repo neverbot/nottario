@@ -111,6 +111,7 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/projects/{id}/members", guard(ListMembersHandler(proj)))
 	mux.Handle("POST /api/projects/{id}/members", guard(AddMemberHandler(proj)))
 	mux.Handle("DELETE /api/projects/{id}/members/{user_id}/{role_id}", guard(RemoveMemberHandler(proj)))
+	mux.Handle("DELETE /api/projects/{id}/members/{user_id}", guard(RemoveMemberEntirelyHandler(proj)))
 
 	tok := TokenDeps{Pool: d.Pool, Resolver: d.Resolver}
 	mux.Handle("GET /api/projects/{project_id}/tokens", guard(ListProjectTokensHandler(tok)))
