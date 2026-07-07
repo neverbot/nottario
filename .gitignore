@@ -7,6 +7,11 @@ docs/site/dist/
 # Visual companion from the brainstorming process
 .superpowers/
 
+# Skill bundle mirrored into .claude/ for local Claude Code sessions.
+# The canonical bundle ships from internal/skill/files/ — the copy
+# here is a working convenience and must not be versioned.
+.claude/skills/
+
 # Build artefacts and binaries
 /nottario
 /bin/

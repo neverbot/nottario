@@ -87,12 +87,10 @@ instance, four corollaries follow:
 - **Backend:** Go (`cmd/nottario` + `internal/...`, embed.go).
   pgx/v5 against Postgres 16.
 - **Frontend:** vanilla CSS + Lit (~5KB, ES modules, no build step).
-  No React/Vue/Svelte/Angular. Charts hand-rolled SVG.
-- **No JS visualisation libraries.** Every chart in the app is
-  hand-rolled SVG: Gantt (`pages/gantt.js`) and the architecture
-  diagram (`components/arch-canvas.js`, currently powered by the
-  vendored `elkjs` for compound layout but rendered with our own SVG).
-- **Database:** Postgres always. SQLite is off the table.
+  Charts hand-rolled SVG — Gantt (`pages/gantt.js`) and the
+  architecture diagram (`components/arch-canvas.js`, layout by the
+  vendored `elkjs`, rendering our own).
+- **Database:** Postgres 16.
   The backend is fully on **sqlc**; all queries live in
   `internal/db/queries/*.sql` and the generated Go is committed at
   `internal/db/dbq/`. Outside sqlc, pgx with `$N` placeholders only;
@@ -117,7 +115,8 @@ instance, four corollaries follow:
     multiple tasks can't form cycles.
   - `rollUpParentDone` runs inside the SetState transaction; a
     background reconciler catches anything that drifted.
-- **Real-time:** SSE + Postgres `LISTEN/NOTIFY`. No WebSockets.
+- **Real-time:** SSE (Server-Sent Events, one-way HTTP streaming via
+  `EventSource`) + Postgres `LISTEN/NOTIFY`. No WebSockets.
 - **Deployment:** Docker. `compose.yml` brings up `nottario` +
   Postgres. Local smoke tests always hit the container at
   `http://localhost:8080`; never run `./bin/nottario` directly.
@@ -139,8 +138,6 @@ instance, four corollaries follow:
   accent), system sans-serif typography, medium density, thin
   borders, flat colour badges, simple dropdowns. If a visual choice
   doesn't sit naturally next to GitHub, pause and reconsider.
-- **Hand-drawn (Rough.js) is parked.** Revisit only after the
-  architectural graph renderer is solid.
 - **No decorative animation.** Things appear where they belong.
   Motion is acceptable only when it's *functional* (showing what just
   changed, scrolling somewhere). Respect `prefers-reduced-motion`.
@@ -190,11 +187,6 @@ instance, four corollaries follow:
   discipline is on the agent closing the task. The site is rebuilt
   on every push to master, so a missed entry is visible publicly
   within minutes.
-
-### File naming
-- Markdown filenames are always lowercase (`readme.md`, `claude.md`,
-  etc.), even when tools traditionally use uppercase. Use a symlink
-  if a tool strictly requires uppercase.
 
 ### Git
 - Commit messages: single line, Conventional Commits. No body, no
@@ -390,43 +382,38 @@ That target chains, in order:
 4. `make sqlc-check` — `sqlc diff` confirms the committed generated
    code in `internal/db/dbq` matches the queries in
    `internal/db/queries`.
-5. `go test ./...` must pass — every package, including the
+5. `make docs-check` — smoke-builds the Hugo-style docs site so a
+   broken shortcode or template lands here, not on the deployed site.
+6. `make js-check` — `node --check` (parse-only) over every `.js` in
+   `internal/web/static/`. Catches structural breakage like unbalanced
+   brackets or template literals. A `package.json` at the static root
+   declares `"type": "module"` so Node parses ESM.
+7. `make frontend-check` — Biome (lint + format check) via
+   `npx --yes @biomejs/biome`, config in `biome.json` at the repo root.
+   The Rust binary caches under `~/.npm/_npx/`, so no `node_modules`
+   in the repo. `make frontend-format` rewrites files in place.
+8. `go test ./...` must pass — every package, including the
    concurrency and integration tests as they land.
 
 If any of these fail, fix the underlying issue. Never bypass with
 `--no-verify` or by skipping packages. Linters and tools are pinned
 in the Makefile; `make tools` installs them.
 
-Frontend assets (`internal/web/static/**`) are vanilla JS without a
-build step. The gate covers them in two layers:
-
-1. `make js-check` runs `node --check` (parse-only) over every `.js`.
-   Catches structural breakage like unbalanced brackets or template
-   literals — fast, no deps, no false positives. A `package.json` at
-   the static root declares `"type": "module"` so Node parses ESM.
-2. `make frontend-check` runs Biome (lint + format check) via
-   `npx --yes @biomejs/biome` against `internal/web/static/`. Config
-   lives in `biome.json` at the repo root. The Rust binary caches
-   under `~/.npm/_npx/`, so no `node_modules` in the repo and no
-   global install on dev machines. `make frontend-format` rewrites
-   files in place.
-
-Together the two layers catch a class of bug we've already hit twice:
-**backticks inside comments within a `` css`…` `` or `` html`…` ``
-tagged template literal terminate the template early and silently
-break the stylesheet/markup**. Avoid backticks in comments inside
-those blocks; the gate now enforces it.
+The js-check + frontend-check pair catches a class of bug we've hit
+twice: **backticks inside comments within a `` css`…` `` or
+`` html`…` `` tagged template literal terminate the template early
+and silently break the stylesheet/markup**. Avoid backticks in
+comments inside those blocks; the gate enforces it.
 
 ## Project status
 
-Approaching v0.1.0 beta. Released under MIT (`license.md`). The
-foundation is in place — identity (per-project tokens), tasks
-(cycles, priorities, dependencies, atomic claim), docs (versioned,
+A v0.1.0 tag was cut on 2026-06-08 under MIT (`license.md`), but the
+project is not really running on version numbers: CI republishes
+`ghcr.io/neverbot/nottario:latest` on every push to master and
+`:latest` is always the current stable. The foundation covers
+identity (per-project tokens), tasks (cycles,
+priorities, dependencies, atomic claim), docs (versioned with
 optimistic concurrency), architecture (ELK-backed canvas), gantt,
-kanban, MCP server, skill bundle, search, full-text multi-language.
-CI publishes `ghcr.io/neverbot/nottario:latest` on every push to
-master.
-
-The remaining work for v0.1.0 lives as tasks inside Nottario itself
-(see `nottario.tasks.list { state: 'todo' }`); the headline items
-are automated backups, UI design reviews and a few polish bugs.
+kanban, MCP server, skill bundle, full-text multi-language search,
+per-user notifications with a topbar bell, self-update advisories,
+and `pg_dump`-based backups.
