@@ -86,6 +86,17 @@ func (h *Hub) Subscribe(projectID uuid.UUID) (<-chan Event, func()) {
 // have no matching DB trigger). Non-blocking.
 func (h *Hub) Publish(ev Event) { h.publish(ev) }
 
+// PublishGlobal fans an event out to every subscriber regardless of
+// project scope. Use for cross-project state (self-update advisories,
+// instance-wide broadcasts). Non-blocking.
+func (h *Hub) PublishGlobal(ev Event) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for s := range h.subs {
+		h.deliver(s, ev)
+	}
+}
+
 // publish fans an event out to interested subscribers. Non-blocking.
 func (h *Hub) publish(ev Event) {
 	h.mu.Lock()
@@ -94,14 +105,16 @@ func (h *Hub) publish(ev Event) {
 		if ev.ProjectID == nil || *ev.ProjectID != s.projectID {
 			continue
 		}
-		select {
-		case s.ch <- ev:
-		default:
-			// subscriber is slow; drop the event to avoid blocking the
-			// listener goroutine.
-			h.logger.Warn("dropping event for slow subscriber",
-				"type", ev.Type, "project", s.projectID)
-		}
+		h.deliver(s, ev)
+	}
+}
+
+func (h *Hub) deliver(s *subscriber, ev Event) {
+	select {
+	case s.ch <- ev:
+	default:
+		h.logger.Warn("dropping event for slow subscriber",
+			"type", ev.Type, "project", s.projectID)
 	}
 }
 

@@ -25,22 +25,28 @@ func SSEHandler(hub *Hub, pool *pgxpool.Pool, resolver *identity.Resolver) http.
 			return
 		}
 		pidStr := r.URL.Query().Get("project_id")
-		pid, err := uuid.Parse(pidStr)
-		if err != nil {
-			http.Error(w, "project_id is required", http.StatusBadRequest)
-			return
-		}
-		if !c.IsAdmin {
-			roles, err := identity.UserRoleIDs(r.Context(), pool, c.UserID, pid)
+		var pid uuid.UUID
+		if pidStr != "" {
+			parsed, err := uuid.Parse(pidStr)
 			if err != nil {
-				http.Error(w, "lookup failed", http.StatusInternalServerError)
+				http.Error(w, "project_id malformed", http.StatusBadRequest)
 				return
 			}
-			if len(roles) == 0 {
-				http.Error(w, "not a project member", http.StatusForbidden)
-				return
+			pid = parsed
+			if !c.IsAdmin {
+				roles, err := identity.UserRoleIDs(r.Context(), pool, c.UserID, pid)
+				if err != nil {
+					http.Error(w, "lookup failed", http.StatusInternalServerError)
+					return
+				}
+				if len(roles) == 0 {
+					http.Error(w, "not a project member", http.StatusForbidden)
+					return
+				}
 			}
 		}
+		// Empty project_id = global-only subscription (banner, instance-wide
+		// advisories). Auth is still required; membership check skipped.
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {

@@ -122,6 +122,13 @@ func main() {
 			Upstream: cfg.SelfUpdateUpstream,
 			Interval: cfg.SelfUpdateInterval,
 			Logger:   logger.With("subsystem", "selfupdate"),
+			// Broadcast a minimal signal on every observable state
+			// transition — the banner re-fetches /api/version/status
+			// (which is already admin-gated) instead of receiving the
+			// SHAs on the wire.
+			Notifier: func() {
+				hub.PublishGlobal(realtime.Event{Type: "version_status"})
+			},
 		})
 		selfUpdateState = p.State()
 		go p.Start(ctx)

@@ -92,6 +92,52 @@ func TestFetchLatestSHA_NetworkErrorKeepsPriorState(t *testing.T) {
 	}
 }
 
+func TestNotifier_FiresOnTransitionOnly(t *testing.T) {
+	respCode := http.StatusOK
+	body := `{"sha":"first"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(respCode)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	var calls int
+	p := New(Config{
+		BaseURL:  srv.URL,
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Notifier: func() { calls++ },
+	})
+	// First check: empty → "first". One call.
+	p.checkOnce(context.Background())
+	if calls != 1 {
+		t.Fatalf("calls after first success = %d, want 1", calls)
+	}
+	// No-op re-check: same SHA, no error. Zero additional calls.
+	p.checkOnce(context.Background())
+	if calls != 1 {
+		t.Fatalf("calls after no-op recheck = %d, want 1", calls)
+	}
+	// Server flips SHA. One additional call.
+	body = `{"sha":"second"}`
+	p.checkOnce(context.Background())
+	if calls != 2 {
+		t.Fatalf("calls after sha flip = %d, want 2", calls)
+	}
+	// Error transition: fresh failure. One additional call.
+	respCode = http.StatusInternalServerError
+	body = "boom"
+	p.checkOnce(context.Background())
+	if calls != 3 {
+		t.Fatalf("calls after error = %d, want 3", calls)
+	}
+	// Same error again: no call.
+	p.checkOnce(context.Background())
+	if calls != 3 {
+		t.Fatalf("calls after repeat error = %d, want 3", calls)
+	}
+}
+
 func TestFetchLatestSHA_MissingSHAIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{}`))

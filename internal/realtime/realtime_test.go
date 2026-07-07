@@ -125,7 +125,9 @@ func TestHub_NilProjectIDIsIgnored(t *testing.T) {
 	ch, cancel := hub.Subscribe(pid)
 	defer cancel()
 
-	// Event without a project_id never reaches any project subscriber.
+	// Event without a project_id never reaches any project subscriber
+	// via the per-project Publish path — that's what PublishGlobal is
+	// for. Publish drops nil-project events silently.
 	realtime.PublishForTest(hub, realtime.Event{Type: "global"})
 
 	select {
@@ -133,6 +135,31 @@ func TestHub_NilProjectIDIsIgnored(t *testing.T) {
 		t.Fatalf("received broadcast on a project subscriber: %+v", ev)
 	case <-time.After(50 * time.Millisecond):
 		// expected
+	}
+}
+
+func TestHub_PublishGlobalFansToAllSubscribers(t *testing.T) {
+	hub := realtime.New(silentLogger())
+	pidA := uuid.New()
+	pidB := uuid.New()
+	chA, cancelA := hub.Subscribe(pidA)
+	defer cancelA()
+	chB, cancelB := hub.Subscribe(pidB)
+	defer cancelB()
+	chGlobal, cancelGlobal := hub.Subscribe(uuid.Nil)
+	defer cancelGlobal()
+
+	hub.PublishGlobal(realtime.Event{Type: "version_status"})
+
+	for name, ch := range map[string]<-chan realtime.Event{"A": chA, "B": chB, "global": chGlobal} {
+		select {
+		case ev := <-ch:
+			if ev.Type != "version_status" {
+				t.Errorf("%s got %q, want version_status", name, ev.Type)
+			}
+		case <-time.After(200 * time.Millisecond):
+			t.Fatalf("%s did not receive global event", name)
+		}
 	}
 }
 
@@ -418,7 +445,7 @@ func TestSSE_RejectsUnauthenticated(t *testing.T) {
 	}
 }
 
-func TestSSE_RequiresProjectID(t *testing.T) {
+func TestSSE_MissingProjectIDIsGlobalSub(t *testing.T) {
 	pool := testutil.NewPool(t)
 	hub := realtime.New(silentLogger())
 	key := []byte("0123456789abcdef0123456789abcdef")
@@ -438,7 +465,67 @@ func TestSSE_RequiresProjectID(t *testing.T) {
 	srv := httptest.NewServer(realtime.SSEHandler(hub, pool, resolver))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+	streamCtx, cancelStream := context.WithCancel(context.Background())
+	defer cancelStream()
+	req, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, srv.URL, nil)
+	req.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: cookieVal})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", resp.StatusCode)
+	}
+
+	rdr := bufio.NewReader(resp.Body)
+	if line, err := rdr.ReadString('\n'); err != nil || !strings.HasPrefix(line, ": ok") {
+		t.Fatalf("initial line %q err=%v", line, err)
+	}
+
+	// Push a global event; global sub receives it.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		hub.PublishGlobal(realtime.Event{Type: "version_status"})
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		line, err := rdr.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read line: %v", err)
+		}
+		if strings.HasPrefix(line, "data:") {
+			if !strings.Contains(line, "version_status") {
+				t.Errorf("data line %q missing version_status", line)
+			}
+			return
+		}
+	}
+	t.Fatal("did not receive `data:` line within deadline")
+}
+
+func TestSSE_MalformedProjectIDIs400(t *testing.T) {
+	pool := testutil.NewPool(t)
+	hub := realtime.New(silentLogger())
+	key := []byte("0123456789abcdef0123456789abcdef")
+	resolver := identity.NewResolver(pool, key, false)
+
+	ctx := context.Background()
+	u, _, err := identity.UpsertFromGithub(ctx, pool, 9877, "u2", "U2", "")
+	if err != nil {
+		t.Fatalf("user: %v", err)
+	}
+	sess, err := identity.NewSession(ctx, pool, u.ID, "test", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("session: %v", err)
+	}
+	cookieVal := identity.EncodeCookie(sess.ID, key)
+
+	srv := httptest.NewServer(realtime.SSEHandler(hub, pool, resolver))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"?project_id=not-a-uuid", nil)
 	req.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: cookieVal})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

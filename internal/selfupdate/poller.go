@@ -55,19 +55,29 @@ func (s *State) Snapshot() (latestSHA string, checkedAt time.Time, lastErr strin
 	return s.latestSHA, s.checkedAt, s.lastErr
 }
 
-func (s *State) setSuccess(sha string, at time.Time) {
+// setSuccess overwrites latestSHA + checkedAt. Returns true when the
+// observable state (latestSHA or clear-error transition) actually
+// changed, so callers can fire a notifier only on real transitions
+// and not on every no-op re-check.
+func (s *State) setSuccess(sha string, at time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	changed := s.latestSHA != sha || s.lastErr != ""
 	s.latestSHA = sha
 	s.checkedAt = at
 	s.lastErr = ""
+	return changed
 }
 
-func (s *State) setError(err string, at time.Time) {
+// setError records an error. Returns true when the error text changed
+// (fresh failure kind, or first failure after a good check).
+func (s *State) setError(err string, at time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	changed := s.lastErr != err
 	s.checkedAt = at
 	s.lastErr = err
+	return changed
 }
 
 // Poller checks a GitHub repository for its current master SHA on a
@@ -80,6 +90,7 @@ type Poller struct {
 	state    *State
 	logger   *slog.Logger
 	now      func() time.Time
+	notifier func()
 }
 
 // Config wires the poller. Interval below MinInterval is clamped up.
@@ -92,6 +103,12 @@ type Config struct {
 	BaseURL string
 	// Now overrides the clock; nil = time.Now.
 	Now func() time.Time
+	// Notifier fires after every check whose result differs from the
+	// previous observable state (fresh latestSHA, or an error text
+	// transition). Nil disables. Called synchronously on the poller
+	// goroutine — keep it non-blocking (a hub Publish, not a network
+	// round-trip).
+	Notifier func()
 }
 
 // New builds a poller. It does NOT start; call Start(ctx) once
@@ -118,6 +135,7 @@ func New(c Config) *Poller {
 		httpc:    &http.Client{Timeout: 5 * time.Second},
 		baseURL:  c.BaseURL,
 		state:    &State{},
+		notifier: c.Notifier,
 		logger:   c.Logger,
 		now:      c.Now,
 	}
@@ -155,12 +173,16 @@ func (p *Poller) Start(ctx context.Context) {
 func (p *Poller) checkOnce(ctx context.Context) {
 	sha, err := p.fetchLatestSHA(ctx)
 	now := p.now()
+	var changed bool
 	if err != nil {
 		p.logger.Warn("self-update check failed", "err", err)
-		p.state.setError(err.Error(), now)
-		return
+		changed = p.state.setError(err.Error(), now)
+	} else {
+		changed = p.state.setSuccess(sha, now)
 	}
-	p.state.setSuccess(sha, now)
+	if changed && p.notifier != nil {
+		p.notifier()
+	}
 }
 
 // commitsResponse is the subset of the GitHub commits API we need.
