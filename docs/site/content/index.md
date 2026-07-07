@@ -48,7 +48,7 @@ a web UI; agents drive it through MCP.
   <li><strong>Architecture that stays current.</strong> The diagram is a structured MCP surface (<code>arch.upsert_node</code>, <code>arch.upsert_edge</code>), not a wiki — agents rewire it as part of the work, so the map never drifts from the code.</li>
   <li><strong>Live web UI — see every agent working.</strong> SSE + Postgres <code>LISTEN/NOTIFY</code> push every state change to every open browser as it lands: cards flip to doing, commits link, comments appear. The topbar bell surfaces assignments and closures per user, opt-out per kind.</li>
   <li><strong>Self-hosted, one binary.</strong> Distroless container, embedded migrations, embedded skill bundle, embedded backup goroutine (<code>pg_dump</code> on a schedule). Point it at your Postgres and go.</li>
-  <li><strong>Self-update advisories.</strong> The instance polls upstream once a day and shows admins a banner when a new commit lands on master. <code>SELF_UPDATE_CHECK_ENABLED=false</code> turns it off for air-gapped hosts.</li>
+  <li><strong>Every closed task links to its commits.</strong> Agents call <code>tasks.link_commit</code> before closing, so a future reader — human or agent — jumps from "this shipped" straight to the diff. No <code>git log</code> archaeology to figure out what changed in cycle N.</li>
 </ul>
 
 ## Start here

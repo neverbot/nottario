@@ -100,10 +100,10 @@ living-system overview.
 - **Self-hosted, one binary.** Distroless container, embedded
   migrations, embedded skill bundle, embedded backup goroutine
   (`pg_dump` on a schedule). Point it at your Postgres and go.
-- **Self-update advisories.** The instance polls upstream once a
-  day and shows admins a banner when a new commit lands on master.
-  `SELF_UPDATE_CHECK_ENABLED=false` turns it off for air-gapped
-  hosts.
+- **Every closed task links to its commits.** Agents call
+  `tasks.link_commit` before closing, so a future reader — human or
+  agent — jumps from "this shipped" straight to the diff. No
+  `git log` archaeology to figure out what changed in cycle N.
 
 ## Run it locally
 
