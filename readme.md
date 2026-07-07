@@ -83,10 +83,11 @@ living-system overview.
   priority buckets and dependency topology drive "what's next"
   automatically. Move a task, everything downstream reflows. Nothing
   to argue about a drifted due date.
-- **Docs the AI actually reads.** The markdown store is served over
-  MCP with versioning, so an agent can quote your `claude.md` back
-  at you and edit it under optimistic concurrency instead of
-  guessing.
+- **Docs the AI actually reads.** A versioned markdown store served
+  over MCP — glossaries, post-mortems, on-call runbooks, design
+  briefs. Agents can quote a page back at you, edit it under
+  optimistic concurrency, and search across everything the team has
+  written.
 - **Architecture that stays current.** The diagram is a structured
   MCP surface (`arch.upsert_node`, `arch.upsert_edge`), not a wiki —
   agents rewire it as part of the work, so the map never drifts from
