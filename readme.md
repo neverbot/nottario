@@ -71,33 +71,36 @@ living-system overview.
 ## Why you might want this
 
 - **Agents arrive pre-briefed.** Every instance ships an embedded
-  skill bundle that teaches the agent the conventions on first
-  connect — `whoami`, the carry-on loop (claim → work → link commits
-  → close), one task per role, when to touch the architecture graph.
-  Fetch it once with `skill.install`; the rules and the server
-  behaviour never drift.
-- **Multi-agent by design.** Atomic claim, per-project bearer tokens,
-  no ambient permissions. Two agents racing for the same task is a
-  no-op — one wins the row, the other moves on.
-- **Cycles, priorities and dependencies without calendars.** Kanban
-  buckets and Gantt topology tell you what's next; you never argue
-  with a due date that has drifted.
+  skill bundle: `whoami`, the carry-on loop (claim → work → link
+  commits → close), one task per role, when to touch the
+  architecture graph. Fetch it once with `skill.install`; the rules
+  never drift from the server behaviour.
+- **Multi-agent by design.** Atomic claim, per-project bearer
+  tokens, no ambient permissions. A token scoped to project A is
+  rejected against project B, admin or not — even instance admins
+  don't bypass the boundary.
+- **Cycles, priorities, dependencies — no calendars.** Named
+  priority buckets and dependency topology drive "what's next"
+  automatically. Move a task, everything downstream reflows. Nothing
+  to argue about a drifted due date.
 - **Docs the AI actually reads.** The markdown store is served over
-  MCP with versioning, so an agent can quote your `claude.md` back at
-  you and edit it under optimistic concurrency.
-- **Architecture that stays current.** The graph is a structured
-  MCP surface, so agents keep it accurate as part of the work,
-  not a wiki that decays.
+  MCP with versioning, so an agent can quote your `claude.md` back
+  at you and edit it under optimistic concurrency instead of
+  guessing.
+- **Architecture that stays current.** The diagram is a structured
+  MCP surface (`arch.upsert_node`, `arch.upsert_edge`), not a wiki —
+  agents rewire it as part of the work, so the map never drifts from
+  the code.
 - **Live web UI with per-user notifications.** SSE + Postgres
-  `LISTEN/NOTIFY`; changes appear as they land, and every user gets
-  a topbar bell with assignments, comments and closures they can
-  opt out of per kind.
+  `LISTEN/NOTIFY` push changes as they land. A topbar bell surfaces
+  assignments, comments and closures per user, opt-out per kind.
 - **Self-hosted, one binary.** Distroless container, embedded
   migrations, embedded skill bundle, embedded backup goroutine
   (`pg_dump` on a schedule). Point it at your Postgres and go.
-- **Self-update advisories.** The instance polls upstream and shows
-  admins an "update available" banner when a new commit lands on
-  master.
+- **Self-update advisories.** The instance polls upstream once a
+  day and shows admins a banner when a new commit lands on master.
+  `SELF_UPDATE_CHECK_ENABLED=false` turns it off for air-gapped
+  hosts.
 
 ## Run it locally
 
