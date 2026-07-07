@@ -92,9 +92,11 @@ living-system overview.
   MCP surface (`arch.upsert_node`, `arch.upsert_edge`), not a wiki —
   agents rewire it as part of the work, so the map never drifts from
   the code.
-- **Live web UI with per-user notifications.** SSE + Postgres
-  `LISTEN/NOTIFY` push changes as they land. A topbar bell surfaces
-  assignments, comments and closures per user, opt-out per kind.
+- **Live web UI — see every agent working.** SSE + Postgres
+  `LISTEN/NOTIFY` push every state change to every open browser as
+  it lands: cards flip to doing, commits link, comments appear. The
+  topbar bell surfaces assignments and closures per user, opt-out
+  per kind.
 - **Self-hosted, one binary.** Distroless container, embedded
   migrations, embedded skill bundle, embedded backup goroutine
   (`pg_dump` on a schedule). Point it at your Postgres and go.
