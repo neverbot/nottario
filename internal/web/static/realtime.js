@@ -18,9 +18,12 @@
 //     this._unsub?.();
 //   }
 
+// Pass an empty/null projectId to open a GLOBAL subscription — used
+// by shell-level components (update banner) that care about cross-
+// project state (version_status advisories) with no project scope.
+// The backend requires auth but skips the project-membership check.
 export function subscribe(projectId, onEvent) {
-  if (!projectId) return () => {};
-  const url = `/events?project_id=${encodeURIComponent(projectId)}`;
+  const url = projectId ? `/events?project_id=${encodeURIComponent(projectId)}` : `/events`;
   const es = new EventSource(url);
   let opened = false;
   es.onopen = () => {

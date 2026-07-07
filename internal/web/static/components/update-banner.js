@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { subscribe } from '/static/realtime.js';
 
 // <nottario-update-banner .me=${me}>
 //
@@ -112,6 +113,25 @@ class NottarioUpdateBanner extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._fetchStatus();
+    // Subscribe to the global SSE stream. The server pushes
+    // `version_status` whenever the selfupdate poller records a real
+    // state change (new upstream SHA, error transition, or first
+    // successful check). We re-fetch on that signal AND on
+    // realtime.reconnected so a watchtower-driven container restart
+    // auto-clears the banner: EventSource reconnects to the fresh
+    // container, the new state (running.sha == latest.sha) lands,
+    // banner hides without a page reload.
+    this._unsub = subscribe(null, (ev) => {
+      if (ev.type === 'version_status' || ev.type === 'realtime.reconnected') {
+        this._fetchStatus();
+      }
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._unsub?.();
+    this._unsub = null;
   }
 
   async _fetchStatus() {
