@@ -70,6 +70,12 @@ living-system overview.
 
 ## Why you might want this
 
+- **Agents arrive pre-briefed.** Every instance ships an embedded
+  skill bundle that teaches the agent the conventions on first
+  connect — `whoami`, the carry-on loop (claim → work → link commits
+  → close), one task per role, when to touch the architecture graph.
+  Fetch it once with `skill.install`; the rules and the server
+  behaviour never drift.
 - **Multi-agent by design.** Atomic claim, per-project bearer tokens,
   no ambient permissions. Two agents racing for the same task is a
   no-op — one wins the row, the other moves on.
@@ -82,11 +88,10 @@ living-system overview.
 - **Architecture that stays current.** The graph is a structured
   MCP surface, so agents keep it accurate as part of the work,
   not a wiki that decays.
-- **Per-user notifications with a topbar bell.** Assignments,
-  comments, closures — opt out per kind, or disable the whole
-  system with `NOTIFICATIONS_ENABLED=false`.
-- **Live web UI.** SSE + Postgres `LISTEN/NOTIFY`; changes appear as
-  they land, no refresh.
+- **Live web UI with per-user notifications.** SSE + Postgres
+  `LISTEN/NOTIFY`; changes appear as they land, and every user gets
+  a topbar bell with assignments, comments and closures they can
+  opt out of per kind.
 - **Self-hosted, one binary.** Distroless container, embedded
   migrations, embedded skill bundle, embedded backup goroutine
   (`pg_dump` on a schedule). Point it at your Postgres and go.
