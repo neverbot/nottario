@@ -112,6 +112,18 @@ these three checks before moving on:
    also…", a half-formed bug repro, a future-page idea. File it as
    a task NOW with verbatim context, before you forget. See "Filing
    work as you discover it" below.
+4. **Did you create or change any markdown about the project itself
+   — architecture notes, ADRs, runbooks, glossaries, post-mortems,
+   design briefs, methodology, or instructions for agents (`claude.md`,
+   `AGENTS.md`, `GEMINI.md`, files under `.claude/skills/`)?** These
+   are exactly what the docs domain exists for. Publish or update
+   the matching document in `nottario.docs` (`kind: context` for
+   project knowledge, `kind: skill` for agent instructions) using the
+   read → edit → commit → write flow with `expected_version`. When
+   the file lives in the repo AND in Nottario, both copies are the
+   same truth — don't let them drift. Full flow and idioms:
+   `domains/docs.md` → "Mirror repo markdown into Nottario" and
+   "Keeping a local file in sync with Nottario".
 
 ## Filing work as you discover it
 

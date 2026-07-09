@@ -147,6 +147,37 @@ edit that broke an assumption.
 
 ## Idiomatic patterns
 
+### "Mirror repo markdown into Nottario"
+
+Any markdown file in the repo that describes the project itself —
+not source, not generated output — should have a mirror in the docs
+domain so agents on other laptops (or agents that never clone the
+repo, like an MCP-only helper) can read it. Concretely:
+
+- **Agent instruction files**: `claude.md`, `AGENTS.md`, `GEMINI.md`,
+  anything under `.claude/skills/`, `.cursor/rules/`, `.aider.conf.md`,
+  and equivalents. `kind: skill`, typically at
+  `projects/<id>/skills/<file>.md` or under `global/skills/` when the
+  rule applies across projects.
+- **Living project context**: architecture notes, ADRs (decision
+  records), glossaries, onboarding pages, runbooks, post-mortems,
+  incident reports, design briefs, methodology docs (branching
+  strategy, release checklist, on-call playbook). `kind: context`,
+  typically under `projects/<id>/context/…`.
+- **Personal scratchpads and half-baked ideas** that don't warrant a
+  task yet. `kind: note`, typically under
+  `projects/<id>/notes/<login>/…`.
+
+**Rule of thumb.** If a future teammate (human or agent) would
+benefit from reading it, and it's not a task and not source code,
+it belongs in Nottario docs. If you edit the repo copy, update the
+Nottario copy in the same session — the read → edit → commit → write
+sync flow below is the contract; don't let the two copies drift.
+
+Small style tweaks or typo fixes on a mirrored file still count as
+edits: bump the Nottario copy too, otherwise the next agent syncing
+from Nottario will silently undo your fix.
+
 ### "Record this decision"
 
 A short ADR-style document under `context/decisions/`. Two minutes of
