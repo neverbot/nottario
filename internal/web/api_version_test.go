@@ -41,6 +41,30 @@ func TestUpdateAvailable_DifferingShas(t *testing.T) {
 	}
 }
 
+// Real production shape: CI stamps `internal/version.Commit` via
+// `git rev-parse --short HEAD` (7 chars) but the GitHub commits API
+// returns the full 40-char sha. The two sides must compare equal
+// when the short is a prefix of the full, otherwise the update
+// banner sticks ON forever on every self-hoster.
+func TestUpdateAvailable_ShortFullMix(t *testing.T) {
+	short := "abc1234"
+	fullSame := "abc1234def5678901234567890123456789012345"
+	fullOther := "def56789012345678901234567890123456789012"
+	if updateAvailable(short, fullSame) {
+		t.Errorf("short vs full-same-prefix reported update available, want false")
+	}
+	if updateAvailable(fullSame, short) {
+		t.Errorf("full vs short-same-prefix reported update available, want false")
+	}
+	if !updateAvailable(short, fullOther) {
+		t.Errorf("short vs full-differing-prefix reported no update, want true")
+	}
+	// Case-insensitive across the mixed lengths.
+	if updateAvailable("ABC1234", fullSame) {
+		t.Errorf("uppercase short vs lowercase full-same-prefix reported update available, want false")
+	}
+}
+
 // End-to-end: anonymous call to the endpoint returns 401.
 func TestVersionStatusHandler_AnonymousIs401(t *testing.T) {
 	pool := testutil.NewPool(t)

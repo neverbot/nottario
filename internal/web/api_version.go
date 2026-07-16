@@ -87,9 +87,21 @@ func VersionStatusHandler(d VersionStatusDeps) http.Handler {
 // commits. Blank on either side means "unknown", never "available"
 // — we never scare the operator with a spurious banner during a
 // startup window before the first successful check.
+//
+// The two inputs routinely differ in length: CI stamps the running
+// sha via `git rev-parse --short HEAD` (7 chars) while the GitHub
+// commits API returns the full 40-char sha. A naive full-string
+// EqualFold would always report "different", pinning the banner ON
+// for every self-hoster. Compare by the shorter of the two lengths
+// so any short/full combo (or two shorts, or two fulls) works, as
+// long as one is a prefix of the other.
 func updateAvailable(runningSHA, latestSHA string) bool {
 	if runningSHA == "" || latestSHA == "" || runningSHA == "none" {
 		return false
 	}
-	return !strings.EqualFold(runningSHA, latestSHA)
+	n := len(runningSHA)
+	if len(latestSHA) < n {
+		n = len(latestSHA)
+	}
+	return !strings.EqualFold(runningSHA[:n], latestSHA[:n])
 }
