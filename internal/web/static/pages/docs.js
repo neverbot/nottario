@@ -220,6 +220,64 @@ class NottarioDocsPage extends LitElement {
       border-color: var(--accent);
     }
 
+    /* Compact reader header: one strip carrying the breadcrumb path,
+       kind badge, current version, and actions. The visible document
+       title is the markdown body's own leading H1 — we do NOT stamp
+       the metadata title field a second time above it. */
+    .reader-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .reader-strip .crumbs {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      color: var(--fg-muted);
+      min-width: 0;
+    }
+    .reader-strip .crumb-seg { color: var(--gray-5); }
+    .reader-strip .crumb-seg.last { color: var(--fg); font-weight: 600; }
+    .reader-strip .sep { color: var(--border); }
+    .reader-strip .spacer { flex: 1; }
+    .reader-strip .actions { display: flex; align-items: center; gap: 4px; }
+    .reader-strip .actions .btn { font-size: 12px; padding: 4px 10px; }
+    .reader-strip .version-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 12px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .reader-strip .version-btn:hover {
+      color: var(--fg);
+      background: var(--bg-subtle);
+      border-color: var(--border);
+    }
+    .reader-strip .version-btn.open {
+      color: var(--fg);
+      background: var(--tint-blue);
+      border-color: var(--accent);
+    }
+
+    /* Titleless docs get an injected chrome H1 so the reader is not
+       flat. Match nottario-markdown's H1 look. */
+    .fallback-title {
+      margin: 24px 0 0;
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--fg);
+    }
+
     /* The prose container now lives inside <nottario-markdown>; the
        reader only owns the description line above it. */
     nottario-markdown { display: block; margin: 24px 0 0; }
@@ -1008,11 +1066,21 @@ class NottarioDocsPage extends LitElement {
     // filename) is rendered bold + dark; everything before is muted.
     const segs = (s.path || '').split('/');
     const last = segs.pop();
+    const contentHtml = (viewing ? viewing.content_html : s.content_html) || '';
+    // The doc's own leading H1 is the visible title. Only fall back to
+    // a chrome H1 when the body has none — otherwise we'd stack
+    // "Title" twice, one from the metadata field, one from the H1.
+    const hasLeadingH1 = /^\s*<h1[\s>]/i.test(contentHtml);
     return html`
       <div class="reader-col">
-        <div class="reader-title">
-          <h2>${s.title || last}</h2>
+        <div class="reader-strip">
+          <div class="crumbs">
+            ${segs.map((p) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
+            <span class="crumb-seg last">${last}</span>
+          </div>
           <span class=${`badge ${s.kind}`}>${s.kind}</span>
+          <button class=${`version-btn ${this.historyOpen ? 'open' : ''}`}
+                  @click=${() => this.toggleHistory()}>v${s.current_version}</button>
           <div class="spacer"></div>
           <div class="actions">
             ${
@@ -1040,13 +1108,6 @@ class NottarioDocsPage extends LitElement {
             }
           </div>
         </div>
-        <div class="reader-meta">
-          ${segs.map((p) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
-          <span class="crumb-seg last">${last}</span>
-          <span class="sep">·</span>
-          <button class=${`version-btn ${this.historyOpen ? 'open' : ''}`}
-                  @click=${() => this.toggleHistory()}>v${s.current_version}</button>
-        </div>
 
         ${
           viewing
@@ -1062,6 +1123,8 @@ class NottarioDocsPage extends LitElement {
             : null
         }
 
+        ${hasLeadingH1 ? null : html`<h1 class="fallback-title">${s.title || last}</h1>`}
+
         ${
           (viewing ? viewing.description : s.description)
             ? html`<p class="description">${viewing ? viewing.description : s.description}</p>`
@@ -1069,7 +1132,7 @@ class NottarioDocsPage extends LitElement {
         }
         <nottario-markdown
           project-id=${this.projectId}
-          .html=${(viewing ? viewing.content_html : s.content_html) || ''}>
+          .html=${contentHtml}>
         </nottario-markdown>
       </div>
     `;
