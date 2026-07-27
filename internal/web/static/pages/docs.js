@@ -224,13 +224,18 @@ class NottarioDocsPage extends LitElement {
        kind badge, current version, and actions. The visible document
        title is the markdown body's own leading H1 — we do NOT stamp
        the metadata title field a second time above it. */
+    .reader-header {
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
     .reader-strip {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border);
+    }
+    .reader-header .description {
+      margin: 8px 0 0;
     }
     .reader-strip .crumbs {
       display: inline-flex;
@@ -1073,6 +1078,7 @@ class NottarioDocsPage extends LitElement {
     const hasLeadingH1 = /^\s*<h1[\s>]/i.test(contentHtml);
     return html`
       <div class="reader-col">
+        <div class="reader-header">
         <div class="reader-strip">
           <div class="crumbs">
             ${segs.map((p) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
@@ -1108,6 +1114,12 @@ class NottarioDocsPage extends LitElement {
             }
           </div>
         </div>
+        ${
+          (viewing ? viewing.description : s.description)
+            ? html`<p class="description">${viewing ? viewing.description : s.description}</p>`
+            : null
+        }
+        </div>
 
         ${
           viewing
@@ -1125,11 +1137,6 @@ class NottarioDocsPage extends LitElement {
 
         ${hasLeadingH1 ? null : html`<h1 class="fallback-title">${s.title || last}</h1>`}
 
-        ${
-          (viewing ? viewing.description : s.description)
-            ? html`<p class="description">${viewing ? viewing.description : s.description}</p>`
-            : null
-        }
         <nottario-markdown
           project-id=${this.projectId}
           .html=${contentHtml}>
