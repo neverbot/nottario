@@ -51,6 +51,33 @@ If you need the role catalogue (to assign to "any backend"), call
 
 ## 3. Work a task end-to-end
 
+### Preflight: surface your own `doing` first
+
+Whenever the human asks "what's next", "cuáles son las siguientes
+tareas", "carry on", or any pickup-shaped question, ALWAYS list
+your own open pickup BEFORE previewing new work:
+
+```text
+nottario.tasks.list {
+  project_id,
+  assignee_user_id: whoami.user_id,
+  state: 'doing'
+}
+```
+
+Any row here is a task you (or a previous agent under the same
+identity) claimed in an earlier session and never closed. Surface
+these at the top of your reply, labelled as "still open from before".
+Then, and only then, preview the next eligible `todo` via
+`tasks.next` / `claim_next`.
+
+Starting a fresh pickup while a `doing` row lingers leaves two
+half-done tasks and pollutes the "who is on what" view the human
+uses to steer. If the human explicitly parks the old row, fine —
+but the choice has to be theirs, not silently skipped.
+
+### The pickup loop
+
 The loop when the human says "carry on" or "do the next thing":
 
 1. **Atomic claim.** `nottario.tasks.claim_next { project_id }`

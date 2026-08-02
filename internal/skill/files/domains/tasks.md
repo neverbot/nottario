@@ -102,6 +102,35 @@ Filters can change between calls (e.g. swap `state` mid-walk) without
 corrupting the cursor — the ordering is stable across mutations
 because the cursor encodes `(priority, created_at, id)`.
 
+### Surfacing your own open work
+
+`tasks.next` and `claim_next` look at `todo` only. Neither returns
+your own `doing` rows, so a naïve "what's next" reply hides pickup
+you already committed to in a previous session.
+
+Always pair the two queries when the human asks for a preview:
+
+```text
+// 1. your unfinished pickup from before
+nottario.tasks.list {
+  project_id,
+  assignee_user_id: whoami.user_id,
+  state: 'doing'
+}
+
+// 2. the next eligible todo
+nottario.tasks.next {
+  project_id,
+  assignee_user_id: whoami.user_id
+}
+```
+
+Reply with the `doing` set first (call it out — "still open from
+before"), the eligible `todo` second. The invariant an agent enforces
+across sessions: no `doing` row assigned to `whoami.user_id`
+survives a pickup dialog without the human being explicitly reminded
+of it.
+
 ### `nottario.tasks.next`
 
 Returns the next eligible task or `{task: null}` if nothing is

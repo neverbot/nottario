@@ -10,6 +10,13 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-08-03
+
+- **Agent skill bundle** now tells agents to list their own `doing`
+  tasks and surface them before previewing new work when the human
+  asks "what's next", so unfinished pickup from a previous session
+  isn't silently skipped.
+
 ## 2026-07-07
 
 - **Deleting a role no longer kicks its holders out of the project.**
