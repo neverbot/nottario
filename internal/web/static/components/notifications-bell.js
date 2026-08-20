@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { popoverStyles } from '/static/components/surfaces.js';
+import { formatRelativeTime } from '/static/time.js';
 import { OutsideClickController } from '/static/components/outside-click.js';
 import '/static/components/avatar.js';
 
@@ -304,23 +305,6 @@ class NottarioNotificationsBell extends LitElement {
     } catch (_) {}
   }
 
-  _relTime(iso) {
-    if (!iso) return '';
-    const then = new Date(iso).getTime();
-    if (!Number.isFinite(then)) return '';
-    const diff = Date.now() - then;
-    if (diff < 60_000) return 'just now';
-    const m = Math.floor(diff / 60_000);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    if (d < 7) return `${d}d ago`;
-    const w = Math.floor(d / 7);
-    if (w < 12) return `${w}w ago`;
-    return new Date(iso).toLocaleDateString();
-  }
-
   _renderCopy(n) {
     const actorName =
       n.actor?.display_name || (n.actor?.github_login ? '@' + n.actor.github_login : 'Someone');
@@ -395,7 +379,7 @@ class NottarioNotificationsBell extends LitElement {
                   <span class="unread-dot" aria-hidden="true"></span>
                   <span class="body">
                     <span class="copy">${this._renderCopy(n)}</span>
-                    <span class="when">${this._relTime(n.created_at)}</span>
+                    <span class="when">${formatRelativeTime(n.created_at)}</span>
                   </span>
                   <nottario-avatar class="avatar-slot"
                     .src=${n.actor?.avatar_url || ''}

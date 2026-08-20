@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { defaultPathFor, viewByKey } from '/static/views.js';
+import { formatRelativeTime } from '/static/time.js';
 import { EscController } from '/static/components/esc.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
@@ -366,7 +367,7 @@ class NottarioProjectsPage extends LitElement {
         ${
           s.last_activity_at
             ? html`<span class="activity" title=${new Date(s.last_activity_at).toLocaleString()}>
-                   ${this._relativeTime(s.last_activity_at)}
+                   ${formatRelativeTime(s.last_activity_at)}
                  </span>`
             : null
         }
@@ -399,21 +400,6 @@ class NottarioProjectsPage extends LitElement {
 
   // Tiny relative-time formatter: "5m", "3h", "2d", "3w". Falls back
   // to a date for anything older than ~12 weeks. No new dep.
-  _relativeTime(iso) {
-    const then = new Date(iso).getTime();
-    const diff = Date.now() - then;
-    if (diff < 60_000) return 'just now';
-    const m = Math.floor(diff / 60_000);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    if (d < 7) return `${d}d ago`;
-    const w = Math.floor(d / 7);
-    if (w < 12) return `${w}w ago`;
-    return new Date(iso).toLocaleDateString();
-  }
-
   render() {
     if (this.projects === null) {
       return html`<div class="empty">Loading projects…</div>`;

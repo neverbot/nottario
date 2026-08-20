@@ -7,6 +7,7 @@ import { formButton } from '/static/components/form-button.js';
 import { confirm } from '/static/components/confirm-dialog.js';
 import { trashIcon } from '/static/components/icons.js';
 import { defaultPathFor } from '/static/views.js';
+import { formatRelativeTime } from '/static/time.js';
 import '/static/components/field.js';
 import { badgeStyles } from '/static/components/badges.js';
 import { popoverStyles } from '/static/components/surfaces.js';
@@ -1223,24 +1224,13 @@ class NottarioDocsPage extends LitElement {
                   ? html`<span class="via" title=${`Agent: ${v.via_mcp.name || 'MCP'}`}>via ${v.via_mcp.name || 'MCP'}</span>`
                   : null
               }
-              <span class="when">${this._relTime(v.created_at)}</span>
+              <span class="when">${formatRelativeTime(v.created_at)}</span>
             </li>
           `,
           )}
         </ul>
       </div>
     `;
-  }
-
-  _relTime(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const diff = (Date.now() - d.getTime()) / 1000;
-    if (diff < 60) return 'just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
-    return d.toLocaleDateString();
   }
 
   renderCreateForm() {

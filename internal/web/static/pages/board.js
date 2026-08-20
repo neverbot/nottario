@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
+import { formatRelativeTime } from '/static/time.js';
 import { OutsideClickController } from '/static/components/outside-click.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
@@ -1647,7 +1648,7 @@ class NottarioBoardPage extends LitElement {
                 <span>${c.name}</span>
                 ${
                   c.closed_at
-                    ? html`<span class="muted">closed ${this._relTime(c.closed_at)}</span>`
+                    ? html`<span class="muted">closed ${formatRelativeTime(c.closed_at)}</span>`
                     : html`<span class="muted">active</span>`
                 }
               </li>
@@ -2056,17 +2057,6 @@ class NottarioBoardPage extends LitElement {
     return new Date(iso).toLocaleDateString();
   }
 
-  _relTime(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const diff = (Date.now() - d.getTime()) / 1000;
-    if (diff < 60) return 'just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
-    return d.toLocaleDateString();
-  }
-
   // Renders "(edited 5m ago by @name)" below a task field or comment
   // body. Returns nothing when the field was never edited.
   _renderEditedMarker(editedAt, editedByUserID) {
@@ -2074,7 +2064,7 @@ class NottarioBoardPage extends LitElement {
     const editor = this._memberByID(editedByUserID);
     const name = editor?.display_name || editor?.github_login || 'someone';
     const abs = new Date(editedAt).toLocaleString();
-    return html`<div class="edited-mark" title=${abs}>(edited ${this._relTime(editedAt)} by ${name})</div>`;
+    return html`<div class="edited-mark" title=${abs}>(edited ${formatRelativeTime(editedAt)} by ${name})</div>`;
   }
 
   // Renders a single comment, including the per-comment action menu
@@ -2114,7 +2104,7 @@ class NottarioBoardPage extends LitElement {
                       ? html`<span class="via"><span class="sep">·</span>via <span class="token">${c.via_mcp.name || 'MCP'}</span></span>`
                       : null
                   }
-                  <span class="when">${this._relTime(c.created_at)}</span>
+                  <span class="when">${formatRelativeTime(c.created_at)}</span>
                   ${
                     canModify && !editing
                       ? html`

@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { formatRelativeTime } from '/static/time.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
 import { badgeStyles } from '/static/components/badges.js';
@@ -493,7 +494,7 @@ class NottarioProfilePage extends LitElement {
 
   _renderTokenRow(t) {
     const created = t.created_at ? new Date(t.created_at).toLocaleDateString() : '';
-    const lastUsed = t.last_used_at ? this._relTime(t.last_used_at) : '—';
+    const lastUsed = t.last_used_at ? formatRelativeTime(t.last_used_at) : '—';
     const revoked = !!t.revoked_at;
     return html`
       <tr class=${revoked ? 'revoked' : ''}>
@@ -521,22 +522,6 @@ class NottarioProfilePage extends LitElement {
         </td>
       </tr>
     `;
-  }
-
-  _relTime(iso) {
-    const then = new Date(iso).getTime();
-    if (!Number.isFinite(then)) return '';
-    const diff = Date.now() - then;
-    if (diff < 60_000) return 'just now';
-    const m = Math.floor(diff / 60_000);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    if (d < 7) return `${d}d ago`;
-    const w = Math.floor(d / 7);
-    if (w < 12) return `${w}w ago`;
-    return new Date(iso).toLocaleDateString();
   }
 }
 

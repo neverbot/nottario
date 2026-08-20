@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { formatRelativeTime } from '/static/time.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
@@ -1056,21 +1057,6 @@ class NottarioProjectSettings extends LitElement {
   // freshness of an active token reads at a glance. Older than 30
   // days falls back to the absolute date so we don't pretend to
   // know "47 days ago".
-  _fmtRelativeDate(d) {
-    if (!d) return '—';
-    const then = new Date(d).getTime();
-    const now = Date.now();
-    const secs = Math.max(0, Math.floor((now - then) / 1000));
-    if (secs < 45) return 'just now';
-    const mins = Math.floor(secs / 60);
-    if (mins < 60) return `${mins} min ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
-    return this._fmtDate(d);
-  }
-
   _armRevoke(id) {
     this._revokeArmedId = id;
   }
@@ -1219,7 +1205,7 @@ class NottarioProjectSettings extends LitElement {
         <td>${nameCell}</td>
         <td class="mono">${prefixCell}</td>
         <td title=${t.created_at || ''}>${this._fmtDate(t.created_at)}</td>
-        <td title=${t.last_used_at || ''}>${this._fmtRelativeDate(t.last_used_at)}</td>
+        <td title=${t.last_used_at || ''}>${t.last_used_at ? formatRelativeTime(t.last_used_at) : '—'}</td>
         <td>
           ${
             t.revoked_at
