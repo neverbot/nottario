@@ -6,6 +6,7 @@ import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
 import { confirm } from '/static/components/confirm-dialog.js';
 import { trashIcon } from '/static/components/icons.js';
+import { defaultPathFor } from '/static/views.js';
 import '/static/components/field.js';
 import { badgeStyles } from '/static/components/badges.js';
 import '/static/components/page-header.js';
@@ -232,25 +233,60 @@ class NottarioDocsPage extends LitElement {
       display: flex;
       align-items: center;
       gap: 8px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      min-width: 0;
     }
     .reader-header .description {
       margin: 8px 0 0;
     }
     .reader-strip .crumbs {
-      display: inline-flex;
+      display: flex;
       align-items: baseline;
+      flex-wrap: nowrap;
       gap: 4px;
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 12px;
       color: var(--fg-muted);
       min-width: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
     }
-    .reader-strip .crumb-seg { color: var(--gray-5); }
-    .reader-strip .crumb-seg.last { color: var(--fg); font-weight: 600; }
-    .reader-strip .sep { color: var(--border); }
-    .reader-strip .spacer { flex: 1; }
-    .reader-strip .actions { display: flex; align-items: center; gap: 4px; }
+    .reader-strip .crumb-seg { color: var(--gray-5); flex-shrink: 0; }
+    .reader-strip .crumb-seg.last {
+      color: var(--fg);
+      font-weight: 600;
+      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 3ch;
+    }
+    .reader-strip .crumb-mid {
+      color: var(--gray-5);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .reader-strip .crumb-link {
+      color: var(--gray-5);
+      text-decoration: none;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .reader-strip .crumb-link:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+    .reader-strip .sep { color: var(--border); flex-shrink: 0; }
+    .reader-strip .actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
     .reader-strip .actions .btn { font-size: 12px; padding: 4px 10px; }
     .reader-strip .version-btn {
       background: transparent;
@@ -261,6 +297,7 @@ class NottarioDocsPage extends LitElement {
       padding: 1px 6px;
       border-radius: 4px;
       cursor: pointer;
+      flex-shrink: 0;
     }
     .reader-strip .version-btn:hover {
       color: var(--fg);
@@ -272,6 +309,7 @@ class NottarioDocsPage extends LitElement {
       background: var(--tint-blue);
       border-color: var(--accent);
     }
+    .reader-strip .badge { flex-shrink: 0; }
 
     /* Titleless docs get an injected chrome H1 so the reader is not
        flat. Match nottario-markdown's H1 look. */
@@ -1069,8 +1107,18 @@ class NottarioDocsPage extends LitElement {
     const viewing = this.viewingVersion;
     // breadcrumb segments from the path. The last segment (the
     // filename) is rendered bold + dark; everything before is muted.
-    const segs = (s.path || '').split('/');
-    const last = segs.pop();
+    const rawSegs = (s.path || '').split('/');
+    // Project-scoped docs store paths as `context/foo.md` (no project
+    // prefix). Prepend a link to the project's home view — the URL
+    // shows the UUID but the crumb should show the name.
+    const projectHead = this.project
+      ? { name: this.project.name, href: defaultPathFor(this.project) }
+      : null;
+    const midSegs = rawSegs.slice(0, -1);
+    const lastRaw = rawSegs[rawSegs.length - 1] || '';
+    // Drop the `.md` extension on the leaf. The mono font + slashes
+    // already read as a file path; the extension is redundant chrome.
+    const last = lastRaw.replace(/\.md$/i, '');
     const contentHtml = (viewing ? viewing.content_html : s.content_html) || '';
     // The doc's own leading H1 is the visible title. Only fall back to
     // a chrome H1 when the body has none — otherwise we'd stack
@@ -1081,13 +1129,25 @@ class NottarioDocsPage extends LitElement {
         <div class="reader-header">
         <div class="reader-strip">
           <div class="crumbs">
-            ${segs.map((p) => html`<span class="crumb-seg">${p}</span><span class="sep">/</span>`)}
-            <span class="crumb-seg last">${last}</span>
+            ${
+              projectHead
+                ? html`<a class="crumb-link" href=${projectHead.href}
+                          @click=${(e) => {
+                            e.preventDefault();
+                            window.nottarioNavigate(projectHead.href);
+                          }}>${projectHead.name}</a><span class="sep">/</span>`
+                : null
+            }
+            ${
+              midSegs.length
+                ? html`<span class="crumb-mid" title=${midSegs.join('/')}>${midSegs.join('/')}</span><span class="sep">/</span>`
+                : null
+            }
+            <span class="crumb-seg last" title=${last}>${last}</span>
           </div>
           <span class=${`badge ${s.kind}`}>${s.kind}</span>
           <button class=${`version-btn ${this.historyOpen ? 'open' : ''}`}
                   @click=${() => this.toggleHistory()}>v${s.current_version}</button>
-          <div class="spacer"></div>
           <div class="actions">
             ${
               viewing
