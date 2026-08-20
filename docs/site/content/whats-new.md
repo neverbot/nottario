@@ -12,6 +12,14 @@ are cut on demand.
 
 ## 2026-08-20
 
+- **Pages reload without re-downloading the frontend.** Static assets
+  now carry an `ETag`, so a browser that already has them revalidates
+  with an empty `304` instead of fetching everything again — around
+  3.2 MB per reload on a typical page. Freshness is unchanged: a
+  rebuilt asset still arrives in full. The `?v=` cache-busting query on
+  the entry scripts is gone, since the ETag covers every file rather
+  than just those two.
+
 - **The documentation site is now agent-readable.** A curated
   [llms.txt](https://neverbot.github.io/nottario/llms.txt) index lives at
   the site root, and every page is also served as plain Markdown at the
