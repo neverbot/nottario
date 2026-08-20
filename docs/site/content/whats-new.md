@@ -10,6 +10,16 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-08-20
+
+- **The documentation site is now agent-readable.** A curated
+  [llms.txt](https://neverbot.github.io/nottario/llms.txt) index lives at
+  the site root, and every page is also served as plain Markdown at the
+  same URL with the extension swapped for `.md` (for example
+  `/getting-started.md`), following the
+  [llms.txt proposal](https://llmstxt.org). `make docs-check` fails if a
+  page is missing from the index, so the two cannot drift apart.
+
 ## 2026-08-03
 
 - **Agent skill bundle** now tells agents to list their own `doing`

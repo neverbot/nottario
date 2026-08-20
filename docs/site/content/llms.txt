@@ -1,0 +1,45 @@
+# Nottario
+
+> Open-source, self-hosted coordinator for human developers and their AI agents. One Go binary plus one Postgres gives a team a task backlog with atomic claim, a versioned markdown store agents actually read, and an architecture diagram agents keep current. Humans browse a web UI; agents drive the same data over MCP.
+
+Nottario is built for agents as first-class users, so this documentation
+is written to be read by one. Every page below is also served as plain
+Markdown at the same URL with the extension swapped for `.md`.
+
+Two things are worth knowing before reading further. Agents authenticate
+with per-project API tokens, and a token issued for one project cannot
+read or write another. And the skill bundle under "Agent skills" is the
+operating manual an agent installs into its own workspace; it is the
+canonical description of how to claim work and record progress.
+
+## Start
+
+- [Home](https://neverbot.github.io/nottario/index.md): what Nottario is, the three domains it covers, and who it is for.
+- [Getting started](https://neverbot.github.io/nottario/getting-started.md): bring an instance up with Docker Compose, create a project, issue an agent token.
+
+## Views
+
+- [Kanban board](https://neverbot.github.io/nottario/kanban.md): the task board, its filters, and what each column means.
+- [Gantt timeline](https://neverbot.github.io/nottario/gantt.md): dependency-ordered timeline. Nottario has no calendar dates; the axis is derived from ordering.
+- [Shared documents](https://neverbot.github.io/nottario/docs.md): the versioned markdown store, optimistic concurrency, and document history.
+- [Architecture diagram](https://neverbot.github.io/nottario/architecture.md): the navigable box-and-arrow graph agents maintain in textual form.
+
+## Reference
+
+- [Self-hosting reference](https://neverbot.github.io/nottario/self-hosting.md): every environment variable, backup configuration, TLS and secret hygiene.
+- [MCP integration](https://neverbot.github.io/nottario/mcp.md): wiring an agent to the MCP server, the transport, and the tool catalogue.
+- [Contributing](https://neverbot.github.io/nottario/contributing.md): repository layout, the pre-commit gate, and the conventions a patch must follow.
+
+## Agent skills
+
+- [Agent skills](https://neverbot.github.io/nottario/skills.md): what the skill bundle is and how an agent installs it.
+- [Skill: overview](https://neverbot.github.io/nottario/skills/overview.md): the operating rules an agent follows end to end, from identity to closing a task.
+- [Skill: tasks domain](https://neverbot.github.io/nottario/skills/tasks.md): task schema, states, priorities, dependencies, atomic claim, and closing discipline.
+- [Skill: cycles domain](https://neverbot.github.io/nottario/skills/cycles.md): cycles (sprints), rollover, and the end-of-cycle transition.
+- [Skill: documents domain](https://neverbot.github.io/nottario/skills/docs.md): reading and writing shared context, and handling version conflicts.
+- [Skill: architecture domain](https://neverbot.github.io/nottario/skills/architecture.md): declaring nodes and edges, and keeping the diagram honest.
+- [Skill: identity reference](https://neverbot.github.io/nottario/skills/identity.md): how Nottario authenticates an agent and resolves the calling user.
+
+## Optional
+
+- [What's new](https://neverbot.github.io/nottario/whats-new.md): user-visible changes, newest first. Every push to master ships to `:latest`.

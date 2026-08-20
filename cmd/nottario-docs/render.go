@@ -190,6 +190,11 @@ func renderAll(inDir, outDir string) error {
 			return fmt.Errorf("%s: %w", p.SourcePath, err)
 		}
 		expanded[p.SourcePath] = e
+		// The plain-Markdown twin an agent gets by swapping the page
+		// URL's extension for .md. See agents.go.
+		if err := writeMarkdown(outDir, p, e); err != nil {
+			return fmt.Errorf("%s: write markdown twin: %w", p.SourcePath, err)
+		}
 		body, err := renderBody(e)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.SourcePath, err)

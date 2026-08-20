@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -43,10 +45,37 @@ func runChecks(inDir string) error {
 		}
 	}
 
+	// llms.txt is hand-written, so nothing forces it to keep up with
+	// the corpus. Check it exists and that every page is listed —
+	// an unlisted page is invisible to any agent that trusts the
+	// index. Runs after the per-page checks so a genuinely broken
+	// page surfaces its own error first.
+	errs = append(errs, checkLLMsTxt(inDir, pages)...)
+
 	if err := joinErrors(errs); err != nil {
 		return err
 	}
 	return nil
+}
+
+// checkLLMsTxt validates the hand-written index at content/llms.txt:
+// it must exist, and it must mention the Markdown twin of every page
+// in the corpus. It deliberately does not check ordering, prose or
+// grouping — those are editorial calls the author makes.
+func checkLLMsTxt(inDir string, pages []*Page) []error {
+	raw, err := os.ReadFile(filepath.Join(inDir, llmsTxtName))
+	if err != nil {
+		return []error{fmt.Errorf("%s: %w", llmsTxtName, err)}
+	}
+	body := string(raw)
+	var errs []error
+	for _, p := range pages {
+		if !strings.Contains(body, markdownURLFor(p.URL)) {
+			errs = append(errs, fmt.Errorf("%s: page %q is not listed (expected a link to %q)",
+				llmsTxtName, p.URL, markdownURLFor(p.URL)))
+		}
+	}
+	return errs
 }
 
 // markdownLinkRE matches markdown `[text](url)` links AND raw HTML

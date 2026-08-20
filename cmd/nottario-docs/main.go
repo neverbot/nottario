@@ -89,6 +89,9 @@ func run(inDir, outDir string, check bool) error {
 	if err := copyScreenshots(outDir); err != nil {
 		return fmt.Errorf("copy screenshots: %w", err)
 	}
+	if err := copyLLMsTxt(inDir, outDir); err != nil {
+		return fmt.Errorf("copy llms.txt: %w", err)
+	}
 	return renderAll(inDir, outDir)
 }
 

@@ -73,13 +73,66 @@ func TestRunEndToEnd(t *testing.T) {
 		[]byte("---\ntitle: Home\n---\n# Home\n\nWelcome.\n"), 0o644))
 	must(t, os.WriteFile(filepath.Join(in, "page.md"),
 		[]byte("---\ntitle: Page\nsection: Start\n---\n# Page\n\nBody.\n"), 0o644))
+	must(t, os.WriteFile(filepath.Join(in, llmsTxtName),
+		[]byte("# T\n\n- index.md\n- page.md\n"), 0o644))
 	if err := run(in, out, false); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	for _, want := range []string{"index.html", "page/index.html", "static/docs.css", "search-index.json"} {
+	for _, want := range []string{
+		"index.html", "page/index.html", "static/docs.css", "search-index.json",
+		"llms.txt", "index.md", "page.md",
+	} {
 		if _, err := os.Stat(filepath.Join(out, want)); err != nil {
 			t.Errorf("missing artefact %s: %v", want, err)
 		}
+	}
+	// The .md twin carries the markdown source, not rendered HTML.
+	b, err := os.ReadFile(filepath.Join(out, "page.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(b); !strings.Contains(got, "# Page") || strings.Contains(got, "<h1") {
+		t.Errorf("markdown twin is not plain markdown: %q", got)
+	}
+}
+
+func TestMarkdownURLFor(t *testing.T) {
+	cases := map[string]string{
+		"/":                 "index.md",
+		"/getting-started/": "getting-started.md",
+		"/skills/tasks/":    "skills/tasks.md",
+	}
+	for in, want := range cases {
+		if got := markdownURLFor(in); got != want {
+			t.Errorf("markdownURLFor(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRewriteMarkdownLinksAppliesBaseURL(t *testing.T) {
+	prev := baseURL
+	baseURL = "/nottario"
+	defer func() { baseURL = prev }()
+	got := rewriteMarkdownLinks("see [a](/getting-started/) and [b](https://x.dev/y)")
+	if !strings.Contains(got, "](/nottario/getting-started/)") {
+		t.Errorf("internal link not prefixed: %q", got)
+	}
+	if !strings.Contains(got, "](https://x.dev/y)") {
+		t.Errorf("external link was rewritten: %q", got)
+	}
+}
+
+func TestRunChecksCatchesPageMissingFromLLMsTxt(t *testing.T) {
+	in := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(in, "index.md"),
+		[]byte("---\ntitle: Home\n---\n# Home\n"), 0o644))
+	must(t, os.WriteFile(filepath.Join(in, "orphan.md"),
+		[]byte("---\ntitle: Orphan\n---\n# Orphan\n"), 0o644))
+	must(t, os.WriteFile(filepath.Join(in, llmsTxtName),
+		[]byte("# T\n\n- index.md\n"), 0o644))
+	err := runChecks(in)
+	if err == nil || !strings.Contains(err.Error(), "not listed") {
+		t.Fatalf("expected unlisted-page error, got %v", err)
 	}
 }
 
