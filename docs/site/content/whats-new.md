@@ -12,6 +12,13 @@ are cut on demand.
 
 ## 2026-08-20
 
+- **The frontend is now served compressed.** Static assets and the app
+  shell are gzipped once at startup and served precompressed to any
+  browser that accepts them, cutting the transfer by about 70% (the
+  architecture page's layout engine alone drops from 1.6 MB to
+  472 KB). Clients that do not advertise gzip still get uncompressed
+  bytes, and `Vary: Accept-Encoding` keeps shared caches honest.
+
 - **Pages reload without re-downloading the frontend.** Static assets
   now carry an `ETag`, so a browser that already has them revalidates
   with an empty `304` instead of fetching everything again — around

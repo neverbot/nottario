@@ -44,6 +44,9 @@ func IndexHandler() http.Handler {
 	// re-sending the document. http.ServeContent handles the
 	// conditional request against the ETag we set here.
 	etag := etagOf(html)
+	// The shell is served on every navigation, so it gets the same
+	// precompression as the assets it references. See compress.go.
+	gz, hasGzip := gzipBytes(html)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for _, p := range reservedPrefixes {
 			if strings.HasPrefix(r.URL.Path, p) {
@@ -53,6 +56,13 @@ func IndexHandler() http.Handler {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		w.Header().Set("Vary", "Accept-Encoding")
+		if hasGzip && acceptsGzip(r) {
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Header().Set("ETag", gz.etag)
+			http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(gz.body))
+			return
+		}
 		w.Header().Set("ETag", etag)
 		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(html))
 	})

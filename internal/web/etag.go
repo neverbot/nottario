@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
-	"net/http"
-	"path"
 	"strings"
 	"sync"
 )
@@ -66,17 +64,4 @@ func buildStaticETags() {
 func etagOf(content []byte) string {
 	sum := sha256.Sum256(content)
 	return `"` + hex.EncodeToString(sum[:])[:16] + `"`
-}
-
-// withStaticETag wraps the static file server, attaching the
-// precomputed validator for the requested asset. Requests for unknown
-// paths fall through untouched so the file server can 404 them.
-func withStaticETag(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rel := strings.TrimPrefix(path.Clean(r.URL.Path), "/static/")
-		if tag := staticETagFor(rel); tag != "" {
-			w.Header().Set("ETag", tag)
-		}
-		next.ServeHTTP(w, r)
-	})
 }

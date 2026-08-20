@@ -46,11 +46,12 @@ func NewServer(d Deps) http.Handler {
 	// which surfaced repeatedly during dogfooding as "I rebuilt but the
 	// page hasn't changed".
 	//
-	// withStaticETag supplies the validator that makes revalidation
-	// cheap: without it the browser has nothing to send in
-	// If-None-Match, so every "revalidation" was a full re-download.
-	// See etag.go.
-	staticHandler := withStaticETag(
+	// withStaticAssets supplies the validator that makes revalidation
+	// cheap (without it the browser has nothing to send in
+	// If-None-Match, so every "revalidation" was a full re-download)
+	// and serves precompressed bytes to clients that accept gzip.
+	// See etag.go and compress.go.
+	staticHandler := withStaticAssets(
 		http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))),
 	)
 	mux.Handle("GET /static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
