@@ -1,4 +1,5 @@
 import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
+import { priorityLabel } from '/static/priorities.js';
 import { subscribe } from '/static/realtime.js';
 
 // <nottario-gantt> renders the project's tasks as a horizontal
@@ -825,14 +826,6 @@ class NottarioGantt extends LitElement {
     return sortedRoles.length ? sortedRoles.join(', ') : 'no roles';
   }
 
-  _priorityLabel(value) {
-    if (this.priorities?.length) {
-      const exact = this.priorities.find((p) => p.value === value);
-      if (exact) return exact.key;
-    }
-    return `p${value}`;
-  }
-
   async load() {
     if (!this.projectId) return;
     try {
@@ -1626,7 +1619,7 @@ class NottarioGantt extends LitElement {
           <!-- Priority labels at the top of each future sub-column -->
           ${futurePriorityBuckets.map(
             (b) => svg`
-            <text class="priority-label" x=${b.x + 4} y=${headerH - 4}>${this._priorityLabel(b.priority)}</text>
+            <text class="priority-label" x=${b.x + 4} y=${headerH - 4}>${priorityLabel(b.priority, this.priorities)}</text>
           `,
           )}
 
@@ -2088,7 +2081,7 @@ class NottarioGantt extends LitElement {
                 ? html`<span class="chip">${t.type}</span>`
                 : null
           }
-          <span class="chip">${this._priorityLabel(t.priority)}</span>
+          <span class="chip">${priorityLabel(t.priority, this.priorities)}</span>
           ${
             role
               ? html`

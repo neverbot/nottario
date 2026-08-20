@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
+import { priorityLabel } from '/static/priorities.js';
 import { formatRelativeTime } from '/static/time.js';
 import { OutsideClickController } from '/static/components/outside-click.js';
 import { toast } from '/static/components/toast.js';
@@ -1050,13 +1051,6 @@ class NottarioBoardPage extends LitElement {
     return this.roles.find((r) => r.id === id);
   }
 
-  _priorityLabel(value) {
-    if (!this.priorities?.length) return `p${value}`;
-    const exact = this.priorities.find((p) => p.value === value);
-    if (exact) return exact.key;
-    return `p${value}`;
-  }
-
   // Find the priority bucket whose Value is closest to `value`. Used
   // to pre-select the dropdown when the stored priority happens to
   // land between buckets (e.g. someone set a raw integer via SQL or
@@ -1113,7 +1107,7 @@ class NottarioBoardPage extends LitElement {
           <div class="meta">
             <span class=${`prio ${this._priorityBucket(next.priority)}`}>
               <span class="dot"></span>
-              ${this._priorityLabel(next.priority)}
+              ${priorityLabel(next.priority, this.priorities)}
             </span>
             ${
               role
@@ -1518,7 +1512,7 @@ class NottarioBoardPage extends LitElement {
     const a11yLabel =
       `${t.title}, ${t.type}, ${t.state}` +
       (role ? `, role ${role.label}` : '') +
-      `, priority ${this._priorityLabel(t.priority)}` +
+      `, priority ${priorityLabel(t.priority, this.priorities)}` +
       (assigneeName ? `, assigned to ${assigneeName}` : '');
     const dragging = this._draggingID === t.id;
     const isWontDo = t.state === 'wont_do';
@@ -1545,7 +1539,7 @@ class NottarioBoardPage extends LitElement {
         <div class="meta">
           <span class=${`prio ${this._priorityBucket(t.priority)}`}>
             <span class="dot"></span>
-            ${this._priorityLabel(t.priority)}
+            ${priorityLabel(t.priority, this.priorities)}
           </span>
           ${
             role
