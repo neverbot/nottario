@@ -1,5 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
-import { formatRelativeTime } from '/static/time.js';
+import { formatDate, formatRelativeTime } from '/static/time.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { surfaceStyles, tableStyles } from '/static/components/surfaces.js';
 import { badgeStyles } from '/static/components/badges.js';
@@ -493,7 +493,7 @@ class NottarioProfilePage extends LitElement {
   }
 
   _renderTokenRow(t) {
-    const created = t.created_at ? new Date(t.created_at).toLocaleDateString() : '';
+    const created = t.created_at ? formatDate(t.created_at) : '';
     const lastUsed = t.last_used_at ? formatRelativeTime(t.last_used_at) : '—';
     const revoked = !!t.revoked_at;
     return html`

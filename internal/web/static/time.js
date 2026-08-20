@@ -7,6 +7,27 @@
 // list but a bare locale date on the board. One implementation, one
 // output.
 
+// formatDate renders an ISO timestamp as a readable absolute date:
+// "27 May 2026". Locale-aware, so the month name and field order
+// follow the browser's locale rather than being pinned to English.
+//
+// Preferred over a bare toLocaleDateString(), whose all-numeric
+// "27/05/2026" is ambiguous across locales — the same string means two
+// different days either side of the Atlantic.
+//
+// Returns '' for a missing or unparseable input, matching
+// formatRelativeTime, so callers own their own placeholder.
+export function formatDate(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 // formatRelativeTime renders an ISO timestamp as a short, compact
 // "time since" string: "just now", "5m ago", "3h ago", "2d ago",
 // "6w ago", falling back to a locale date past twelve weeks.
@@ -31,5 +52,5 @@ export function formatRelativeTime(iso) {
   if (days < 7) return `${days}d ago`;
   const weeks = Math.floor(days / 7);
   if (weeks < 12) return `${weeks}w ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso);
 }

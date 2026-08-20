@@ -1,5 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
-import { formatRelativeTime } from '/static/time.js';
+import { formatDate, formatRelativeTime } from '/static/time.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
@@ -1043,15 +1043,6 @@ class NottarioProjectSettings extends LitElement {
 
   // Created column: a compact absolute date (no time, no seconds). The
   // full ISO timestamp sits in the title attribute for power users.
-  _fmtDate(d) {
-    if (!d) return '—';
-    const dt = new Date(d);
-    return dt.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  }
 
   // Last-used column: relative ("3 days ago", "just now") so the
   // freshness of an active token reads at a glance. Older than 30
@@ -1204,7 +1195,7 @@ class NottarioProjectSettings extends LitElement {
       <tr>
         <td>${nameCell}</td>
         <td class="mono">${prefixCell}</td>
-        <td title=${t.created_at || ''}>${this._fmtDate(t.created_at)}</td>
+        <td title=${t.created_at || ''}>${t.created_at ? formatDate(t.created_at) : '—'}</td>
         <td title=${t.last_used_at || ''}>${t.last_used_at ? formatRelativeTime(t.last_used_at) : '—'}</td>
         <td>
           ${
