@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // reservedPrefixes are URL prefixes that must never fall through to
@@ -49,6 +50,12 @@ func IndexHandler() http.Handler {
 		panic("nottario: index.html render: " + err.Error())
 	}
 	html := rendered.Bytes()
+	// The shell is rendered once and never changes while the process
+	// runs, so it gets the same treatment as the assets it references:
+	// a strong validator, so a navigation costs a 304 instead of
+	// re-sending the document. http.ServeContent handles the
+	// conditional request against the ETag we set here.
+	etag := etagOf(html)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for _, p := range reservedPrefixes {
 			if strings.HasPrefix(r.URL.Path, p) {
@@ -58,8 +65,8 @@ func IndexHandler() http.Handler {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(html)
+		w.Header().Set("ETag", etag)
+		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(html))
 	})
 }
 

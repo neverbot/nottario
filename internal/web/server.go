@@ -44,9 +44,15 @@ func NewServer(d Deps) http.Handler {
 	// to revalidate before reusing a cached copy. Without this header
 	// browsers happily serve stale JS/CSS even after a binary rebuild,
 	// which surfaced repeatedly during dogfooding as "I rebuilt but the
-	// page hasn't changed". The assets ship inside the binary anyway,
-	// so the bandwidth cost of revalidation is trivial.
-	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticSub)))
+	// page hasn't changed".
+	//
+	// withStaticETag supplies the validator that makes revalidation
+	// cheap: without it the browser has nothing to send in
+	// If-None-Match, so every "revalidation" was a full re-download.
+	// See etag.go.
+	staticHandler := withStaticETag(
+		http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))),
+	)
 	mux.Handle("GET /static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		staticHandler.ServeHTTP(w, r)
