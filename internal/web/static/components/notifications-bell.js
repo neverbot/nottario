@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { popoverStyles } from '/static/components/surfaces.js';
+import { OutsideClickController } from '/static/components/outside-click.js';
 import '/static/components/avatar.js';
 
 // <nottario-notifications-bell .me=${me}>
@@ -187,7 +188,12 @@ class NottarioNotificationsBell extends LitElement {
     this._loading = false;
     this._nextAfter = null;
     this._disabled = false;
-    this._onDocClick = this._onDocClick.bind(this);
+    new OutsideClickController(this, {
+      isOpen: () => this._open,
+      close: () => {
+        this._open = false;
+      },
+    });
     this._onDocKey = this._onDocKey.bind(this);
     this._onVisibility = this._onVisibility.bind(this);
     this._onNavigate = this._onNavigate.bind(this);
@@ -195,7 +201,6 @@ class NottarioNotificationsBell extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    document.addEventListener('click', this._onDocClick, true);
     document.addEventListener('keydown', this._onDocKey);
     document.addEventListener('visibilitychange', this._onVisibility);
     window.addEventListener('nottario-navigate', this._onNavigate);
@@ -204,7 +209,6 @@ class NottarioNotificationsBell extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    document.removeEventListener('click', this._onDocClick, true);
     document.removeEventListener('keydown', this._onDocKey);
     document.removeEventListener('visibilitychange', this._onVisibility);
     window.removeEventListener('nottario-navigate', this._onNavigate);
@@ -246,12 +250,6 @@ class NottarioNotificationsBell extends LitElement {
     } finally {
       this._loading = false;
     }
-  }
-
-  _onDocClick(e) {
-    if (!this._open) return;
-    if (e.composedPath().includes(this)) return;
-    this._open = false;
   }
 
   _onDocKey(e) {

@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { popoverStyles } from '/static/components/surfaces.js';
+import { OutsideClickController } from '/static/components/outside-click.js';
 import { chevronDownIcon } from '/static/components/icons.js';
 
 // <nottario-chip-filter> — pill-shaped filter control used to narrow
@@ -106,24 +107,13 @@ class NottarioChipFilter extends LitElement {
     this.values = [];
     this.options = [];
     this._open = false;
-  }
-
-  // Close the popover when the user clicks outside the chip. Attached
-  // at the document level to catch clicks that land on other parts of
-  // the host page (toolbar buttons, columns, …).
-  connectedCallback() {
-    super.connectedCallback();
-    this._docClick = (e) => {
-      if (this._open && !e.composedPath().includes(this)) {
+    // Close the popover when the user presses outside the chip.
+    new OutsideClickController(this, {
+      isOpen: () => this._open,
+      close: () => {
         this._open = false;
-      }
-    };
-    document.addEventListener('mousedown', this._docClick);
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    document.removeEventListener('mousedown', this._docClick);
+      },
+    });
   }
 
   _onChipClick() {

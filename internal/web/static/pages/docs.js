@@ -9,6 +9,8 @@ import { trashIcon } from '/static/components/icons.js';
 import { defaultPathFor } from '/static/views.js';
 import '/static/components/field.js';
 import { badgeStyles } from '/static/components/badges.js';
+import { popoverStyles } from '/static/components/surfaces.js';
+import { OutsideClickController } from '/static/components/outside-click.js';
 import '/static/components/page-header.js';
 import '/static/components/search-input.js';
 import '/static/components/markdown.js';
@@ -37,6 +39,7 @@ class NottarioDocsPage extends LitElement {
     buttonStyles,
     formStyles,
     badgeStyles,
+    popoverStyles,
     css`
     :host { display: block; box-sizing: border-box; }
     * { box-sizing: border-box; }
@@ -261,13 +264,16 @@ class NottarioDocsPage extends LitElement {
       white-space: nowrap;
       min-width: 3ch;
     }
+    /* Shrinks (and ellipsizes) when the strip runs out of room, but
+       never grows — growing would push the filename away from its own
+       path and leave a gap mid-breadcrumb. */
     .reader-strip .crumb-mid {
       color: var(--gray-5);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       min-width: 0;
-      flex: 1 1 auto;
+      flex: 0 1 auto;
     }
     .reader-strip .crumb-link {
       color: var(--gray-5);
@@ -364,18 +370,14 @@ class NottarioDocsPage extends LitElement {
        each row shows version, relative time, author hint, and the
        commit-style message. Newest first. Click a row → load that
        version into the reader read-only. */
+    /* Chrome comes from popoverStyles; only the anchor, size and
+       padding are local here. */
     .history-pop {
-      position: absolute;
       top: calc(100% + 6px);
       right: 0;
       width: 360px;
       max-height: 420px;
       overflow: auto;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
-      z-index: 50;
       padding: 6px;
     }
     .history-pop .empty { padding: 12px; color: var(--fg-muted); font-size: 13px; }
@@ -507,7 +509,16 @@ class NottarioDocsPage extends LitElement {
     this.viewingVersion = null;
     this._cursorIdx = -1;
     this._onKey = this._onKey.bind(this);
-    this._onDocClick = this._onDocClick.bind(this);
+    // The history popover is the only anchored menu this page owns, so
+    // the boundary is the anchor plus the version buttons that toggle
+    // it rather than the whole page.
+    new OutsideClickController(this, {
+      selector: '.history-pop, .version-btn',
+      isOpen: () => this.historyOpen,
+      close: () => {
+        this.historyOpen = false;
+      },
+    });
   }
 
   connectedCallback() {
@@ -517,7 +528,6 @@ class NottarioDocsPage extends LitElement {
     this._hashHandler = () => this._applyHash();
     window.addEventListener('hashchange', this._hashHandler);
     window.addEventListener('keydown', this._onKey);
-    document.addEventListener('click', this._onDocClick);
   }
 
   disconnectedCallback() {
@@ -525,7 +535,6 @@ class NottarioDocsPage extends LitElement {
     this._unsub?.();
     window.removeEventListener('hashchange', this._hashHandler);
     window.removeEventListener('keydown', this._onKey);
-    document.removeEventListener('click', this._onDocClick);
   }
 
   updated(c) {
@@ -630,19 +639,6 @@ class NottarioDocsPage extends LitElement {
         e.preventDefault();
       }
       return;
-    }
-  }
-
-  _onDocClick(e) {
-    if (!this.historyOpen) return;
-    // Close history when clicking anywhere outside it.
-    const path = e.composedPath?.() || [];
-    if (
-      !path.some(
-        (n) => n?.classList?.contains?.('history-pop') || n?.classList?.contains?.('version-btn'),
-      )
-    ) {
-      this.historyOpen = false;
     }
   }
 
@@ -1207,14 +1203,14 @@ class NottarioDocsPage extends LitElement {
 
   renderHistoryPop() {
     if (this.historyVersions === null) {
-      return html`<div class="history-pop"><div class="empty">Loading...</div></div>`;
+      return html`<div class="popover history-pop"><div class="empty">Loading...</div></div>`;
     }
     if (!this.historyVersions.length) {
-      return html`<div class="history-pop"><div class="empty">No history yet.</div></div>`;
+      return html`<div class="popover history-pop"><div class="empty">No history yet.</div></div>`;
     }
     const current = this.selected.current_version;
     return html`
-      <div class="history-pop">
+      <div class="popover history-pop">
         <ul>
           ${this.historyVersions.map(
             (v) => html`

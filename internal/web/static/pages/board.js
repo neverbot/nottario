@@ -98,17 +98,13 @@ class NottarioBoardPage extends LitElement {
       left: 0;
       min-width: 220px;
     }
+    /* Rows reuse .popover-item from surfaces.js; only the two-column
+       name/meta split is local. */
     .cycle-dropdown li {
-      display: flex;
-      align-items: baseline;
       justify-content: space-between;
+      align-items: baseline;
       gap: 12px;
-      padding: 6px 12px;
-      cursor: pointer;
-      font-size: 13px;
-      color: var(--fg);
     }
-    .cycle-dropdown li:hover { background: var(--bg-hover); }
     .cycle-dropdown li.current { font-weight: 600; background: var(--tint-blue); }
     .cycle-dropdown li .muted { color: var(--gray-5); font-size: 11px; }
     .cycle-counts {
@@ -1646,7 +1642,7 @@ class NottarioBoardPage extends LitElement {
               (c) => html`
               <li role="option"
                   aria-selected=${c.id === current.id ? 'true' : 'false'}
-                  class=${c.id === current.id ? 'current' : ''}
+                  class=${`popover-item ${c.id === current.id ? 'current' : ''}`}
                   @click=${() => this._selectCycle(c.id)}>
                 <span>${c.name}</span>
                 ${

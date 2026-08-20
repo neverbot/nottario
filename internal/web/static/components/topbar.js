@@ -1,5 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { badgeStyles } from './badges.js';
+import { popoverStyles } from './surfaces.js';
+import { OutsideClickController } from './outside-click.js';
 import './avatar.js';
 import './notifications-bell.js';
 import '../pages/search.js';
@@ -19,6 +21,7 @@ class NottarioTopbar extends LitElement {
 
   static styles = [
     badgeStyles,
+    popoverStyles,
     css`
     :host {
       box-sizing: border-box;
@@ -182,16 +185,14 @@ class NottarioTopbar extends LitElement {
     }
 
     .menu-wrap { position: relative; }
+    /* Chrome (background, border, radius, shadow) comes from
+       popoverStyles; only the anchor, width, padding and stacking are
+       local. The topbar is not a stacking context of its own, so this
+       menu has to outrank page-level popovers explicitly. */
     .menu {
-      position: absolute;
       top: calc(100% + 6px);
       right: 0;
       min-width: 240px;
-      background: var(--bg);
-      color: var(--fg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
       padding: 6px;
       z-index: 50;
     }
@@ -233,11 +234,12 @@ class NottarioTopbar extends LitElement {
     this.open = false;
     this._projectName = '';
     this._projectNameFor = '';
-    this._onDocClick = (e) => {
-      if (!this.open) return;
-      if (e.composedPath().includes(this)) return;
-      this.open = false;
-    };
+    new OutsideClickController(this, {
+      isOpen: () => this.open,
+      close: () => {
+        this.open = false;
+      },
+    });
     this._onKey = (e) => {
       if (!this.open) return;
       if (e.key === 'Escape') {
@@ -250,11 +252,9 @@ class NottarioTopbar extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    document.addEventListener('click', this._onDocClick, true);
     document.addEventListener('keydown', this._onKey);
   }
   disconnectedCallback() {
-    document.removeEventListener('click', this._onDocClick, true);
     document.removeEventListener('keydown', this._onKey);
     super.disconnectedCallback();
   }
@@ -406,7 +406,7 @@ class NottarioTopbar extends LitElement {
             ${
               this.open
                 ? html`
-              <div class="menu" role="menu" @keydown=${this._onMenuKey}>
+              <div class="popover menu" role="menu" @keydown=${this._onMenuKey}>
                 <div class="who">
                   <div class="display">${this.me.display_name || this.me.github_login}</div>
                   ${this.me.github_login ? html`<div class="login">@${this.me.github_login}</div>` : ''}
