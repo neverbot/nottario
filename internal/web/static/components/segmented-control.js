@@ -49,7 +49,7 @@ class NottarioSegmentedControl extends LitElement {
       background: var(--bg);
       color: var(--fg);
       border-color: var(--border);
-      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+      box-shadow: var(--shadow-sm);
     }
     button:focus-visible {
       outline: 2px solid var(--accent);

@@ -278,7 +278,7 @@ class NottarioBoardPage extends LitElement {
       padding: 10px 12px;
       margin-bottom: 8px;
       cursor: pointer;
-      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+      box-shadow: var(--shadow-sm);
     }
     /* Assignee avatar: small, bottom-right corner, doesn't compete
        with the meta chips. White ring for separation against the

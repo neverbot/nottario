@@ -24,7 +24,7 @@ export const surfaceStyles = css`
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
-    box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+    box-shadow: var(--shadow-sm);
     box-sizing: border-box;
   }
   .surface.tinted {
@@ -66,7 +66,7 @@ export const tableStyles = css`
     border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+    box-shadow: var(--shadow-sm);
     box-sizing: border-box;
   }
   table.data-table th,
@@ -137,7 +137,7 @@ export const popoverStyles = css`
     color: var(--fg);
     border: 1px solid var(--border);
     border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+    box-shadow: var(--shadow-lg);
     z-index: 30;
     box-sizing: border-box;
   }

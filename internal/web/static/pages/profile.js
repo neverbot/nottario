@@ -55,7 +55,7 @@ class NottarioProfilePage extends LitElement {
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 18px 20px;
-      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+      box-shadow: var(--shadow-sm);
     }
     .identity .name { font-size: 20px; font-weight: 600; margin: 0; }
     .identity .login {

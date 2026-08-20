@@ -47,13 +47,13 @@ class NottarioProjectsPage extends LitElement {
       background: #fff;
       border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+      box-shadow: var(--shadow-sm);
       cursor: pointer;
       transition: border-color 80ms ease-out, box-shadow 80ms ease-out;
     }
     .card:hover {
       border-color: var(--border-strong);
-      box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04),
+      box-shadow: var(--shadow-sm),
                   0 4px 12px rgba(31, 35, 40, 0.06);
     }
     .card:focus-visible {
