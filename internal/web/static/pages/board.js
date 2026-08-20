@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
+import { OutsideClickController } from '/static/components/outside-click.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
 import { confirm } from '/static/components/confirm-dialog.js';
@@ -783,6 +784,17 @@ class NottarioBoardPage extends LitElement {
     this._commentSavingID = null;
     this._commentDeletingID = null;
     new EscController(this, (e) => this._onEsc(e));
+    // The cycle switcher is an anchored menu, so it also closes on a
+    // press outside it. The selector matches the wrapper holding both
+    // the trigger button and the list, so pressing the trigger does
+    // not close the menu it just opened.
+    new OutsideClickController(this, {
+      selector: '.cycle-switcher',
+      isOpen: () => this._cycleDropdownOpen,
+      close: () => {
+        this._cycleDropdownOpen = false;
+      },
+    });
   }
 
   // ---- Drag and drop between columns ----------------------------
