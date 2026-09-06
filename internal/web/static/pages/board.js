@@ -1,7 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
-import { priorityLabel } from '/static/priorities.js';
+import { priorityBand, priorityLabel } from '/static/priorities.js';
 import { formatRelativeTime } from '/static/time.js';
 import { OutsideClickController } from '/static/components/outside-click.js';
 import { toast } from '/static/components/toast.js';
@@ -355,10 +355,10 @@ class NottarioBoardPage extends LitElement {
     }
 
     /* Priority is encoded as a coloured dot so it's the first thing
-       the eye reads on a card — high → red, medium → amber, low →
-       neutral. The bucket label sits next to the dot in muted text.
-       Three tints reflect the three priority bands; max collapses
-       into high, min into low. */
+       the eye reads on a card — high red, medium amber, low neutral.
+       The bucket label sits next to the dot in muted text. The three
+       tints are thirds of the project's own priority span, so they
+       track a retuned catalogue instead of fixed numbers. */
     .prio {
       display: inline-flex;
       align-items: center;
@@ -1105,7 +1105,7 @@ class NottarioBoardPage extends LitElement {
           <div class="eyebrow">Up next</div>
           <div class="title">${next.title}</div>
           <div class="meta">
-            <span class=${`prio ${this._priorityBucket(next.priority)}`}>
+            <span class=${`prio ${priorityBand(next.priority, this.priorities)}`}>
               <span class="dot"></span>
               ${priorityLabel(next.priority, this.priorities)}
             </span>
@@ -1178,17 +1178,6 @@ class NottarioBoardPage extends LitElement {
   _filterCount() {
     const f = this._filters || {};
     return (f.mine ? 1 : 0) + (f.roles?.length || 0) + (f.types?.length || 0);
-  }
-
-  // Map a numeric priority to a coarse bucket (high / medium / low)
-  // used for the card's coloured dot. The exact cutoffs follow the
-  // default priority catalogue: max(100)/high(75)→high; medium(50)→
-  // medium; low(25)/min(0)→low. Tasks created via SQL with off-bucket
-  // values still land in the closest band.
-  _priorityBucket(value) {
-    if (value >= 65) return 'high';
-    if (value >= 35) return 'medium';
-    return 'low';
   }
 
   open(t) {
@@ -1537,7 +1526,7 @@ class NottarioBoardPage extends LitElement {
            }}>
         <div class="title">${t.title}</div>
         <div class="meta">
-          <span class=${`prio ${this._priorityBucket(t.priority)}`}>
+          <span class=${`prio ${priorityBand(t.priority, this.priorities)}`}>
             <span class="dot"></span>
             ${priorityLabel(t.priority, this.priorities)}
           </span>

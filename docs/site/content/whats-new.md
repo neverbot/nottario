@@ -10,6 +10,18 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-09-07
+
+- **Task priorities are validated and the colour dot follows your
+  buckets.** A raw `priority` outside 0–1000 (the range a priority
+  bucket may itself occupy) is now rejected by task creation and
+  update, through both the API and MCP; previously any integer reached
+  the database unchecked. Values that sit *between* buckets stay legal
+  on purpose, and still render as `p70` rather than a bucket name. The
+  coloured dot on a kanban card is now ranked against the project's own
+  catalogue instead of fixed cutoffs, so a retuned set of buckets no
+  longer paints every card the same colour.
+
 ## 2026-08-20
 
 - **The frontend is now served compressed.** Static assets and the app
