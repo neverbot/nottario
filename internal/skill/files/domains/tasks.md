@@ -18,7 +18,7 @@ description: Complete reference for the Nottario tasks domain: schema, semantics
 | `title`                 | text                                 | Required.                                                             |
 | `description_md`        | text                                 | Markdown.                                                             |
 | `state`                 | `todo`\|`doing`\|`done`              | Lifecycle.                                                            |
-| `priority`              | int                                  | 0–100 by convention. Higher = picked sooner.                         |
+| `priority`              | int                                  | 0–1000. Higher = picked sooner. Prefer `priority_key`.               |
 | `assignee_user_id`      | uuid \| null                         | Specific user.                                                        |
 | `target_role_id`        | uuid \| null                         | Role-scoped; eligible to any holder.                                 |
 | `actual_start`          | timestamp \| null                    | Set automatically when entering `doing` (kept across re-enters).      |
@@ -160,6 +160,17 @@ add buckets per project.
 numbers in `priority` unless you have a deliberate reason to bypass
 the buckets (e.g. inserting between two existing buckets).
 
+An off-bucket value is accepted, but it costs you the label: the
+kanban card and the Gantt bar render it as `p70` instead of `high`,
+and the coloured dot falls back to ranking the number against the
+catalogue's overall span. If you find yourself reaching for a raw
+number regularly, the project is missing a bucket — ask the humans to
+add one rather than scattering unnamed integers.
+
+The raw value is bounded to 0–1000, the same range a bucket may
+occupy; anything outside it is rejected by `tasks.create` /
+`tasks.update`.
+
 ### `nottario.tasks.create`
 
 Defaults: `state=todo`, `type=task`, `priority=50`. To create a
@@ -230,7 +241,7 @@ Mutates the fields you pass. Notable nuances:
   user. Same for `target_role_id`.
 - Changing `priority` is the canonical way to reorder; pass
   `priority_key` (resolved against project buckets) rather than a raw
-  number.
+  number. Raw values outside 0–1000 are rejected.
 - Use this for description edits and renames; do not delete-and-recreate.
 - **Reparenting cascades `cycle_id`**: setting `parent_task_id` on a
   leaf task forces the task's `cycle_id` to match the new parent's

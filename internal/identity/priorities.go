@@ -12,6 +12,15 @@ import (
 	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
+// MinPriorityValue and MaxPriorityValue bound the numeric scale that
+// both priority buckets and task priorities live on. A task may sit
+// between two buckets (or miss them entirely) on purpose, but it can
+// never sit outside the range a bucket could occupy.
+const (
+	MinPriorityValue = 0
+	MaxPriorityValue = 1000
+)
+
 // Priority is one bucket in the project's priority vocabulary.
 type Priority struct {
 	ProjectID uuid.UUID `json:"project_id"`
@@ -95,8 +104,8 @@ func UpsertPriority(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID
 	if key == "" {
 		return nil, errors.New("priority key is required")
 	}
-	if value < 0 || value > 1000 {
-		return nil, errors.New("priority value must be between 0 and 1000")
+	if value < MinPriorityValue || value > MaxPriorityValue {
+		return nil, fmt.Errorf("priority value must be between %d and %d", MinPriorityValue, MaxPriorityValue)
 	}
 	row, err := dbq.New(pool).UpsertProjectPriority(ctx, dbq.UpsertProjectPriorityParams{
 		ProjectID: projectID,

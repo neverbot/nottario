@@ -16,6 +16,7 @@ import (
 
 	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/db/dbq"
+	"github.com/neverbot/nottario/internal/identity"
 )
 
 // ErrNotFound is returned when a lookup yields no row.
@@ -27,6 +28,24 @@ var ErrNotFound = errors.New("task not found")
 type Authorship struct {
 	UserID  *uuid.UUID
 	TokenID *uuid.UUID
+}
+
+// validatePriority bounds the raw priority integer.
+//
+// A value that matches no bucket stays legal on purpose: interposing
+// between two buckets is a documented move, and the UI degrades to a
+// "p<value>" label for it. What is not legal is a value outside the
+// scale the buckets themselves live on — that used to reach the
+// column unchecked, since the column carries no CHECK and the
+// "raw 0-100" note in the MCP schema is prose, not a constraint.
+func validatePriority(p *int) error {
+	if p == nil {
+		return nil
+	}
+	if *p < identity.MinPriorityValue || *p > identity.MaxPriorityValue {
+		return fmt.Errorf("priority must be between %d and %d", identity.MinPriorityValue, identity.MaxPriorityValue)
+	}
+	return nil
 }
 
 // CreateParams carries the fields settable at task creation time.
@@ -55,6 +74,9 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	}
 	if !ValidType(t) {
 		return nil, fmt.Errorf("invalid type: %q", t)
+	}
+	if err := validatePriority(p.Priority); err != nil {
+		return nil, err
 	}
 	if err := validateTaskAssignments(ctx, pool, p.ProjectID, p.TargetRoleID, p.AssigneeUserID); err != nil {
 		return nil, err
@@ -389,6 +411,9 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParam
 	}
 	if p.Type != nil && !ValidType(*p.Type) {
 		return nil, fmt.Errorf("invalid type: %q", *p.Type)
+	}
+	if err := validatePriority(p.Priority); err != nil {
+		return nil, err
 	}
 	if p.TargetRoleID != nil || p.AssigneeUserID != nil {
 		q := dbq.New(pool)
