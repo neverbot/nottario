@@ -17,7 +17,7 @@ description: Complete reference for the Nottario tasks domain: schema, semantics
 | `type`                  | `task`\|`bug`\|`chore`\|`spike`\|`feature` |                                                                       |
 | `title`                 | text                                 | Required.                                                             |
 | `description_md`        | text                                 | Markdown.                                                             |
-| `state`                 | `todo`\|`doing`\|`done`              | Lifecycle.                                                            |
+| `state`                 | `todo`\|`doing`\|`done`\|`wont_do`   | Lifecycle. `done` and `wont_do` are both terminal.                    |
 | `priority`              | int                                  | 0–100. Higher = picked sooner. Prefer `priority_key`.                |
 | `assignee_user_id`      | uuid \| null                         | Specific user.                                                        |
 | `target_role_id`        | uuid \| null                         | Role-scoped; eligible to any holder.                                 |
