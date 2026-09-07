@@ -1,6 +1,6 @@
 ---
 name: nottario-domain-tasks
-description: Complete reference for the Nottario tasks domain: schema, semantics, every tool, edge cases.
+description: 'Complete reference for the Nottario tasks domain: schema, semantics, every tool, edge cases.'
 ---
 
 # Tasks domain — full reference
