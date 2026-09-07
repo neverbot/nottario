@@ -16,9 +16,14 @@ import (
 // both priority buckets and task priorities live on. A task may sit
 // between two buckets (or miss them entirely) on purpose, but it can
 // never sit outside the range a bucket could occupy.
+//
+// 0-100 is the scale everything else already assumed: the settings UI
+// caps both bucket inputs at 100, the MCP schema advertises it, and
+// the seeded catalogue tops out at 100. This constant used to read
+// 1000 in UpsertPriority alone, which no other surface honoured.
 const (
 	MinPriorityValue = 0
-	MaxPriorityValue = 1000
+	MaxPriorityValue = 100
 )
 
 // Priority is one bucket in the project's priority vocabulary.

@@ -134,7 +134,7 @@ type tasksCreateInput struct {
 	Title          string `json:"title" jsonschema:"short title"`
 	Description    string `json:"description,omitempty" jsonschema:"markdown body"`
 	Type           string `json:"type,omitempty" jsonschema:"'task' (default), 'bug', 'chore', 'spike' or 'feature'"`
-	Priority       *int   `json:"priority,omitempty" jsonschema:"raw 0-1000, need not match a bucket. Prefer priority_key."`
+	Priority       *int   `json:"priority,omitempty" jsonschema:"raw 0-100, need not match a bucket. Prefer priority_key."`
 	PriorityKey    string `json:"priority_key,omitempty" jsonschema:"bucket key from projects.list_priorities"`
 	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"assignee uuid"`
 	TargetRoleID   string `json:"target_role_id,omitempty" jsonschema:"target role uuid"`
@@ -148,7 +148,7 @@ type tasksUpdateInput struct {
 	Title          *string `json:"title,omitempty"`
 	Description    *string `json:"description,omitempty"`
 	Type           *string `json:"type,omitempty"`
-	Priority       *int    `json:"priority,omitempty" jsonschema:"raw 0-1000, need not match a bucket. Prefer priority_key."`
+	Priority       *int    `json:"priority,omitempty" jsonschema:"raw 0-100, need not match a bucket. Prefer priority_key."`
 	PriorityKey    string  `json:"priority_key,omitempty" jsonschema:"bucket key from projects.list_priorities"`
 	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"uuid, or '' to unset"`
 	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"uuid, or '' to unset"`

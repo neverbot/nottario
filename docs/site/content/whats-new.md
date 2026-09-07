@@ -13,7 +13,7 @@ are cut on demand.
 ## 2026-09-07
 
 - **Task priorities are validated and the colour dot follows your
-  buckets.** A raw `priority` outside 0–1000 (the range a priority
+  buckets.** A raw `priority` outside 0–100 (the range a priority
   bucket may itself occupy) is now rejected by task creation and
   update, through both the API and MCP; previously any integer reached
   the database unchecked. Values that sit *between* buckets stay legal

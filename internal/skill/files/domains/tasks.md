@@ -18,7 +18,7 @@ description: Complete reference for the Nottario tasks domain: schema, semantics
 | `title`                 | text                                 | Required.                                                             |
 | `description_md`        | text                                 | Markdown.                                                             |
 | `state`                 | `todo`\|`doing`\|`done`              | Lifecycle.                                                            |
-| `priority`              | int                                  | 0–1000. Higher = picked sooner. Prefer `priority_key`.               |
+| `priority`              | int                                  | 0–100. Higher = picked sooner. Prefer `priority_key`.                |
 | `assignee_user_id`      | uuid \| null                         | Specific user.                                                        |
 | `target_role_id`        | uuid \| null                         | Role-scoped; eligible to any holder.                                 |
 | `actual_start`          | timestamp \| null                    | Set automatically when entering `doing` (kept across re-enters).      |
@@ -167,7 +167,7 @@ catalogue's overall span. If you find yourself reaching for a raw
 number regularly, the project is missing a bucket — ask the humans to
 add one rather than scattering unnamed integers.
 
-The raw value is bounded to 0–1000, the same range a bucket may
+The raw value is bounded to 0–100, the same range a bucket may
 occupy; anything outside it is rejected by `tasks.create` /
 `tasks.update`.
 
@@ -241,7 +241,7 @@ Mutates the fields you pass. Notable nuances:
   user. Same for `target_role_id`.
 - Changing `priority` is the canonical way to reorder; pass
   `priority_key` (resolved against project buckets) rather than a raw
-  number. Raw values outside 0–1000 are rejected.
+  number. Raw values outside 0–100 are rejected.
 - Use this for description edits and renames; do not delete-and-recreate.
 - **Reparenting cascades `cycle_id`**: setting `parent_task_id` on a
   leaf task forces the task's `cycle_id` to match the new parent's
