@@ -15,7 +15,13 @@ LDFLAGS := -s -w \
 	-X github.com/neverbot/nottario/internal/version.Date=$(DATE)
 
 # Pinned tool versions so `make check` is reproducible across machines.
-GOLANGCI_LINT_VERSION ?= v1.62.2
+#
+# golangci-lint must be a v2 release: v1 cannot read the export data
+# of Go 1.27 and up ("export data version 4 is greater than maximum
+# supported version 2"), which surfaces as a cascade of bogus
+# typecheck errors across packages that compile and vet cleanly.
+# The v2 module path carries the major version.
+GOLANGCI_LINT_VERSION ?= v2.13.2
 SQLC_VERSION          ?= v1.31.1
 
 # Where 'go install' drops binaries (works inside and outside CI).
@@ -49,10 +55,16 @@ TEST_DATABASE_URL ?= postgres://nottario:nottario@localhost:5432/postgres?sslmod
 test-integration:
 	TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(GO) test ./...
 
+# Installs the pinned tools, and REINSTALLS when the version on disk
+# does not match the pin. Checking only for existence (the previous
+# behaviour) made the pin decorative: any golangci-lint already at
+# $(GOBIN) — left by another project, or a `go install ...@latest` —
+# won forever, so a contributor could silently lint with a different
+# tool than CI.
 tools:
-	@command -v $(GOBIN)/golangci-lint >/dev/null 2>&1 \
-		|| $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-	@command -v $(GOBIN)/sqlc >/dev/null 2>&1 \
+	@$(GOBIN)/golangci-lint version 2>/dev/null | grep -qF ' $(GOLANGCI_LINT_VERSION:v%=%) ' \
+		|| $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@$(GOBIN)/sqlc version 2>/dev/null | grep -qxF '$(SQLC_VERSION)' \
 		|| $(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
 # Regenerate type-safe Go from internal/db/queries/*.sql against the

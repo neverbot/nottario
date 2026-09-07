@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/neverbot/nottario/internal/db/dbq"
@@ -199,7 +198,7 @@ func resolveIdleThreshold(ctx context.Context, q *dbq.Queries, projectID uuid.UU
 	if err != nil {
 		return 0, err
 	}
-	var v pgtype.Int4 = override
+	v := override
 	if v.Valid {
 		return time.Duration(v.Int32) * time.Second, nil
 	}

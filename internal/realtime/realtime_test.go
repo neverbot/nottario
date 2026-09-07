@@ -380,7 +380,7 @@ func TestHub_CycleClosedEventReachesSubscribers(t *testing.T) {
 
 	deadline := time.After(3 * time.Second)
 	seenClosed, seenCreated := false, false
-	for !(seenClosed && seenCreated) {
+	for !seenClosed || !seenCreated {
 		select {
 		case ev := <-ch:
 			if ev.Type == "cycle.closed" {

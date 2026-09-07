@@ -149,7 +149,7 @@ func joinErrors(errs []error) error {
 		return errs[0]
 	}
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%d validation errors:", len(errs)))
+	fmt.Fprintf(&b, "%d validation errors:", len(errs))
 	for _, e := range errs {
 		b.WriteString("\n  - ")
 		b.WriteString(e.Error())
