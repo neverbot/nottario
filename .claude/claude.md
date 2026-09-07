@@ -248,7 +248,10 @@ git and use whatever backlog your fork prefers.
   read-only preview.
 - **Default priority is bucket `medium` per project.** Prefer
   `priority_key` over raw integers; the buckets live in
-  `nottario.projects.list_priorities`.
+  `nottario.projects.list_priorities`. A raw `priority` is bounded to
+  0-100 and is rejected outside that range; a value that misses every
+  bucket is legal but renders as `p70` with no bucket name, so reach
+  for it only to interpose deliberately.
 - **File new work BEFORE doing it.** Two shapes of "new work" both
   go through `nottario.tasks.create` *before* you write any code,
   open any editor, or run any command:
