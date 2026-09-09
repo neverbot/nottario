@@ -3,6 +3,7 @@ package web
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -392,5 +393,52 @@ func TestMCP_Docs_AppendSeamsWithNewline(t *testing.T) {
 	}, &read)
 	if got := read["content"].(string); got != "# Seam\n\nno trailing newline\nappended line" {
 		t.Errorf("seam was mangled: %q", got)
+	}
+}
+
+// Regression: the digest must be computed over the encoded bytes of
+// the body, not by casting the text to bytea. `content_md::bytea`
+// does not encode — it parses the text as bytea *input syntax*, so a
+// backslash escape anywhere in the document (a "\n" inside a code
+// sample, a Windows path) aborts the whole query with "invalid input
+// syntax for type bytea".
+//
+// The first version of docs.stat shipped with that cast and failed on
+// the very first real document it was pointed at, because every skill
+// page contains escaped newlines in its examples. The original tests
+// missed it by using clean ASCII bodies.
+func TestMCP_Docs_StatHandlesBackslashesAndUnicode(t *testing.T) {
+	f := newMCPFixture(t, 13343, "docs-stat-escapes")
+
+	cases := []struct{ name, body string }{
+		{"escaped newline", "# Sample\n\n```\ncontent = \"---\\ntitle: x\\n---\"\n```\n"},
+		{"windows path", "See C:\\Users\\dev\\notes for the dump.\n"},
+		{"lone backslash", "a \\ b\n"},
+		{"backslash x escape", "regex: \\x41 and \\\\ literal\n"},
+		{"non-ascii", "# Título\n\nAcentuación, emoji 🎯, ideogramas 漢字.\n"},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := fmt.Sprintf("projects/%s/notes/esc-%d.md", f.projectID, i)
+			f.callJSON(t, "nottario.docs.write", map[string]any{
+				"project_id": f.projectID, "path": path,
+				"content": tc.body, "expected_version": 0,
+			}, nil)
+
+			var st map[string]any
+			f.callJSON(t, "nottario.docs.stat", map[string]any{
+				"project_id": f.projectID, "path": path,
+			}, &st)
+
+			want := sha256.Sum256([]byte(tc.body))
+			if got := st["content_sha256"]; got != hex.EncodeToString(want[:]) {
+				t.Errorf("content_sha256 = %v, want %s", got, hex.EncodeToString(want[:]))
+			}
+			// size_bytes must count bytes, not runes — the caller is
+			// comparing against a file on disk.
+			if st["size_bytes"].(float64) != float64(len(tc.body)) {
+				t.Errorf("size_bytes = %v, want %d", st["size_bytes"], len(tc.body))
+			}
+		})
 	}
 }

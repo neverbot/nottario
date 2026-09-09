@@ -268,6 +268,13 @@ type Querier interface {
 	//
 	// octet_length, not length: the caller is comparing against bytes on
 	// disk, and length() counts characters.
+	//
+	// convert_to(...,'UTF8'), NOT content_md::bytea. The cast does not
+	// encode text as bytes — it parses it as bytea *input syntax*, so any
+	// backslash escape in the document ("\\n" inside a code sample, a
+	// Windows path) raises "invalid input syntax for type bytea" and the
+	// whole call fails. convert_to encodes, which is what a digest of the
+	// stored bytes actually means.
 	StatDocument(ctx context.Context, arg StatDocumentParams) (StatDocumentRow, error)
 	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error

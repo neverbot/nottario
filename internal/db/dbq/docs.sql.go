@@ -615,8 +615,8 @@ func (q *Queries) SoftDeleteDocument(ctx context.Context, arg SoftDeleteDocument
 const statDocument = `-- name: StatDocument :one
 SELECT path,
        current_version,
-       octet_length(content_md)                 AS size_bytes,
-       encode(sha256(content_md::bytea), 'hex') AS content_sha256,
+       octet_length(content_md)                                AS size_bytes,
+       encode(sha256(convert_to(content_md, 'UTF8')), 'hex')   AS content_sha256,
        updated_at
 FROM documents
 WHERE scope = $1::text
@@ -650,6 +650,13 @@ type StatDocumentRow struct {
 //
 // octet_length, not length: the caller is comparing against bytes on
 // disk, and length() counts characters.
+//
+// convert_to(...,'UTF8'), NOT content_md::bytea. The cast does not
+// encode text as bytes — it parses it as bytea *input syntax*, so any
+// backslash escape in the document ("\\n" inside a code sample, a
+// Windows path) raises "invalid input syntax for type bytea" and the
+// whole call fails. convert_to encodes, which is what a digest of the
+// stored bytes actually means.
 func (q *Queries) StatDocument(ctx context.Context, arg StatDocumentParams) (StatDocumentRow, error) {
 	row := q.db.QueryRow(ctx, statDocument, arg.Scope, arg.ProjectID, arg.Path)
 	var i StatDocumentRow
