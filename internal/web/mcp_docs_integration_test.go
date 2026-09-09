@@ -171,3 +171,57 @@ func TestMCP_Docs_ReadHeadOnly(t *testing.T) {
 		t.Errorf("full read must not include truncated key, got %+v", full)
 	}
 }
+
+// The docs.write ack is deliberately slim: it must carry the new
+// version so the caller can chain the next write, and must NOT echo
+// the body back. Echoing hands the agent a second copy of something
+// it just composed, which on a large document is the single most
+// expensive thing this tool could do to its context.
+func TestMCP_Docs_WriteReturnsSlimAck(t *testing.T) {
+	f := newMCPFixture(t, 13336, "docs-slim-ack")
+	path := "projects/" + f.projectID + "/notes/slim.md"
+	body := "# Slim\n\n" + strings.Repeat("filler paragraph. ", 200)
+
+	var ack map[string]any
+	f.callJSON(t, "nottario.docs.write", map[string]any{
+		"project_id":       f.projectID,
+		"path":             path,
+		"content":          body,
+		"expected_version": 0,
+		"message":          "init",
+	}, &ack)
+
+	for _, k := range []string{"path", "current_version", "updated_at"} {
+		if _, ok := ack[k]; !ok {
+			t.Errorf("ack is missing %q: %+v", k, ack)
+		}
+	}
+	if _, ok := ack["content"]; ok {
+		t.Error("ack echoed the document body back")
+	}
+	// Anything carrying the body would be far larger than the handful
+	// of scalars the ack is meant to be.
+	if got := len(ack); got > 4 {
+		t.Errorf("ack has %d keys, expected a slim shape: %+v", got, ack)
+	}
+	if ack["path"] != path {
+		t.Errorf("path = %v, want %q", ack["path"], path)
+	}
+	if v, ok := ack["current_version"].(float64); !ok || v != 1 {
+		t.Errorf("current_version = %v, want 1", ack["current_version"])
+	}
+
+	// The version in the ack is usable directly as the next
+	// expected_version — that is the whole reason it is returned.
+	var ack2 map[string]any
+	f.callJSON(t, "nottario.docs.write", map[string]any{
+		"project_id":       f.projectID,
+		"path":             path,
+		"content":          body + "\nmore",
+		"expected_version": int(ack["current_version"].(float64)),
+		"message":          "update",
+	}, &ack2)
+	if v, ok := ack2["current_version"].(float64); !ok || v != 2 {
+		t.Errorf("second write current_version = %v, want 2", ack2["current_version"])
+	}
+}

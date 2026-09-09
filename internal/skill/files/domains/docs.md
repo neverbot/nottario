@@ -131,6 +131,13 @@ might be editing the same path. Don't.
 Always include a short `message` explaining *why* — like a commit
 message. It's stored on the version row and helps future readers.
 
+The response is a **slim ack**: `{path, current_version, updated_at}`.
+The body you sent is deliberately not echoed back — you already have
+it, and on a large document a second copy is the most expensive thing
+this tool could do to your context. `current_version` is returned
+because you need it for the next write; cache it rather than calling
+`docs.read` to look it up again.
+
 ### `nottario.docs.delete`
 
 Soft delete: the row stays in `document_versions` so history is
@@ -320,9 +327,28 @@ concurrent change. The shortcut is not worth the recovery time when
 two agents clobber each other.
 
 **Don't re-`docs.read` what you just wrote.** `docs.write` returns
-the document including the new `current_version`. Cache that and pass
-it to the next write. Re-reading the same body you just sent buys
-nothing.
+the new `current_version` in its ack. Cache that and pass it to the
+next write. Re-reading a body you composed yourself buys nothing.
+
+**Moving a whole file through MCP is not free.** `content` is a tool
+argument, so every byte of the document crosses your context on the
+way out. If your host can shell out, `POST /api/docs/write` takes the
+same per-project Bearer token and the same JSON body, so the file can
+go straight from disk to the server without passing through you:
+
+```bash
+jq -n --arg p "<path>" --arg m "<why>" --rawfile c <file> \
+   '{scope:"project",project_id:"<id>",path:$p,content:$c,message:$m,expected_version:<n>}' \
+| curl -s -X POST "$NOTTARIO/api/docs/write" \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data-binary @-
+```
+
+The same trick answers "has this file changed?" without reading the
+document into your context at all — pipe `GET /api/docs/read` through
+`jq -r '.content'` into `diff`, and only the verdict reaches you. Note
+that stored `content` has the frontmatter split off into its own
+field, so strip the local file's frontmatter before comparing or every
+diff will look dirty.
 
 ## Things you cannot do (today)
 

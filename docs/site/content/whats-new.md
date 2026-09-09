@@ -10,6 +10,16 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-09-09
+
+- **`docs.write` no longer echoes the document back.** The MCP tool now
+  answers with a slim `{path, current_version, updated_at}` ack instead
+  of the whole stored document, matching the slim-by-default shape every
+  other high-frequency tool adopted. An agent syncing a large file used
+  to pay for its body three times over — reading it, sending it, and
+  receiving it back; that last third is gone. `current_version` is still
+  returned, since the next write needs it.
+
 ## 2026-09-07
 
 - **Task priorities are validated and the colour dot follows your

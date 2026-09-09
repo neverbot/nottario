@@ -144,7 +144,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.write",
-		Description: "Creates/updates a document. Pass expected_version = current_version (0 for new). Conflict returns {error:'version_conflict', current_version}. Omitting expected_version is deprecated.",
+		Description: "Creates/updates a document. Pass expected_version = current_version (0 for new). Returns a slim ack {path, current_version, updated_at} — the body you sent is not echoed back. Conflict returns {error:'version_conflict', current_version}. Omitting expected_version is deprecated.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsWriteInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -178,7 +178,19 @@ func registerDocs(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(doc)
+		// Slim ack. Echoing the document back would hand the caller a
+		// second copy of the body it just composed — on a large
+		// document that is the single most expensive thing this tool
+		// could do to an agent's context.
+		//
+		// current_version is the one field worth returning: without it
+		// the caller has to docs.read before its next write just to
+		// learn the number, which costs far more than it saves.
+		return jsonResult(map[string]any{
+			"path":            doc.Path,
+			"current_version": doc.CurrentVersion,
+			"updated_at":      doc.UpdatedAt,
+		})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
