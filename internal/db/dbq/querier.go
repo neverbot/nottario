@@ -81,6 +81,11 @@ type Querier interface {
 	// ErrVersionConflict — instead of racing past the check and tripping
 	// the document_versions_document_id_version_key unique constraint.
 	GetDocumentByPathForUpdate(ctx context.Context, arg GetDocumentByPathForUpdateParams) (GetDocumentByPathForUpdateRow, error)
+	// Same row lock as GetDocumentByPathForUpdate, but also returns the
+	// fields Append has to carry over unchanged. Appending touches only
+	// the body: kind, title, description and frontmatter are whatever the
+	// document already declared.
+	GetDocumentForAppend(ctx context.Context, arg GetDocumentForAppendParams) (GetDocumentForAppendRow, error)
 	GetDocumentForDelete(ctx context.Context, arg GetDocumentForDeleteParams) (GetDocumentForDeleteRow, error)
 	GetDocumentVersion(ctx context.Context, arg GetDocumentVersionParams) (DocumentVersion, error)
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
@@ -252,6 +257,18 @@ type Querier interface {
 	// cancel decision is preserved.
 	SetTaskWontDo(ctx context.Context, id uuid.UUID) error
 	SoftDeleteDocument(ctx context.Context, arg SoftDeleteDocumentParams) error
+	// Fingerprint of a document without its body. Lets a caller decide
+	// whether a write is needed at all: hash the local copy and compare,
+	// instead of reading the whole document back just to diff it.
+	//
+	// The digest covers content_md, which is the body WITHOUT frontmatter
+	// (Write splits it off into its own column). A caller comparing
+	// against a file on disk has to strip that file's frontmatter first or
+	// every comparison reports a difference.
+	//
+	// octet_length, not length: the caller is comparing against bytes on
+	// disk, and length() counts characters.
+	StatDocument(ctx context.Context, arg StatDocumentParams) (StatDocumentRow, error)
 	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error

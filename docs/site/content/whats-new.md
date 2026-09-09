@@ -12,6 +12,15 @@ are cut on demand.
 
 ## 2026-09-09
 
+- **Two new MCP tools make document sync cheap.**
+  [`nottario.docs.stat`](/docs/) fingerprints a document —
+  `current_version`, size and a SHA-256 of the body — so an agent can
+  tell whether a write is needed without pulling the document to
+  compare it. `nottario.docs.append` adds markdown to the end of an
+  existing document under the same `expected_version` guard, so a
+  changelog entry costs the entry rather than the whole file. Neither
+  changes existing behaviour; both are additions.
+
 - **`docs.write` no longer echoes the document back.** The MCP tool now
   answers with a slim `{path, current_version, updated_at}` ack instead
   of the whole stored document, matching the slim-by-default shape every

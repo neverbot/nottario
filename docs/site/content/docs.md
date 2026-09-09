@@ -66,6 +66,19 @@ the order they typically appear in a session:
   optimistic concurrency: two agents writing the same path see
   exactly one win.
 
+- `nottario.docs.stat { project_id, scope, path }` returns
+  `current_version`, `size_bytes` and a `content_sha256` of the
+  body — no body. It answers "has this changed?" without pulling
+  the document, which matters when an agent is keeping a repo file
+  and its Nottario copy in sync. The digest covers the body without
+  frontmatter, since the server stores the two halves separately.
+- `nottario.docs.append { project_id, scope, path, content,
+  expected_version }` adds markdown to the end of an existing
+  document. It is the only partial write here, and it is safe
+  because it cannot overwrite anything: no anchor to mismatch, no
+  existing text touched, still guarded by `expected_version`. Good
+  for changelogs and decision logs; it never creates a document.
+
 The pattern is "read → edit → write with expected_version", same
 as a git commit on top of a known tip. The web UI follows the
 identical contract under the hood.

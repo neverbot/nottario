@@ -99,6 +99,54 @@ Full-text search over `title`, `description` and body. Use
 `plainto_tsquery` semantics (treat the query as keywords; the parser
 ignores quoting and operators). Filters: `kind`.
 
+### `nottario.docs.stat`
+
+Fingerprints a document without its body:
+
+```json
+{ "path": "…", "current_version": 7, "size_bytes": 9000,
+  "content_sha256": "…", "updated_at": "…" }
+```
+
+Use it to answer "does this need writing?" for a fraction of a
+`docs.read`. Hash your local copy, compare, and skip the write when
+the digests agree.
+
+**The digest covers the body WITHOUT frontmatter.** `docs.write`
+splits frontmatter into its own column, so a file on disk hashes
+differently unless you strip its frontmatter block first. Get this
+wrong and every comparison reports a difference.
+
+### `nottario.docs.append`
+
+Adds markdown to the end of an existing document's body:
+
+```text
+nottario.docs.append {
+  project_id, path,
+  content: "\n## 2026-09-09\n\n- the new entry\n",
+  expected_version: 7,
+  message: "log today's decision",
+}
+```
+
+You pay for the entry, not for the whole document. Same slim ack and
+same `expected_version` contract as `docs.write`.
+
+Appending is the only partial write on this surface, and it is safe
+for a specific reason: there is no anchor to mismatch and no existing
+text to overwrite, so a stale caller cannot corrupt a passage it
+misread. It only ever adds, at the end, under a version check.
+
+The document must already exist — append never creates. Use
+`docs.write` for the first version. The server also guarantees exactly
+one newline at the seam, so a body that does not end in a newline
+cannot swallow your first line.
+
+Reach for it on anything log-shaped: changelogs, decision records,
+running notes. For editing existing text, `docs.write` the whole
+document; there is deliberately no line-level patch tool.
+
 ### `nottario.docs.write`
 
 Creates or updates the document keyed by `(scope, project_id, path)`.
@@ -325,6 +373,13 @@ only when a wider sweep is genuinely needed.
 falls back to last-writer-wins and may silently overwrite a
 concurrent change. The shortcut is not worth the recovery time when
 two agents clobber each other.
+
+**`docs.stat` before you read, and `docs.append` before you rewrite.**
+Two habits kill most of the cost of keeping documents in sync. Reading
+a whole document to find out whether it changed is the expensive way
+to learn one bit — `docs.stat` answers it with a hash. And rewriting a
+document to add a line at the end sends the whole body for the sake of
+that line — `docs.append` sends the line.
 
 **Don't re-`docs.read` what you just wrote.** `docs.write` returns
 the new `current_version` in its ack. Cache that and pass it to the

@@ -19,6 +19,42 @@ WHERE scope = sqlc.arg('scope')::text
   AND path = sqlc.arg('path')::text
 FOR UPDATE;
 
+-- name: StatDocument :one
+-- Fingerprint of a document without its body. Lets a caller decide
+-- whether a write is needed at all: hash the local copy and compare,
+-- instead of reading the whole document back just to diff it.
+--
+-- The digest covers content_md, which is the body WITHOUT frontmatter
+-- (Write splits it off into its own column). A caller comparing
+-- against a file on disk has to strip that file's frontmatter first or
+-- every comparison reports a difference.
+--
+-- octet_length, not length: the caller is comparing against bytes on
+-- disk, and length() counts characters.
+SELECT path,
+       current_version,
+       octet_length(content_md)                 AS size_bytes,
+       encode(sha256(content_md::bytea), 'hex') AS content_sha256,
+       updated_at
+FROM documents
+WHERE scope = sqlc.arg('scope')::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND path = sqlc.arg('path')::text
+  AND deleted_at IS NULL;
+
+-- name: GetDocumentForAppend :one
+-- Same row lock as GetDocumentByPathForUpdate, but also returns the
+-- fields Append has to carry over unchanged. Appending touches only
+-- the body: kind, title, description and frontmatter are whatever the
+-- document already declared.
+SELECT id, current_version, kind, title, description, content_md, frontmatter
+FROM documents
+WHERE scope = sqlc.arg('scope')::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND path = sqlc.arg('path')::text
+  AND deleted_at IS NULL
+FOR UPDATE;
+
 -- name: InsertDocument :one
 INSERT INTO documents (
     scope, project_id, path, kind, title, description, content_md, frontmatter,

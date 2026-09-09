@@ -40,6 +40,9 @@ The MCP server exposes one tool per natural verb. Highlights:
   the audit trail honest.
 - `nottario.docs.read`, `nottario.docs.write` — versioned markdown
   documents with optimistic concurrency via `expected_version`.
+- `nottario.docs.stat`, `nottario.docs.append` — the cheap pair:
+  fingerprint a document without its body to decide whether a write
+  is needed, and add to the end of one without resending it.
 - `nottario.arch.upsert_node`, `nottario.arch.upsert_edge` —
   maintain the architecture graph.
 - `nottario.search` — full-text across tasks, docs and arch nodes.
@@ -56,7 +59,14 @@ The tools return **slim** payloads by default. A mutation like
 the fields an agent needs to chain the next call — `id`, `title`,
 `state`, `priority`, `updated_at`, role/assignee — and does **not**
 echo back the description or comment body the agent just sent.
-`tasks.list` rows follow the same rule.
+`tasks.list` rows follow the same rule. `docs.write` and
+`docs.append` answer with `{path, current_version, updated_at}` — the
+markdown you just sent is not read back to you.
+
+The same instinct applies to reads. `docs.stat` exists so an agent can
+check whether a document changed without paying for its body, and
+`docs.read { head_only: true }` returns frontmatter plus the first 400
+characters when you only need to confirm you have the right file.
 
 When the full object is genuinely needed (e.g. an agent reading a
 task it didn't create), pass `verbose: true` on the call to opt

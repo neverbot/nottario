@@ -45,6 +45,19 @@ type docsWriteInput struct {
 	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"must equal current_version (or 0 for new)"`
 }
 
+type docsStatInput struct {
+	docsScopeInput
+	Path string `json:"path" jsonschema:"logical path"`
+}
+
+type docsAppendInput struct {
+	docsScopeInput
+	Path            string `json:"path" jsonschema:"logical path"`
+	Content         string `json:"content" jsonschema:"markdown to add at the end of the body"`
+	Message         string `json:"message,omitempty" jsonschema:"change message on the version row"`
+	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"must equal current_version"`
+}
+
 type docsDeleteInput struct {
 	docsScopeInput
 	Path            string `json:"path" jsonschema:"logical path"`
@@ -186,6 +199,69 @@ func registerDocs(server *sdk.Server, d Deps) {
 		// current_version is the one field worth returning: without it
 		// the caller has to docs.read before its next write just to
 		// learn the number, which costs far more than it saves.
+		return jsonResult(map[string]any{
+			"path":            doc.Path,
+			"current_version": doc.CurrentVersion,
+			"updated_at":      doc.UpdatedAt,
+		})
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.docs.stat",
+		Description: "Fingerprints a document without its body: {path, current_version, size_bytes, content_sha256, updated_at}. Use it to decide whether a write is needed instead of reading the document to diff it. The digest covers the body WITHOUT frontmatter — strip a local file's frontmatter before hashing it.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsStatInput) (*sdk.CallToolResult, any, error) {
+		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		st, err := docs.ReadStat(ctx, d.Pool, scope, pid, in.Path)
+		if errors.Is(err, docs.ErrNotFound) {
+			return toolError("document not found")
+		}
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(st)
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.docs.append",
+		Description: "Adds markdown to the end of an existing document. Costs the entry, not the whole document. Pass expected_version = current_version. Returns the same slim ack as docs.write. The document must exist; append never creates.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsAppendInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if scope == docs.ScopeGlobal && !c.IsAdmin {
+			return toolError("only admins can modify global documents")
+		}
+		if in.ExpectedVersion == nil {
+			log.Printf("mcp docs.append: deprecated call without expected_version (user=%s path=%q scope=%s)", c.UserID, in.Path, scope)
+		}
+		doc, err := docs.Append(ctx, d.Pool, docs.AppendParams{
+			Scope: scope, ProjectID: pid, Path: in.Path,
+			Content:         in.Content,
+			Message:         in.Message,
+			ExpectedVersion: in.ExpectedVersion,
+		}, docs.Authorship{UserID: ptrUUID(c.UserID), TokenID: ptrUUID(c.TokenID)})
+		var vc *docs.VersionConflictError
+		if errors.As(err, &vc) {
+			return jsonResult(map[string]any{
+				"error":           "version_conflict",
+				"current_version": vc.CurrentVersion,
+				"message":         "re-read the document and retry with the latest current_version",
+			})
+		}
+		if errors.Is(err, docs.ErrNotFound) {
+			return toolError("document not found (append never creates; use docs.write for the first version)")
+		}
+		if err != nil {
+			return toolError(err.Error())
+		}
 		return jsonResult(map[string]any{
 			"path":            doc.Path,
 			"current_version": doc.CurrentVersion,

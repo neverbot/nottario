@@ -71,6 +71,51 @@ func (q *Queries) GetDocumentByPathForUpdate(ctx context.Context, arg GetDocumen
 	return i, err
 }
 
+const getDocumentForAppend = `-- name: GetDocumentForAppend :one
+SELECT id, current_version, kind, title, description, content_md, frontmatter
+FROM documents
+WHERE scope = $1::text
+  AND project_id IS NOT DISTINCT FROM $2::uuid
+  AND path = $3::text
+  AND deleted_at IS NULL
+FOR UPDATE
+`
+
+type GetDocumentForAppendParams struct {
+	Scope     string
+	ProjectID *uuid.UUID
+	Path      string
+}
+
+type GetDocumentForAppendRow struct {
+	ID             uuid.UUID
+	CurrentVersion int32
+	Kind           string
+	Title          string
+	Description    string
+	ContentMd      string
+	Frontmatter    []byte
+}
+
+// Same row lock as GetDocumentByPathForUpdate, but also returns the
+// fields Append has to carry over unchanged. Appending touches only
+// the body: kind, title, description and frontmatter are whatever the
+// document already declared.
+func (q *Queries) GetDocumentForAppend(ctx context.Context, arg GetDocumentForAppendParams) (GetDocumentForAppendRow, error) {
+	row := q.db.QueryRow(ctx, getDocumentForAppend, arg.Scope, arg.ProjectID, arg.Path)
+	var i GetDocumentForAppendRow
+	err := row.Scan(
+		&i.ID,
+		&i.CurrentVersion,
+		&i.Kind,
+		&i.Title,
+		&i.Description,
+		&i.ContentMd,
+		&i.Frontmatter,
+	)
+	return i, err
+}
+
 const getDocumentForDelete = `-- name: GetDocumentForDelete :one
 SELECT id, current_version, title, description, content_md, frontmatter
 FROM documents
@@ -565,6 +610,57 @@ func (q *Queries) SoftDeleteDocument(ctx context.Context, arg SoftDeleteDocument
 		arg.ID,
 	)
 	return err
+}
+
+const statDocument = `-- name: StatDocument :one
+SELECT path,
+       current_version,
+       octet_length(content_md)                 AS size_bytes,
+       encode(sha256(content_md::bytea), 'hex') AS content_sha256,
+       updated_at
+FROM documents
+WHERE scope = $1::text
+  AND project_id IS NOT DISTINCT FROM $2::uuid
+  AND path = $3::text
+  AND deleted_at IS NULL
+`
+
+type StatDocumentParams struct {
+	Scope     string
+	ProjectID *uuid.UUID
+	Path      string
+}
+
+type StatDocumentRow struct {
+	Path           string
+	CurrentVersion int32
+	SizeBytes      int32
+	ContentSha256  string
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Fingerprint of a document without its body. Lets a caller decide
+// whether a write is needed at all: hash the local copy and compare,
+// instead of reading the whole document back just to diff it.
+//
+// The digest covers content_md, which is the body WITHOUT frontmatter
+// (Write splits it off into its own column). A caller comparing
+// against a file on disk has to strip that file's frontmatter first or
+// every comparison reports a difference.
+//
+// octet_length, not length: the caller is comparing against bytes on
+// disk, and length() counts characters.
+func (q *Queries) StatDocument(ctx context.Context, arg StatDocumentParams) (StatDocumentRow, error) {
+	row := q.db.QueryRow(ctx, statDocument, arg.Scope, arg.ProjectID, arg.Path)
+	var i StatDocumentRow
+	err := row.Scan(
+		&i.Path,
+		&i.CurrentVersion,
+		&i.SizeBytes,
+		&i.ContentSha256,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateDocument = `-- name: UpdateDocument :one

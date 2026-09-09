@@ -627,3 +627,148 @@ func timestampPtr(ts pgtype.Timestamptz) *time.Time {
 	v := ts.Time
 	return &v
 }
+
+// Stat is a document's fingerprint without its body: enough to decide
+// whether a write is needed, at a fraction of the cost of reading the
+// document to diff it.
+type Stat struct {
+	Path           string    `json:"path"`
+	CurrentVersion int       `json:"current_version"`
+	SizeBytes      int       `json:"size_bytes"`
+	ContentSHA256  string    `json:"content_sha256"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// ReadStat returns the fingerprint of one document.
+//
+// The digest covers the stored body, which has had its frontmatter
+// split off into a separate column. A caller comparing against a file
+// on disk must strip that file's frontmatter before hashing, or the
+// two will never agree.
+func ReadStat(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uuid.UUID, path string) (*Stat, error) {
+	if err := validateScope(scope, projectID); err != nil {
+		return nil, err
+	}
+	row, err := dbq.New(pool).StatDocument(ctx, dbq.StatDocumentParams{
+		Scope:     string(scope),
+		ProjectID: projectID,
+		Path:      path,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &Stat{
+		Path:           row.Path,
+		CurrentVersion: int(row.CurrentVersion),
+		SizeBytes:      int(row.SizeBytes),
+		ContentSHA256:  row.ContentSha256,
+		UpdatedAt:      row.UpdatedAt.Time,
+	}, nil
+}
+
+// AppendParams carries an append. Only the body grows; kind, title,
+// description and frontmatter are whatever the document already
+// declared.
+type AppendParams struct {
+	Scope           Scope
+	ProjectID       *uuid.UUID
+	Path            string
+	Content         string
+	Message         string
+	ExpectedVersion *int
+}
+
+// Append adds text to the end of an existing document's body and
+// bumps the version, under the same optimistic-concurrency contract as
+// Write.
+//
+// It exists because appending is the one partial write that cannot
+// modify the wrong thing: there is no anchor to mismatch and no
+// existing text to overwrite. A caller adding a changelog entry or a
+// decision record pays for the entry, not for the whole document.
+//
+// Appending to a document that does not exist is an error rather than
+// an implicit create — "add to the end" of nothing is a caller
+// mistake, and silently creating would hide a wrong path.
+func Append(ctx context.Context, pool *pgxpool.Pool, p AppendParams, by Authorship) (*Document, error) {
+	if err := validateScope(p.Scope, p.ProjectID); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(p.Path) == "" {
+		return nil, ErrPathRequired
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
+
+	existing, err := q.GetDocumentForAppend(ctx, dbq.GetDocumentForAppendParams{
+		Scope:     string(p.Scope),
+		ProjectID: p.ProjectID,
+		Path:      p.Path,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if p.ExpectedVersion != nil && *p.ExpectedVersion != int(existing.CurrentVersion) {
+		return nil, &VersionConflictError{CurrentVersion: int(existing.CurrentVersion)}
+	}
+
+	body := joinBody(existing.ContentMd, p.Content)
+	newVersion := int(existing.CurrentVersion) + 1
+
+	row, err := q.UpdateDocument(ctx, dbq.UpdateDocumentParams{
+		ID:               existing.ID,
+		Kind:             existing.Kind,
+		Title:            existing.Title,
+		Description:      existing.Description,
+		ContentMd:        body,
+		Frontmatter:      existing.Frontmatter,
+		CurrentVersion:   int32(newVersion),
+		UpdatedByUserID:  by.UserID,
+		UpdatedByTokenID: by.TokenID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := q.InsertDocumentVersion(ctx, dbq.InsertDocumentVersionParams{
+		DocumentID:    existing.ID,
+		Version:       int32(newVersion),
+		Title:         existing.Title,
+		Description:   existing.Description,
+		ContentMd:     body,
+		Frontmatter:   existing.Frontmatter,
+		Message:       p.Message,
+		AuthorUserID:  by.UserID,
+		AuthorTokenID: by.TokenID,
+	}); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	d := documentFromUpdateRow(row)
+	return &d, nil
+}
+
+// joinBody concatenates with exactly one newline at the seam, so an
+// existing body that does not end in a newline cannot swallow the
+// first line of the appended text.
+func joinBody(existing, addition string) string {
+	if existing == "" {
+		return addition
+	}
+	if strings.HasSuffix(existing, "\n") || strings.HasPrefix(addition, "\n") {
+		return existing + addition
+	}
+	return existing + "\n" + addition
+}
