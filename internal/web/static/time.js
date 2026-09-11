@@ -54,3 +54,16 @@ export function formatRelativeTime(iso) {
   if (weeks < 12) return `${weeks}w ago`;
   return formatDate(iso);
 }
+
+// formatDateTime renders an ISO timestamp as an unambiguous absolute
+// date and time: "19 May 2026, 16:34". Meant for hover titles behind a
+// relative time, where a bare toLocaleString() would show the
+// all-numeric "19/05/2026, 16:34:00" that formatDate exists to avoid.
+//
+// Returns '' for a missing or unparseable input.
+export function formatDateTime(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}

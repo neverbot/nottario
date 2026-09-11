@@ -2,7 +2,7 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
 import { priorityBand, priorityLabel } from '/static/priorities.js';
-import { formatRelativeTime } from '/static/time.js';
+import { formatDateTime, formatRelativeTime } from '/static/time.js';
 import { OutsideClickController } from '/static/components/outside-click.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
@@ -461,6 +461,10 @@ class NottarioBoardPage extends LitElement {
       font-size: 11px;
     }
     .detail .meta .author-cell .via .sep { margin-right: 4px; opacity: 0.6; }
+    /* Creation time rides the creator line in the same muted weight as
+       a comment's timestamp, so the task reads dated like its replies. */
+    .detail .meta .author-cell .when { color: var(--gray-5); }
+    .detail .meta .author-cell .when .sep { margin-right: 4px; opacity: 0.6; }
     .detail .meta .author-cell .via .token {
       font-style: normal;
       font-family: ui-monospace, SFMono-Regular, monospace;
@@ -1965,13 +1969,26 @@ class NottarioBoardPage extends LitElement {
   }
 
   // "Created by" field-line on the task detail header. Shows the
-  // creator's avatar + display name, with the agent badge / "via
-  // {token}" suffix when the task was created through an MCP token.
-  // Skipped when both creator and via_mcp are absent (very old rows
-  // pre-tracking).
+  // creator's avatar + display name, the agent badge / "via {token}"
+  // suffix when the task came through an MCP token, and when it was
+  // created — the same "name · 3d ago" shape every comment's meta line
+  // already uses, so the original post is dated like its replies.
+  // Relative on screen, absolute on hover, matching the "(edited …)"
+  // marker. Rows that predate creator tracking still get the date.
   _renderCreatedByLine(task) {
     const creator = task.created_by_user_id ? this._memberByID(task.created_by_user_id) : null;
-    if (!creator && !task.via_mcp) return null;
+    const when = task.created_at
+      ? html`<span class="when" title=${formatDateTime(task.created_at)}><span class="sep">·</span>${formatRelativeTime(task.created_at)}</span>`
+      : null;
+    if (!creator && !task.via_mcp) {
+      if (!when) return null;
+      return html`
+        <div class="field-line">
+          <span class="lbl">Created</span>
+          <span class="val author-cell">${formatRelativeTime(task.created_at)}</span>
+        </div>
+      `;
+    }
     const name = creator?.display_name || creator?.github_login || 'unknown';
     return html`
       <div class="field-line">
@@ -1987,6 +2004,7 @@ class NottarioBoardPage extends LitElement {
               ? html`<span class="via"><span class="sep">·</span>via <span class="token">${task.via_mcp.name || 'MCP'}</span></span>`
               : null
           }
+          ${when}
         </span>
       </div>
     `;
@@ -2007,8 +2025,8 @@ class NottarioBoardPage extends LitElement {
     // back to a plain row so we never inject untrusted text into a URL.
     const repoOK = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo);
     const url = repoOK && sha ? `https://github.com/${repo}/commit/${sha}` : null;
-    const when = c.added_at ? this._commitRelTime(c.added_at) : '';
-    const whenTitle = c.added_at ? new Date(c.added_at).toLocaleString() : '';
+    const when = c.added_at ? formatRelativeTime(c.added_at) : '';
+    const whenTitle = c.added_at ? formatDateTime(c.added_at) : '';
     const inner = html`
       <span class="sha" title=${sha}>${shortSha}</span>
       <span class="msg" title=${c.message || ''}>${c.message || '—'}</span>
@@ -2021,32 +2039,13 @@ class NottarioBoardPage extends LitElement {
     return html`<div class="commit">${inner}</div>`;
   }
 
-  // Tiny relative-time formatter for commit added_at. Same shape as
-  // the one on /projects: "5m ago", "3h ago", "2d ago", "3w ago",
-  // falls back to a locale date past ~12 weeks.
-  _commitRelTime(iso) {
-    const then = new Date(iso).getTime();
-    if (!Number.isFinite(then)) return '';
-    const diff = Date.now() - then;
-    if (diff < 60_000) return 'just now';
-    const m = Math.floor(diff / 60_000);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    if (d < 7) return `${d}d ago`;
-    const w = Math.floor(d / 7);
-    if (w < 12) return `${w}w ago`;
-    return new Date(iso).toLocaleDateString();
-  }
-
   // Renders "(edited 5m ago by @name)" below a task field or comment
   // body. Returns nothing when the field was never edited.
   _renderEditedMarker(editedAt, editedByUserID) {
     if (!editedAt) return null;
     const editor = this._memberByID(editedByUserID);
     const name = editor?.display_name || editor?.github_login || 'someone';
-    const abs = new Date(editedAt).toLocaleString();
+    const abs = formatDateTime(editedAt);
     return html`<div class="edited-mark" title=${abs}>(edited ${formatRelativeTime(editedAt)} by ${name})</div>`;
   }
 
@@ -2087,7 +2086,7 @@ class NottarioBoardPage extends LitElement {
                       ? html`<span class="via"><span class="sep">·</span>via <span class="token">${c.via_mcp.name || 'MCP'}</span></span>`
                       : null
                   }
-                  <span class="when">${formatRelativeTime(c.created_at)}</span>
+                  <span class="when" title=${formatDateTime(c.created_at)}>${formatRelativeTime(c.created_at)}</span>
                   ${
                     canModify && !editing
                       ? html`
