@@ -1,6 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { defaultPathFor, viewByKey } from '/static/views.js';
-import { formatRelativeTime } from '/static/time.js';
+import { formatDateTime, formatRelativeTime } from '/static/time.js';
 import { EscController } from '/static/components/esc.js';
 import { toast } from '/static/components/toast.js';
 import { formButton } from '/static/components/form-button.js';
@@ -366,7 +366,7 @@ class NottarioProjectsPage extends LitElement {
         <span class="stat"><span class="n">${s.done_count}</span> done</span>
         ${
           s.last_activity_at
-            ? html`<span class="activity" title=${new Date(s.last_activity_at).toLocaleString()}>
+            ? html`<span class="activity" title=${formatDateTime(s.last_activity_at)}>
                    ${formatRelativeTime(s.last_activity_at)}
                  </span>`
             : null

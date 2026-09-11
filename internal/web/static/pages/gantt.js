@@ -1,6 +1,7 @@
 import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
 import { priorityLabel } from '/static/priorities.js';
 import { subscribe } from '/static/realtime.js';
+import { formatDateTime } from '/static/time.js';
 
 // <nottario-gantt> renders the project's tasks as a horizontal
 // timeline with three zones on the X axis:
@@ -1677,7 +1678,7 @@ class NottarioGantt extends LitElement {
           <line class="now-line"
                 x1=${presentX + presentWidth / 2} y1=${headerH - 6}
                 x2=${presentX + presentWidth / 2} y2=${totalHeight}>
-            <title>${this.now ? this.now.toLocaleString() : ''}</title>
+            <title>${this.now ? formatDateTime(this.now) : ''}</title>
           </line>
           ${(() => {
             const pillW = 30;
@@ -1693,7 +1694,7 @@ class NottarioGantt extends LitElement {
                     x=${presentX + presentWidth / 2}
                     y=${pillY + pillH / 2}
                     text-anchor="middle">
-                <title>${this.now ? this.now.toLocaleString() : ''}</title>
+                <title>${this.now ? formatDateTime(this.now) : ''}</title>
                 NOW
               </text>
             `;
