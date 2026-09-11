@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nottario — logo concepts</title>
+<style>
+  body { font: 14px/1.5 -apple-system, system-ui, sans-serif; margin: 0; color: #1f2328; }
+  h1 { font-size: 18px; padding: 20px 24px 0; margin: 0; }
+  p.sub { padding: 4px 24px 0; margin: 0; color: #59636e; }
+  .row { display: flex; gap: 40px; padding: 24px; flex-wrap: wrap; }
+  .card { border: 1px solid #d1d9e0; border-radius: 12px; overflow: hidden; width: 320px; }
+  .card h2 { font-size: 14px; margin: 0; padding: 12px 16px; background: #f6f8fa; border-bottom: 1px solid #d1d9e0; }
+  .sizes { display: flex; align-items: center; gap: 18px; padding: 20px 16px; }
+  .sizes img { display: block; }
+  .dark { background: #0d1117; }
+  .light { background: #ffffff; }
+  .strip { display: flex; align-items: center; gap: 18px; padding: 16px; }
+  .topbar { display: flex; align-items: center; gap: 8px; background: #0d1117; color: #e6edf3; padding: 10px 16px; border-radius: 8px; }
+  .topbar img { width: 22px; height: 22px; }
+  .chip { width: 22px; height: 22px; border-radius: 5px;
+          background: linear-gradient(135deg, #2da44e 0%, #1f6feb 100%); }
+  .label { color: #59636e; font-size: 12px; }
+  code { background: #f6f8fa; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>nottario — logo concepts</h1>
+  <p class="sub">Gradient kept from the current mark: <code>#2da44e → #1f6feb</code> (green → blue). Current temporary mark for reference: <span class="chip" style="display:inline-block;vertical-align:middle"></span></p>
+
+  <div class="row">
+    <div class="card">
+      <h2>A — Monogram tile</h2>
+      <div class="sizes light">
+        <img src="concept-a-monogram.svg" width="96" height="96">
+        <img src="concept-a-monogram.svg" width="48" height="48">
+        <img src="concept-a-monogram.svg" width="24" height="24">
+        <img src="concept-a-monogram.svg" width="16" height="16">
+      </div>
+      <div class="strip dark"><div class="topbar"><img src="concept-a-monogram.svg"><span>nottario</span></div></div>
+    </div>
+
+    <div class="card">
+      <h2>B — Graph "n" (nodes)</h2>
+      <div class="sizes light">
+        <img src="concept-b-graph.svg" width="96" height="96">
+        <img src="concept-b-graph.svg" width="48" height="48">
+        <img src="concept-b-graph.svg" width="24" height="24">
+        <img src="concept-b-graph.svg" width="16" height="16">
+      </div>
+      <div class="strip dark"><div class="topbar"><img src="concept-b-graph.svg"><span>nottario</span></div></div>
+    </div>
+
+    <div class="card">
+      <h2>C — Notary seal</h2>
+      <div class="sizes light">
+        <img src="concept-c-seal.svg" width="96" height="96">
+        <img src="concept-c-seal.svg" width="48" height="48">
+        <img src="concept-c-seal.svg" width="24" height="24">
+        <img src="concept-c-seal.svg" width="16" height="16">
+      </div>
+      <div class="strip dark"><div class="topbar"><img src="concept-c-seal.svg"><span>nottario</span></div></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card" style="width:auto">
+      <h2>On dark</h2>
+      <div class="sizes dark">
+        <img src="concept-a-monogram.svg" width="64" height="64">
+        <img src="concept-b-graph.svg" width="64" height="64">
+        <img src="concept-c-seal.svg" width="64" height="64">
+      </div>
+    </div>
+  </div>
+</body>
+</html>

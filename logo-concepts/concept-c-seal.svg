@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="nottario">
+  <defs>
+    <linearGradient id="nc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2da44e"/>
+      <stop offset="1" stop-color="#1f6feb"/>
+    </linearGradient>
+  </defs>
+  <!-- notary seal: nottario ~ notario (records / certifies) -->
+  <circle cx="64" cy="64" r="56" fill="url(#nc)"/>
+  <circle cx="64" cy="64" r="45" fill="none" stroke="#ffffff" stroke-width="2.5"
+          stroke-dasharray="3 7" stroke-linecap="round" opacity="0.85"/>
+  <g fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50 84 V52"/>
+    <path d="M50 67 C50 56 57 50 67 50 C77 50 84 56 84 67 V84"/>
+  </g>
+</svg>
