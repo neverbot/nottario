@@ -43,6 +43,8 @@ The MCP server exposes one tool per natural verb. Highlights:
 - `nottario.docs.stat`, `nottario.docs.append` — the cheap pair:
   fingerprint a document without its body to decide whether a write
   is needed, and add to the end of one without resending it.
+- `nottario.docs.upload_url` — a signed, five-minute, single-use URL to
+  upload a whole document from a file on disk.
 - `nottario.arch.upsert_node`, `nottario.arch.upsert_edge` —
   maintain the architecture graph.
 - `nottario.search` — full-text across tasks, docs and arch nodes.
@@ -122,3 +124,11 @@ and copy-pasteable fetch/extract commands per platform.
 Every MCP request must carry a Bearer token. Tokens are issued
 per-project from the Settings tab and stored hashed. Revoking from
 the UI invalidates immediately.
+
+The token is configured once, in the MCP client, by the person
+setting up the agent. Agents are instructed never to read it, search
+for it or reuse it against the HTTP API: everything they need is an
+MCP tool, and for large files `nottario.docs.upload_url` issues a
+short-lived signed URL instead of exposing a credential. A signed
+upload URL stops working after five minutes, after one successful
+upload, or as soon as the token that requested it is revoked.

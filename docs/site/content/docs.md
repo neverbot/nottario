@@ -78,6 +78,12 @@ the order they typically appear in a session:
   because it cannot overwrite anything: no anchor to mismatch, no
   existing text touched, still guarded by `expected_version`. Good
   for changelogs and decision logs; it never creates a document.
+- `nottario.docs.upload_url { project_id, path, expected_version,
+  file_sha256 }` is for files that already exist on disk. It returns a
+  signed URL, valid for five minutes, that accepts one `PUT` of exactly
+  that file on top of that version, so the bytes go from disk to the
+  server without passing through the agent, and the agent never handles
+  a token.
 
 The pattern is "read → edit → write with expected_version", same
 as a git commit on top of a known tip. The web UI follows the

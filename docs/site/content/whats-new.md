@@ -12,6 +12,17 @@ are cut on demand.
 
 ## 2026-09-15
 
+- **Upload whole documents without handing agents a token.** New MCP
+  tool `nottario.docs.upload_url` returns a signed URL, valid for five
+  minutes, that accepts a single `PUT` of one specific file (matched by
+  SHA-256) on top of one specific version. The document goes straight
+  from disk to the server instead of through the agent's context, and a
+  replayed, altered or expired URL is refused, as is any URL whose
+  requesting token has since been revoked. The skill bundle now tells
+  agents never to look for, print or reuse their MCP token against the
+  HTTP API; if an agent of yours scripted uploads that way, switch it
+  to this tool. See [shared documents](/docs/).
+
 - **API tokens can no longer modify global documents — not even an
   admin's.** Writes, appends and deletes with `scope=global` now
   require an admin signed in to the web app; through MCP or REST with a

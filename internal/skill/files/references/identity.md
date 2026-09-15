@@ -9,7 +9,9 @@ description: Detailed reference on how Nottario authenticates agents and resolve
 
 Nottario MCP authenticates agents with **per-project API tokens**:
 
-- Header: `Authorization: Bearer ntr_<random>`.
+- The MCP client sends `Authorization: Bearer ntr_<random>` on every
+  request. The human configured it when adding the server; the agent
+  never handles it (see "Hands off the token" below).
 - Each token is bound to **exactly one project**. One token = one
   project. An agent using a token issued for project A cannot read or
   write anything in project B, even if the underlying user is a
@@ -33,6 +35,20 @@ project, the tool returns `"token scoped to project X, request
 targets Y"`. Cache the project id from `whoami` and reuse it
 everywhere.
 
+## Hands off the token
+
+The token is how your MCP client authenticates. It is not part of your
+work, and you never need it. Never:
+
+- read, look for, or print it;
+- pass it to curl or any other tool;
+- use it to call Nottario's HTTP API.
+
+Use MCP tools for everything; for whole files, use
+`nottario.docs.upload_url`. If a task seems to need the token, stop and
+ask the human. If one ever appears in your output, do not repeat it —
+tell the human so they can revoke it.
+
 ## What `whoami` returns
 
 | Field          | Meaning                                                                        |
@@ -42,7 +58,6 @@ everywhere.
 | `display_name` | the user's GitHub display name (falls back to the login).                      |
 | `is_admin`     | `true` if the user is the instance admin (first GitHub user to ever log in). Does not grant cross-project access for token callers. |
 | `source`       | always `"token"` for MCP callers (other surfaces may use `"session"`).         |
-| `token_id`     | uuid of the specific API token presented.                                      |
 | `memberships`  | array of `{project_id, project_slug, project_name, role_id, role_key, role_label, role_color, role_position}`. For token callers this list is **filtered to the token's project only** — every entry refers to the same `project_id`, one per role the user holds in that project. Use `memberships[0].project_id` as the canonical `project_id` for the rest of the session. |
 
 ## Roles

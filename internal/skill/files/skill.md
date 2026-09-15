@@ -14,7 +14,7 @@ under `domains/`; call `nottario.skill.read` to pull the one you need.
 
 Always start with `nottario.whoami`. It tells you the **user** you act
 on behalf of (`user_id`, `github_login`), whether you are an **admin**,
-the **token_id** authenticating you, and the **single project** the
+how you authenticated (`source`), and the **single project** the
 token is scoped to (`memberships[0].project_id` and friends — token
 callers always see exactly one membership: the one belonging to the
 token's project). On failure the token is missing or revoked — stop
@@ -26,6 +26,12 @@ Tokens are **per-project**. One token = one project. Passing
 `"token scoped to project X, request targets Y"`. Cache the project
 id from `whoami` and reuse it on every tool call — never let the user
 or another step override it without re-running `whoami`.
+
+**The token belongs to your MCP client, not to you.** Never read it,
+look for it, print it, or use it to call Nottario's HTTP API.
+Everything you need is an MCP tool; for whole files use
+`nottario.docs.upload_url`. If a task seems to require the token, stop
+and ask the human. See `references/identity.md` → "Hands off the token".
 
 After `whoami` and before any code work, also decide your **git mode**
 for the session: solo agent, one of several parallel agents under the
@@ -201,6 +207,9 @@ feature", "Block this until X is done").
 
 ## Rules of thumb
 
+- **Never touch the API token.** Don't look for it, don't print it,
+  don't call Nottario's HTTP API with it. MCP tools only; for whole
+  files, `docs.upload_url`.
 - **Re-confirm the project on every call.** Pass `project_id`
   explicitly; do not infer from conversation memory.
 - **Never invent ids.** Always look them up via `list` / `get`.

@@ -114,10 +114,32 @@ Use it to answer "does this need writing?" for a fraction of a
 `docs.read`. Hash your local copy, compare, and skip the write when
 the digests agree.
 
-**The digest covers the body WITHOUT frontmatter.** `docs.write`
-splits frontmatter into its own column, so a file on disk hashes
-differently unless you strip its frontmatter block first. Get this
-wrong and every comparison reports a difference.
+**The digest covers the stored body, not the file.** When a document
+is written, its YAML frontmatter is split into a separate column, and
+the newlines right after the closing `---` are dropped with it. So
+`sha256sum file.md` will never match `content_sha256` for a document
+that has frontmatter. Hash what the server stores instead:
+
+```python
+# nottario-body-sha256.py FILE -> the content_sha256 docs.stat reports
+import hashlib, sys
+md = open(sys.argv[1], encoding="utf-8", newline="").read()
+body, head = md, md.lstrip("\r\n\t ")
+if head.startswith("---") and (head[3:4] == "\n" or head[3:5] == "\r\n"):
+    rest, i = head[3:], 0
+    while (j := rest.find("\n---", i)) >= 0:
+        k = j + 4
+        if k == len(rest) or rest[k] in "\r\n":
+            body = rest[k:].lstrip("\r\n")
+            break
+        i = k
+print(hashlib.sha256(body.encode("utf-8")).hexdigest())
+```
+
+It mirrors the server's split exactly for any document the server
+accepts (a document whose frontmatter is not valid YAML is refused on
+write, so it never has a digest to compare against). A file with no
+frontmatter hashes as-is.
 
 ### `nottario.docs.append`
 
@@ -187,6 +209,70 @@ it, and on a large document a second copy is the most expensive thing
 this tool could do to your context. `current_version` is returned
 because you need it for the next write; cache it rather than calling
 `docs.read` to look it up again.
+
+### `nottario.docs.upload_url`
+
+Creates or replaces a **whole document from a file on disk**, without
+the file's bytes passing through your context and without you ever
+handling an API token. You ask for a signed URL, then send the file to
+it with a plain HTTP `PUT`.
+
+Use it whenever the content already exists as a file — a repo
+document you are mirroring, a generated report, anything you would
+otherwise paste into `docs.write`. For text you are composing right
+now, `docs.write` is fine: those bytes are in your context anyway. To
+add to the end of a document, `docs.append` is cheaper still.
+
+The flow:
+
+```text
+1. st = nottario.docs.stat { project_id, path }        // or "not found" for a new doc
+2. compare st.content_sha256 with the body hash of your file (see docs.stat)
+   → equal: stop, nothing to upload
+3. file_sha256 = sha256 of the EXACT file bytes         // e.g. shasum -a 256 file.md
+4. u = nottario.docs.upload_url {
+     project_id, path,
+     expected_version: st.current_version,             // 0 to create
+     file_sha256,
+     message: "why",
+   }
+5. curl -fsS -X PUT --data-binary @file.md "<u.upload_url>"
+   → {"path": …, "current_version": …, "updated_at": …}
+```
+
+**Two different hashes, on purpose.** `docs.stat` compares *stored
+bodies*, so its `content_sha256` excludes the frontmatter.
+`file_sha256` is the SHA-256 of the *exact bytes you upload*, frontmatter
+included. The first answers "is it already there?"; the second locks
+the URL to one specific file.
+
+What the URL allows, and nothing more:
+
+- **Valid for 5 minutes** (`expires_in_seconds: 300`). Request it right
+  before uploading, not at the start of a long task.
+- **One file.** The body must hash to `file_sha256`; anything else is
+  refused with `400` and nothing is written.
+- **One version, so one use.** The upload replaces the document only if
+  it is still at `expected_version`. After a successful upload, the
+  same URL returns `409 version_conflict`, which makes it single-use.
+- **One project and path**, always a project document; global documents
+  cannot be uploaded this way.
+- **No credential inside.** Do not add an `Authorization` header: the
+  signature is the whole credential. Quote the URL in the shell — it
+  contains `&`.
+
+Responses:
+
+| Status | Meaning | What to do |
+|---|---|---|
+| `200` | Written. Slim ack with the new `current_version`. | Cache the version. |
+| `400` | Body does not match `file_sha256`, is not UTF-8, or the frontmatter is invalid. Nothing written. | Re-hash the file you are actually sending. |
+| `403` | URL expired, altered, or the token that requested it was revoked. | Request a new URL. If it keeps failing, tell the human. |
+| `409` | The document is no longer at `expected_version`. | `docs.stat` again and decide; never just re-sign blindly over someone else's change. |
+| `413` | Body over 8 MiB. | Documents that large do not belong in Nottario. |
+
+The tool itself refuses to sign for a version it can already see is
+stale, returning the same `version_conflict` shape without a URL.
 
 ### `nottario.docs.delete`
 
@@ -325,6 +411,10 @@ lockstep using the optimistic-concurrency primitives:
    }
    ```
 
+   When the local copy is a file on disk, do this step with
+   `docs.upload_url` instead of pasting the file into `docs.write`:
+   same `expected_version`, but the bytes never pass through you.
+
 4. **On `version_conflict`** the response carries the live
    `current_version` and a message:
 
@@ -388,25 +478,16 @@ that line — `docs.append` sends the line.
 the new `current_version` in its ack. Cache that and pass it to the
 next write. Re-reading a body you composed yourself buys nothing.
 
-**Moving a whole file through MCP is not free.** `content` is a tool
-argument, so every byte of the document crosses your context on the
-way out. If your host can shell out, `POST /api/docs/write` takes the
-same per-project Bearer token and the same JSON body, so the file can
-go straight from disk to the server without passing through you:
+**Moving a whole file: `docs.upload_url`, never the HTTP API.**
+`docs.write`'s `content` is a tool argument, so every byte of the
+document crosses your context on the way out. For a file that already
+exists on disk, get a signed URL from `docs.upload_url` and `PUT` the
+file to it: the bytes go from disk to the server, and all you ever hold
+is a URL that expires in five minutes.
 
-```bash
-jq -n --arg p "<path>" --arg m "<why>" --rawfile c <file> \
-   '{scope:"project",project_id:"<id>",path:$p,content:$c,message:$m,expected_version:<n>}' \
-| curl -s -X POST "$NOTTARIO/api/docs/write" \
-    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data-binary @-
-```
-
-The same trick answers "has this file changed?" without reading the
-document into your context at all — pipe `GET /api/docs/read` through
-`jq -r '.content'` into `diff`, and only the verdict reaches you. Note
-that stored `content` has the frontmatter split off into its own
-field, so strip the local file's frontmatter before comparing or every
-diff will look dirty.
+Do not work around this by calling Nottario's REST API with your MCP
+token. You should never have the token in the first place — see
+`skill.md` §1 and `references/identity.md` → "Hands off the token".
 
 ## Things you cannot do (today)
 
