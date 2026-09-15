@@ -135,6 +135,9 @@ func NewServer(d Deps) http.Handler {
 		sessionKey = d.Resolver.SessionKey
 	}
 	mux.Handle("GET /skill.zip", SkillZipHandler(d.Pool, sessionKey))
+	// Signed, single-use document upload issued by nottario.docs.upload_url.
+	// The signature is the credential; no token or session is consulted.
+	mux.Handle("PUT /api/docs/upload", UploadDocHandler(d.Pool, sessionKey))
 
 	// Real-time event stream for the web UI (and any future SSE client).
 	if d.Hub != nil {

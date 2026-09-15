@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -57,6 +59,17 @@ type docsAppendInput struct {
 	Message         string `json:"message,omitempty" jsonschema:"change message on the version row"`
 	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"must equal current_version"`
 }
+
+type docsUploadURLInput struct {
+	ProjectID       string `json:"project_id" jsonschema:"project uuid"`
+	Path            string `json:"path" jsonschema:"logical path of the document to create or replace"`
+	ExpectedVersion *int   `json:"expected_version" jsonschema:"current_version from docs.stat, or 0 to create"`
+	FileSHA256      string `json:"file_sha256" jsonschema:"hex SHA-256 of the exact bytes you will upload: the whole file, frontmatter included"`
+	Kind            string `json:"kind,omitempty" jsonschema:"override; otherwise from frontmatter or 'context'"`
+	Message         string `json:"message,omitempty" jsonschema:"change message on the version row"`
+}
+
+const docsUploadInstructions = "PUT the exact bytes whose SHA-256 you signed to upload_url before expires_at, e.g. curl -fsS -X PUT --data-binary @<file> '<upload_url>' (quote the URL: it contains '&'). Send no Authorization header: the signature is the credential. The URL works once: it replaces the document only if it is still at expected_version, so a retry after success returns version_conflict. On 403 (expired) request a new URL; on 409 run docs.stat and decide again; on 400 the body did not match file_sha256 and nothing was written."
 
 type docsDeleteInput struct {
 	docsScopeInput
@@ -270,6 +283,73 @@ func registerDocs(server *sdk.Server, d Deps) {
 			"path":            doc.Path,
 			"current_version": doc.CurrentVersion,
 			"updated_at":      doc.UpdatedAt,
+		})
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.docs.upload_url",
+		Description: "Signs a single-use URL to create or replace a whole document from a file on disk, so its bytes never pass through your context and you never handle a token. Returns {upload_url, method, expires_at, expires_in_seconds, instructions}. Valid 5 minutes. file_sha256 = SHA-256 of the exact bytes you will PUT (frontmatter included). expected_version = current_version from docs.stat, or 0 to create. Project documents only.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsUploadURLInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(d.SessionKey) == 0 {
+			// Never issue an unsigned upload URL.
+			return toolError(docs.ErrUploadNoKey.Error())
+		}
+		if c.Source != identity.SourceToken || c.TokenID == uuid.Nil {
+			return toolError("upload URLs are only issued to API-token callers")
+		}
+		pid, err := uuid.Parse(in.ProjectID)
+		if err != nil {
+			return toolError("project_id must be a uuid")
+		}
+		if err := requireProjectAccess(ctx, d, pid); err != nil {
+			return toolError(err.Error())
+		}
+		if strings.TrimSpace(in.Path) == "" {
+			return toolError("path is required")
+		}
+		if in.ExpectedVersion == nil || *in.ExpectedVersion < 0 {
+			return toolError("expected_version is required: current_version from docs.stat, or 0 to create")
+		}
+		sha := strings.ToLower(strings.TrimSpace(in.FileSHA256))
+		if !docs.ValidSHA256Hex(sha) {
+			return toolError("file_sha256 must be the 64-character hex SHA-256 of the exact bytes you will upload")
+		}
+		// Fail fast on a stale version instead of letting the agent
+		// upload bytes that are bound to be refused. The upload still
+		// re-checks atomically; this only saves a wasted transfer.
+		if st, err := docs.ReadStat(ctx, d.Pool, docs.ScopeProject, &pid, in.Path); err == nil && st.CurrentVersion != *in.ExpectedVersion {
+			return jsonResult(map[string]any{
+				"error":           "version_conflict",
+				"current_version": st.CurrentVersion,
+				"message":         "the document is not at expected_version; run docs.stat and decide again",
+			})
+		}
+		exp := time.Now().Add(docs.UploadTTL).Unix()
+		q, err := docs.SignUpload(d.SessionKey, docs.UploadGrant{
+			ProjectID:       pid,
+			Path:            in.Path,
+			ExpectedVersion: *in.ExpectedVersion,
+			FileSHA256:      sha,
+			Kind:            in.Kind,
+			Message:         in.Message,
+			UserID:          c.UserID,
+			TokenID:         c.TokenID,
+			ExpiresAt:       exp,
+		})
+		if err != nil {
+			return toolError(err.Error())
+		}
+		base := strings.TrimRight(externalBaseURL(ctx), "/")
+		return jsonResult(map[string]any{
+			"upload_url":         base + "/api/docs/upload?" + q.Encode(),
+			"method":             "PUT",
+			"expires_at":         time.Unix(exp, 0).UTC().Format(time.RFC3339),
+			"expires_in_seconds": int(docs.UploadTTL / time.Second),
+			"instructions":       docsUploadInstructions,
 		})
 	})
 
