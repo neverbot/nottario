@@ -25,8 +25,10 @@ on each developer's laptop. Three kinds, all stored the same way:
 Every document lives in one of two scopes:
 
 - `project` — visible only within one project. Pass `project_id`.
-- `global` — visible to every project. No `project_id`. Only admins
-  can modify globals.
+- `global` — visible to every project. No `project_id`. Any token
+  can read globals; **no token can modify them**, not even an admin's.
+  Global writes need an admin signed in to the web app, because they
+  reach every project and a token is scoped to one.
 
 ## Paths
 
@@ -212,8 +214,9 @@ repo, like an MCP-only helper) can read it. Concretely:
 - **Agent instruction files**: `claude.md`, `AGENTS.md`, `GEMINI.md`,
   anything under `.claude/skills/`, `.cursor/rules/`, `.aider.conf.md`,
   and equivalents. `kind: skill`, typically at
-  `projects/<id>/skills/<file>.md` or under `global/skills/` when the
-  rule applies across projects.
+  `projects/<id>/skills/<file>.md`. Rules that should apply across
+  projects belong under `global/skills/`, but only an admin in the web
+  app can write there — flag it to the human rather than attempting it.
 - **Living project context**: architecture notes, ADRs (decision
   records), glossaries, onboarding pages, runbooks, post-mortems,
   incident reports, design briefs, methodology docs (branching
@@ -410,4 +413,5 @@ diff will look dirty.
 - Edit a comment or version body retroactively.
 - Move (rename a path) — write the new path and delete the old.
 - Attach images or binaries (planned for a later milestone).
-- Modify global documents unless you are admin.
+- Modify global documents. Tokens are refused even for admins; global
+  writes need a signed-in admin in the web app.

@@ -200,5 +200,5 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("PATCH /api/projects/{id}/tasks/{task_id}/comments/{comment_id}", guard(EditCommentHandler(tasks)))
 	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}/comments/{comment_id}", guard(DeleteCommentHandler(tasks)))
 
-	return mux
+	return withBodyLimit(mux)
 }

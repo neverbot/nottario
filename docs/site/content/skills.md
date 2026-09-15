@@ -98,6 +98,11 @@ rebuilding the binary: an admin writes a document with `scope=global`,
 in the next `skill.install` snapshot transparently — overrides change
 `bundle_version`, so the next sync picks them up.
 
+Overrides can only be written by an admin signed in to the web app.
+API tokens — including an admin's — are refused for any global
+document, because an override changes the instructions of agents on
+every project while a token is scoped to a single one.
+
 Use this to add bundle-absent files (`by-language/go.md`,
 `by-role/security.md`, `recipes/deploying-to-our-k8s.md`).
 

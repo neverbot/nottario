@@ -10,6 +10,24 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-09-15
+
+- **API tokens can no longer modify global documents — not even an
+  admin's.** Writes, appends and deletes with `scope=global` now
+  require an admin signed in to the web app; through MCP or REST with a
+  token they are refused. Global documents include the skill overrides
+  (`global/skills/*`) that every project's agents install, so a token
+  scoped to one project could previously rewrite agent instructions on
+  all of them. Reading global documents with a token is unchanged. If
+  an agent of yours maintained overrides, move that step to a human.
+  See [skills](/skills/).
+
+- **Request bodies are capped at 8 MiB.** A larger declared body is
+  refused with `413` before it is read; a body without a declared
+  length is cut off at the same point. Previously any authenticated
+  caller could send an unbounded payload, and document writes stored it
+  twice.
+
 ## 2026-09-09
 
 - **Two new MCP tools make document sync cheap.**

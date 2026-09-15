@@ -76,12 +76,13 @@ func (d DocsDeps) resolveScope(ctx context.Context, c identity.Caller, scopeStr,
 	return scope, &pid, nil
 }
 
-// requireWriteGlobal limits write access to global docs to admins.
+// requireWriteGlobal applies identity.RequireGlobalWrite to global
+// writes: admins only, and never through an API token.
 func requireWriteGlobal(c identity.Caller, scope docs.Scope) error {
-	if scope == docs.ScopeGlobal && !c.IsAdmin {
-		return errors.New("only admins can modify global documents")
+	if scope != docs.ScopeGlobal {
+		return nil
 	}
-	return nil
+	return identity.RequireGlobalWrite(c)
 }
 
 // ListDocsHandler returns lightweight summaries.

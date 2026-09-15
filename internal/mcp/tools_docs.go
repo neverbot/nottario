@@ -167,8 +167,10 @@ func registerDocs(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		if scope == docs.ScopeGlobal && !c.IsAdmin {
-			return toolError("only admins can modify global documents")
+		if scope == docs.ScopeGlobal {
+			if err := identity.RequireGlobalWrite(c); err != nil {
+				return toolError(err.Error())
+			}
 		}
 		if in.ExpectedVersion == nil {
 			log.Printf("mcp docs.write: deprecated call without expected_version (user=%s path=%q scope=%s)", c.UserID, in.Path, scope)
@@ -236,8 +238,10 @@ func registerDocs(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		if scope == docs.ScopeGlobal && !c.IsAdmin {
-			return toolError("only admins can modify global documents")
+		if scope == docs.ScopeGlobal {
+			if err := identity.RequireGlobalWrite(c); err != nil {
+				return toolError(err.Error())
+			}
 		}
 		if in.ExpectedVersion == nil {
 			log.Printf("mcp docs.append: deprecated call without expected_version (user=%s path=%q scope=%s)", c.UserID, in.Path, scope)
@@ -281,8 +285,10 @@ func registerDocs(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		if scope == docs.ScopeGlobal && !c.IsAdmin {
-			return toolError("only admins can modify global documents")
+		if scope == docs.ScopeGlobal {
+			if err := identity.RequireGlobalWrite(c); err != nil {
+				return toolError(err.Error())
+			}
 		}
 		if in.ExpectedVersion == nil {
 			log.Printf("mcp docs.delete: deprecated call without expected_version (user=%s path=%q scope=%s)", c.UserID, in.Path, scope)

@@ -308,10 +308,17 @@ to disk.
 ## Overrides
 
 Each instance can **override or extend** any file without rebuilding:
-an admin (or an agent with admin permissions) writes a document with
-`scope=global`, `kind=skill`, `path=global/skills/<file>`. The next
-`skill.install` snapshot includes the override transparently —
-overrides change `bundle_version`, so the next sync picks them up.
+an admin writes a document with `scope=global`, `kind=skill`,
+`path=global/skills/<file>`. The next `skill.install` snapshot
+includes the override transparently — overrides change
+`bundle_version`, so the next sync picks them up.
+
+**Agents cannot write overrides.** Global documents reach every
+project on the instance, and an API token is scoped to one project, so
+`docs.write` / `docs.append` / `docs.delete` with `scope=global` are
+refused for every token — including an admin's. Overrides are changed
+by an admin signed in to the web app. If you think an override is
+needed, say so to the human instead of attempting the write.
 
 Use this to tighten a shipped file for your team, or to add bundle-
 absent files (`by-language/go.md`, `by-role/security.md`,
