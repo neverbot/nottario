@@ -23,6 +23,13 @@ LDFLAGS := -s -w \
 # The v2 module path carries the major version.
 GOLANGCI_LINT_VERSION ?= v2.13.2
 SQLC_VERSION          ?= v1.31.1
+# Biome must be pinned for the same reason as golangci-lint: it both
+# lints AND formats, so an unpinned `npx @biomejs/biome` lets a new
+# upstream release fail the gate on a file nobody touched. That is
+# exactly how CI broke on d9a58b8 — gantt.js unchanged since its last
+# green run, a newer Biome, a new formatting opinion. Bump this
+# deliberately, in a commit that carries the reformatting with it.
+BIOME_VERSION         ?= 2.5.14
 
 # Where 'go install' drops binaries (works inside and outside CI).
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
@@ -119,18 +126,20 @@ js-check:
 	@find internal/web/static -name '*.js' -not -path '*/vendor/*' -print0 \
 		| xargs -0 -I{} node --check {}
 
-# Frontend lint + format gate via Biome. The Rust binary is cached
-# under `~/.npm/_npx/` after the first invocation, so no global
-# install is needed and the repo carries no `node_modules`. The check
+# Frontend lint + format gate via Biome, pinned to BIOME_VERSION so
+# the same input always yields the same verdict here and in CI. The
+# Rust binary is cached under `~/.npm/_npx/` after the first
+# invocation, so no global install is needed and the repo carries no
+# `node_modules`. The check
 # variant fails on lint errors; warnings stay visible but do not
 # block the gate. The format variant rewrites files in place.
 frontend-check:
 	@command -v npx >/dev/null 2>&1 || { echo "npx is required for frontend-check (install Node 20+)"; exit 1; }
-	npx --yes @biomejs/biome check internal/web/static
+	npx --yes @biomejs/biome@$(BIOME_VERSION) check internal/web/static
 
 frontend-format:
 	@command -v npx >/dev/null 2>&1 || { echo "npx is required for frontend-format (install Node 20+)"; exit 1; }
-	npx --yes @biomejs/biome check --write internal/web/static
+	npx --yes @biomejs/biome@$(BIOME_VERSION) check --write internal/web/static
 
 # Documentation site (cmd/nottario-docs + docs/site/content).
 # `docs-build` produces a working static site under docs/site/dist.

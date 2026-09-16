@@ -1939,7 +1939,7 @@ class NottarioGantt extends LitElement {
                        `M ${x1} ${y1} ` +
                        `C ${x1 + bow} ${y1} ${x1 + bow} ${yMid} ${xMid} ${yMid} ` +
                        `S ${x2 - bow} ${y2} ${x2} ${y2}`
-}
+                     }
                      @click=${onClick}></path>`;
   }
 
