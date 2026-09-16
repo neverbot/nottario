@@ -470,7 +470,7 @@ class NottarioProjectSettings extends LitElement {
         let msg = `HTTP ${res.status}`;
         try {
           const j = await res.json();
-          if (j && j.error) msg = j.error;
+          if (j?.error) msg = j.error;
         } catch (_) {}
         throw new Error(msg);
       }

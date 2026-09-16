@@ -167,7 +167,7 @@ class NottarioUpdateBanner extends LitElement {
 
   render() {
     const s = this._status;
-    if (!s || !s.update_available) return null;
+    if (!s?.update_available) return null;
     const latestSha = s.latest?.sha || '';
     if (this._dismissed && this._dismissed === latestSha) return null;
 
