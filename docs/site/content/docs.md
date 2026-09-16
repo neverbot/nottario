@@ -52,14 +52,16 @@ the order they typically appear in a session:
 - `nottario.docs.list { project_id, scope, path_prefix? }` walks
   the tree to find what's there without pulling bodies.
 - `nottario.docs.read { project_id, scope, path }` returns the
-  full document including its parsed frontmatter and the
-  `current_version` integer. The agent stashes that integer.
+  whole document exactly as written, frontmatter included, plus the
+  parsed frontmatter and the `current_version` integer. The agent stashes that integer.
 - `nottario.docs.search { project_id, scope, query }` is full-text
-  across title, description and body.
+  across title, description and body; the frontmatter block
+  itself is not indexed.
 - `nottario.docs.write { project_id, scope, path, content,
   expected_version, message }` commits an edit. `content` is the
-  full markdown including frontmatter; the server splits and
-  stores the two halves. `expected_version` is the integer from
+  full markdown including frontmatter, stored byte for byte; the
+  server only reads the frontmatter to fill title, description and
+  kind. `expected_version` is the integer from
   the most recent read — if the server's `current_version` no
   longer matches, the call returns `version_conflict` with the
   fresh number and the agent re-reads, merges, retries. This is
@@ -68,10 +70,10 @@ the order they typically appear in a session:
 
 - `nottario.docs.stat { project_id, scope, path }` returns
   `current_version`, `size_bytes` and a `content_sha256` of the
-  body — no body. It answers "has this changed?" without pulling
+  stored file — not the document itself. It answers "has this changed?" without pulling
   the document, which matters when an agent is keeping a repo file
-  and its Nottario copy in sync. The digest covers the body without
-  frontmatter, since the server stores the two halves separately.
+  and its Nottario copy in sync. The digest is the SHA-256 of the whole
+  file, so it matches `sha256sum` of the repo copy.
 - `nottario.docs.append { project_id, scope, path, content,
   expected_version }` adds markdown to the end of an existing
   document. It is the only partial write here, and it is safe

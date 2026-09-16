@@ -29,7 +29,7 @@ type docsListInput struct {
 type docsReadInput struct {
 	docsScopeInput
 	Path     string `json:"path" jsonschema:"document logical path"`
-	HeadOnly bool   `json:"head_only,omitempty" jsonschema:"return frontmatter + first 400 chars of body (with truncated flag) instead of the full document"`
+	HeadOnly bool   `json:"head_only,omitempty" jsonschema:"return parsed frontmatter + the first 400 chars of the document (with truncated flag) instead of the whole document"`
 }
 
 type docsSearchInput struct {
@@ -41,7 +41,7 @@ type docsSearchInput struct {
 type docsWriteInput struct {
 	docsScopeInput
 	Path            string `json:"path" jsonschema:"logical path"`
-	Content         string `json:"content" jsonschema:"full markdown body (frontmatter optional)"`
+	Content         string `json:"content" jsonschema:"the complete markdown document, frontmatter included; stored byte for byte"`
 	Kind            string `json:"kind,omitempty" jsonschema:"override; otherwise from frontmatter or 'context'"`
 	Message         string `json:"message,omitempty" jsonschema:"change message on the version row"`
 	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"must equal current_version (or 0 for new)"`
@@ -111,7 +111,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.read",
-		Description: "Reads a document: title, kind, body, frontmatter, current_version. head_only=true returns frontmatter + 400-char preview with {truncated, body_length} for catalogue checks.",
+		Description: "Reads a document: title, kind, content (the complete markdown exactly as written, frontmatter included), parsed frontmatter, current_version. head_only=true returns frontmatter + the first 400 chars with {truncated, body_length} for catalogue checks.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsReadInput) (*sdk.CallToolResult, any, error) {
 		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
 		if err != nil {
@@ -223,7 +223,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.stat",
-		Description: "Fingerprints a document without its body: {path, current_version, size_bytes, content_sha256, updated_at}. Use it to decide whether a write is needed instead of reading the document to diff it. The digest covers the body WITHOUT frontmatter — strip a local file's frontmatter before hashing it.",
+		Description: "Fingerprints a document without returning it: {path, current_version, size_bytes, content_sha256, updated_at}. content_sha256 is the SHA-256 of the whole stored file, frontmatter included, so it matches `sha256sum <file>` of a local copy. Use it to decide whether a write is needed instead of reading the document to diff it.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsStatInput) (*sdk.CallToolResult, any, error) {
 		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
 		if err != nil {

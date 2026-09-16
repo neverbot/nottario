@@ -33,9 +33,9 @@ const (
 )
 
 // Document is the row in `documents` plus its (already-decoded)
-// frontmatter. ContentMD is the markdown body *without* the
-// frontmatter front block — agents and humans see only the body. The
-// raw frontmatter sits in Frontmatter.
+// frontmatter. ContentMD is the complete markdown exactly as it was
+// written, frontmatter block included. Frontmatter is derived from it
+// at write time for convenience and is never used to rebuild it.
 type Document struct {
 	ID               uuid.UUID        `json:"id"`
 	Scope            Scope            `json:"scope"`

@@ -71,6 +71,9 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 		return nil, ErrPathRequired
 	}
 
+	// The document is stored exactly as received. Frontmatter is parsed
+	// only to extract kind, title and description; body is used to derive
+	// a title when the frontmatter has none, never to replace content.
 	frontmatter, body, err := SplitFrontmatter(p.ContentMD)
 	if err != nil {
 		return nil, fmt.Errorf("parse frontmatter: %w", err)
@@ -100,6 +103,8 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 	if err != nil {
 		return nil, fmt.Errorf("marshal frontmatter: %w", err)
 	}
+	content := p.ContentMD
+	bodyOffset := int32(BodyOffset(content))
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -126,8 +131,9 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 			Kind:             string(kind),
 			Title:            title,
 			Description:      description,
-			ContentMd:        body,
+			ContentMd:        content,
 			Frontmatter:      fmJSON,
+			BodyOffset:       bodyOffset,
 			CreatedByUserID:  by.UserID,
 			CreatedByTokenID: by.TokenID,
 		})
@@ -140,7 +146,7 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 			Version:       1,
 			Title:         title,
 			Description:   description,
-			ContentMd:     body,
+			ContentMd:     content,
 			Frontmatter:   fmJSON,
 			Message:       p.Message,
 			AuthorUserID:  by.UserID,
@@ -167,8 +173,9 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 		Kind:             string(kind),
 		Title:            title,
 		Description:      description,
-		ContentMd:        body,
+		ContentMd:        content,
 		Frontmatter:      fmJSON,
+		BodyOffset:       bodyOffset,
 		CurrentVersion:   int32(newVersion),
 		UpdatedByUserID:  by.UserID,
 		UpdatedByTokenID: by.TokenID,
@@ -182,7 +189,7 @@ func Write(ctx context.Context, pool *pgxpool.Pool, p WriteParams, by Authorship
 		Version:       int32(newVersion),
 		Title:         title,
 		Description:   description,
-		ContentMd:     body,
+		ContentMd:     content,
 		Frontmatter:   fmJSON,
 		Message:       p.Message,
 		AuthorUserID:  by.UserID,
@@ -641,10 +648,8 @@ type Stat struct {
 
 // ReadStat returns the fingerprint of one document.
 //
-// The digest covers the stored body, which has had its frontmatter
-// split off into a separate column. A caller comparing against a file
-// on disk must strip that file's frontmatter before hashing, or the
-// two will never agree.
+// The digest covers the document exactly as stored, frontmatter
+// included, so it equals the SHA-256 of the file that was written.
 func ReadStat(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *uuid.UUID, path string) (*Stat, error) {
 	if err := validateScope(scope, projectID); err != nil {
 		return nil, err
@@ -669,9 +674,9 @@ func ReadStat(ctx context.Context, pool *pgxpool.Pool, scope Scope, projectID *u
 	}, nil
 }
 
-// AppendParams carries an append. Only the body grows; kind, title,
-// description and frontmatter are whatever the document already
-// declared.
+// AppendParams carries an append. The document only grows at its end;
+// kind, title, description and frontmatter are whatever the document
+// already declared.
 type AppendParams struct {
 	Scope           Scope
 	ProjectID       *uuid.UUID
@@ -733,6 +738,7 @@ func Append(ctx context.Context, pool *pgxpool.Pool, p AppendParams, by Authorsh
 		Description:      existing.Description,
 		ContentMd:        body,
 		Frontmatter:      existing.Frontmatter,
+		BodyOffset:       existing.BodyOffset,
 		CurrentVersion:   int32(newVersion),
 		UpdatedByUserID:  by.UserID,
 		UpdatedByTokenID: by.TokenID,

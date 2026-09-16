@@ -72,7 +72,8 @@ func (q *Queries) GetDocumentByPathForUpdate(ctx context.Context, arg GetDocumen
 }
 
 const getDocumentForAppend = `-- name: GetDocumentForAppend :one
-SELECT id, current_version, kind, title, description, content_md, frontmatter
+SELECT id, current_version, kind, title, description, content_md, frontmatter,
+       body_offset
 FROM documents
 WHERE scope = $1::text
   AND project_id IS NOT DISTINCT FROM $2::uuid
@@ -95,12 +96,13 @@ type GetDocumentForAppendRow struct {
 	Description    string
 	ContentMd      string
 	Frontmatter    []byte
+	BodyOffset     int32
 }
 
 // Same row lock as GetDocumentByPathForUpdate, but also returns the
 // fields Append has to carry over unchanged. Appending touches only
-// the body: kind, title, description and frontmatter are whatever the
-// document already declared.
+// the end of the document: kind, title, description, frontmatter and
+// body_offset are whatever the document already declared.
 func (q *Queries) GetDocumentForAppend(ctx context.Context, arg GetDocumentForAppendParams) (GetDocumentForAppendRow, error) {
 	row := q.db.QueryRow(ctx, getDocumentForAppend, arg.Scope, arg.ProjectID, arg.Path)
 	var i GetDocumentForAppendRow
@@ -112,6 +114,7 @@ func (q *Queries) GetDocumentForAppend(ctx context.Context, arg GetDocumentForAp
 		&i.Description,
 		&i.ContentMd,
 		&i.Frontmatter,
+		&i.BodyOffset,
 	)
 	return i, err
 }
@@ -188,7 +191,7 @@ func (q *Queries) GetDocumentVersion(ctx context.Context, arg GetDocumentVersion
 const insertDocument = `-- name: InsertDocument :one
 INSERT INTO documents (
     scope, project_id, path, kind, title, description, content_md, frontmatter,
-    current_version, created_by_user_id, created_by_token_id,
+    body_offset, current_version, created_by_user_id, created_by_token_id,
     updated_by_user_id, updated_by_token_id
 )
 VALUES (
@@ -200,11 +203,12 @@ VALUES (
     $6::text,
     $7::text,
     $8::jsonb,
+    $9::int,
     1,
-    $9::uuid,
     $10::uuid,
-    $9::uuid,
-    $10::uuid
+    $11::uuid,
+    $10::uuid,
+    $11::uuid
 )
 RETURNING id, scope, project_id, path, kind, title, description, content_md,
           frontmatter, current_version, deleted_at,
@@ -222,6 +226,7 @@ type InsertDocumentParams struct {
 	Description      string
 	ContentMd        string
 	Frontmatter      []byte
+	BodyOffset       int32
 	CreatedByUserID  *uuid.UUID
 	CreatedByTokenID *uuid.UUID
 }
@@ -256,6 +261,7 @@ func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) 
 		arg.Description,
 		arg.ContentMd,
 		arg.Frontmatter,
+		arg.BodyOffset,
 		arg.CreatedByUserID,
 		arg.CreatedByTokenID,
 	)
@@ -643,10 +649,8 @@ type StatDocumentRow struct {
 // whether a write is needed at all: hash the local copy and compare,
 // instead of reading the whole document back just to diff it.
 //
-// The digest covers content_md, which is the body WITHOUT frontmatter
-// (Write splits it off into its own column). A caller comparing
-// against a file on disk has to strip that file's frontmatter first or
-// every comparison reports a difference.
+// content_md is the document exactly as written, frontmatter included,
+// so the digest equals `sha256sum` of the file that was uploaded.
 //
 // octet_length, not length: the caller is comparing against bytes on
 // disk, and length() counts characters.
@@ -677,11 +681,12 @@ SET kind = $1::text,
     description = $3::text,
     content_md = $4::text,
     frontmatter = $5::jsonb,
-    current_version = $6::int,
-    updated_by_user_id = $7::uuid,
-    updated_by_token_id = $8::uuid,
+    body_offset = $6::int,
+    current_version = $7::int,
+    updated_by_user_id = $8::uuid,
+    updated_by_token_id = $9::uuid,
     deleted_at = NULL
-WHERE id = $9::uuid
+WHERE id = $10::uuid
 RETURNING id, scope, project_id, path, kind, title, description, content_md,
           frontmatter, current_version, deleted_at,
           created_by_user_id, created_by_token_id,
@@ -695,6 +700,7 @@ type UpdateDocumentParams struct {
 	Description      string
 	ContentMd        string
 	Frontmatter      []byte
+	BodyOffset       int32
 	CurrentVersion   int32
 	UpdatedByUserID  *uuid.UUID
 	UpdatedByTokenID *uuid.UUID
@@ -728,6 +734,7 @@ func (q *Queries) UpdateDocument(ctx context.Context, arg UpdateDocumentParams) 
 		arg.Description,
 		arg.ContentMd,
 		arg.Frontmatter,
+		arg.BodyOffset,
 		arg.CurrentVersion,
 		arg.UpdatedByUserID,
 		arg.UpdatedByTokenID,

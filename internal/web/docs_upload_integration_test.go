@@ -122,7 +122,7 @@ func TestDocsUpload_HappyPathShapeTTLAndSingleUse(t *testing.T) {
 	if !ok {
 		t.Fatal("document not stored")
 	}
-	if d.Title != "Plan" || !strings.HasPrefix(d.ContentMD, "# Plan") {
+	if d.Title != "Plan" || d.ContentMD != string(body) {
 		t.Errorf("stored title=%q content=%q", d.Title, d.ContentMD)
 	}
 	tokens, err := identity.ListProjectTokens(f.ctx, f.pgx(t), uuid.MustParse(f.projectID))

@@ -132,6 +132,7 @@ type Document struct {
 	UpdatedByTokenID *uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	BodyOffset       int32
 	SearchVector     interface{}
 }
 

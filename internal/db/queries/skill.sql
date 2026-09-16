@@ -10,10 +10,11 @@ WHERE scope = 'global'
   AND path LIKE sqlc.arg('path_prefix')::text;
 
 -- name: GetSkillOverride :one
--- Reads the body and frontmatter of a single skill-override document
--- keyed by its full path (e.g. 'global/skills/domains/tasks.md').
--- Returns ErrNoRows when there is no override for that path.
-SELECT content_md, frontmatter FROM documents
+-- Reads a single skill-override document, exactly as it was written
+-- (frontmatter included), keyed by its full path
+-- (e.g. 'global/skills/domains/tasks.md'). Returns ErrNoRows when
+-- there is no override for that path.
+SELECT content_md FROM documents
 WHERE scope = 'global'
   AND kind = 'skill'
   AND deleted_at IS NULL

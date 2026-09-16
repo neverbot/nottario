@@ -57,3 +57,41 @@ func TestSplitFrontmatter_InvalidYAML(t *testing.T) {
 		t.Fatal("expected yaml error, got nil")
 	}
 }
+
+func TestBody(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"none", "# Hi\n\ntext\n", "# Hi\n\ntext\n"},
+		{"block", "---\ntitle: T\n---\n\n# Hi\n", "# Hi\n"},
+		{"leading blank lines", "\n\n---\ntitle: T\n---\nbody", "body"},
+		{"crlf", "---\r\ntitle: T\r\n---\r\n\r\nbody", "body"},
+		{"unterminated", "---\ntitle: T\nbody", "---\ntitle: T\nbody"},
+		{"only frontmatter", "---\ntitle: T\n---\n", ""},
+		// Body does not validate YAML; it only locates the block.
+		{"invalid yaml", "---\ntitle: : :\n---\nbody", "body"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Body(c.in); got != c.want {
+				t.Errorf("Body(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// BodyOffset feeds Postgres substr(), which counts characters. A
+// multi-byte character inside the frontmatter must not shift it.
+func TestBodyOffset_CountsCharacters(t *testing.T) {
+	cases := []string{
+		"# no frontmatter\n",
+		"---\ntitle: plain\n---\n\nbody",
+		"---\ntitle: Diseño ñandú 🚀\n---\n\nbody ñ",
+		"\n---\ndescription: \"a: b\"\n---\nbody",
+	}
+	for _, md := range cases {
+		off := BodyOffset(md)
+		got := string([]rune(md)[off:])
+		if got != Body(md) {
+			t.Errorf("BodyOffset(%q) = %d selects %q, want %q", md, off, got, Body(md))
+		}
+	}
+}

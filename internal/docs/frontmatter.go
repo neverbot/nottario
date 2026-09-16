@@ -2,45 +2,80 @@ package docs
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
 
-// SplitFrontmatter parses an incoming markdown document. It expects the
-// frontmatter (if any) to be a YAML block delimited by `---` on its
-// own line at the very top of the file. It returns the parsed
-// frontmatter as a Go map and the body that follows.
-//
-// If no frontmatter is present, frontmatter is nil and body == md.
-func SplitFrontmatter(md string) (frontmatter map[string]any, body string, err error) {
+// Documents are stored exactly as written: frontmatter and body
+// together, byte for byte. Frontmatter is only *read* on the way in,
+// to extract kind, title and description. The systems that must not
+// see it (the search index and the HTML renderer) skip it themselves
+// with Body / BodyOffset; nothing ever strips it from storage.
+
+// locateFrontmatter finds a YAML frontmatter block delimited by `---`
+// lines at the very top of md. It returns the raw YAML and the byte
+// index in md where the body starts (past the closing delimiter and
+// any newlines after it). ok is false when md has no complete block.
+func locateFrontmatter(md string) (rawYAML string, bodyStart int, ok bool) {
 	const delim = "---"
 	trimmed := strings.TrimLeft(md, "\r\n\t ")
 	if !strings.HasPrefix(trimmed, delim) {
-		return nil, md, nil
+		return "", 0, false
 	}
 	rest := trimmed[len(delim):]
 	if !strings.HasPrefix(rest, "\n") && !strings.HasPrefix(rest, "\r\n") {
-		return nil, md, nil
+		return "", 0, false
 	}
-	// Locate the closing delimiter line.
 	closing := findClosingDelimiter(rest)
 	if closing < 0 {
-		// Unterminated frontmatter — leave document as-is.
+		// Unterminated frontmatter: the whole document is body.
+		return "", 0, false
+	}
+	start := closing + len(delim)
+	for start < len(rest) && (rest[start] == '\n' || rest[start] == '\r') {
+		start++
+	}
+	restOffset := len(md) - len(rest)
+	return rest[:closing], restOffset + start, true
+}
+
+// SplitFrontmatter parses the frontmatter of a markdown document and
+// returns it together with the body that follows. It does not change
+// what is stored: callers keep md whole.
+//
+// If no frontmatter is present, frontmatter is nil and body == md. A
+// block that is present but is not valid YAML is an error.
+func SplitFrontmatter(md string) (frontmatter map[string]any, body string, err error) {
+	rawYAML, start, ok := locateFrontmatter(md)
+	if !ok {
 		return nil, md, nil
 	}
-	rawYAML := rest[:closing]
-	bodyStart := closing + len(delim)
-	// Skip any trailing newline after the closing delimiter.
-	for bodyStart < len(rest) && (rest[bodyStart] == '\n' || rest[bodyStart] == '\r') {
-		bodyStart++
-	}
-	body = rest[bodyStart:]
-
 	fm := map[string]any{}
 	if err := yaml.Unmarshal([]byte(rawYAML), &fm); err != nil {
 		return nil, md, err
 	}
-	return fm, body, nil
+	return fm, md[start:], nil
+}
+
+// Body returns md without its frontmatter block, for renderers that
+// display the document. It does not validate the YAML: a stored
+// document already passed that check when it was written.
+func Body(md string) string {
+	if _, start, ok := locateFrontmatter(md); ok {
+		return md[start:]
+	}
+	return md
+}
+
+// BodyOffset is where the body starts, counted in characters rather
+// than bytes, because it feeds Postgres substr() in the search index
+// and substr counts characters. Zero when there is no frontmatter.
+func BodyOffset(md string) int {
+	if _, start, ok := locateFrontmatter(md); ok {
+		return utf8.RuneCountInString(md[:start])
+	}
+	return 0
 }
 
 // findClosingDelimiter returns the byte index in s of a line that is

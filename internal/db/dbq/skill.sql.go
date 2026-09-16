@@ -10,26 +10,22 @@ import (
 )
 
 const getSkillOverride = `-- name: GetSkillOverride :one
-SELECT content_md, frontmatter FROM documents
+SELECT content_md FROM documents
 WHERE scope = 'global'
   AND kind = 'skill'
   AND deleted_at IS NULL
   AND path = $1::text
 `
 
-type GetSkillOverrideRow struct {
-	ContentMd   string
-	Frontmatter []byte
-}
-
-// Reads the body and frontmatter of a single skill-override document
-// keyed by its full path (e.g. 'global/skills/domains/tasks.md').
-// Returns ErrNoRows when there is no override for that path.
-func (q *Queries) GetSkillOverride(ctx context.Context, path string) (GetSkillOverrideRow, error) {
+// Reads a single skill-override document, exactly as it was written
+// (frontmatter included), keyed by its full path
+// (e.g. 'global/skills/domains/tasks.md'). Returns ErrNoRows when
+// there is no override for that path.
+func (q *Queries) GetSkillOverride(ctx context.Context, path string) (string, error) {
 	row := q.db.QueryRow(ctx, getSkillOverride, path)
-	var i GetSkillOverrideRow
-	err := row.Scan(&i.ContentMd, &i.Frontmatter)
-	return i, err
+	var content_md string
+	err := row.Scan(&content_md)
+	return content_md, err
 }
 
 const listSkillOverridePaths = `-- name: ListSkillOverridePaths :many

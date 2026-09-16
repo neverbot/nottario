@@ -10,6 +10,19 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-09-17
+
+- **Documents are stored exactly as written.** A document's frontmatter
+  now stays in the document: `docs.read`, version history, skill
+  overrides and the upload flow all return the same bytes that were
+  written, and `docs.stat`'s `content_sha256` is the plain SHA-256 of
+  the file, so it matches `sha256sum` of a local copy without stripping
+  anything first. Title, description and kind are still read from the
+  frontmatter; search and the web view skip it. Existing documents are
+  migrated on startup: their frontmatter is rebuilt from what was
+  stored, so its formatting may differ from the original file until the
+  document is written again. See [shared documents](/docs/).
+
 ## 2026-09-15
 
 - **Upload whole documents without handing agents a token.** New MCP

@@ -68,13 +68,15 @@ tags: [testing, quality]
 - `description` (string): shown in lists; this is the "blurb" you read
   *before* deciding to load the full body.
 - `kind` (string): can also be passed explicitly to `docs.write`.
-- Any other keys are stored verbatim in `frontmatter` and round-trip
-  through `read` / `write`.
+- Any other keys are yours; they stay in the document.
 
-When you read a document, the response splits the body from the
-parsed frontmatter (as an object). When you write, you send the full
-markdown including frontmatter in `content`; the server splits and
-stores them.
+**Documents are stored whole.** `content` is always the complete
+markdown exactly as written, frontmatter included: what you write is
+what `read` returns, byte for byte. The server only *reads* the
+frontmatter to fill `title`, `description` and `kind`, and returns it
+parsed as `frontmatter` for convenience. Search does not index it and
+the web view does not render it. A frontmatter block that is not valid
+YAML is refused on write.
 
 ## Tools
 
@@ -85,25 +87,27 @@ Returns lightweight summaries (no body). Use it to navigate, then
 
 ### `nottario.docs.read`
 
-Returns the full document including body, parsed frontmatter and the
-current version number. **Capture `current_version`**: you need it to
+Returns the whole document (`content`, frontmatter included), the
+parsed frontmatter and the current version number. **Capture `current_version`**: you need it to
 update the document safely.
 
 Pass `head_only: true` when you only need to check "is this the right
 doc" — the response then carries the frontmatter, title, description,
-`current_version` and just the first 400 chars of `content`, with
-`truncated: true` / `body_length: N` so you know there is more. Useful
+`current_version` and just the first 400 chars of `content` (which
+starts with the frontmatter block), with `truncated: true` /
+`body_length: N` so you know there is more. Useful
 for catalogue-style flows over many documents.
 
 ### `nottario.docs.search`
 
-Full-text search over `title`, `description` and body. Use
+Full-text search over `title`, `description` and body (the
+frontmatter block is not indexed). Use
 `plainto_tsquery` semantics (treat the query as keywords; the parser
 ignores quoting and operators). Filters: `kind`.
 
 ### `nottario.docs.stat`
 
-Fingerprints a document without its body:
+Fingerprints a document without returning it:
 
 ```json
 { "path": "…", "current_version": 7, "size_bytes": 9000,
@@ -114,32 +118,9 @@ Use it to answer "does this need writing?" for a fraction of a
 `docs.read`. Hash your local copy, compare, and skip the write when
 the digests agree.
 
-**The digest covers the stored body, not the file.** When a document
-is written, its YAML frontmatter is split into a separate column, and
-the newlines right after the closing `---` are dropped with it. So
-`sha256sum file.md` will never match `content_sha256` for a document
-that has frontmatter. Hash what the server stores instead:
-
-```python
-# nottario-body-sha256.py FILE -> the content_sha256 docs.stat reports
-import hashlib, sys
-md = open(sys.argv[1], encoding="utf-8", newline="").read()
-body, head = md, md.lstrip("\r\n\t ")
-if head.startswith("---") and (head[3:4] == "\n" or head[3:5] == "\r\n"):
-    rest, i = head[3:], 0
-    while (j := rest.find("\n---", i)) >= 0:
-        k = j + 4
-        if k == len(rest) or rest[k] in "\r\n":
-            body = rest[k:].lstrip("\r\n")
-            break
-        i = k
-print(hashlib.sha256(body.encode("utf-8")).hexdigest())
-```
-
-It mirrors the server's split exactly for any document the server
-accepts (a document whose frontmatter is not valid YAML is refused on
-write, so it never has a digest to compare against). A file with no
-frontmatter hashes as-is.
+**The digest is the file's.** Documents are stored byte for byte,
+frontmatter included, so `content_sha256` equals `sha256sum file.md`
+(or `shasum -a 256 file.md`) of the copy you wrote.
 
 ### `nottario.docs.append`
 
@@ -174,7 +155,8 @@ document; there is deliberately no line-level patch tool.
 ### `nottario.docs.write`
 
 Creates or updates the document keyed by `(scope, project_id, path)`.
-The body you send should include any frontmatter you want preserved:
+`content` is the complete file, frontmatter included; it is stored
+exactly as sent:
 
 ```text
 content = "---\ntitle: …\nkind: skill\n---\n\nBody…"
@@ -240,11 +222,10 @@ The flow:
    → {"path": …, "current_version": …, "updated_at": …}
 ```
 
-**Two different hashes, on purpose.** `docs.stat` compares *stored
-bodies*, so its `content_sha256` excludes the frontmatter.
-`file_sha256` is the SHA-256 of the *exact bytes you upload*, frontmatter
-included. The first answers "is it already there?"; the second locks
-the URL to one specific file.
+**One hash, two uses.** Both are the SHA-256 of the whole file.
+`docs.stat`'s `content_sha256` answers "is it already there?";
+`file_sha256` locks the URL to one specific file. When they are equal,
+skip the upload.
 
 What the URL allows, and nothing more:
 
@@ -357,7 +338,7 @@ nottario.docs.write {
 
 ```text
 doc = nottario.docs.read { ..., path }
-edit the body locally (regenerate full markdown with frontmatter)
+edit doc.content locally (it already includes the frontmatter)
 nottario.docs.write {
   ..., path,
   content: new_body,
@@ -452,7 +433,7 @@ be dominated by bodies you'll never look at.
 **`docs.read { head_only: true }` for catalogue checks.** When you
 only need to confirm "is this the doc I want" (right title, right
 kind, right frontmatter), pass `head_only: true`. The response then
-carries the frontmatter + the first 400 chars of `content` plus
+carries the parsed frontmatter + the first 400 chars of `content` plus
 `truncated: true` / `body_length: N` markers. Switch to a full
 `docs.read` only when you've decided to actually work with the body.
 

@@ -83,8 +83,8 @@ type Querier interface {
 	GetDocumentByPathForUpdate(ctx context.Context, arg GetDocumentByPathForUpdateParams) (GetDocumentByPathForUpdateRow, error)
 	// Same row lock as GetDocumentByPathForUpdate, but also returns the
 	// fields Append has to carry over unchanged. Appending touches only
-	// the body: kind, title, description and frontmatter are whatever the
-	// document already declared.
+	// the end of the document: kind, title, description, frontmatter and
+	// body_offset are whatever the document already declared.
 	GetDocumentForAppend(ctx context.Context, arg GetDocumentForAppendParams) (GetDocumentForAppendRow, error)
 	GetDocumentForDelete(ctx context.Context, arg GetDocumentForDeleteParams) (GetDocumentForDeleteRow, error)
 	GetDocumentVersion(ctx context.Context, arg GetDocumentVersionParams) (DocumentVersion, error)
@@ -96,10 +96,11 @@ type Querier interface {
 	GetProjectArchIdleSeconds(ctx context.Context, projectID uuid.UUID) (pgtype.Int4, error)
 	GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (GetProjectByIDOrSlugRow, error)
 	GetProjectCycleLabel(ctx context.Context, id uuid.UUID) (string, error)
-	// Reads the body and frontmatter of a single skill-override document
-	// keyed by its full path (e.g. 'global/skills/domains/tasks.md').
-	// Returns ErrNoRows when there is no override for that path.
-	GetSkillOverride(ctx context.Context, path string) (GetSkillOverrideRow, error)
+	// Reads a single skill-override document, exactly as it was written
+	// (frontmatter included), keyed by its full path
+	// (e.g. 'global/skills/domains/tasks.md'). Returns ErrNoRows when
+	// there is no override for that path.
+	GetSkillOverride(ctx context.Context, path string) (string, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
 	// Queries used by the markdown renderer to resolve cross-domain chip
 	// references ([[task:N]], [[doc:path]], [[arch:slug]]) into the
@@ -261,10 +262,8 @@ type Querier interface {
 	// whether a write is needed at all: hash the local copy and compare,
 	// instead of reading the whole document back just to diff it.
 	//
-	// The digest covers content_md, which is the body WITHOUT frontmatter
-	// (Write splits it off into its own column). A caller comparing
-	// against a file on disk has to strip that file's frontmatter first or
-	// every comparison reports a difference.
+	// content_md is the document exactly as written, frontmatter included,
+	// so the digest equals `sha256sum` of the file that was uploaded.
 	//
 	// octet_length, not length: the caller is comparing against bytes on
 	// disk, and length() counts characters.

@@ -157,8 +157,11 @@ func TestMCP_Docs_ReadHeadOnly(t *testing.T) {
 	if head["truncated"] != true {
 		t.Errorf("head_only must mark truncated=true when body exceeds preview, got %v", head["truncated"])
 	}
-	if blf, _ := head["body_length"].(float64); int(blf) != 600 {
-		t.Errorf("head_only body_length expected 600, got %v", head["body_length"])
+	if !strings.HasPrefix(preview, "---\ntitle: Head Only Test\n---\n") {
+		t.Errorf("head_only preview must start at the top of the stored document, got %q", preview[:40])
+	}
+	if blf, _ := head["body_length"].(float64); int(blf) != len(body) {
+		t.Errorf("head_only body_length expected %d, got %v", len(body), head["body_length"])
 	}
 
 	// Full read returns the complete body.
@@ -284,31 +287,55 @@ func TestMCP_Docs_Stat(t *testing.T) {
 	}
 }
 
-// The frontmatter split is the one thing that will trip callers
-// comparing a stat digest against a file on disk, so pin it.
-func TestMCP_Docs_StatDigestExcludesFrontmatter(t *testing.T) {
+// Documents are stored whole, so everything a caller compares against
+// a file on disk is the file itself: read returns its exact bytes and
+// stat hashes them. Pin it, including the blank lines after the
+// frontmatter that the old split used to eat.
+func TestMCP_Docs_StoredWholeAndStatIsFileDigest(t *testing.T) {
 	f := newMCPFixture(t, 13338, "docs-stat-fm")
 	path := "projects/" + f.projectID + "/notes/fm.md"
-	frontmatter := "---\ntitle: With frontmatter\n---\n\n"
-	body := "# With frontmatter\n\nthe body\n"
+	file := "---\ntitle: With frontmatter\ntags: [quokka]\n---\n\n\n# With frontmatter\n\nthe body\n"
 
 	f.callJSON(t, "nottario.docs.write", map[string]any{
 		"project_id": f.projectID, "path": path,
-		"content": frontmatter + body, "expected_version": 0, "message": "init",
+		"content": file, "expected_version": 0, "message": "init",
 	}, nil)
+
+	var doc map[string]any
+	f.callJSON(t, "nottario.docs.read", map[string]any{
+		"project_id": f.projectID, "path": path,
+	}, &doc)
+	if doc["content"] != file {
+		t.Errorf("read did not return the stored file byte for byte:\n got %q\nwant %q", doc["content"], file)
+	}
+	if doc["title"] != "With frontmatter" {
+		t.Errorf("title not extracted from frontmatter: %v", doc["title"])
+	}
 
 	var st map[string]any
 	f.callJSON(t, "nottario.docs.stat", map[string]any{
 		"project_id": f.projectID, "path": path,
 	}, &st)
-
-	bodyOnly := sha256.Sum256([]byte(body))
-	whole := sha256.Sum256([]byte(frontmatter + body))
-	if st["content_sha256"] != hex.EncodeToString(bodyOnly[:]) {
-		t.Errorf("digest should cover the body alone, got %v", st["content_sha256"])
+	whole := sha256.Sum256([]byte(file))
+	if st["content_sha256"] != hex.EncodeToString(whole[:]) {
+		t.Errorf("digest should be sha256 of the whole file, got %v", st["content_sha256"])
 	}
-	if st["content_sha256"] == hex.EncodeToString(whole[:]) {
-		t.Error("digest covered the frontmatter too")
+	if st["size_bytes"] != float64(len(file)) {
+		t.Errorf("size_bytes = %v, want %d", st["size_bytes"], len(file))
+	}
+
+	// The search index skips the frontmatter: "quokka" appears only
+	// there, "body" only below it.
+	for query, want := range map[string]int{"quokka": 0, "body": 1} {
+		var res struct {
+			Hits []map[string]any `json:"hits"`
+		}
+		f.callJSON(t, "nottario.docs.search", map[string]any{
+			"project_id": f.projectID, "query": query,
+		}, &res)
+		if len(res.Hits) != want {
+			t.Errorf("search %q returned %d hits, want %d", query, len(res.Hits), want)
+		}
 	}
 }
 

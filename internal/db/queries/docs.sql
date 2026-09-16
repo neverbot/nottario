@@ -24,10 +24,8 @@ FOR UPDATE;
 -- whether a write is needed at all: hash the local copy and compare,
 -- instead of reading the whole document back just to diff it.
 --
--- The digest covers content_md, which is the body WITHOUT frontmatter
--- (Write splits it off into its own column). A caller comparing
--- against a file on disk has to strip that file's frontmatter first or
--- every comparison reports a difference.
+-- content_md is the document exactly as written, frontmatter included,
+-- so the digest equals `sha256sum` of the file that was uploaded.
 --
 -- octet_length, not length: the caller is comparing against bytes on
 -- disk, and length() counts characters.
@@ -52,9 +50,10 @@ WHERE scope = sqlc.arg('scope')::text
 -- name: GetDocumentForAppend :one
 -- Same row lock as GetDocumentByPathForUpdate, but also returns the
 -- fields Append has to carry over unchanged. Appending touches only
--- the body: kind, title, description and frontmatter are whatever the
--- document already declared.
-SELECT id, current_version, kind, title, description, content_md, frontmatter
+-- the end of the document: kind, title, description, frontmatter and
+-- body_offset are whatever the document already declared.
+SELECT id, current_version, kind, title, description, content_md, frontmatter,
+       body_offset
 FROM documents
 WHERE scope = sqlc.arg('scope')::text
   AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
@@ -65,7 +64,7 @@ FOR UPDATE;
 -- name: InsertDocument :one
 INSERT INTO documents (
     scope, project_id, path, kind, title, description, content_md, frontmatter,
-    current_version, created_by_user_id, created_by_token_id,
+    body_offset, current_version, created_by_user_id, created_by_token_id,
     updated_by_user_id, updated_by_token_id
 )
 VALUES (
@@ -77,6 +76,7 @@ VALUES (
     sqlc.arg('description')::text,
     sqlc.arg('content_md')::text,
     sqlc.arg('frontmatter')::jsonb,
+    sqlc.arg('body_offset')::int,
     1,
     sqlc.narg('created_by_user_id')::uuid,
     sqlc.narg('created_by_token_id')::uuid,
@@ -96,6 +96,7 @@ SET kind = sqlc.arg('kind')::text,
     description = sqlc.arg('description')::text,
     content_md = sqlc.arg('content_md')::text,
     frontmatter = sqlc.arg('frontmatter')::jsonb,
+    body_offset = sqlc.arg('body_offset')::int,
     current_version = sqlc.arg('current_version')::int,
     updated_by_user_id = sqlc.narg('updated_by_user_id')::uuid,
     updated_by_token_id = sqlc.narg('updated_by_token_id')::uuid,

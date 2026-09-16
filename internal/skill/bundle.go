@@ -4,9 +4,8 @@
 // Resolution order for any requested path (e.g. "domains/tasks.md"):
 //
 //  1. A `documents` row with scope='global', kind='skill' and
-//     path='global/skills/<requested>'. When present, its content
-//     (frontmatter reconstructed from JSONB + body) is returned and
-//     marked Origin="global".
+//     path='global/skills/<requested>'. When present, its content is
+//     returned exactly as stored and marked Origin="global".
 //  2. Otherwise the file embedded in the binary, marked
 //     Origin="embedded".
 //
@@ -25,10 +24,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neverbot/nottario/internal/db/dbq"
-	"gopkg.in/yaml.v3"
 )
 
 //go:embed all:files
@@ -72,8 +69,7 @@ func Embedded(path string) ([]byte, error) {
 
 // Read resolves a skill file with overrides. When the user has
 // written a `kind=skill` document at `global/skills/<path>`, that
-// content is returned with frontmatter reconstructed; otherwise the
-// embedded copy.
+// content is returned as stored; otherwise the embedded copy.
 func Read(ctx context.Context, pool *pgxpool.Pool, path string) ([]byte, Origin, error) {
 	clean, err := safePath(path)
 	if err != nil {
@@ -155,41 +151,14 @@ func BundleVersion(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// readOverride looks up the document at global/skills/<path>. When
-// found, it reconstructs the markdown (frontmatter YAML + body) and
-// returns it.
+// readOverride looks up the document at global/skills/<path> and
+// returns it exactly as it was written.
 func readOverride(ctx context.Context, pool *pgxpool.Pool, path string) ([]byte, bool) {
-	row, err := dbq.New(pool).GetSkillOverride(ctx, globalSkillPrefix+path)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, false
-	}
+	content, err := dbq.New(pool).GetSkillOverride(ctx, globalSkillPrefix+path)
 	if err != nil {
 		return nil, false
 	}
-	body := row.ContentMd
-	rawFM := row.Frontmatter
-
-	// Reconstruct: if the document has a non-empty frontmatter object,
-	// emit it as YAML at the top followed by the body.
-	if len(rawFM) > 0 && string(rawFM) != "{}" {
-		var fm map[string]any
-		if err := yamlUnmarshalJSON(rawFM, &fm); err == nil && len(fm) > 0 {
-			fmYaml, err := yaml.Marshal(fm)
-			if err == nil {
-				combined := fmt.Sprintf("---\n%s---\n\n%s", string(fmYaml), body)
-				return []byte(combined), true
-			}
-		}
-	}
-	return []byte(body), true
-}
-
-// yamlUnmarshalJSON parses JSON-encoded bytes (what jsonb returns)
-// into a map[string]any. We use yaml.Unmarshal because YAML is a
-// JSON superset and the yaml.v3 decoder happens to handle JSON
-// fine; this avoids pulling in encoding/json just for this helper.
-func yamlUnmarshalJSON(raw []byte, dst *map[string]any) error {
-	return yaml.Unmarshal(raw, dst)
+	return []byte(content), true
 }
 
 // safePath rejects path traversal and leading slashes.
