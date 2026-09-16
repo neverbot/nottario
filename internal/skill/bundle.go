@@ -127,28 +127,60 @@ func List(ctx context.Context, pool *pgxpool.Pool) ([]Entry, error) {
 	return entries, nil
 }
 
-// BundleVersion returns a stable sha256 hash over the resolved bundle
-// content (overrides applied), formatted as "sha256:<hex>". Two
-// servers serving the same logical bundle agree on the same string;
-// flipping a single byte in any included file changes it. Used as a
-// quick "have I already synced this?" check on the client side.
-func BundleVersion(ctx context.Context, pool *pgxpool.Pool) (string, error) {
+// ManifestName is the checksum file shipped at the root of the bundle
+// zip. It lists every other file as `<sha256 hex>  <path>`, sorted by
+// path: the format `sha256sum` / `shasum -a 256` print and accept with
+// `-c`.
+const ManifestName = "SHA256SUMS"
+
+// File is one resolved bundle file.
+type File struct {
+	Path string
+	Data []byte
+}
+
+// Snapshot resolves every bundle file once (overrides applied) and
+// builds the manifest from exactly those bytes, so the zip and
+// bundle_version always describe the same content.
+func Snapshot(ctx context.Context, pool *pgxpool.Pool) ([]File, []byte, error) {
 	entries, err := List(ctx, pool)
+	if err != nil {
+		return nil, nil, err
+	}
+	files := make([]File, 0, len(entries))
+	var manifest strings.Builder
+	for _, e := range entries {
+		if e.Path == ManifestName {
+			// Reserved for the manifest itself; an override with this
+			// name would make the bundle describe itself.
+			continue
+		}
+		data, _, err := Read(ctx, pool, e.Path)
+		if err != nil {
+			return nil, nil, err
+		}
+		sum := sha256.Sum256(data)
+		fmt.Fprintf(&manifest, "%s  %s\n", hex.EncodeToString(sum[:]), e.Path)
+		files = append(files, File{Path: e.Path, Data: data})
+	}
+	return files, []byte(manifest.String()), nil
+}
+
+// VersionOf returns the bundle_version for a manifest: "sha256:" plus
+// the SHA-256 of the SHA256SUMS file. An installed bundle checks itself
+// with `shasum -a 256 <dir>/SHA256SUMS`; it is not a hash of the zip.
+func VersionOf(manifest []byte) string {
+	sum := sha256.Sum256(manifest)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// BundleVersion returns the version of the bundle currently served.
+func BundleVersion(ctx context.Context, pool *pgxpool.Pool) (string, error) {
+	_, manifest, err := Snapshot(ctx, pool)
 	if err != nil {
 		return "", err
 	}
-	h := sha256.New()
-	for _, e := range entries {
-		body, _, err := Read(ctx, pool, e.Path)
-		if err != nil {
-			return "", err
-		}
-		// Length-prefix each (path, body) so re-ordering or splitting
-		// can never collide with another arrangement.
-		_, _ = fmt.Fprintf(h, "%d\x00%s\x00%d\x00", len(e.Path), e.Path, len(body))
-		_, _ = h.Write(body)
-	}
-	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+	return VersionOf(manifest), nil
 }
 
 // readOverride looks up the document at global/skills/<path> and

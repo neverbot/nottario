@@ -106,7 +106,9 @@ discipline, sqlc conventions). Installation is a single tool call:
 
 `nottario.skill.install` returns a small JSON descriptor with a
 short-lived signed URL for the bundle zip, the install plan, and a
-`bundle_version` hash for cache short-circuiting. The bundle content
+`bundle_version`: the SHA-256 of the `SHA256SUMS` file inside the zip,
+which the agent compares against its installed copy before
+downloading anything. The bundle content
 **does not flow through the response** — the agent fetches the URL
 out of band and unzips into the local skill directory using whatever
 HTTP and unzip tools its host exposes. Prefer

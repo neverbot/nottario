@@ -39,6 +39,9 @@ func SkillHandler(pool *pgxpool.Pool) http.Handler {
 	})
 }
 
+// bundleZipTime is the modification time stamped on every zip entry.
+var bundleZipTime = time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
+
 // SkillZipHandler streams the entire current skill tree (with
 // overrides applied) as a single zip archive. Two auth modes:
 //
@@ -66,31 +69,33 @@ func SkillZipHandler(pool *pgxpool.Pool, sessionKey []byte) http.Handler {
 			}
 		}
 
-		entries, err := skill.List(r.Context(), pool)
+		files, manifest, err := skill.Snapshot(r.Context(), pool)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Disposition", `attachment; filename="nottario-skill.zip"`)
+		w.Header().Set("X-Nottario-Bundle-Version", skill.VersionOf(manifest))
 
 		zw := zip.NewWriter(w)
 		defer zw.Close()
-		now := time.Now()
-		for _, e := range entries {
-			data, _, err := skill.Read(r.Context(), pool, e.Path)
-			if err != nil {
-				continue
-			}
+		files = append(files, skill.File{Path: skill.ManifestName, Data: manifest})
+		for _, f := range files {
+			// A fixed timestamp keeps the archive byte-identical for the
+			// same content. Still, compare bundle_version against
+			// SHA256SUMS, never against a hash of the zip.
 			fw, err := zw.CreateHeader(&zip.FileHeader{
-				Name:     e.Path,
+				Name:     f.Path,
 				Method:   zip.Deflate,
-				Modified: now,
+				Modified: bundleZipTime,
 			})
 			if err != nil {
-				continue
+				return
 			}
-			_, _ = fw.Write(data)
+			if _, err := fw.Write(f.Data); err != nil {
+				return
+			}
 		}
 	})
 }

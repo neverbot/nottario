@@ -25,12 +25,12 @@ const skillInstallTTL = 5 * time.Minute
 // response (rather than relying on the agent having read the skill
 // bundle first) so that the very first install — when the bundle is
 // not yet on disk — still knows what to do.
-const skillInstallInstructions = "Fetch the zip from download_url using any HTTP tool you have (curl, wget, Invoke-WebRequest, Python urllib, Node fetch — pick whatever works on the host). Extract its contents into preferred_dir, overwriting existing files. If you can't write there, fall back to fallback_dir. Create the directory if it doesn't exist. The bundle is loaded by the client (Claude Code, etc.) at session start, so a session restart is required for the new skills to take effect. The download_url is signed and expires in 5 minutes."
+const skillInstallInstructions = "First check whether you already have this bundle: hash the SHA256SUMS file inside the installed directory (sha256sum <dir>/SHA256SUMS, or shasum -a 256) and compare \"sha256:<hex>\" with bundle_version. Equal means up to date: stop, nothing to download or restart. bundle_version is NOT a hash of the zip or of any single skill file; only SHA256SUMS. If it differs or SHA256SUMS is missing, fetch the zip from download_url using any HTTP tool you have (curl, wget, Invoke-WebRequest, Python urllib, Node fetch). Replace the contents of preferred_dir with the zip contents (files not listed in SHA256SUMS are leftovers of an older bundle). If you can't write there, fall back to fallback_dir. Create the directory if it doesn't exist. Optionally verify with sha256sum -c SHA256SUMS run inside the directory. The client loads skills at session start, so tell the human to restart it for the new skills to take effect. The download_url is signed and expires in 5 minutes."
 
 func registerSkill(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.skill.install",
-		Description: "Returns {download_url, format, bundle_version, install} for the skill bundle zip. The agent fetches the URL (5-min HMAC TTL, no Authorization needed), unzips into install.preferred_dir, and reminds the human to restart their client. Bundle bytes never traverse the MCP response.",
+		Description: "Returns {download_url, format, bundle_version, install} for the skill bundle zip. bundle_version = \"sha256:\" + SHA-256 of the SHA256SUMS file shipped inside the zip: compare it with that file in your installed directory and skip the download when equal. Otherwise fetch the URL (5-min HMAC TTL, no Authorization needed), unzip into install.preferred_dir, and remind the human to restart their client. Bundle bytes never traverse the MCP response.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ SkillInstallInput) (*sdk.CallToolResult, any, error) {
 		version, err := skill.BundleVersion(ctx, d.Pool)
 		if err != nil {
@@ -50,6 +50,7 @@ func registerSkill(server *sdk.Server, d Deps) {
 			"bundle_version": version,
 			"install": map[string]any{
 				"name":          "nottario",
+				"manifest":      skill.ManifestName,
 				"preferred_dir": "<workspace>/.claude/skills/nottario",
 				"fallback_dir":  "~/.claude/skills/nottario",
 				"instructions":  skillInstallInstructions,

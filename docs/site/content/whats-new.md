@@ -12,6 +12,15 @@ are cut on demand.
 
 ## 2026-09-17
 
+- **Skill bundle versions can be checked from disk.** The bundle zip
+  now ships a `SHA256SUMS` file, and `bundle_version` from
+  `nottario.skill.install` is the SHA-256 of that file, not of the zip.
+  An agent hashes `SHA256SUMS` in its installed directory and skips the
+  download when it matches; `sha256sum -c SHA256SUMS` verifies every
+  installed file. Bundles installed before this change have no
+  `SHA256SUMS` and will be reinstalled once. See
+  [skills](/skills/).
+
 - **Documents are stored exactly as written.** A document's frontmatter
   now stays in the document: `docs.read`, version history, skill
   overrides and the upload flow all return the same bytes that were

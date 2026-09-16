@@ -37,6 +37,7 @@ Response shape:
   "bundle_version": "sha256:…",
   "install": {
     "name": "nottario",
+    "manifest": "SHA256SUMS",
     "preferred_dir": "<workspace>/.claude/skills/nottario",
     "fallback_dir":  "~/.claude/skills/nottario",
     "instructions":  "Fetch the URL with any HTTP tool, unzip into preferred_dir, restart the client."
@@ -58,10 +59,29 @@ contributor gets it); the home path (`~/.claude/skills/nottario/`)
 is the fallback when you work on Nottario across unrelated checkouts
 or do not want to version the bundle.
 
-`bundle_version` is a stable sha256 over the resolved bundle (with
-overrides applied). Stash it next to the installed files; on the next
-install call, if it matches what is on disk, skip the download
-entirely.
+**Check before downloading.** `bundle_version` is `sha256:` followed
+by the SHA-256 of the `SHA256SUMS` file that ships inside the zip. It
+is **not** a hash of the zip, of `skill.md`, or of any other single
+file. To know whether you are up to date, hash that one file where the
+bundle is installed:
+
+```bash
+echo "sha256:$(sha256sum "$DIR/SHA256SUMS" | cut -d' ' -f1)"   # Linux
+echo "sha256:$(shasum -a 256 "$DIR/SHA256SUMS" | cut -d' ' -f1)" # macOS
+```
+
+```powershell
+"sha256:" + (Get-FileHash "$DIR\SHA256SUMS" -Algorithm SHA256).Hash.ToLower()
+```
+
+Equal to `bundle_version`: stop, there is nothing to download and no
+restart to ask for. Different, or `SHA256SUMS` missing (a first
+install, or a bundle from before the manifest existed): install.
+
+`SHA256SUMS` lists every other file as `<sha256>  <path>`, the format
+`sha256sum -c` reads, so `(cd "$DIR" && sha256sum -c SHA256SUMS)`
+verifies an install and reveals files edited by hand. Files in the
+directory that it does not list are leftovers of an older bundle.
 
 The session has to be restarted after a sync — most agent hosts read
 the skill bundle once at session start and do not re-scan. The agent

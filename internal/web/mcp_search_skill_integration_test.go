@@ -3,6 +3,8 @@ package web
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"strings"
@@ -105,15 +107,17 @@ func TestMCP_SkillInstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("response is not a valid zip: %v", err)
 	}
-	foundSkillMD := false
-	for _, e := range zr.File {
-		if e.Name == "skill.md" {
-			foundSkillMD = true
-			break
-		}
+	assertBundleVerifiable(t, zr, resp.BundleVersion)
+
+	// Same content, same bytes: a second download is identical.
+	again, err := http.Get(resp.DownloadURL)
+	if err != nil {
+		t.Fatalf("GET again: %v", err)
 	}
-	if !foundSkillMD {
-		t.Errorf("zip is missing skill.md")
+	body2, _ := io.ReadAll(again.Body)
+	_ = again.Body.Close()
+	if !bytes.Equal(body, body2) {
+		t.Error("two downloads of the same bundle differ byte-wise")
 	}
 
 	// Tampered signature → 401.
@@ -125,5 +129,55 @@ func TestMCP_SkillInstall(t *testing.T) {
 	_ = httpResp.Body.Close()
 	if httpResp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("tampered URL returned %d, want 401", httpResp.StatusCode)
+	}
+}
+
+// assertBundleVerifiable checks the bundle the way an agent does from
+// disk: SHA256SUMS hashes to bundle_version, and it lists every other
+// file in the zip with its correct digest.
+func assertBundleVerifiable(t *testing.T, zr *zip.Reader, bundleVersion string) {
+	t.Helper()
+	contents := map[string][]byte{}
+	for _, e := range zr.File {
+		rc, err := e.Open()
+		if err != nil {
+			t.Fatalf("open %s: %v", e.Name, err)
+		}
+		data, _ := io.ReadAll(rc)
+		_ = rc.Close()
+		contents[e.Name] = data
+	}
+	if _, ok := contents["skill.md"]; !ok {
+		t.Error("zip is missing skill.md")
+	}
+	manifest, ok := contents["SHA256SUMS"]
+	if !ok {
+		t.Fatal("zip is missing SHA256SUMS")
+	}
+	sum := sha256.Sum256(manifest)
+	if got := "sha256:" + hex.EncodeToString(sum[:]); got != bundleVersion {
+		t.Errorf("sha256(SHA256SUMS) = %s, bundle_version = %s", got, bundleVersion)
+	}
+	listed := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSuffix(string(manifest), "\n"), "\n") {
+		digest, name, found := strings.Cut(line, "  ")
+		if !found {
+			t.Fatalf("manifest line is not sha256sum format: %q", line)
+		}
+		data, ok := contents[name]
+		if !ok {
+			t.Errorf("manifest lists %s, which is not in the zip", name)
+			continue
+		}
+		fileSum := sha256.Sum256(data)
+		if hex.EncodeToString(fileSum[:]) != digest {
+			t.Errorf("manifest digest for %s does not match its content", name)
+		}
+		listed[name] = true
+	}
+	for name := range contents {
+		if name != "SHA256SUMS" && !listed[name] {
+			t.Errorf("%s is in the zip but not in SHA256SUMS", name)
+		}
 	}
 }
