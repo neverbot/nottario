@@ -733,25 +733,8 @@ class NottarioDocsPage extends LitElement {
   startEdit() {
     if (!this.selected) return;
     this.editing = true;
-    const fm = this.selected.frontmatter || {};
-    let draft = '';
-    if (Object.keys(fm).length) {
-      const lines = ['---'];
-      for (const [k, v] of Object.entries(fm)) {
-        if (Array.isArray(v)) {
-          lines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(', ')}]`);
-        } else if (typeof v === 'string') {
-          lines.push(`${k}: ${v}`);
-        } else {
-          lines.push(`${k}: ${JSON.stringify(v)}`);
-        }
-      }
-      lines.push('---');
-      draft = lines.join('\n') + '\n\n' + (this.selected.content || '');
-    } else {
-      draft = this.selected.content || '';
-    }
-    this.draft = draft;
+    // content is the stored document, frontmatter included: edit it as is.
+    this.draft = this.selected.content || '';
   }
 
   async saveEdit(e) {
