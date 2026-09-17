@@ -32,10 +32,14 @@ The MCP server exposes one tool per natural verb. Highlights:
 - `nottario.tasks.list` — list tasks, with filters by state, type,
   assignee, role, parent, cycle.
 - `nottario.tasks.claim_next` — atomic "pick the next eligible
-  task and assign it to me". Use this instead of the legacy
-  three-step pattern.
+  task and assign it to me", in one locked statement.
 - `nottario.tasks.claim` — atomic claim by id.
+- `nottario.tasks.create` — files a task; `claim: true` creates it
+  already assigned to the caller and in `doing`, for work the agent
+  is about to start.
 - `nottario.tasks.set_state` — transitions with precondition checks.
+  Moving a task out of `todo` assigns it to the caller when it has no
+  assignee, so nothing sits in `doing` or reaches `done` unowned.
 - `nottario.tasks.add_comment`, `nottario.tasks.link_commit` — keep
   the audit trail honest.
 - `nottario.docs.read`, `nottario.docs.write` — versioned markdown

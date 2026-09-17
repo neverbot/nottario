@@ -75,7 +75,7 @@ Cycles is a small domain — most of its discipline comes from how
 `tasks.next`, `tasks.claim_next` and `tasks.list_priorities` all
 default to the project's active cycle when `cycle_id` is omitted.
 Sending it explicitly only adds noise to the call and likely a
-round-trip to `cycles.current` you used to look it up. Just omit it.
+round-trip to `cycles.current`. Just omit it.
 
 **`cycles.current` once per session, max.** The active cycle changes
 at most once per sprint cadence (weeks). Cache its id locally if you

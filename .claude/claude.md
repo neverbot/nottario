@@ -108,7 +108,7 @@ instance, four corollaries follow:
 - **Concurrency model (multi-agent safe):**
   - `nottario.tasks.claim_next` / `nottario.tasks.claim` are atomic
     (`SELECT … FOR UPDATE SKIP LOCKED` and per-row locks). Never use
-    the legacy three-step `next + update + set_state` pattern.
+    the racy `next + update + set_state` pattern.
   - `SetState(done)` runs inside a transaction with `FOR UPDATE` on
     the task row + precondition check. `AddDependency` takes a
     project-scoped `pg_advisory_xact_lock` so concurrent edits across
@@ -225,9 +225,11 @@ git and use whatever backlog your fork prefers.
 - **Skill-bundle edits go under `target_role = backend`**, not
   frontend. They're operational instructions for agents using the
   MCP server, not UI work.
-- **Self-assign before doing.** When picking up a task, set
-  `assignee_user_id = your whoami.user_id` BEFORE calling
-  `set_state doing`. Otherwise the task sits doing with no owner.
+- **Claim the work, don't let the server do it for you.** Take a task
+  with `claim` / `claim_next`, or file it already yours with
+  `tasks.create { claim: true }` when you are about to start on it.
+  Moving an unowned task out of `todo` assigns it to you anyway, but
+  that is a safety net for a step you skipped.
 - **Use the MCP for task CRUD/state transitions**, not direct SQL.
   SQL is for read-only inspection or bug-recovery only.
 - **Link commits before closing a task.** Whenever the work landed
@@ -242,9 +244,9 @@ git and use whatever backlog your fork prefers.
   documentation-only tasks legitimately have no commit; everything
   else does.
 - **Atomic pickup:** call `nottario.tasks.claim_next` (no filter or
-  with role/assignee) or `nottario.tasks.claim` (specific id). The
-  legacy three-call pattern (`next` + `update` + `set_state`) is
-  racy and disabled by convention — `nottario.tasks.next` is now a
+  with role/assignee) or `nottario.tasks.claim` (specific id). Never
+  pick up with `next` + `update` + `set_state`: another agent can take
+  the task between any two of those calls. `nottario.tasks.next` is a
   read-only preview.
 - **Default priority is bucket `medium` per project.** Prefer
   `priority_key` over raw integers; the buckets live in

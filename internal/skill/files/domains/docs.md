@@ -178,9 +178,10 @@ The conflict shape is:
   "message": "re-read the document and retry with the latest current_version" }
 ```
 
-Omitting `expected_version` is **deprecated**: the server still
-accepts the write but logs a warning, and you're racing whoever else
-might be editing the same path. Don't.
+**Never omit `expected_version`.** The server still accepts a write
+without it, so nothing stops you, but then you are overwriting
+whatever is there — including an edit somebody made between your read
+and your write, which disappears with no conflict and no trace.
 
 Always include a short `message` explaining *why* — like a commit
 message. It's stored on the version row and helps future readers.
@@ -260,8 +261,8 @@ stale, returning the same `version_conflict` shape without a URL.
 Soft delete: the row stays in `document_versions` so history is
 preserved. Re-writing the same path resurrects the document with the
 next version number. Same `expected_version` semantics as `write`:
-pass the `current_version` from your most recent read; omitting it is
-deprecated and logs a warning.
+pass the `current_version` from your most recent read, and never omit
+it — a delete that races another edit destroys it silently.
 
 ### `nottario.docs.history`, `nottario.docs.read_version`
 

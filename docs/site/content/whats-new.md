@@ -12,6 +12,17 @@ are cut on demand.
 
 ## 2026-09-17
 
+- **No task reaches `doing` or `done` without an owner.** Moving a task
+  out of `todo` now assigns it to whoever moved it when it has no
+  assignee, through MCP or the web, so agents that skipped the claim
+  step stop leaving ownerless rows behind. An existing assignee is
+  never replaced, and sending a task back to `todo` clears the owner as
+  before. `nottario.tasks.create` also takes `claim: true`, which
+  creates a task already assigned to the caller and in `doing` — the
+  one-call form of "I am filing the work I am about to start". Note
+  for humans: dragging an unassigned card in the Kanban now makes it
+  yours. See [the MCP server](/mcp/).
+
 - **Skill bundle versions can be checked from disk.** The bundle zip
   now ships a `SHA256SUMS` file, and `bundle_version` from
   `nottario.skill.install` is the SHA-256 of that file, not of the zip.

@@ -57,6 +57,22 @@ If you need the role catalogue (to assign to "any backend"), call
 
 ## 3. Work a task end-to-end
 
+**Two rules hold for every task, however it came to exist:**
+
+1. **A task you are working on is assigned to you.** Take it with
+   `tasks.claim` / `claim_next`, or, when you are filing work you are
+   about to start, with `tasks.create { claim: true }` — one call that
+   creates it already yours and in `doing`. The server assigns you
+   anyway when you move an unowned task out of `todo`, but that is a
+   safety net catching a step you skipped, not the way to work.
+2. **A task that reaches `done` carries a closing comment**, and the
+   commit links when the work produced commits. `tasks.close` does the
+   comment, the links and the transition in one call.
+
+They apply just as much to the common case — you are working, you file
+the task for what you are doing, you finish it and close it — as to
+taking something off the backlog.
+
 ### Preflight: surface your own `doing` first
 
 Whenever the human asks "what's next", "cuáles son las siguientes
@@ -107,10 +123,10 @@ The loop when the human says "carry on" or "do the next thing":
    rules: `domains/tasks.md` §"Always leave a closing comment".
 4. **Close the loop** (see below), then go back to step 1.
 
-The pre-`tasks.close` pattern (separate `link_commit` + `add_comment`
-+ `set_state`) still works — `tasks.close` is the preferred path
-because it's one round-trip and rolls back cleanly on precondition
-failure.
+**Do not close a task with separate `link_commit` + `add_comment` +
+`set_state` calls.** They still work, so nothing stops you, but a
+failure part-way through leaves a comment and links on a task that
+never closed. `tasks.close` is one round-trip and rolls back cleanly.
 
 When the human narrows the pickup ("the next task about topic X" or
 "work on this id"), discover candidates with `nottario.tasks.list` and
@@ -174,6 +190,12 @@ nottario.tasks.create {
   target_role_id: "..."   // optional: route to a role rather than a person
 }
 ```
+
+That shape files work for later: it lands in `todo` with no owner,
+which is right for something you are not about to do. **When you file
+work you are starting now, add `claim: true`** — the task is created
+assigned to you and in `doing`, and you never end up with a row that
+went from `todo` to `done` with nobody on it.
 
 Pick `type`:
 

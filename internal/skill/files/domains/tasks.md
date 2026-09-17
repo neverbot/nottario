@@ -86,8 +86,8 @@ Ordering: `priority DESC, created_at ASC`.
 - `cursor` — opaque string. Empty/omitted ⇒ first page. Otherwise pass
   the previous response's `next_cursor`.
 
-Each response is now `{tasks, next_cursor, has_more}` (instead of just
-`{tasks}`). The canonical walk loops while `has_more`:
+Each response is `{tasks, next_cursor, has_more}`. The canonical walk
+loops while `has_more`:
 
 ```text
 cursor = ""
@@ -173,8 +173,24 @@ occupy; anything outside it is rejected by `tasks.create` /
 
 ### `nottario.tasks.create`
 
-Defaults: `state=todo`, `type=task`, `priority=50`. To create a
-feature with subtasks:
+Defaults: `state=todo`, `type=task`, `priority=50`.
+
+**`claim: true` when the work is yours and starts now.** It creates
+the task already assigned to you and in `doing`, in one call:
+
+```text
+nottario.tasks.create {
+  project_id, title, type, target_role_id, description,
+  claim: true,
+}
+```
+
+Use it every time you file work you are about to start, which is most
+of the tasks you create yourself. Leave it out only when you are
+filing something for the backlog, for somebody else, or for later:
+those are the tasks that belong in `todo` with no owner.
+
+To create a feature with subtasks:
 
 ```text
 1. create(type='feature', title='Sign in with Google')        → F
@@ -251,18 +267,27 @@ Mutates the fields you pass. Notable nuances:
 
 ### `nottario.tasks.set_state`
 
-The only correct way to move a task between states. It manages
-`actual_start` and `actual_end` for you:
+Moves a task between states and manages `actual_start` /
+`actual_end` for you:
 
-- `todo` → clears both.
+- `todo` → clears both, and the task goes back to having no owner.
 - `doing` → fills `actual_start` (only if currently null).
 - `done` → fills `actual_end` and preserves any earlier `actual_start`.
 
-For terminal transitions (`done` and `wont_do`) prefer
-`nottario.tasks.close` over `set_state` — it bundles the closing
-comment and the commit links into the same transaction, so a
-precondition failure cannot leave an orphan comment behind. See
-`tasks.close` below.
+**Moving a task out of `todo` makes it yours if nobody owns it.** The
+server assigns you as it moves, so a task can never sit in `doing`,
+or reach `done`, with nobody answering for it. It never takes a task
+away from an existing assignee. This is a safety net, not the
+intended route: claim the work deliberately with `tasks.claim`,
+`claim_next`, or `create { claim: true }`, so the assignment says "I
+took this" rather than "the server noticed nobody had".
+
+**For `done` and `wont_do`, use `nottario.tasks.close` instead.** It
+carries the closing comment and the commit links in the same
+transaction, so a precondition failure cannot leave an orphan comment
+behind. `set_state done` works and is not going away, but on its own
+it closes a task with no record of what shipped — if you use it, you
+still owe the comment and the commit links.
 
 ### `nottario.tasks.close`
 
@@ -365,10 +390,13 @@ nottario.tasks.close {
 `tasks.close` runs the commit links, the comment and the state
 transition inside one Postgres transaction. On a precondition failure
 (`state=done` blocked by an open dependency) the whole thing rolls
-back — no orphan comment, no orphan commit link. That is the reason
-to prefer it over the legacy three-call pattern (`link_commit` +
-`add_comment` + `set_state`), which is still supported but leaves the
-caller to clean up the half-applied state itself.
+back — no orphan comment, no orphan commit link. 
+
+**Do not close a task with `link_commit` + `add_comment` +
+`set_state`.** Those three calls still work, and a failure half-way
+through leaves a comment and links on a task that never closed, which
+you then have to clean up by hand. One `close` call does the same
+thing atomically and costs one response instead of three.
 
 For ordinary close-as-no-code paths (a `wont_do`, a documentation
 task) just drop `commits` and the comment carries the story.
@@ -445,13 +473,16 @@ Two shapes of "new work" both go through `nottario.tasks.create`
 2. **Substantive new work the user explicitly asks you to do.**
    "Let's add Biome", "do the design review of the Kanban", "rename
    `content_md` to `content`". Even when the user is telling you to
-   *act*, the act starts with `tasks.create` → `claim` → work.
+   *act*, the act starts with `tasks.create { claim: true }` → work.
    Skipping the row because "the request is obviously the task"
    leaves the backlog blind: the work has no handle for tracking, no
    audit trail, no link to the resulting commits. The exception is
    conversational tweaks that fit in a single small commit and need
    no follow-up (a typo fix in a doc, a one-line CSS adjustment) —
    those can land directly.
+
+File the first shape plain — it goes to the backlog — and the second
+with `claim: true` when you start on it right away.
 
 Both shapes need the right `target_role`, an honest description,
 dependencies linked if relevant, and a split into role children when
@@ -517,12 +548,12 @@ If the human hands you an id, call `claim` directly. Read the
 conflict shape on failure and surface it to the human ("that task is
 already in doing assigned to X", "preconditions still pending: …").
 
-#### Why the old three-call pattern is gone
+#### Never pick up a task with `next` + `update` + `set_state`
 
-The historical `tasks.next` + `tasks.update {assignee}` + `set_state
-doing` sequence is **racy**: between any two calls another agent can
-slip in and claim the same task. Use `claim_next` / `claim` instead;
-`tasks.next` is a preview, never a pickup.
+That sequence is **racy**: between any two of those calls another
+agent can slip in and take the same task, and you both end up working
+on it. `tasks.next` is a preview, never a pickup. Take work with
+`claim_next` or `claim`, which do it in one locked statement.
 
 If a task you want is already claimed by another user: leave a
 `nottario.tasks.add_comment` or escalate to the human. Do not
@@ -608,13 +639,12 @@ past. Comment only when you have something a future reader actually
 needs: a closing summary, a mid-work decision you had to make, a
 discovered blocker.
 
-**Close in one call when possible.** `tasks.close` collapses
-`link_commit` + `add_comment` + `set_state` into a single round-trip
-with one response. The slim ack is `{task, comment_id?,
-linked_commit_count}` — you don't pay for repeated Task echoes between
-the three legacy calls. Falling back to the three-call form is only
-worth it when the work was big enough that the closing comment
-genuinely needs to be written in stages.
+**Close in one call.** `tasks.close` collapses `link_commit` +
+`add_comment` + `set_state` into a single round-trip with one
+response. The slim ack is `{task, comment_id?, linked_commit_count}` —
+you don't pay for a Task echo per call. Splitting it up is only worth
+it when the work was big enough that the closing comment genuinely
+needs to be written in stages.
 
 **Don't re-`tasks.get` what you already know.** If the previous tool
 call returned a task with `id` X and `updated_at` Y, don't fetch it
