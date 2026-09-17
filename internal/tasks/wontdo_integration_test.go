@@ -45,7 +45,7 @@ func TestWontDo_Transitions(t *testing.T) {
 
 	t.Run("todo -> wont_do sets actual_end", func(t *testing.T) {
 		tk := mk("cancelled from todo")
-		got, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo)
+		got, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo, nil)
 		if err != nil {
 			t.Fatalf("SetState wont_do: %v", err)
 		}
@@ -62,14 +62,14 @@ func TestWontDo_Transitions(t *testing.T) {
 
 	t.Run("doing -> wont_do preserves actual_start", func(t *testing.T) {
 		tk := mk("cancelled mid-flight")
-		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDoing); err != nil {
+		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDoing, nil); err != nil {
 			t.Fatalf("SetState doing: %v", err)
 		}
 		started, _ := tasks.Get(ctx, pool, tk.ID)
 		if started.ActualStart == nil {
 			t.Fatalf("expected actual_start set after doing")
 		}
-		got, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo)
+		got, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo, nil)
 		if err != nil {
 			t.Fatalf("SetState wont_do: %v", err)
 		}
@@ -86,10 +86,10 @@ func TestWontDo_Transitions(t *testing.T) {
 
 	t.Run("wont_do -> todo clears timestamps (re-open)", func(t *testing.T) {
 		tk := mk("reopened")
-		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo); err != nil {
+		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo, nil); err != nil {
 			t.Fatalf("SetState wont_do: %v", err)
 		}
-		got, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateTodo)
+		got, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateTodo, nil)
 		if err != nil {
 			t.Fatalf("SetState todo (re-open): %v", err)
 		}
@@ -103,10 +103,10 @@ func TestWontDo_Transitions(t *testing.T) {
 
 	t.Run("done -> wont_do is refused", func(t *testing.T) {
 		tk := mk("shipped")
-		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDone); err != nil {
+		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDone, nil); err != nil {
 			t.Fatalf("SetState done: %v", err)
 		}
-		_, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo)
+		_, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo, nil)
 		var terr *tasks.ErrInvalidStateTransition
 		if !errors.As(err, &terr) {
 			t.Fatalf("expected ErrInvalidStateTransition, got %v", err)
@@ -122,10 +122,10 @@ func TestWontDo_Transitions(t *testing.T) {
 
 	t.Run("wont_do -> done is refused", func(t *testing.T) {
 		tk := mk("cancelled then promoted")
-		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo); err != nil {
+		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo, nil); err != nil {
 			t.Fatalf("SetState wont_do: %v", err)
 		}
-		_, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDone)
+		_, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDone, nil)
 		var terr *tasks.ErrInvalidStateTransition
 		if !errors.As(err, &terr) {
 			t.Fatalf("expected ErrInvalidStateTransition, got %v", err)
@@ -166,16 +166,16 @@ func TestWontDo_DependencyPrecondition(t *testing.T) {
 	}
 
 	// Cannot close B yet — A is still todo.
-	if _, err := tasks.SetState(ctx, pool, b.ID, tasks.StateDone); err == nil {
+	if _, err := tasks.SetState(ctx, pool, b.ID, tasks.StateDone, nil); err == nil {
 		t.Fatalf("expected unresolved-precondition error, got nil")
 	}
 
 	// Cancel A. B should now be closable as done because wont_do
 	// upstreams count as closed for the precondition check.
-	if _, err := tasks.SetState(ctx, pool, a.ID, tasks.StateWontDo); err != nil {
+	if _, err := tasks.SetState(ctx, pool, a.ID, tasks.StateWontDo, nil); err != nil {
 		t.Fatalf("SetState A wont_do: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, b.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, b.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState B done after upstream wont_do: %v", err)
 	}
 }
@@ -217,7 +217,7 @@ func TestWontDo_FeatureRollup(t *testing.T) {
 		TargetRoleID: &roleID,
 	}, by)
 
-	if _, err := tasks.SetState(ctx, pool, c1.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, c1.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState c1 done: %v", err)
 	}
 	// Parent should still be open: c2 is still todo.
@@ -225,7 +225,7 @@ func TestWontDo_FeatureRollup(t *testing.T) {
 	if got.State == tasks.StateDone {
 		t.Fatalf("parent rolled up too early — c2 still open")
 	}
-	if _, err := tasks.SetState(ctx, pool, c2.ID, tasks.StateWontDo); err != nil {
+	if _, err := tasks.SetState(ctx, pool, c2.ID, tasks.StateWontDo, nil); err != nil {
 		t.Fatalf("SetState c2 wont_do: %v", err)
 	}
 	got, _ = tasks.Get(ctx, pool, parent.ID)
@@ -254,7 +254,7 @@ func TestWontDo_ClaimNextSkips(t *testing.T) {
 		Title:        "cancelled candidate",
 		TargetRoleID: &roleID,
 	}, by)
-	if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo); err != nil {
+	if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateWontDo, nil); err != nil {
 		t.Fatalf("SetState wont_do: %v", err)
 	}
 	_, err := tasks.Next(ctx, pool, tasks.NextFilter{ProjectID: p.ID})

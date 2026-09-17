@@ -50,10 +50,10 @@ func TestEndCycle_BasicMove(t *testing.T) {
 	tDoing := mk("goes-doing")
 	tDone := mk("goes-done")
 
-	if _, err := tasks.SetState(ctx, pool, tDoing.ID, tasks.StateDoing); err != nil {
+	if _, err := tasks.SetState(ctx, pool, tDoing.ID, tasks.StateDoing, nil); err != nil {
 		t.Fatalf("SetState doing: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, tDone.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, tDone.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState done: %v", err)
 	}
 
@@ -144,13 +144,13 @@ func TestEndCycle_CascadesPartialFeature(t *testing.T) {
 	c2 := mkChild("c2")
 	c3 := mkChild("c3")
 
-	if _, err := tasks.SetState(ctx, pool, c1.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, c1.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState c1 done: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, c2.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, c2.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState c2 done: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, c3.ID, tasks.StateDoing); err != nil {
+	if _, err := tasks.SetState(ctx, pool, c3.ID, tasks.StateDoing, nil); err != nil {
 		t.Fatalf("SetState c3 doing: %v", err)
 	}
 
@@ -232,10 +232,10 @@ func TestEndCycle_LeavesFullyDoneFeatureAlone(t *testing.T) {
 	c1 := mkChild("c1")
 	c2 := mkChild("c2")
 
-	if _, err := tasks.SetState(ctx, pool, c1.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, c1.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState c1 done: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, c2.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, c2.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState c2 done: %v", err)
 	}
 
@@ -248,10 +248,10 @@ func TestEndCycle_LeavesFullyDoneFeatureAlone(t *testing.T) {
 		t.Fatalf("Get feature post-children: %v", err)
 	}
 	if fGot.State != tasks.StateDone {
-		if _, err := tasks.SetState(ctx, pool, feature.ID, tasks.StateDoing); err != nil {
+		if _, err := tasks.SetState(ctx, pool, feature.ID, tasks.StateDoing, nil); err != nil {
 			t.Fatalf("force feature doing: %v", err)
 		}
-		if _, err := tasks.SetState(ctx, pool, feature.ID, tasks.StateDone); err != nil {
+		if _, err := tasks.SetState(ctx, pool, feature.ID, tasks.StateDone, nil); err != nil {
 			t.Fatalf("force feature done: %v", err)
 		}
 	}

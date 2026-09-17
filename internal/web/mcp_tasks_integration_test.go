@@ -492,3 +492,57 @@ func TestMCP_Tasks_ListClosedDefault(t *testing.T) {
 		t.Errorf("state=wont_do scope failed, got %+v", got)
 	}
 }
+
+// The two paths an agent takes when it files work it is doing itself:
+// create with claim, or create plain and move it later. Neither may
+// leave a task without an owner.
+func TestMCP_Tasks_OwnershipWithoutClaimCall(t *testing.T) {
+	f := newMCPFixture(t, 13381, "tasks-ownership")
+
+	var claimed map[string]any
+	f.callJSON(t, "nottario.tasks.create", map[string]any{
+		"project_id": f.projectID,
+		"title":      "filed and started in one call",
+		"claim":      true,
+	}, &claimed)
+	if claimed["state"] != "doing" || claimed["assignee_user_id"] != f.userID {
+		t.Errorf("claim=true create: state=%v assignee=%v, want doing / %s", claimed["state"], claimed["assignee_user_id"], f.userID)
+	}
+
+	var plain map[string]any
+	f.callJSON(t, "nottario.tasks.create", map[string]any{
+		"project_id": f.projectID,
+		"title":      "moved without claiming",
+	}, &plain)
+	id, _ := plain["id"].(string)
+	if plain["assignee_user_id"] != nil {
+		t.Fatalf("a plain create should not assign anyone: %+v", plain)
+	}
+
+	var moved map[string]any
+	f.callJSON(t, "nottario.tasks.set_state", map[string]any{
+		"project_id": f.projectID,
+		"task_id":    id,
+		"state":      "doing",
+	}, &moved)
+	if moved["assignee_user_id"] != f.userID {
+		t.Errorf("set_state doing left the task unowned: %+v", moved)
+	}
+
+	// And the same through close, on a task nobody ever claimed.
+	var third map[string]any
+	f.callJSON(t, "nottario.tasks.create", map[string]any{
+		"project_id": f.projectID,
+		"title":      "closed without claiming",
+	}, &third)
+	var closed map[string]any
+	f.callJSON(t, "nottario.tasks.close", map[string]any{
+		"project_id": f.projectID,
+		"task_id":    third["id"],
+		"comment":    "done in passing",
+	}, &closed)
+	task, _ := closed["task"].(map[string]any)
+	if task == nil || task["assignee_user_id"] != f.userID || task["state"] != "done" {
+		t.Errorf("close left the task unowned: %+v", closed)
+	}
+}

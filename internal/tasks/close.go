@@ -97,7 +97,7 @@ func Close(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, p ClosePar
 		}
 	}
 
-	if err := setStateTx(ctx, tx, taskID, p.State); err != nil {
+	if err := setStateTx(ctx, tx, taskID, p.State, by.UserID); err != nil {
 		return nil, err
 	}
 

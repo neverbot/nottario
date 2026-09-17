@@ -427,7 +427,7 @@ func SetTaskStateHandler(d TaskDeps) http.Handler {
 		// Snapshot state pre-write so the Notifier can tell whether
 		// the transition actually crossed into a closed state.
 		prev, _ := tasks.Get(r.Context(), d.Pool, tid)
-		t, err := tasks.SetState(r.Context(), d.Pool, tid, req.State)
+		t, err := tasks.SetState(r.Context(), d.Pool, tid, req.State, actorFrom(c))
 		if err != nil {
 			// Surface the unresolved-precondition detail to clients so
 			// they can render a useful message without an extra round-trip.

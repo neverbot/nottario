@@ -201,7 +201,7 @@ func TestSetStateDone_RollUpExactlyOnce(t *testing.T) {
 	// Close every child simultaneously.
 	closeErrs := make([]error, children)
 	runConcurrent(t, children, func(i int) {
-		_, closeErrs[i] = tasks.SetState(ctx, pool, kids[i].ID, tasks.StateDone)
+		_, closeErrs[i] = tasks.SetState(ctx, pool, kids[i].ID, tasks.StateDone, nil)
 	})
 	for i, err := range closeErrs {
 		if err != nil {
@@ -250,7 +250,7 @@ func TestSetState_PreconditionRace(t *testing.T) {
 		if i == 0 {
 			addErr = tasks.AddDependency(ctx, pool, target.ID, dep.ID)
 		} else {
-			closed, closeErr = tasks.SetState(ctx, pool, target.ID, tasks.StateDone)
+			closed, closeErr = tasks.SetState(ctx, pool, target.ID, tasks.StateDone, nil)
 		}
 	})
 

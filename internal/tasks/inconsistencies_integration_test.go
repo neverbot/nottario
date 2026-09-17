@@ -44,10 +44,10 @@ func TestListInconsistencies_DependentAlreadyDone(t *testing.T) {
 	// dependency only AFTER child is done, which is itself the
 	// inconsistency this check catches in real life (deps added
 	// retroactively after the dependent shipped).
-	if _, err := tasks.SetState(ctx, pool, child.ID, tasks.StateDoing); err != nil {
+	if _, err := tasks.SetState(ctx, pool, child.ID, tasks.StateDoing, nil); err != nil {
 		t.Fatalf("SetState doing: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, child.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, child.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState done: %v", err)
 	}
 	if err := tasks.AddDependency(ctx, pool, child.ID, parent.ID); err != nil {
@@ -73,10 +73,10 @@ func TestListInconsistencies_DependentAlreadyDone(t *testing.T) {
 	}
 
 	// Closing the parent removes it from the report.
-	if _, err := tasks.SetState(ctx, pool, parent.ID, tasks.StateDoing); err != nil {
+	if _, err := tasks.SetState(ctx, pool, parent.ID, tasks.StateDoing, nil); err != nil {
 		t.Fatalf("SetState parent doing: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, parent.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, parent.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState parent done: %v", err)
 	}
 	items, err = tasks.ListInconsistencies(ctx, pool, p.ID)

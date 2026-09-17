@@ -336,3 +336,13 @@ RETURNING id, project_id, parent_task_id, type, title, description_md,
           created_by_user_id, created_by_token_id,
           created_at, updated_at, cycle_id;
 
+
+-- name: AssignTaskIfUnassigned :execrows
+-- Gives an unassigned task an owner, leaving an existing assignee
+-- alone. Used when a task leaves 'todo': whoever moved it owns it,
+-- so no task can sit in doing (or reach done) with nobody on it.
+UPDATE tasks SET
+  assignee_user_id = sqlc.arg('assignee_user_id')::uuid,
+  updated_at = now()
+WHERE id = sqlc.arg('id')::uuid
+  AND assignee_user_id IS NULL;

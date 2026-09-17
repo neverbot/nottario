@@ -52,14 +52,14 @@ func TestTasks_CreateSetStateAndDependencyCycle(t *testing.T) {
 		t.Fatalf("expected todo on create, got %s", a.State)
 	}
 
-	if _, err := tasks.SetState(ctx, pool, a.ID, tasks.StateDoing); err != nil {
+	if _, err := tasks.SetState(ctx, pool, a.ID, tasks.StateDoing, nil); err != nil {
 		t.Fatalf("SetState doing: %v", err)
 	}
 	got, err := tasks.Get(ctx, pool, a.ID)
 	if err != nil || got.State != tasks.StateDoing || got.ActualStart == nil {
 		t.Fatalf("after doing: state=%s actual_start=%v err=%v", got.State, got.ActualStart, err)
 	}
-	if _, err := tasks.SetState(ctx, pool, a.ID, tasks.StateDone); err != nil {
+	if _, err := tasks.SetState(ctx, pool, a.ID, tasks.StateDone, nil); err != nil {
 		t.Fatalf("SetState done: %v", err)
 	}
 	got, _ = tasks.Get(ctx, pool, a.ID)

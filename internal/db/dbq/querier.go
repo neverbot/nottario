@@ -18,6 +18,10 @@ type Querier interface {
 	ArchNodeCycleCheck(ctx context.Context, arg ArchNodeCycleCheckParams) (bool, error)
 	// Grants a specific role to a member. Idempotent.
 	AssignRole(ctx context.Context, arg AssignRoleParams) error
+	// Gives an unassigned task an owner, leaving an existing assignee
+	// alone. Used when a task leaves 'todo': whoever moved it owns it,
+	// so no task can sit in doing (or reach done) with nobody on it.
+	AssignTaskIfUnassigned(ctx context.Context, arg AssignTaskIfUnassignedParams) (int64, error)
 	// Build the full graph snapshot for one project as a single JSONB
 	// document. Used both by the migration baseline and by the runtime
 	// flush path.

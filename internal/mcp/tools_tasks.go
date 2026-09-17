@@ -139,6 +139,7 @@ type tasksCreateInput struct {
 	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"assignee uuid"`
 	TargetRoleID   string `json:"target_role_id,omitempty" jsonschema:"target role uuid"`
 	ParentTaskID   string `json:"parent_task_id,omitempty" jsonschema:"parent feature task uuid"`
+	Claim          bool   `json:"claim,omitempty" jsonschema:"create it already yours and in 'doing'. Use it whenever you are filing work you are about to start, instead of create + claim."`
 	Verbose        bool   `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
@@ -399,7 +400,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.create",
-		Description: "Creates a task. Defaults: state=todo, type=task, priority=50. Slim shape by default — the description you sent is not echoed back.",
+		Description: "Creates a task. Defaults: state=todo, type=task, priority=50. Pass claim=true when you are filing work you are about to start: the task is created assigned to you and in 'doing', in one call. Slim shape by default — the description you sent is not echoed back.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCreateInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -432,6 +433,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 			DescriptionMD: in.Description,
 			Type:          tasks.Type(in.Type),
 			Priority:      priority,
+			Claim:         in.Claim,
 		}
 		if id := optUUID(in.AssigneeUserID); id != nil {
 			params.AssigneeUserID = id
@@ -506,8 +508,12 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.set_state",
-		Description: "Transitions state; manages actual_start/end. done↔wont_do refused (route via todo). Precondition failure returns {error, preconditions}. Slim shape. Prefer tasks.close for terminal transitions.",
+		Description: "Transitions state; manages actual_start/end. Moving a task out of 'todo' assigns it to you when it has no assignee. done↔wont_do refused (route via todo). Precondition failure returns {error, preconditions}. Slim shape. Prefer tasks.close for terminal transitions: it links commits and leaves a closing comment in the same call.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksStateInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
 			return toolError(err.Error())
@@ -515,7 +521,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
-		t, err := tasks.SetState(ctx, d.Pool, tid, tasks.State(in.State))
+		t, err := tasks.SetState(ctx, d.Pool, tid, tasks.State(in.State), callerActor(c))
 		if err != nil {
 			var uerr *tasks.UnresolvedPreconditionsError
 			if errors.As(err, &uerr) {
@@ -779,4 +785,14 @@ func authorshipFor(c identity.Caller) tasks.Authorship {
 		a.TokenID = &tid
 	}
 	return a
+}
+
+// callerActor is the caller's user id for the repo calls that record
+// who acted. Nil when the caller has no user behind it.
+func callerActor(c identity.Caller) *uuid.UUID {
+	if c.UserID == uuid.Nil {
+		return nil
+	}
+	uid := c.UserID
+	return &uid
 }

@@ -58,10 +58,15 @@ type CreateParams struct {
 	Priority       *int
 	AssigneeUserID *uuid.UUID
 	TargetRoleID   *uuid.UUID
+	// Claim creates the task already owned by its author and in
+	// 'doing'. It is the one-call form of "I am filing the work I am
+	// about to start", which otherwise takes a create plus a claim and
+	// leaves an unowned row behind whenever the second call is skipped.
+	Claim bool
 }
 
-// Create inserts a new task. State defaults to 'todo'. Implemented
-// via sqlc-generated dbq.InsertTask.
+// Create inserts a new task. State defaults to 'todo', or 'doing' when
+// p.Claim is set (see CreateParams.Claim).
 func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorship) (*Task, error) {
 	p.Title = html.UnescapeString(p.Title)
 	p.DescriptionMD = html.UnescapeString(p.DescriptionMD)
@@ -78,7 +83,14 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	if err := validatePriority(p.Priority); err != nil {
 		return nil, err
 	}
-	if err := validateTaskAssignments(ctx, pool, p.ProjectID, p.TargetRoleID, p.AssigneeUserID); err != nil {
+	assignee := p.AssigneeUserID
+	if p.Claim {
+		if by.UserID == nil {
+			return nil, errors.New("claim requires a user: the caller has no identity")
+		}
+		assignee = by.UserID
+	}
+	if err := validateTaskAssignments(ctx, pool, p.ProjectID, p.TargetRoleID, assignee); err != nil {
 		return nil, err
 	}
 	priority := 50
@@ -94,14 +106,20 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	if err != nil {
 		return nil, fmt.Errorf("resolve active cycle: %w", err)
 	}
-	row, err := dbq.New(pool).InsertTask(ctx, dbq.InsertTaskParams{
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
+	row, err := q.InsertTask(ctx, dbq.InsertTaskParams{
 		ProjectID:        p.ProjectID,
 		ParentTaskID:     p.ParentTaskID,
 		Type:             string(t),
 		Title:            p.Title,
 		DescriptionMd:    p.DescriptionMD,
 		Priority:         int32(priority),
-		AssigneeUserID:   p.AssigneeUserID,
+		AssigneeUserID:   assignee,
 		TargetRoleID:     p.TargetRoleID,
 		CreatedByUserID:  by.UserID,
 		CreatedByTokenID: by.TokenID,
@@ -109,6 +127,19 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	})
 	if err != nil {
 		return nil, err
+	}
+	if p.Claim {
+		if err := q.SetTaskDoing(ctx, row.ID); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	if p.Claim {
+		// Re-read so state, actual_start and the enrichment come from
+		// the row as it now stands rather than from the insert.
+		return Get(ctx, pool, row.ID)
 	}
 	out := &Task{
 		ID:               row.ID,
@@ -618,7 +649,10 @@ func (e *ErrInvalidStateTransition) Error() string {
 	return fmt.Sprintf("invalid state transition: %s → %s", e.From, e.To)
 }
 
-func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*Task, error) {
+// SetState moves a task to s. actor is the user making the move, used
+// to give an unassigned task an owner (nil for automated transitions
+// like the background reconciler).
+func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State, actor *uuid.UUID) (*Task, error) {
 	if !ValidState(s) {
 		return nil, fmt.Errorf("invalid state: %q", s)
 	}
@@ -627,7 +661,7 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err := setStateTx(ctx, tx, id, s); err != nil {
+	if err := setStateTx(ctx, tx, id, s, actor); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -642,7 +676,13 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State) (*
 // *ErrInvalidStateTransition or *UnresolvedPreconditionsError on
 // validation failures; any of those should be surfaced to the API
 // caller as-is and trigger a rollback.
-func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State) error {
+//
+// actor is the user behind the transition, or nil when nobody is (the
+// reconciler). Moving a task out of 'todo' gives it actor as assignee
+// when it has none: a task in doing, or one that reaches done, always
+// has someone answering for it, whether the mover went through
+// tasks.claim, set_state or close.
+func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uuid.UUID) error {
 	q := dbq.New(tx)
 
 	// Lock the task row for the rest of this transaction. AddDependency
@@ -705,6 +745,15 @@ func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State) error {
 	}
 	if err != nil {
 		return err
+	}
+
+	if actor != nil && s != StateTodo {
+		if _, err := q.AssignTaskIfUnassigned(ctx, dbq.AssignTaskIfUnassignedParams{
+			ID:             id,
+			AssigneeUserID: *actor,
+		}); err != nil {
+			return err
+		}
 	}
 
 	// Bubble a closed-state upward inside the same transaction so two

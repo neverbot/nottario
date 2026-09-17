@@ -12,6 +12,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const assignTaskIfUnassigned = `-- name: AssignTaskIfUnassigned :execrows
+UPDATE tasks SET
+  assignee_user_id = $1::uuid,
+  updated_at = now()
+WHERE id = $2::uuid
+  AND assignee_user_id IS NULL
+`
+
+type AssignTaskIfUnassignedParams struct {
+	AssigneeUserID uuid.UUID
+	ID             uuid.UUID
+}
+
+// Gives an unassigned task an owner, leaving an existing assignee
+// alone. Used when a task leaves 'todo': whoever moved it owns it,
+// so no task can sit in doing (or reach done) with nobody on it.
+func (q *Queries) AssignTaskIfUnassigned(ctx context.Context, arg AssignTaskIfUnassignedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, assignTaskIfUnassigned, arg.AssigneeUserID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimNextEligibleTask = `-- name: ClaimNextEligibleTask :one
 WITH candidate AS (
   SELECT t.id FROM tasks t
