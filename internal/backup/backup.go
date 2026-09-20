@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,6 +40,21 @@ const (
 	FileSuffix = ".dump"
 )
 
+// A dump is the entire database in one file: tasks, documents, user
+// emails, the API token table. It is readable by its owner and nobody
+// else, and so is the directory holding it — a backup directory on a
+// shared host must not hand the database to every local account.
+const (
+	dirPerm  os.FileMode = 0o700
+	filePerm os.FileMode = 0o600
+)
+
+// tmpAge is how long an orphan .tmp may sit before being cleaned up.
+// A dump interrupted by a restart leaves one behind, and the final
+// name is what retention matches, so without this they accumulate
+// forever. Well clear of any real dump's runtime.
+const tmpAge = 24 * time.Hour
+
 // Run blocks until ctx is cancelled. Returns nil immediately if
 // Config.Dir is empty. Safe to call once from main().
 func Run(ctx context.Context, c Config) error {
@@ -62,8 +78,15 @@ func Run(ctx context.Context, c Config) error {
 	if err != nil {
 		return fmt.Errorf("parse NOTTARIO_BACKUP_AT: %w", err)
 	}
-	if err := os.MkdirAll(c.Dir, 0o755); err != nil {
+	if err := os.MkdirAll(c.Dir, dirPerm); err != nil {
 		return fmt.Errorf("mkdir backup dir: %w", err)
+	}
+	// MkdirAll leaves an existing directory's mode alone, so tighten it
+	// explicitly: a directory created by an earlier version, or by the
+	// operator, is the common case. A mount we do not own refuses the
+	// chmod; that is the operator's call to make, so carry on.
+	if err := os.Chmod(c.Dir, dirPerm); err != nil {
+		c.Logger.Warn("could not tighten backup dir permissions", "dir", c.Dir, "err", err)
 	}
 	c.Logger.Info("backups enabled", "dir", c.Dir, "at", c.At, "keep_days", c.KeepDays)
 	for {
@@ -113,11 +136,24 @@ func dumpOnce(ctx context.Context, c Config) error {
 	name := fmt.Sprintf("%s%s%s", FilePrefix, now.Format("2006-01-02-1504"), FileSuffix)
 	tmp := filepath.Join(c.Dir, name+".tmp")
 	final := filepath.Join(c.Dir, name)
-	cmd := exec.CommandContext(ctx, "pg_dump", "--format=custom", "--file="+tmp, c.DatabaseURL)
+	dsn, password := splitPassword(c.DatabaseURL)
+	cmd := exec.CommandContext(ctx, "pg_dump", "--format=custom", "--file="+tmp, dsn)
+	// The password goes through the environment: process arguments are
+	// world-readable in `ps` for as long as the dump runs.
+	if password != "" {
+		cmd.Env = append(os.Environ(), "PGPASSWORD="+password)
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("pg_dump: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	// pg_dump creates the file under its own umask, so tighten it before
+	// it takes its final name. The brief window while it is still a .tmp
+	// is covered by the directory being 0700.
+	if err := os.Chmod(tmp, filePerm); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("chmod dump: %w", err)
 	}
 	if err := os.Rename(tmp, final); err != nil {
 		return fmt.Errorf("rename: %w", err)
@@ -128,21 +164,50 @@ func dumpOnce(ctx context.Context, c Config) error {
 
 var dumpNameRe = regexp.MustCompile(`^` + FilePrefix + `\d{4}-\d{2}-\d{2}-\d{4}` + regexp.QuoteMeta(FileSuffix) + `$`)
 
+var tmpNameRe = regexp.MustCompile(`^` + FilePrefix + `\d{4}-\d{2}-\d{2}-\d{4}` + regexp.QuoteMeta(FileSuffix+".tmp") + `$`)
+
+// splitPassword takes the password out of a postgres:// URL, returning
+// the URL without it plus the password itself, for the caller to pass
+// through the environment. A DSN in keyword form (host=… password=…)
+// or one with no password is returned untouched.
+func splitPassword(dsn string) (string, string) {
+	u, err := url.Parse(dsn)
+	if err != nil || u.User == nil {
+		return dsn, ""
+	}
+	password, ok := u.User.Password()
+	if !ok {
+		return dsn, ""
+	}
+	u.User = url.User(u.User.Username())
+	return u.String(), password
+}
+
 func pruneOldDumps(dir string, keepDays int, now time.Time) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	cutoff := now.Add(-time.Duration(keepDays) * 24 * time.Hour)
+	tmpCutoff := now.Add(-tmpAge)
 	for _, e := range entries {
-		if e.IsDir() || !dumpNameRe.MatchString(e.Name()) {
+		if e.IsDir() {
+			continue
+		}
+		var deadline time.Time
+		switch {
+		case dumpNameRe.MatchString(e.Name()):
+			deadline = cutoff
+		case tmpNameRe.MatchString(e.Name()):
+			deadline = tmpCutoff
+		default:
 			continue
 		}
 		info, ierr := e.Info()
 		if ierr != nil {
 			continue
 		}
-		if info.ModTime().Before(cutoff) {
+		if info.ModTime().Before(deadline) {
 			_ = os.Remove(filepath.Join(dir, e.Name()))
 		}
 	}

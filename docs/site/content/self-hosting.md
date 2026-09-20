@@ -43,11 +43,16 @@ extra ceremony. The `_FILE` variant takes precedence when both are
 set — recommended under Docker secrets or Kubernetes mounted
 secrets.
 
-> **Container UID.** The image runs as `nonroot` (UID **65532**, fixed
-> by the distroless base image). The `_FILE` targets must be readable
-> by that UID. With Docker Compose `file:` secrets the mounted file
-> inherits the host's owner; if the host file is `0600 root:root`,
+> **Container UID and GID.** The image runs as `nonroot`, with both
+> pinned to **65532** in the Dockerfile. The `_FILE` targets must be
+> readable by that UID. With Docker Compose `file:` secrets the mounted
+> file inherits the host's owner; if the host file is `0600 root:root`,
 > Nottario can't read it. Either widen to `644` or `chown 65532:65532`.
+>
+> On the host, `ls` shows those numbers as names only if they exist in
+> its own `/etc/passwd` and `/etc/group`; otherwise you get the raw
+> number, `UNKNOWN`, or an unrelated local name that happens to use the
+> same id. That is cosmetic — permissions are decided by the numbers.
 
 ## Backups
 
@@ -57,6 +62,19 @@ time. The container ships the matching `postgresql-client` so the
 dump runs in-process; no sidecar needed. Files are named
 `nottario-YYYY-MM-DDTHH-MM-SS.dump` and `NOTTARIO_BACKUP_KEEP_DAYS`
 controls the rotation.
+
+A dump is the whole database in one file — tasks, documents, user
+emails, the API token table — so Nottario writes them `0600` and keeps
+the directory `0700`, both owned by UID 65532. It tightens an existing
+directory on startup too, and logs a warning instead of failing when
+the mount does not let it. Grant access to a backup agent by owner or
+by a group the host controls, not by widening the mode.
+
+A dump interrupted by a restart leaves a `.tmp` file behind; those are
+removed once they are a day old.
+
+The database password reaches `pg_dump` through `PGPASSWORD`, not as a
+command-line argument, so it does not show up in `ps` on the host.
 
 To restore: stop the container, drop the database, and run
 `pg_restore --clean --if-exists -d <DATABASE_URL> <file.dump>`.

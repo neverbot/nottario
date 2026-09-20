@@ -10,6 +10,20 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-09-20
+
+- **Backups are no longer readable by every account on the host.** Dump
+  files are written `0600` and the backup directory `0700`, tightened on
+  startup for directories created by earlier versions. A dump is the
+  entire database, so grant access to it by owner or group rather than
+  by widening the mode. The database password now reaches `pg_dump`
+  through the environment instead of its command line, where `ps` could
+  read it; `.tmp` files left behind by a restart mid-dump are cleaned up
+  after a day; and the container's group id is pinned to 65532 next to
+  its user id, so files in mounted volumes keep the same ownership
+  across image rebuilds. See
+  [self-hosting](/self-hosting/#backups).
+
 ## 2026-09-17
 
 - **No task reaches `doing` or `done` without an owner.** Moving a task

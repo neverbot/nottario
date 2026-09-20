@@ -1,16 +1,19 @@
 package backup
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
-// dumpOnce intentionally has no unit test: it shells out to pg_dump
-// and requires a real Postgres reachable at Config.DatabaseURL. The
-// integration path is exercised by the operator running the binary
-// against the dev compose stack.
+// dumpOnce is tested against a stand-in pg_dump placed first on PATH
+// (see fakePgDump): what matters here is how the dump file is created
+// and how the command is invoked, not what Postgres puts inside it.
 
 func TestParseClock(t *testing.T) {
 	cases := []struct {
@@ -126,5 +129,142 @@ func TestPruneOldDumps_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 	if err := pruneOldDumps(dir, 7, time.Now()); err != nil {
 		t.Errorf("pruneOldDumps on empty dir: %v", err)
+	}
+}
+
+func TestSplitPassword(t *testing.T) {
+	cases := []struct{ name, in, wantDSN, wantPass string }{
+		{"url with password", "postgres://u:s3cr3t@db:5432/nottario?sslmode=disable", "postgres://u@db:5432/nottario?sslmode=disable", "s3cr3t"},
+		{"url without password", "postgres://u@db:5432/nottario", "postgres://u@db:5432/nottario", ""},
+		{"url without user", "postgres://db:5432/nottario", "postgres://db:5432/nottario", ""},
+		{"keyword form is left alone", "host=db user=u password=s3cr3t dbname=nottario", "host=db user=u password=s3cr3t dbname=nottario", ""},
+		{"escaped characters survive", "postgres://u:p%40ss%2Fword@db/nottario", "postgres://u@db/nottario", "p@ss/word"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dsn, pass := splitPassword(tc.in)
+			if dsn != tc.wantDSN || pass != tc.wantPass {
+				t.Errorf("splitPassword(%q) = (%q, %q), want (%q, %q)", tc.in, dsn, pass, tc.wantDSN, tc.wantPass)
+			}
+		})
+	}
+}
+
+// fakePgDump puts a stand-in pg_dump first on PATH. It writes a file
+// where it is told, with a deliberately loose mode, and records how it
+// was invoked.
+func fakePgDump(t *testing.T) (recordPath string) {
+	t.Helper()
+	dir := t.TempDir()
+	recordPath = filepath.Join(dir, "invocation")
+	script := "#!/bin/sh\n" +
+		"{ echo \"args: $*\"; echo \"pgpassword: ${PGPASSWORD-}\"; } > \"" + recordPath + "\"\n" +
+		"for a in \"$@\"; do case \"$a\" in --file=*) out=\"${a#--file=}\";; esac; done\n" +
+		"umask 0022\n" +
+		"echo dump-contents > \"$out\"\n" +
+		"chmod 0644 \"$out\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "pg_dump"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return recordPath
+}
+
+// The dump is the whole database: it must land 0600, and the password
+// must not be visible in the process arguments.
+func TestDumpOnce_WritesPrivateFileAndHidesPassword(t *testing.T) {
+	record := fakePgDump(t)
+	dir := t.TempDir()
+	now := time.Date(2026, 9, 20, 3, 0, 0, 0, time.Local)
+	err := dumpOnce(t.Context(), Config{
+		Dir:         dir,
+		DatabaseURL: "postgres://u:s3cr3t@db:5432/nottario",
+		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Now:         func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("dumpOnce: %v", err)
+	}
+
+	final := filepath.Join(dir, FilePrefix+"2026-09-20-0300"+FileSuffix)
+	info, err := os.Stat(final)
+	if err != nil {
+		t.Fatalf("dump not written: %v", err)
+	}
+	if got := info.Mode().Perm(); got != filePerm {
+		t.Errorf("dump mode = %#o, want %#o", got, filePerm)
+	}
+	if _, err := os.Stat(final + ".tmp"); !os.IsNotExist(err) {
+		t.Error("the .tmp file survived a successful dump")
+	}
+
+	invocation, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatalf("no invocation recorded: %v", err)
+	}
+	args, _, _ := strings.Cut(string(invocation), "\n")
+	if strings.Contains(args, "s3cr3t") {
+		t.Errorf("password passed on the command line: %s", args)
+	}
+	if !strings.Contains(string(invocation), "pgpassword: s3cr3t") {
+		t.Errorf("password not passed through the environment: %s", invocation)
+	}
+}
+
+// Run tightens a directory an earlier version left at 0755.
+func TestRun_TightensExistingBackupDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "backups")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := Run(ctx, Config{
+		Dir:      dir,
+		At:       "03:00",
+		KeepDays: 7,
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != dirPerm {
+		t.Errorf("backup dir mode = %#o, want %#o", got, dirPerm)
+	}
+}
+
+// A restart mid-dump leaves a .tmp behind. Retention matches only the
+// final name, so these need cleaning up on their own.
+func TestPruneOldDumps_RemovesOrphanTempFiles(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 9, 20, 3, 0, 0, 0, time.Local)
+	write := func(name string, age time.Duration) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("x"), filePerm); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, now.Add(-age), now.Add(-age)); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	oldTmp := write(FilePrefix+"2026-09-01-0300"+FileSuffix+".tmp", 48*time.Hour)
+	freshTmp := write(FilePrefix+"2026-09-20-0300"+FileSuffix+".tmp", time.Minute)
+	recentDump := write(FilePrefix+"2026-09-19-0300"+FileSuffix, 24*time.Hour)
+	unrelated := write("notes.txt.tmp", 72*time.Hour)
+
+	if err := pruneOldDumps(dir, 7, now); err != nil {
+		t.Fatalf("pruneOldDumps: %v", err)
+	}
+	if _, err := os.Stat(oldTmp); !os.IsNotExist(err) {
+		t.Error("an orphan .tmp older than a day survived")
+	}
+	for _, keep := range []string{freshTmp, recentDump, unrelated} {
+		if _, err := os.Stat(keep); err != nil {
+			t.Errorf("%s should have been kept: %v", filepath.Base(keep), err)
+		}
 	}
 }

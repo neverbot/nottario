@@ -17,12 +17,16 @@ RUN CGO_ENABLED=0 GOOS=linux \
       -o /out/nottario ./cmd/nottario
 
 FROM alpine:3.21
+# UID *and* GID are pinned to 65532. Files the container writes into a
+# mounted volume (backups, secrets) carry those numbers, and a host
+# granting access by group needs them stable across image rebuilds —
+# an unpinned `addgroup -S` takes whatever number alpine has free.
 # postgresql17-client matches the version used by self-hosters on
 # Postgres 17 servers (pg_dump refuses to dump a server newer than
 # itself). The pg17 client is backward-compatible with older servers,
 # so it also works against the Postgres 16 dev container.
 RUN apk add --no-cache postgresql17-client ca-certificates \
-    && addgroup -S nonroot \
+    && addgroup -S -g 65532 nonroot \
     && adduser -S -G nonroot -u 65532 -h /home/nonroot nonroot
 COPY --from=build /out/nottario /nottario
 EXPOSE 8080
