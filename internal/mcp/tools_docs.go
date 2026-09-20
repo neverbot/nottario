@@ -69,8 +69,6 @@ type docsUploadURLInput struct {
 	Message         string `json:"message,omitempty" jsonschema:"change message on the version row"`
 }
 
-const docsUploadInstructions = "PUT the exact bytes whose SHA-256 you signed to upload_url before expires_at, e.g. curl -fsS -X PUT --data-binary @<file> '<upload_url>' (quote the URL: it contains '&'). Send no Authorization header: the signature is the credential. The URL works once: it replaces the document only if it is still at expected_version, so a retry after success returns version_conflict. On 403 (expired) request a new URL; on 409 run docs.stat and decide again; on 400 the body did not match file_sha256 and nothing was written."
-
 type docsDeleteInput struct {
 	docsScopeInput
 	Path            string `json:"path" jsonschema:"logical path"`
@@ -287,8 +285,11 @@ func registerDocs(server *sdk.Server, d Deps) {
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
-		Name:        "nottario.docs.upload_url",
-		Description: "Signs a single-use URL to create or replace a whole document from a file on disk, so its bytes never pass through your context and you never handle a token. Returns {upload_url, method, expires_at, expires_in_seconds, instructions}. Valid 5 minutes. file_sha256 = SHA-256 of the exact bytes you will PUT (frontmatter included). expected_version = current_version from docs.stat, or 0 to create. Project documents only.",
+		Name: "nottario.docs.upload_url",
+		// The how-to lives here, in the tool description, which the
+		// client already holds for the whole session. Repeating it in
+		// every response charged the same ~150 tokens per upload.
+		Description: "Signs a single-use URL to create or replace a whole document from a file on disk, so its bytes never pass through your context and you never handle a token. Project documents only. file_sha256 = SHA-256 of the exact bytes you will send (the whole file, frontmatter included); expected_version = current_version from docs.stat, or 0 to create. Returns {upload_url, expires_at, expires_in_seconds}. Then PUT that file to upload_url, e.g. curl -fsS -X PUT --data-binary @<file> '<upload_url>' — quote the URL, it contains '&', and send no Authorization header: the signature is the credential. Valid 5 minutes and usable once, on top of that exact version, so a retry after success answers version_conflict. Failures explain themselves: 403 expired (sign a new URL), 409 someone else wrote first (docs.stat and decide again), 400 the bytes did not match file_sha256 (nothing was written).",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsUploadURLInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -346,10 +347,8 @@ func registerDocs(server *sdk.Server, d Deps) {
 		base := strings.TrimRight(externalBaseURL(ctx), "/")
 		return jsonResult(map[string]any{
 			"upload_url":         base + "/api/docs/upload?" + q.Encode(),
-			"method":             "PUT",
 			"expires_at":         time.Unix(exp, 0).UTC().Format(time.RFC3339),
 			"expires_in_seconds": int(docs.UploadTTL / time.Second),
-			"instructions":       docsUploadInstructions,
 		})
 	})
 

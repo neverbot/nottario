@@ -93,8 +93,16 @@ func TestDocsUpload_HappyPathShapeTTLAndSingleUse(t *testing.T) {
 	if strings.Contains(uploadURL, "ntr_") {
 		t.Error("upload_url contains token material")
 	}
-	if out["method"] != "PUT" {
-		t.Errorf("method = %v, want PUT", out["method"])
+	// The response carries only what is specific to this call. How to
+	// use the URL lives in the tool description, which the client holds
+	// for the whole session instead of paying for it per upload.
+	for _, k := range []string{"instructions", "method"} {
+		if _, present := out[k]; present {
+			t.Errorf("response still carries %q: %v", k, out)
+		}
+	}
+	if len(out) != 3 {
+		t.Errorf("response has %d fields, want upload_url + expires_at + expires_in_seconds: %v", len(out), out)
 	}
 	if out["expires_in_seconds"] != float64(300) {
 		t.Errorf("expires_in_seconds = %v, want 300", out["expires_in_seconds"])
