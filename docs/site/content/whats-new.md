@@ -12,6 +12,14 @@ are cut on demand.
 
 ## 2026-09-20
 
+- **The projects list now counts what the Kanban shows.** A project card
+  left feature parents out of its counts, so it could read "3 todo" next
+  to a board showing six cards. Features are cards on the board, and now
+  they count on the card too. Closed work still adds up across every
+  cycle, as the project's running total.
+
+## 2026-09-20
+
 - **Backups are no longer readable by every account on the host.** Dump
   files are written `0600` and the backup directory `0700`, tightened on
   startup for directories created by earlier versions. Only UID 65532

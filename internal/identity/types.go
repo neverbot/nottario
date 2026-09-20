@@ -59,8 +59,10 @@ type Project struct {
 }
 
 // ProjectStats summarises a project's task counts and most recent
-// activity. Feature parents are excluded from the counts because
-// they're aggregates of their children.
+// activity. Feature parents are counted, so the open counts match what
+// the project's Kanban shows; open work only ever lives in the active
+// cycle. The closed counts are the project's running total across every
+// cycle.
 type ProjectStats struct {
 	TodoCount      int        `json:"todo_count"`
 	DoingCount     int        `json:"doing_count"`

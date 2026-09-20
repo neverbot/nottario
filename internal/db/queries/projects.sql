@@ -71,14 +71,23 @@ SELECT EXISTS (SELECT 1 FROM projects WHERE slug = $1)::bool;
 
 -- name: ListAllProjectTaskStats :many
 -- Aggregated counts per project for the projects list cards.
--- Feature parents are excluded — they're aggregates, not work units;
--- same call we already make for the Gantt priority buckets.
+--
+-- Feature parents are counted like any other row, because the board
+-- draws them as cards: excluding them here made a project read
+-- "3 todo" on the list next to a Kanban showing six.
+--
+-- No cycle filter, and none is needed. Closing a cycle moves every
+-- task that is not done or wont_do into the new one (see
+-- MovePartialFeatureSubtrees / MoveStandaloneNonDone), so open work
+-- only ever sits in the active cycle. The closed counts are therefore
+-- the project's running total since its first cycle, which is what the
+-- card wants to show.
 SELECT project_id,
-       COUNT(*) FILTER (WHERE state = 'todo'    AND type != 'feature')::int AS todo_count,
-       COUNT(*) FILTER (WHERE state = 'doing'   AND type != 'feature')::int AS doing_count,
-       COUNT(*) FILTER (WHERE state = 'done'    AND type != 'feature')::int AS done_count,
-       COUNT(*) FILTER (WHERE state = 'wont_do' AND type != 'feature')::int AS wont_do_count,
-       MAX(updated_at)::timestamptz                                         AS last_activity_at
+       COUNT(*) FILTER (WHERE state = 'todo')::int    AS todo_count,
+       COUNT(*) FILTER (WHERE state = 'doing')::int   AS doing_count,
+       COUNT(*) FILTER (WHERE state = 'done')::int    AS done_count,
+       COUNT(*) FILTER (WHERE state = 'wont_do')::int AS wont_do_count,
+       MAX(updated_at)::timestamptz                   AS last_activity_at
 FROM tasks
 GROUP BY project_id;
 

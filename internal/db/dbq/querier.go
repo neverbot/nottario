@@ -141,8 +141,17 @@ type Querier interface {
 	// projects list cards to render an avatar stack.
 	ListAllProjectMembers(ctx context.Context) ([]ListAllProjectMembersRow, error)
 	// Aggregated counts per project for the projects list cards.
-	// Feature parents are excluded — they're aggregates, not work units;
-	// same call we already make for the Gantt priority buckets.
+	//
+	// Feature parents are counted like any other row, because the board
+	// draws them as cards: excluding them here made a project read
+	// "3 todo" on the list next to a Kanban showing six.
+	//
+	// No cycle filter, and none is needed. Closing a cycle moves every
+	// task that is not done or wont_do into the new one (see
+	// MovePartialFeatureSubtrees / MoveStandaloneNonDone), so open work
+	// only ever sits in the active cycle. The closed counts are therefore
+	// the project's running total since its first cycle, which is what the
+	// card wants to show.
 	ListAllProjectTaskStats(ctx context.Context) ([]ListAllProjectTaskStatsRow, error)
 	ListArchEdges(ctx context.Context, arg ListArchEdgesParams) ([]ListArchEdgesRow, error)
 	ListArchKinds(ctx context.Context, projectID uuid.UUID) ([]ArchNodeKind, error)
