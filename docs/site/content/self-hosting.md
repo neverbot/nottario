@@ -59,16 +59,22 @@ secrets.
 When `NOTTARIO_BACKUP_DIR` is set, an in-process goroutine fires
 `pg_dump --format=custom` once a day at `NOTTARIO_BACKUP_AT` local
 time. The container ships the matching `postgresql-client` so the
-dump runs in-process; no sidecar needed. Files are named
-`nottario-YYYY-MM-DDTHH-MM-SS.dump` and `NOTTARIO_BACKUP_KEEP_DAYS`
+dump runs in-process; no sidecar needed. Files are named `nottario-YYYY-MM-DD-HHMM.dump`
+(e.g. `nottario-2026-09-20-0300.dump`) and `NOTTARIO_BACKUP_KEEP_DAYS`
 controls the rotation.
 
 A dump is the whole database in one file — tasks, documents, user
 emails, the API token table — so Nottario writes them `0600` and keeps
 the directory `0700`, both owned by UID 65532. It tightens an existing
 directory on startup too, and logs a warning instead of failing when
-the mount does not let it. Grant access to a backup agent by owner or
-by a group the host controls, not by widening the mode.
+the mount does not let it.
+
+Those modes leave no group or world bits, so only UID 65532 and root
+can read a dump. The mount is yours: if a backup agent has to reach
+them, run it as that uid, as root, or relax the mode yourself with the
+trade-off in mind — every account you let in gets the whole database.
+Nottario only sets the mode on the files and directory it creates; it
+never widens them again.
 
 A dump interrupted by a restart leaves a `.tmp` file behind; those are
 removed once they are a day old.

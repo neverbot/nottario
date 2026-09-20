@@ -18,9 +18,11 @@ RUN CGO_ENABLED=0 GOOS=linux \
 
 FROM alpine:3.21
 # UID *and* GID are pinned to 65532. Files the container writes into a
-# mounted volume (backups, secrets) carry those numbers, and a host
-# granting access by group needs them stable across image rebuilds —
-# an unpinned `addgroup -S` takes whatever number alpine has free.
+# mounted volume (backups) carry those numbers, and the host grants
+# access by chowning the mount to them. An unpinned `addgroup -S` takes
+# whatever number alpine has free, so a rebuild could start writing
+# files under a different group — and land on a number the host already
+# uses for a real group, which reads as that group's name in `ls`.
 # postgresql17-client matches the version used by self-hosters on
 # Postgres 17 servers (pg_dump refuses to dump a server newer than
 # itself). The pg17 client is backward-compatible with older servers,

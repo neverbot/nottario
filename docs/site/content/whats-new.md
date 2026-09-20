@@ -14,9 +14,10 @@ are cut on demand.
 
 - **Backups are no longer readable by every account on the host.** Dump
   files are written `0600` and the backup directory `0700`, tightened on
-  startup for directories created by earlier versions. A dump is the
-  entire database, so grant access to it by owner or group rather than
-  by widening the mode. The database password now reaches `pg_dump`
+  startup for directories created by earlier versions. Only UID 65532
+  and root can read a dump now, so a backup agent that used to read them
+  as some other account needs to run as that uid or as root. The
+  database password now reaches `pg_dump`
   through the environment instead of its command line, where `ps` could
   read it; `.tmp` files left behind by a restart mid-dump are cleaned up
   after a day; and the container's group id is pinned to 65532 next to
