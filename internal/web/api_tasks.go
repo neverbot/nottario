@@ -674,6 +674,49 @@ func LinkCommitHandler(d TaskDeps) http.Handler {
 	})
 }
 
+// UnlinkCommitHandler removes a commit link from a task. DELETE on the
+// same collection the POST above appends to, with the link identified
+// in the body: a sha alone would not do, since a link is (repo, sha),
+// and a repo carries a slash that has no place in a path segment.
+func UnlinkCommitHandler(d TaskDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		pid, err := projectIDFromPath(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := d.ensureProjectAccess(r.Context(), c, pid); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
+		tid, err := taskIDFromPath(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid task id")
+			return
+		}
+		var req linkCommitRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		err = tasks.UnlinkCommit(r.Context(), d.Pool, tid, req.Repo, req.SHA)
+		if errors.Is(err, tasks.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "this task has no such commit link")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
 type commentRequest struct {
 	Body string `json:"body"`
 }

@@ -215,11 +215,49 @@ func TestApiTasks_HTTPCRUD(t *testing.T) {
 	}
 
 	// --- POST /commits: link a commit and read it back. ---
+	commitsURL := ts.URL + "/api/projects/" + pid + "/tasks/" + taskID + "/commits"
 	{
-		r := doRaw(t, "POST", ts.URL+"/api/projects/"+pid+"/tasks/"+taskID+"/commits", authOwner,
+		r := doRaw(t, "POST", commitsURL, authOwner,
 			[]byte(`{"repo":"neverbot/nottario","sha":"deadbeef","message":"QA"}`))
 		if r.StatusCode != http.StatusOK && r.StatusCode != http.StatusCreated && r.StatusCode != http.StatusNoContent {
 			t.Fatalf("link commit: %d %s", r.StatusCode, r.Body)
+		}
+	}
+
+	// --- DELETE /commits: a human correcting a wrong link. ---
+	{
+		// A link the task does not have is a 404, not a silent success:
+		// removing nothing usually means the caller got the sha wrong.
+		r := doRaw(t, "DELETE", commitsURL, authOwner,
+			[]byte(`{"repo":"neverbot/nottario","sha":"c0ffee"}`))
+		if r.StatusCode != http.StatusNotFound {
+			t.Errorf("unlink a commit that was never linked: %d %s, want 404", r.StatusCode, r.Body)
+		}
+
+		r = doRaw(t, "DELETE", commitsURL, authOwner,
+			[]byte(`{"repo":"neverbot/nottario","sha":"deadbeef"}`))
+		if r.StatusCode != http.StatusNoContent {
+			t.Fatalf("unlink commit: %d %s", r.StatusCode, r.Body)
+		}
+
+		// Gone from the task's own payload.
+		r = doRaw(t, "GET", ts.URL+"/api/projects/"+pid+"/tasks/"+taskID, authOwner, nil)
+		if bytes.Contains(r.Body, []byte("deadbeef")) {
+			t.Errorf("commit still linked after unlink: %s", r.Body)
+		}
+
+		// And it is gone for good: a second removal finds nothing.
+		r = doRaw(t, "DELETE", commitsURL, authOwner,
+			[]byte(`{"repo":"neverbot/nottario","sha":"deadbeef"}`))
+		if r.StatusCode != http.StatusNotFound {
+			t.Errorf("second unlink: %d, want 404", r.StatusCode)
+		}
+
+		// Unauthenticated callers cannot rewrite the trail.
+		r = doRaw(t, "DELETE", commitsURL, "",
+			[]byte(`{"repo":"neverbot/nottario","sha":"deadbeef"}`))
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("unlink without auth: %d, want 401", r.StatusCode)
 		}
 	}
 }

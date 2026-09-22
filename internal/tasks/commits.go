@@ -28,11 +28,25 @@ func LinkCommit(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, repo,
 	})
 }
 
-// UnlinkCommit removes the (repo, sha) link from the task.
+// UnlinkCommit removes the (repo, sha) link from the task. It returns
+// ErrNotFound when the task had no such link: a correction that removed
+// nothing is a mistake worth reporting, not a silent success.
 func UnlinkCommit(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, repo, sha string) error {
-	return dbq.New(pool).DeleteTaskCommit(ctx, dbq.DeleteTaskCommitParams{
+	repo = strings.TrimSpace(repo)
+	sha = strings.TrimSpace(sha)
+	if repo == "" || sha == "" {
+		return errInvalid("repo and sha are required")
+	}
+	rows, err := dbq.New(pool).DeleteTaskCommit(ctx, dbq.DeleteTaskCommitParams{
 		TaskID: taskID, Repo: repo, Sha: sha,
 	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ListCommits returns the commits attached to a task.

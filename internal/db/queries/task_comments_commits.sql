@@ -45,7 +45,9 @@ INSERT INTO task_commits (task_id, repo, sha, message, added_by_user_id, added_b
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (task_id, repo, sha) DO UPDATE SET message = EXCLUDED.message;
 
--- name: DeleteTaskCommit :exec
+-- name: DeleteTaskCommit :execrows
+-- Returns the row count so the caller can tell "removed" from "there
+-- was nothing there", which is a 404 rather than a silent success.
 DELETE FROM task_commits WHERE task_id = $1 AND repo = $2 AND sha = $3;
 
 -- name: ListTaskCommits :many

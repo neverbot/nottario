@@ -24,7 +24,7 @@ func (q *Queries) DeleteTaskComment(ctx context.Context, id uuid.UUID) (int64, e
 	return result.RowsAffected(), nil
 }
 
-const deleteTaskCommit = `-- name: DeleteTaskCommit :exec
+const deleteTaskCommit = `-- name: DeleteTaskCommit :execrows
 DELETE FROM task_commits WHERE task_id = $1 AND repo = $2 AND sha = $3
 `
 
@@ -34,9 +34,14 @@ type DeleteTaskCommitParams struct {
 	Sha    string
 }
 
-func (q *Queries) DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error {
-	_, err := q.db.Exec(ctx, deleteTaskCommit, arg.TaskID, arg.Repo, arg.Sha)
-	return err
+// Returns the row count so the caller can tell "removed" from "there
+// was nothing there", which is a 404 rather than a silent success.
+func (q *Queries) DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTaskCommit, arg.TaskID, arg.Repo, arg.Sha)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getTaskComment = `-- name: GetTaskComment :one

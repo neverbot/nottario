@@ -53,7 +53,9 @@ type Querier interface {
 	DeleteSessionByID(ctx context.Context, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTaskComment(ctx context.Context, id uuid.UUID) (int64, error)
-	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) error
+	// Returns the row count so the caller can tell "removed" from "there
+	// was nothing there", which is a 404 rather than a silent success.
+	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) (int64, error)
 	// Idempotent: marks the user as a member of the project. Role
 	// assignments live in a separate table so a membership without any
 	// roles is a legal state.
