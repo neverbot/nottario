@@ -62,11 +62,19 @@ class NottarioBoardPage extends LitElement {
     // while a PATCH /text is in flight. Comment-level edit state lives
     // in _commentEditID (the comment being edited), _commentDrafts (a
     // {id: body} map), _commentSavingID, _commentDeletingID.
+    // Commit rows carry the same kind of state keyed by "repo\nsha",
+    // since a link has no id of its own: _commitUnlinkKey is the row
+    // asking for confirmation, _commitUnlinkBusyKey the one whose
+    // DELETE is in flight, _commitUnlinkError {key, message} the last
+    // failure, shown on its own row.
     _edit: { state: true },
     _commentEditID: { state: true },
     _commentDrafts: { state: true },
     _commentSavingID: { state: true },
     _commentDeletingID: { state: true },
+    _commitUnlinkKey: { state: true },
+    _commitUnlinkBusyKey: { state: true },
+    _commitUnlinkError: { state: true },
   };
 
   static styles = [
@@ -534,21 +542,76 @@ class NottarioBoardPage extends LitElement {
       overflow: hidden;
       background: var(--bg);
     }
+    /* One row = the commit itself plus its unlink control, side by
+       side. The border moved up here so the control sits inside the
+       same separated band as the link it belongs to. */
+    .detail .commits-list .commit-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      border-top: 1px solid var(--gray-2);
+      padding-right: 12px;
+    }
+    .detail .commits-list .commit-row:first-child { border-top: none; }
+    .detail .commits-list .commit-row.busy { opacity: 0.6; }
     .detail .commits-list .commit {
       display: grid;
       grid-template-columns: auto 1fr auto;
       gap: 12px;
       align-items: baseline;
+      min-width: 0;
       padding: 8px 12px;
-      border-top: 1px solid var(--gray-2);
       background: transparent;
       color: var(--fg);
       text-decoration: none;
       font-size: 13px;
       transition: background-color 0.1s;
     }
-    .detail .commits-list .commit:first-child { border-top: none; }
-    .detail .commits-list a.commit:hover { background: var(--bg-subtle); }
+    .detail .commits-list .commit-row:hover a.commit { background: var(--bg-subtle); }
+    /* The unlink control stays out of the way until the row is in
+       play: pointer over it, keyboard inside it, or a confirm open.
+       opacity rather than visibility, so the button keeps its place in
+       the tab order and in the accessibility tree — hiding it outright
+       would put it out of reach of anyone not using a mouse. Clicking
+       it blind only opens the confirm, which is the point of having
+       one. */
+    .detail .commits-list .commit-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      font-size: 12px;
+      transition: opacity 0.1s;
+    }
+    .detail .commits-list .commit-row:hover .commit-actions,
+    .detail .commits-list .commit-row:focus-within .commit-actions,
+    .detail .commits-list .commit-row.open .commit-actions,
+    .detail .commits-list .commit-row.busy .commit-actions { opacity: 1; }
+    /* No hover on a touch screen, so the control has to be there. */
+    @media (hover: none) {
+      .detail .commits-list .commit-actions { opacity: 1; }
+    }
+    .detail .commits-list .commit-actions .ask { color: var(--fg-muted); }
+    .detail .commits-list .commit-actions .link-btn {
+      appearance: none;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      color: var(--fg-muted);
+      cursor: pointer;
+    }
+    .detail .commits-list .commit-actions .link-btn:hover { color: var(--fg); text-decoration: underline; }
+    .detail .commits-list .commit-actions .link-btn.danger:hover { color: var(--danger); }
+    .detail .commits-list .commit-actions .link-btn[disabled] { cursor: default; text-decoration: none; }
+    /* A failed removal keeps the row and says why, under it. */
+    .detail .commits-list .commit-error {
+      grid-column: 1 / -1;
+      margin: 0;
+      padding: 0 12px 8px;
+      font-size: 12px;
+      color: var(--danger);
+    }
     .detail .commits-list a.commit:hover .sha { text-decoration: underline; }
     .detail .commits-list .commit .sha {
       font-family: ui-monospace, SFMono-Regular, monospace;
@@ -785,6 +848,9 @@ class NottarioBoardPage extends LitElement {
     this._commentDrafts = {};
     this._commentSavingID = null;
     this._commentDeletingID = null;
+    this._commitUnlinkKey = null;
+    this._commitUnlinkBusyKey = null;
+    this._commitUnlinkError = null;
     new EscController(this, (e) => this._onEsc(e));
     // The cycle switcher is an anchored menu, so it also closes on a
     // press outside it. The selector matches the wrapper holding both
@@ -844,6 +910,13 @@ class NottarioBoardPage extends LitElement {
     }
     if (this._endSprintOpen) {
       this._endSprintOpen = false;
+      e.stopPropagation();
+      return;
+    }
+    // An open unlink confirm is the innermost thing on screen: Esc
+    // backs out of it, not out of the whole task.
+    if (this._commitUnlinkKey && !this._commitUnlinkBusyKey) {
+      this.cancelUnlinkCommit();
       e.stopPropagation();
       return;
     }
@@ -1238,6 +1311,8 @@ class NottarioBoardPage extends LitElement {
     this._commentDrafts = {};
     this._commentSavingID = null;
     this._commentDeletingID = null;
+    this._commitUnlinkKey = null;
+    this._commitUnlinkError = null;
   }
 
   // --- Inline edit of task title / description / role ---------------
@@ -1334,6 +1409,55 @@ class NottarioBoardPage extends LitElement {
 
   cancelDeleteComment() {
     this._commentDeletingID = null;
+  }
+
+  // A commit link is identified by (repo, sha) — there is no id — so
+  // that pair is the key for every piece of per-row state.
+  _commitKey(c) {
+    return `${(c.repo || '').trim()}\n${(c.sha || '').trim()}`;
+  }
+
+  beginUnlinkCommit(c) {
+    this._commitUnlinkKey = this._commitKey(c);
+    this._commitUnlinkError = null;
+  }
+
+  cancelUnlinkCommit() {
+    this._commitUnlinkKey = null;
+    this._commitUnlinkError = null;
+  }
+
+  // Removing a commit link is a correction a human makes by hand: the
+  // web has no way to link one back, so the row asks first and reports
+  // in place rather than vanishing on a failed request.
+  async confirmUnlinkCommit(c) {
+    const t = this.selected?.task;
+    if (!t) return;
+    const key = this._commitKey(c);
+    this._commitUnlinkBusyKey = key;
+    this._commitUnlinkError = null;
+    try {
+      const r = await fetch(`/api/projects/${this.projectId}/tasks/${t.id}/commits`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo: c.repo, sha: c.sha }),
+      });
+      if (r.status === 204 || r.status === 404) {
+        // 404 means somebody got there first. The row is gone either
+        // way, so reload rather than leaving a card the server no
+        // longer knows about.
+        this._commitUnlinkKey = null;
+        await this.loadDetail(t.id);
+        toast.success(r.status === 204 ? 'Commit unlinked.' : 'That commit was already unlinked.');
+        return;
+      }
+      const j = await r.json().catch(() => ({}));
+      this._commitUnlinkError = { key, message: j.error || r.statusText || 'Request failed' };
+    } catch (e) {
+      this._commitUnlinkError = { key, message: e.message };
+    } finally {
+      this._commitUnlinkBusyKey = null;
+    }
   }
 
   async saveComment(commentID, body) {
@@ -2033,10 +2157,42 @@ class NottarioBoardPage extends LitElement {
       <span class="when" title=${whenTitle}>${when}</span>
       ${showRepo && repo ? html`<span class="row-repo">${repo}</span>` : null}
     `;
-    if (url) {
-      return html`<a class="commit" href=${url} target="_blank" rel="noopener noreferrer">${inner}</a>`;
-    }
-    return html`<div class="commit">${inner}</div>`;
+    // The link and the remove control are siblings: a button nested in
+    // an anchor is invalid, and the whole row stays clickable through
+    // to GitHub.
+    const body = url
+      ? html`<a class="commit" href=${url} target="_blank" rel="noopener noreferrer">${inner}</a>`
+      : html`<div class="commit">${inner}</div>`;
+    const key = this._commitKey(c);
+    const confirming = this._commitUnlinkKey === key;
+    const busy = this._commitUnlinkBusyKey === key;
+    const failure = this._commitUnlinkError?.key === key ? this._commitUnlinkError.message : '';
+    return html`
+      <div class=${`commit-row${confirming ? ' open' : ''}${busy ? ' busy' : ''}`}>
+        ${body}
+        <span class="commit-actions">
+          ${
+            confirming
+              ? html`
+                <span class="ask">Unlink?</span>
+                <button class="link-btn"
+                        ?disabled=${busy}
+                        @click=${() => this.cancelUnlinkCommit()}>Cancel</button>
+                <button class="link-btn danger"
+                        ?disabled=${busy}
+                        @click=${() => this.confirmUnlinkCommit(c)}>${busy ? 'Unlinking…' : 'Unlink'}</button>
+              `
+              : html`
+                <button class="link-btn danger"
+                        title=${`Unlink commit ${shortSha}`}
+                        aria-label=${`Unlink commit ${shortSha}`}
+                        @click=${() => this.beginUnlinkCommit(c)}>Unlink</button>
+              `
+          }
+        </span>
+        ${failure ? html`<p class="commit-error" role="alert">Couldn't unlink: ${failure}</p>` : null}
+      </div>
+    `;
   }
 
   // Renders "(edited 5m ago by @name)" below a task field or comment

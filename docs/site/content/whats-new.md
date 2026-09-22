@@ -10,6 +10,13 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-09-22
+
+- **A commit linked to the wrong task can be unlinked from the web.**
+  Hovering a row in a task's Commits panel reveals an Unlink control,
+  which asks before removing: the link is an audit trail and the web has
+  no way to put one back. Agents cannot unlink over MCP, on purpose.
+
 ## 2026-09-20
 
 - **The projects list now counts what the Kanban shows.** A project card
