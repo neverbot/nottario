@@ -10,6 +10,16 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-09-24
+
+- **Project URLs with the slug work everywhere.** Only
+  `GET /api/projects/{id}` accepted a slug; every other project route
+  demanded a uuid, so reaching a project as `/projects/<slug>/board`
+  showed an empty board with no error, even with work in the cycle. The
+  project segment is now resolved before anything else runs, so
+  readable links work throughout, including the ones the app builds
+  itself.
+
 ## 2026-09-22
 
 - **A commit linked to the wrong task can be unlinked from the web.**
