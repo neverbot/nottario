@@ -109,12 +109,17 @@ func TestApiProjects_EveryRouteRefusesAForeignToken(t *testing.T) {
 		} {
 			url := ts.URL + fill(path, naming.project)
 			r := doRaw(t, method, url, auth, []byte(`{}`))
-			if r.StatusCode >= 200 && r.StatusCode < 300 {
-				t.Errorf("%s %s by %s: %d — a token scoped to another project got through\n%s",
+			switch r.StatusCode {
+			case http.StatusForbidden, http.StatusNotFound:
+				// 403 names the scope violation, 404 hides the project
+				// from someone who should not know it exists. Both are
+				// the access check answering.
+			default:
+				// Anything else means the request died for another
+				// reason — a rejected body, a missing field — and this
+				// route would pass the test even with the check gone.
+				t.Errorf("%s %s by %s: %d, want 403 or 404 from the access check\n%s",
 					method, path, naming.label, r.StatusCode, r.Body)
-			}
-			if strings.Contains(path, "{") && r.StatusCode == http.StatusOK {
-				t.Errorf("%s %s by %s returned 200", method, path, naming.label)
 			}
 		}
 	}

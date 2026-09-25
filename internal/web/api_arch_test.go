@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/testutil"
@@ -22,6 +23,11 @@ type archFixture struct {
 	authOwner    string
 	authOutsider string
 	projectID    string
+	// pool and ownerID let a test reach past HTTP for setup the API
+	// does not expose, e.g. taking an architecture checkpoint (an
+	// MCP-only operation).
+	pool    *pgxpool.Pool
+	ownerID uuid.UUID
 }
 
 func setupArch(t *testing.T) *archFixture {
@@ -57,6 +63,8 @@ func setupArch(t *testing.T) *archFixture {
 		authOwner:    "Bearer " + ownerToken,
 		authOutsider: "Bearer " + outsiderToken,
 		projectID:    p.ID.String(),
+		pool:         pool,
+		ownerID:      owner.ID,
 	}
 }
 

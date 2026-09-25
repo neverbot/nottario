@@ -274,3 +274,58 @@ func TestNotifications_DisabledReturnsEmptyAnd501(t *testing.T) {
 		t.Errorf("disabled mark-read = %d, want 501", rr.Code)
 	}
 }
+
+// "Mark all as read" is the bell's one bulk action. It had a handler
+// wired into this fixture and no test: nothing would have noticed it
+// clearing somebody else's notifications, or none at all.
+func TestNotifications_MarkAllReadOnlyTouchesTheCaller(t *testing.T) {
+	f := setupNotifFixture(t, true)
+	f.seed(t)
+
+	// Give `other` an unread row too, by having `me` comment on the task.
+	actor := f.me.ID
+	f.notif.OnComment(t.Context(), f.task, &actor)
+
+	unread := func(cookie *http.Cookie) int {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/notifications/unread_count", nil)
+		req.AddCookie(cookie)
+		f.handlerCount.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("unread_count = %d: %s", rr.Code, rr.Body.String())
+		}
+		var body struct {
+			Unread int `json:"unread"`
+		}
+		_ = json.Unmarshal(rr.Body.Bytes(), &body)
+		return body.Unread
+	}
+
+	mineBefore, othersBefore := unread(f.cookie), unread(f.otherCookie)
+	if mineBefore == 0 || othersBefore == 0 {
+		t.Fatalf("need unread rows on both sides to tell them apart: mine=%d others=%d", mineBefore, othersBefore)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/notifications/read_all", nil)
+	req.AddCookie(f.cookie)
+	f.handlerAll.ServeHTTP(rr, req)
+	if rr.Code < 200 || rr.Code >= 300 {
+		t.Fatalf("read_all = %d: %s", rr.Code, rr.Body.String())
+	}
+
+	if got := unread(f.cookie); got != 0 {
+		t.Errorf("caller still has %d unread after read_all", got)
+	}
+	if got := unread(f.otherCookie); got != othersBefore {
+		t.Errorf("read_all changed somebody else's unread count: %d, was %d", got, othersBefore)
+	}
+
+	// Anonymous callers have nothing to mark.
+	rr = httptest.NewRecorder()
+	f.handlerAll.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/notifications/read_all", nil))
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous read_all = %d, want 401", rr.Code)
+	}
+}
