@@ -22,10 +22,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -67,6 +69,22 @@ func main() {
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
+	violations, err := run(os.Stdout, patterns...)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if violations > 0 {
+		fmt.Fprintf(os.Stderr, "sqlcheck: %d violation(s)\n", violations)
+		os.Exit(1)
+	}
+}
+
+// run loads the given patterns and reports every unsafe call site to
+// w, returning how many it found. Split out of main so the analyser
+// can be pointed at fixture packages from a test: a guard nobody
+// tests is a guard nobody notices going blind.
+func run(w io.Writer, patterns ...string) (int, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax |
 			packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports |
@@ -75,11 +93,10 @@ func main() {
 	}
 	pkgs, err := packages.Load(cfg, patterns...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "load:", err)
-		os.Exit(2)
+		return 0, fmt.Errorf("load: %w", err)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		os.Exit(2)
+		return 0, errors.New("sqlcheck: the packages under analysis do not type-check")
 	}
 	violations := 0
 	for _, pkg := range pkgs {
@@ -106,7 +123,7 @@ func main() {
 					if ignored[pos.Filename+":"+itoa(pos.Line)] {
 						return true
 					}
-					fmt.Printf("%s:%d:%d: %s in inline argument to %s — use $N placeholders or move the query to sqlc\n",
+					fmt.Fprintf(w, "%s:%d:%d: %s in inline argument to %s — use $N placeholders or move the query to sqlc\n",
 						pos.Filename, pos.Line, pos.Column, reason, sel.Sel.Name)
 					violations++
 				}
@@ -114,10 +131,7 @@ func main() {
 			})
 		}
 	}
-	if violations > 0 {
-		fmt.Fprintf(os.Stderr, "sqlcheck: %d violation(s)\n", violations)
-		os.Exit(1)
-	}
+	return violations, nil
 }
 
 // isPgxReceiver returns true when expr's type lives under the
