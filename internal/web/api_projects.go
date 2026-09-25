@@ -79,7 +79,7 @@ func CreateProjectHandler(d ProjectDeps) http.Handler {
 // GetProjectHandler returns a single project.
 func GetProjectHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, ok := d.caller(r)
+		c, ok := d.caller(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
@@ -88,6 +88,10 @@ func GetProjectHandler(d ProjectDeps) http.Handler {
 		p, err := identity.GetProject(r.Context(), d.Pool, id)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, p.ID); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, p)
@@ -118,6 +122,10 @@ func UpdateProjectHandler(d ProjectDeps) http.Handler {
 		id, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, id); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		var req updateProjectRequest
@@ -152,6 +160,10 @@ func UpdateProjectMCPHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid project id")
 			return
 		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, id); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
 		var body struct {
 			MCPPageSize int `json:"mcp_page_size"`
 		}
@@ -184,6 +196,10 @@ func UpdateProjectDefaultViewHandler(d ProjectDeps) http.Handler {
 		id, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, id); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		var body struct {
@@ -223,6 +239,10 @@ func SetOwnerHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid project id")
 			return
 		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, id); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
 		var req setOwnerRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -255,6 +275,10 @@ func DeleteProjectHandler(d ProjectDeps) http.Handler {
 		id, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, id); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		if err := identity.DeleteProject(r.Context(), d.Pool, id); err != nil {

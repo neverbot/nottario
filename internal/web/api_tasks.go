@@ -71,20 +71,7 @@ func taskIDFromPath(r *http.Request) (uuid.UUID, error) {
 // see it (admin or any membership). It returns 404 to avoid leaking
 // existence to outsiders.
 func (d TaskDeps) ensureProjectAccess(ctx context.Context, c identity.Caller, projectID uuid.UUID) error {
-	if err := identity.RequireProjectScope(c, projectID); err != nil {
-		return err
-	}
-	if c.IsAdmin {
-		return nil
-	}
-	roles, err := identity.UserRoleIDs(ctx, d.Pool, c.UserID, projectID)
-	if err != nil {
-		return err
-	}
-	if len(roles) == 0 {
-		return errors.New("not a project member")
-	}
-	return nil
+	return requireProjectAccess(ctx, d.Pool, c, projectID)
 }
 
 // ListDependenciesHandler returns every dependency edge for the project.

@@ -10,7 +10,7 @@ import (
 // ListRolesHandler returns the role catalogue of a project.
 func ListRolesHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, ok := d.caller(r)
+		c, ok := d.caller(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
@@ -18,6 +18,10 @@ func ListRolesHandler(d ProjectDeps) http.Handler {
 		pid, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		roles, err := identity.ListRoles(r.Context(), d.Pool, pid)
@@ -52,6 +56,10 @@ func CreateRoleHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid project id")
 			return
 		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
 		var req roleRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -80,6 +88,17 @@ func UpdateRoleHandler(d ProjectDeps) http.Handler {
 		}
 		if !c.IsAdmin {
 			writeError(w, http.StatusForbidden, "admin only")
+			return
+		}
+		// Same as the delete below: the role is addressed by its own id,
+		// so without this the project in the path is decoration.
+		pid, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		rid, err := uuid.Parse(r.PathValue("role_id"))
@@ -120,6 +139,10 @@ func ReorderRolesHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid project id")
 			return
 		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
 		var body struct {
 			RoleIDs []string `json:"role_ids"`
 		}
@@ -154,6 +177,18 @@ func DeleteRoleHandler(d ProjectDeps) http.Handler {
 		}
 		if !c.IsAdmin {
 			writeError(w, http.StatusForbidden, "admin only")
+			return
+		}
+		// The role is deleted by its own id, so this handler would
+		// otherwise never look at the project in the path — and would
+		// happily delete a role belonging to another one.
+		pid, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		rid, err := uuid.Parse(r.PathValue("role_id"))

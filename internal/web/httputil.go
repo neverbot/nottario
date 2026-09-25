@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -27,6 +28,28 @@ func writeProjectAccessError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeError(w, http.StatusNotFound, "project not found")
+}
+
+// requireProjectAccess is the check every project-scoped handler owes
+// its own route: the caller's token must be bound to this project, and
+// the caller must be an admin or a member of it. The guard in the
+// router enforces the token half too, but a handler that asks for
+// itself stays correct no matter how it is wired later.
+func requireProjectAccess(ctx context.Context, pool *pgxpool.Pool, c identity.Caller, projectID uuid.UUID) error {
+	if err := identity.RequireProjectScope(c, projectID); err != nil {
+		return err
+	}
+	if c.IsAdmin {
+		return nil
+	}
+	roles, err := identity.UserRoleIDs(ctx, pool, c.UserID, projectID)
+	if err != nil {
+		return err
+	}
+	if len(roles) == 0 {
+		return errors.New("not a project member")
+	}
+	return nil
 }
 
 // withProjectSlug rewrites the project segment of the path to the

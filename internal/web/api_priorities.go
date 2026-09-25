@@ -10,7 +10,7 @@ import (
 // ListPrioritiesHandler returns the priority buckets of a project.
 func ListPrioritiesHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, ok := d.caller(r)
+		c, ok := d.caller(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
@@ -18,6 +18,10 @@ func ListPrioritiesHandler(d ProjectDeps) http.Handler {
 		pid, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		pr, err := identity.ListPriorities(r.Context(), d.Pool, pid)
@@ -52,6 +56,10 @@ func UpsertPriorityHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid project id")
 			return
 		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
 		var req priorityRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -81,6 +89,10 @@ func RemovePriorityHandler(d ProjectDeps) http.Handler {
 		pid, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		key := r.PathValue("key")

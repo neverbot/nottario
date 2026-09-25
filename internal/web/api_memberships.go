@@ -10,7 +10,7 @@ import (
 // ListMembersHandler lists project memberships.
 func ListMembersHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, ok := d.caller(r)
+		c, ok := d.caller(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
@@ -18,6 +18,10 @@ func ListMembersHandler(d ProjectDeps) http.Handler {
 		pid, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		members, err := identity.ListMembers(r.Context(), d.Pool, pid)
@@ -51,6 +55,10 @@ func AddMemberHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid project id")
 			return
 		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
 		var req addMemberRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -82,6 +90,10 @@ func RemoveMemberEntirelyHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid project id")
 			return
 		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
+			return
+		}
 		uid, err := uuid.Parse(r.PathValue("user_id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid user id")
@@ -110,6 +122,10 @@ func RemoveMemberHandler(d ProjectDeps) http.Handler {
 		pid, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		uid, err := uuid.Parse(r.PathValue("user_id"))

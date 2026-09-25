@@ -13,7 +13,7 @@ import (
 // ListCyclesHandler returns every cycle of a project (newest first).
 func ListCyclesHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, ok := d.caller(r)
+		c, ok := d.caller(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
@@ -21,6 +21,10 @@ func ListCyclesHandler(d ProjectDeps) http.Handler {
 		pid, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		out, err := cycles.List(r.Context(), d.Pool, pid)
@@ -35,7 +39,8 @@ func ListCyclesHandler(d ProjectDeps) http.Handler {
 // GetCurrentCycleHandler returns the project's active (open) cycle.
 func GetCurrentCycleHandler(d ProjectDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, ok := d.caller(r)
+		// `caller`, not `c`: the active cycle takes that name below.
+		caller, ok := d.caller(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
@@ -43,6 +48,10 @@ func GetCurrentCycleHandler(d ProjectDeps) http.Handler {
 		pid, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, caller, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		c, err := cycles.ActiveCycle(r.Context(), d.Pool, pid)
@@ -74,6 +83,10 @@ func EndCycleHandler(d ProjectDeps) http.Handler {
 		pid, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if err := requireProjectAccess(r.Context(), d.Pool, c, pid); err != nil {
+			writeProjectAccessError(w, err)
 			return
 		}
 		if err := identity.RequireProjectOwner(r.Context(), d.Pool, pid, c.UserID, c.IsAdmin); err != nil {
