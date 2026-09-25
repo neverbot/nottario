@@ -30,6 +30,13 @@ type OAuthConfig struct {
 	// RequiredOrg, when non-empty, restricts logins to active members
 	// of this GitHub organisation. Empty disables the gate.
 	RequiredOrg string
+	// AuthURL, TokenURL and APIBase point the OAuth dance somewhere
+	// other than github.com. Empty means GitHub itself, which is what
+	// the binary always passes. Tests drive the whole flow against a
+	// stand-in server through these.
+	AuthURL  string
+	TokenURL string
+	APIBase  string
 }
 
 // ErrOrgRequired is returned by HandleGithubCallback when the
@@ -45,17 +52,20 @@ const stateCookieName = "nottario_oauth_state"
 
 const githubAuthURL = "https://github.com/login/oauth/authorize"
 const githubTokenURL = "https://github.com/login/oauth/access_token"
+const githubAPIBase = "https://api.github.com"
 
-// githubAPIBase is overridable in tests. The user/emails endpoints are
-// formed from this base inside fetchGithubUser.
-var githubAPIBase = "https://api.github.com"
+func orDefault(v, fallback string) string {
+	if v == "" {
+		return fallback
+	}
+	return v
+}
 
-// oauthEndpoint returns the GitHub OAuth2 endpoint; tests can
-// substitute a different base if needed.
-func oauthEndpoint() oauth2.Endpoint {
+// oauthEndpoint returns the OAuth2 endpoint for this configuration.
+func oauthEndpoint(c OAuthConfig) oauth2.Endpoint {
 	return oauth2.Endpoint{
-		AuthURL:  githubAuthURL,
-		TokenURL: githubTokenURL,
+		AuthURL:  orDefault(c.AuthURL, githubAuthURL),
+		TokenURL: orDefault(c.TokenURL, githubTokenURL),
 	}
 }
 
@@ -69,7 +79,7 @@ func newOAuth2Config(c OAuthConfig) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     c.ClientID,
 		ClientSecret: c.ClientSecret,
-		Endpoint:     oauthEndpoint(),
+		Endpoint:     oauthEndpoint(c),
 		RedirectURL:  strings.TrimRight(c.PublicURL, "/") + "/auth/github/callback",
 		Scopes:       scopes,
 	}
@@ -132,13 +142,13 @@ func HandleGithubCallback(w http.ResponseWriter, r *http.Request, pool *pgxpool.
 	}
 
 	client := newOAuth2Config(c).Client(ctx, tok)
-	profile, err := fetchGithubUser(ctx, client)
+	profile, err := fetchGithubUser(ctx, client, orDefault(c.APIBase, githubAPIBase))
 	if err != nil {
 		return nil, err
 	}
 
 	if c.RequiredOrg != "" {
-		ok, err := checkOrgMembership(ctx, client, c.RequiredOrg)
+		ok, err := checkOrgMembership(ctx, client, orDefault(c.APIBase, githubAPIBase), c.RequiredOrg)
 		if err != nil {
 			return nil, err
 		}
@@ -170,8 +180,8 @@ type githubProfile struct {
 	Email     string `json:"email"`
 }
 
-func fetchGithubUser(ctx context.Context, client *http.Client) (*githubProfile, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubAPIBase+"/user", nil)
+func fetchGithubUser(ctx context.Context, client *http.Client, apiBase string) (*githubProfile, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/user", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +209,8 @@ func fetchGithubUser(ctx context.Context, client *http.Client) (*githubProfile, 
 // A 404 means the user is not a member; any state other than
 // "active" (e.g. "pending") also rejects. Other statuses surface as
 // an error so the operator can see what's wrong.
-func checkOrgMembership(ctx context.Context, client *http.Client, org string) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubAPIBase+"/user/memberships/orgs/"+org, nil)
+func checkOrgMembership(ctx context.Context, client *http.Client, apiBase, org string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/user/memberships/orgs/"+org, nil)
 	if err != nil {
 		return false, err
 	}

@@ -38,11 +38,8 @@ func TestCheckOrgMembership(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer ts.Close()
-			prev := githubAPIBase
-			githubAPIBase = ts.URL
-			defer func() { githubAPIBase = prev }()
 
-			got, err := checkOrgMembership(context.Background(), http.DefaultClient, org)
+			got, err := checkOrgMembership(context.Background(), http.DefaultClient, ts.URL, org)
 			if tc.errIs != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.errIs) {
 					t.Fatalf("want err containing %q, got %v", tc.errIs, err)
