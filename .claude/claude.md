@@ -393,11 +393,17 @@ That target chains, in order:
    `internal/web/static/`. Catches structural breakage like unbalanced
    brackets or template literals. A `package.json` at the static root
    declares `"type": "module"` so Node parses ESM.
-7. `make frontend-check` — Biome (lint + format check) via
+7. `make js-test` — the frontend unit tests, on Node's built-in
+   runner (`node --test internal/web/static/__tests__/*.test.js`).
+   No framework and no dependency: the modules under test are plain
+   ES modules imported straight from source. Pure logic only (time
+   formatting, priority bands, the view registry); anything needing a
+   DOM belongs in an integration test instead.
+8. `make frontend-check` — Biome (lint + format check) via
    `npx --yes @biomejs/biome`, config in `biome.json` at the repo root.
    The Rust binary caches under `~/.npm/_npx/`, so no `node_modules`
    in the repo. `make frontend-format` rewrites files in place.
-8. `go test ./...` must pass — every package, including the
+9. `go test ./...` must pass — every package, including the
    concurrency and integration tests as they land.
 
 If any of these fail, fix the underlying issue. Never bypass with

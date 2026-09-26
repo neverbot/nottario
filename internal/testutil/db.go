@@ -30,6 +30,29 @@ const EnvDSN = "TEST_DATABASE_URL"
 // ./...` stays a clean no-op without infrastructure).
 func NewPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	dbName := NewDSN(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pool, err := db.Open(ctx, dbName)
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	if err := db.Migrate(ctx, pool); err != nil {
+		pool.Close()
+		t.Fatalf("migrate test db: %v", err)
+	}
+
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+// NewDSN provisions an empty database and returns its DSN, dropping
+// it when t finishes. Use it when the code under test opens its own
+// pool — the binary's own start-up path, for instance. Migrations are
+// NOT run: whoever owns the pool owns that step.
+func NewDSN(t *testing.T) string {
+	t.Helper()
 	dsn := os.Getenv(EnvDSN)
 	if dsn == "" {
 		t.Skipf("%s not set; skipping integration test", EnvDSN)
@@ -41,25 +64,14 @@ func NewPool(t *testing.T) *pgxpool.Pool {
 	if err != nil {
 		t.Fatalf("provision test db: %v", err)
 	}
-
-	pool, err := db.Open(ctx, dbName)
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	if err := db.Migrate(ctx, pool); err != nil {
-		pool.Close()
-		t.Fatalf("migrate test db: %v", err)
-	}
-
 	t.Cleanup(func() {
-		pool.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := drop(ctx, adminDSN, dbName); err != nil {
 			t.Logf("drop test db: %v", err)
 		}
 	})
-	return pool
+	return dbName
 }
 
 // provision opens the admin DSN, creates a uniquely-named database

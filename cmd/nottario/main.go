@@ -6,7 +6,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -36,29 +38,47 @@ import (
 	"github.com/neverbot/nottario/internal/web"
 )
 
+// errConfig marks a start-up failure caused by the environment
+// rather than by the process itself, so main can keep exiting 2 for
+// "you configured me wrong" and 1 for everything else.
+var errConfig = errors.New("config")
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, logger, nil); err != nil {
+		logger.Error("exiting", "err", err)
+		if errors.Is(err, errConfig) {
+			os.Exit(2)
+		}
+		os.Exit(1)
+	}
+}
+
+// run boots everything and serves until ctx is cancelled. It returns
+// errors instead of exiting so the whole start-up path — config,
+// migrations, background workers, routes — can be exercised by a
+// test. ready, when non-nil, is called with the address actually
+// bound, which is also what gets logged: with HTTP_ADDR=:0 the
+// configured value says nothing.
+func run(ctx context.Context, logger *slog.Logger, ready func(net.Addr)) error {
 	logger.Info("starting nottario", "version", version.String())
 
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Error("config", "err", err)
-		os.Exit(2)
+		return fmt.Errorf("%w: %w", errConfig, err)
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
-		logger.Error("db open", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("db open: %w", err)
 	}
 	defer pool.Close()
 
 	if err := db.Migrate(ctx, pool); err != nil {
-		logger.Error("db migrate", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("db migrate: %w", err)
 	}
 	logger.Info("migrations applied")
 
@@ -158,18 +178,25 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		logger.Info("http server listening", "addr", cfg.HTTPAddr, "public_url", cfg.PublicURL)
-		errCh <- srv.ListenAndServe()
-	}()
+	ln, err := net.Listen("tcp", cfg.HTTPAddr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", cfg.HTTPAddr, err)
+	}
+	logger.Info("http server listening", "addr", ln.Addr().String(), "public_url", cfg.PublicURL)
+	if ready != nil {
+		ready(ln.Addr())
+	}
 
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.Serve(ln) }()
+
+	var serveErr error
 	select {
 	case <-ctx.Done():
 		logger.Info("shutdown requested")
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("server error", "err", err)
+			serveErr = fmt.Errorf("server: %w", err)
 		}
 	}
 
@@ -179,4 +206,5 @@ func main() {
 		logger.Error("shutdown", "err", err)
 	}
 	logger.Info("bye")
+	return serveErr
 }

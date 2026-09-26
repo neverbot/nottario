@@ -34,7 +34,7 @@ BIOME_VERSION         ?= 2.5.14
 # Where 'go install' drops binaries (works inside and outside CI).
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
 
-.PHONY: help build test run tidy docker lint check tools sqlc docs-build docs-serve docs-check js-check frontend-check frontend-format
+.PHONY: help build test run tidy docker lint check tools sqlc docs-build docs-serve docs-check js-check js-test frontend-check frontend-format
 
 help:
 	@echo "Targets:"
@@ -111,6 +111,7 @@ check:
 	$(MAKE) sqlc-check
 	$(MAKE) docs-check
 	$(MAKE) js-check
+	$(MAKE) js-test
 	$(MAKE) frontend-check
 	TEST_DATABASE_URL=$(TEST_DATABASE_URL) $(GO) test ./...
 
@@ -125,6 +126,14 @@ js-check:
 	@command -v node >/dev/null 2>&1 || { echo "node is required for js-check (install Node 20+)"; exit 1; }
 	@find internal/web/static -name '*.js' -not -path '*/vendor/*' -print0 \
 		| xargs -0 -I{} node --check {}
+
+# Frontend unit tests on Node's built-in runner. No framework, no
+# dependency, no build step: the modules under test are plain ES
+# modules and the tests import them straight from source, which is the
+# only way this fits a frontend that ships as-is.
+js-test:
+	@command -v node >/dev/null 2>&1 || { echo "node is required for js-test (install Node 20+)"; exit 1; }
+	cd internal/web/static && node --test '__tests__/*.test.js'
 
 # Frontend lint + format gate via Biome, pinned to BIOME_VERSION so
 # the same input always yields the same verdict here and in CI. The

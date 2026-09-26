@@ -69,10 +69,13 @@ The chain, in order:
 6. `make js-check` — `node --check` (parse-only) over every `.js`
    in `internal/web/static/`. Catches structural breakage like
    unbalanced brackets or template literals.
-7. `make frontend-check` — Biome (lint + format) via
+7. `make js-test` — frontend unit tests on Node's built-in runner.
+   No framework, no dependency: plain ES modules imported from
+   source.
+8. `make frontend-check` — Biome (lint + format) via
    `npx --yes @biomejs/biome`. Config in `biome.json` at the repo
    root; `make frontend-format` rewrites files in place.
-8. `go test ./...` — every package, including concurrency and
+9. `go test ./...` — every package, including concurrency and
    integration tests.
 
 Never bypass with `--no-verify` or by skipping packages — the
