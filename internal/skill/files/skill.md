@@ -75,9 +75,10 @@ taking something off the backlog.
 
 ### Preflight: surface your own `doing` first
 
-Whenever the human asks "what's next", "cuáles son las siguientes
-tareas", "carry on", or any pickup-shaped question, ALWAYS list
-your own open pickup BEFORE previewing new work:
+Whenever the human asks "what's next", "what are the next tasks",
+"carry on", or any pickup-shaped question: before previewing new work,
+list your own open pickups, so an unfinished task is resumed instead of
+forgotten.
 
 ```text
 nottario.tasks.list {
