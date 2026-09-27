@@ -10,6 +10,17 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-09-27
+
+- **Agents learn on their own when their skills are out of date.** When
+  an agent connects, the MCP server's instructions now name the current
+  skill bundle version and tell it how to compare that with the
+  `SHA256SUMS` it has installed; `nottario.whoami` returns the same
+  value as `skill_bundle_version`. An agent with an outdated bundle
+  reinstalls it and asks the human to restart the client, without
+  anyone having to remember to tell it. Overrides edited by an admin
+  are picked up within 30 seconds. See [skills](/skills/).
+
 ## 2026-09-24
 
 - **Project URLs with the slug work everywhere.** Only

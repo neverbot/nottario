@@ -59,6 +59,14 @@ contributor gets it); the home path (`~/.claude/skills/nottario/`)
 is the fallback when you work on Nottario across unrelated checkouts
 or do not want to version the bundle.
 
+**How you find out there is a new bundle.** You do not have to poll.
+When you connect, the server's instructions name the current bundle
+version and repeat the check below; `nottario.whoami` returns the same
+value as `skill_bundle_version`. If it differs from your installed
+`SHA256SUMS`, reinstall and tell the human to restart the client. The
+server says this rather than the bundle because an outdated bundle
+cannot know it is outdated.
+
 **Check before downloading.** `bundle_version` is `sha256:` followed
 by the SHA-256 of the `SHA256SUMS` file that ships inside the zip. It
 is **not** a hash of the zip, of `skill.md`, or of any other single

@@ -3,6 +3,7 @@ package mcp
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -15,6 +16,11 @@ type Deps struct {
 	Pool       *pgxpool.Pool
 	Resolver   *identity.Resolver
 	SessionKey []byte // for signing short-lived /skill.zip download URLs
+	// BundleVersionTTL bounds how long the advertised skill bundle
+	// version may lag an override edit. Zero means the default.
+	BundleVersionTTL time.Duration
+
+	bundles *bundleVersions
 }
 
 // Handler returns an http.Handler that authenticates the incoming
@@ -36,10 +42,18 @@ type Deps struct {
 // so we lose nothing the tools currently use. Server->client
 // notifications inside a single request's lifetime still work per
 // the SDK's documentation.
+//
+// The server carries instructions naming the current skill bundle
+// version, so every agent learns at connection time whether its
+// installed skills are out of date. One server is kept per version and
+// replaced when the version changes (see versionedServers).
 func Handler(d Deps) http.Handler {
-	server := buildServer(d)
+	d.bundles = newBundleVersions(d.Pool, d.BundleVersionTTL)
+	servers := &versionedServers{build: func(instructions string) *sdk.Server {
+		return buildServer(d, instructions)
+	}}
 	streamable := sdk.NewStreamableHTTPHandler(func(r *http.Request) *sdk.Server {
-		return server
+		return servers.forVersion(d.bundles.current(r.Context()))
 	}, &sdk.StreamableHTTPOptions{Stateless: true})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,10 +80,10 @@ func resolveCaller(r *http.Request, rv *identity.Resolver) (identity.Caller, boo
 }
 
 // buildServer constructs the MCP server, registering every tool.
-func buildServer(d Deps) *sdk.Server {
+func buildServer(d Deps, instructions string) *sdk.Server {
 	server := sdk.NewServer(
 		&sdk.Implementation{Name: "nottario", Version: version.Version},
-		nil,
+		&sdk.ServerOptions{Instructions: instructions},
 	)
 	registerWhoami(server, d)
 	registerProjects(server, d)

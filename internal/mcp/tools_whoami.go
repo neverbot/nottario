@@ -13,7 +13,7 @@ type WhoamiInput struct{}
 func registerWhoami(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.whoami",
-		Description: "Identifies the caller: user, admin status, auth source, and (project, role) memberships. Call once per session.",
+		Description: "Identifies the caller: user, admin status, auth source, (project, role) memberships, and skill_bundle_version, the current skill bundle to compare with the SHA256SUMS you have installed. Call once per session.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ WhoamiInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -43,13 +43,23 @@ func registerWhoami(server *sdk.Server, d Deps) {
 		// time the full token leaves the server is at issuance. The
 		// caller already authenticated with the bearer it presented;
 		// it does not need its own id repeated to do its job.
-		return jsonResult(map[string]any{
+		out := map[string]any{
 			"user_id":      user.ID,
 			"github_login": user.GithubLogin,
 			"display_name": user.DisplayName,
 			"is_admin":     user.IsAdmin,
 			"source":       string(c.Source),
 			"memberships":  memberships,
-		})
+		}
+		// The same version the server instructions announce, for
+		// clients that never show those instructions to the model.
+		// whoami is the first call the skill asks for, so this is the
+		// fallback path to "your skills are out of date".
+		if d.bundles != nil {
+			if v := d.bundles.current(ctx); v != "" {
+				out["skill_bundle_version"] = v
+			}
+		}
+		return jsonResult(out)
 	})
 }
