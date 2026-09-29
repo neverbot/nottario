@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/tasks"
 )
 
 func writeError(w http.ResponseWriter, status int, msg string) {
@@ -86,6 +87,40 @@ func withProjectSlug(pool *pgxpool.Pool, h http.Handler) http.Handler {
 			return
 		}
 		r.SetPathValue(key, p.ID.String())
+		h.ServeHTTP(w, r)
+	})
+}
+
+// withTaskInProject refuses a request whose task in the path is not a
+// task of the project in the path. Handlers check access to the
+// project and then act on the task id, so without this a caller could
+// name a project they may use and a task from another one. Both
+// {task_id} and {dep_id} are task ids. A mismatch answers exactly like
+// a missing task, to avoid confirming the task exists elsewhere.
+//
+// Runs after withProjectSlug, so the project segment is a uuid.
+func withTaskInProject(pool *pgxpool.Pool, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pid, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			h.ServeHTTP(w, r)
+			return
+		}
+		for _, key := range []string{"task_id", "dep_id"} {
+			raw := r.PathValue(key)
+			if raw == "" {
+				continue
+			}
+			tid, err := uuid.Parse(raw)
+			if err != nil {
+				h.ServeHTTP(w, r) // the handler reports the malformed id
+				return
+			}
+			if err := tasks.RequireInProject(r.Context(), pool, pid, tid); err != nil {
+				writeError(w, http.StatusNotFound, "task not found")
+				return
+			}
+		}
 		h.ServeHTTP(w, r)
 	})
 }

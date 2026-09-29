@@ -93,6 +93,13 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 	if err := validateTaskAssignments(ctx, pool, p.ProjectID, p.TargetRoleID, assignee); err != nil {
 		return nil, err
 	}
+	if p.ParentTaskID != nil {
+		// A task hangs under a feature of its own project, never under
+		// one from another project the caller happens to know the id of.
+		if err := RequireInProject(ctx, pool, p.ProjectID, *p.ParentTaskID); err != nil {
+			return nil, fmt.Errorf("parent task: %w", err)
+		}
+	}
 	priority := 50
 	if p.Priority != nil {
 		priority = *p.Priority
@@ -164,6 +171,33 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 		return nil, err
 	}
 	return out, nil
+}
+
+// ErrTaskInOtherProject is returned when a task id names a task that
+// exists but belongs to a different project than the one the caller
+// was authorised for. Callers surface it exactly like ErrNotFound, so
+// nobody learns that the task exists elsewhere.
+var ErrTaskInOtherProject = errors.New("task not found")
+
+// RequireInProject reports whether taskID is a task of projectID.
+//
+// Every operation that checks access to a project and then acts on a
+// task id it was handed must call this first: checking the project is
+// worthless if the task can come from any other one. Without it, a
+// token for project A could change, close or comment on a task in
+// project B by passing A's id next to B's task.
+func RequireInProject(ctx context.Context, db dbq.DBTX, projectID, taskID uuid.UUID) error {
+	got, err := dbq.New(db).ProjectIDForTask(ctx, taskID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if got != projectID {
+		return ErrTaskInOtherProject
+	}
+	return nil
 }
 
 // Get loads a task by id. Implemented via sqlc-generated dbq.GetTask

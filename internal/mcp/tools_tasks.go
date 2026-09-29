@@ -268,6 +268,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
+		}
 		t, err := tasks.Get(ctx, d.Pool, tid)
 		if err != nil || t.ProjectID != pid {
 			return toolError("task not found")
@@ -342,6 +345,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
+		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
 		}
 		t, err := tasks.Claim(ctx, d.Pool, tid, c.UserID)
 		if err != nil {
@@ -462,6 +468,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
+		}
 		var up tasks.UpdateParams
 		up.Title = in.Title
 		up.DescriptionMD = in.Description
@@ -521,6 +530,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
+		}
 		t, err := tasks.SetState(ctx, d.Pool, tid, tasks.State(in.State), callerActor(c))
 		if err != nil {
 			var uerr *tasks.UnresolvedPreconditionsError
@@ -557,6 +569,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
+		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
 		}
 		state := in.State
 		if state == "" {
@@ -608,6 +623,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
+		}
 		depID, err := uuid.Parse(in.DependsOnID)
 		if err != nil {
 			return toolError("depends_on_id must be a uuid")
@@ -628,6 +646,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
+		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
 		}
 		depID, err := uuid.Parse(in.DependsOnID)
 		if err != nil {
@@ -654,6 +675,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
+		}
 		if err := tasks.LinkCommit(ctx, d.Pool, tid, in.Repo, in.SHA, in.Message, authorshipFor(c)); err != nil {
 			return toolError(err.Error())
 		}
@@ -674,6 +698,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
+		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
 		}
 		cm, err := tasks.AddComment(ctx, d.Pool, tid, in.Body, authorshipFor(c))
 		if err != nil {

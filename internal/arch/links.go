@@ -41,11 +41,21 @@ func UnlinkDoc(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by 
 }
 
 // LinkTask attaches a task uuid to a node. Runs inside an arch session.
+// ErrTaskNotFound is returned when a node is asked to link a task that
+// does not exist in the node's project. A task from another project is
+// reported the same way, so the caller learns nothing about it.
+var ErrTaskNotFound = errors.New("task not found")
+
 func LinkTask(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, by Authorship, taskID uuid.UUID, nodeSlug string) error {
 	return withSession(ctx, pool, projectID, by, func(tx pgx.Tx, q *dbq.Queries) error {
 		nodeID, err := resolveSlugQ(ctx, q, projectID, nodeSlug)
 		if err != nil {
 			return err
+		}
+		// A node points at tasks of its own project only.
+		owner, err := q.ProjectIDForTask(ctx, taskID)
+		if err != nil || owner != projectID {
+			return ErrTaskNotFound
 		}
 		return q.InsertArchNodeLink(ctx, dbq.InsertArchNodeLinkParams{
 			ProjectID: projectID, NodeID: nodeID, LinkType: "task", TargetID: taskID.String(),

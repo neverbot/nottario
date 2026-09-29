@@ -26,6 +26,7 @@ import (
 
 	"github.com/neverbot/nottario/internal/arch"
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/tasks"
 	"github.com/neverbot/nottario/internal/testutil"
 )
 
@@ -529,10 +530,21 @@ func TestLinks_DocAndTask(t *testing.T) {
 		t.Error("LinkDoc with empty path should fail")
 	}
 
-	// Task link round-trip.
-	taskID := uuid.New()
+	// Task link round-trip, against a real task of this project: a
+	// node may not point at a task that does not exist, nor at one
+	// from another project.
+	task, err := tasks.Create(ctx, tc.pool, tasks.CreateParams{
+		ProjectID: tc.projectID, Type: tasks.TypeTask, Title: "linked from the diagram",
+	}, tasks.Authorship{UserID: &tc.userID})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	taskID := task.ID
 	if err := arch.LinkTask(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, taskID, "svc"); err != nil {
 		t.Fatalf("LinkTask: %v", err)
+	}
+	if err := arch.LinkTask(ctx, tc.pool, tc.projectID, arch.Authorship{UserID: tc.userID}, uuid.New(), "svc"); err == nil {
+		t.Error("LinkTask to a task that does not exist should fail")
 	}
 
 	// ListLinks shows both.

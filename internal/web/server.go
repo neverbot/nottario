@@ -91,10 +91,12 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("PATCH /api/me/notification_preferences", PatchPreferencesHandler(notif))
 
 	proj := ProjectDeps{Pool: d.Pool, Resolver: d.Resolver}
-	// Slug first, then the token scope guard, then the handler: the
-	// guard has to see the canonical uuid (see withProjectSlug).
+	// Slug first, then the token scope guard, then the task-belongs-
+	// to-project check, then the handler: the guard has to see the
+	// canonical uuid (see withProjectSlug), and a task in the path is
+	// only meaningful once the project is known to be the caller's.
 	guard := func(h http.Handler) http.Handler {
-		return withProjectSlug(d.Pool, withProjectScopeGuard(d.Resolver, h))
+		return withProjectSlug(d.Pool, withProjectScopeGuard(d.Resolver, withTaskInProject(d.Pool, h)))
 	}
 	mux.Handle("GET /api/projects", ListProjectsHandler(proj))
 	mux.Handle("POST /api/projects", CreateProjectHandler(proj))

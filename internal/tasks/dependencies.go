@@ -52,6 +52,12 @@ func AddDependency(ctx context.Context, pool *pgxpool.Pool, taskID, dependsOnID 
 	if err != nil {
 		return err
 	}
+	// Both ends of an edge live in the same project. The caller has
+	// already been checked against taskID's project; without this the
+	// precondition could be any task anywhere.
+	if err := RequireInProject(ctx, tx, projectID, dependsOnID); err != nil {
+		return fmt.Errorf("depends_on: %w", err)
+	}
 	if err := q.AcquireDepLock(ctx, dbq.AcquireDepLockParams{
 		Namespace: depLockNamespace,
 		ProjectID: projectID.String(),

@@ -368,8 +368,16 @@ func TestApiArch_Links(t *testing.T) {
 		t.Errorf("link doc: %d %s", r.StatusCode, r.Body)
 	}
 
-	// Link a task.
-	taskID := uuid.New()
+	// Link a task — a real one of this project.
+	var created struct {
+		ID uuid.UUID `json:"id"`
+	}
+	tr := doRaw(t, "POST", f.ts.URL+"/api/projects/"+f.projectID+"/tasks", f.authOwner,
+		mustJSON(map[string]any{"title": "linked", "type": "task"}))
+	if err := json.Unmarshal(tr.Body, &created); err != nil || created.ID == uuid.Nil {
+		t.Fatalf("create task: %d %s", tr.StatusCode, tr.Body)
+	}
+	taskID := created.ID
 	r = doRaw(t, "POST", f.url("/nodes/svc/links"), f.authOwner,
 		mustJSON(map[string]any{"task_id": taskID.String()}))
 	if r.StatusCode >= 300 {
