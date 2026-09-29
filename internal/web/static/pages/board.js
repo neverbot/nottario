@@ -548,9 +548,12 @@ class NottarioBoardPage extends LitElement {
     .detail .commits-list .commit-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
+      /* baseline, not center: when the repo wraps under the sha, the
+         control stays on the first line with the sha and the message. */
+      align-items: baseline;
       border-top: 1px solid var(--gray-2);
-      padding-right: 12px;
+      padding-right: 8px;
+      transition: background-color 0.1s;
     }
     .detail .commits-list .commit-row:first-child { border-top: none; }
     .detail .commits-list .commit-row.busy { opacity: 0.6; }
@@ -567,7 +570,9 @@ class NottarioBoardPage extends LitElement {
       font-size: 13px;
       transition: background-color 0.1s;
     }
-    .detail .commits-list .commit-row:hover a.commit { background: var(--bg-subtle); }
+    /* The whole band tints, control included, so a two-line row reads
+       as one unit instead of a shaded link next to a white cell. */
+    .detail .commits-list .commit-row:hover { background: var(--bg-subtle); }
     /* The unlink control stays out of the way until the row is in
        play: pointer over it, keyboard inside it, or a confirm open.
        opacity rather than visibility, so the button keeps its place in
@@ -578,7 +583,7 @@ class NottarioBoardPage extends LitElement {
     .detail .commits-list .commit-actions {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 4px;
       opacity: 0;
       font-size: 12px;
       transition: opacity 0.1s;
@@ -591,19 +596,31 @@ class NottarioBoardPage extends LitElement {
     @media (hover: none) {
       .detail .commits-list .commit-actions { opacity: 1; }
     }
-    .detail .commits-list .commit-actions .ask { color: var(--fg-muted); }
+    .detail .commits-list .commit-actions .ask { color: var(--fg-muted); padding-right: 2px; }
     .detail .commits-list .commit-actions .link-btn {
       appearance: none;
       background: transparent;
       border: 0;
-      padding: 0;
+      border-radius: 4px;
+      padding: 2px 6px;
       font: inherit;
+      line-height: 16px;
       color: var(--fg-muted);
       cursor: pointer;
     }
-    .detail .commits-list .commit-actions .link-btn:hover { color: var(--fg); text-decoration: underline; }
-    .detail .commits-list .commit-actions .link-btn.danger:hover { color: var(--danger); }
-    .detail .commits-list .commit-actions .link-btn[disabled] { cursor: default; text-decoration: none; }
+    .detail .commits-list .commit-actions .link-btn:hover { color: var(--fg); background: var(--gray-2); }
+    /* Inside the confirm the destructive choice reads as one before the
+       pointer reaches it, so it cannot be mistaken for Cancel. */
+    .detail .commits-list .commit-row.open .link-btn.danger { color: var(--danger); }
+    .detail .commits-list .commit-actions .link-btn.danger:hover {
+      color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 10%, transparent);
+    }
+    .detail .commits-list .commit-actions .link-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 0;
+    }
+    .detail .commits-list .commit-actions .link-btn[disabled] { cursor: default; background: transparent; }
     /* A failed removal keeps the row and says why, under it. */
     .detail .commits-list .commit-error {
       grid-column: 1 / -1;
