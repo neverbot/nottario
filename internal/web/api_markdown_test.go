@@ -69,9 +69,12 @@ func TestAPIMarkdown_RejectsInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestAPIMarkdown_RejectsInvalidProjectID(t *testing.T) {
+// project_id accepts a uuid or a slug, since pages send the segment
+// of their URL; one that names no project is a 404, not a malformed
+// request.
+func TestAPIMarkdown_UnknownProjectIs404(t *testing.T) {
 	srv, cookie, _ := newMarkdownServer(t)
-	body := bytes.NewBufferString(`{"project_id":"not-a-uuid","content":"hi"}`)
+	body := bytes.NewBufferString(`{"project_id":"no-such-project","content":"hi"}`)
 	req, _ := http.NewRequest(http.MethodPost, srv.URL, body)
 	req.AddCookie(cookie)
 	resp, err := http.DefaultClient.Do(req)
@@ -79,8 +82,8 @@ func TestAPIMarkdown_RejectsInvalidProjectID(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status: got %d, want 400", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status: got %d, want 404", resp.StatusCode)
 	}
 }
 

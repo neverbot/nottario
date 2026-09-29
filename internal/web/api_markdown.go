@@ -39,7 +39,8 @@ func RenderMarkdownHandler(d MarkdownDeps) http.Handler {
 		return d.Resolver.ResolveToken(r)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := caller(r); !ok {
+		c, ok := caller(r)
+		if !ok {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return
 		}
@@ -50,12 +51,20 @@ func RenderMarkdownHandler(d MarkdownDeps) http.Handler {
 		}
 		var pid *uuid.UUID
 		if req.ProjectID != "" {
-			parsed, err := uuid.Parse(req.ProjectID)
+			// Pages send the project segment of their URL, which is
+			// often the slug, so accept either.
+			p, err := identity.GetProject(r.Context(), d.Pool, req.ProjectID)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "project_id is not a valid uuid")
+				writeError(w, http.StatusNotFound, "project not found")
 				return
 			}
-			pid = &parsed
+			// Chips resolve to task titles and states in this project:
+			// rendering against a project is reading from it.
+			if err := requireProjectAccess(r.Context(), d.Pool, c, p.ID); err != nil {
+				writeProjectAccessError(w, err)
+				return
+			}
+			pid = &p.ID
 		}
 		html, err := markdown.Render(r.Context(), d.Pool, req.Content, pid)
 		if err != nil {

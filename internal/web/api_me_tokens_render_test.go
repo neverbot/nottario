@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/tasks"
 	"github.com/neverbot/nottario/internal/testutil"
 )
 
@@ -162,5 +163,71 @@ func TestApiMarkdown_RenderThroughTheRouter(t *testing.T) {
 
 	if anon := post(nil, mustJSON(map[string]any{"content": "hi"})); anon.StatusCode != http.StatusUnauthorized {
 		t.Errorf("anonymous render: %d, want 401", anon.StatusCode)
+	}
+}
+
+// The markdown endpoint resolves [[task:N]] chips to titles and states
+// in the project it is given. Rendering against a project is reading
+// from it, so it must follow the same access rules as reading it, and
+// it must accept the slug the pages have in their URL.
+func TestApiMarkdown_ProjectAccessAndSlug(t *testing.T) {
+	pool := testutil.NewPool(t)
+	ctx := t.Context()
+	key := []byte("test-session-key")
+
+	if _, _, err := identity.UpsertFromGithub(ctx, pool, 14401, "md-admin", "Admin", ""); err != nil {
+		t.Fatalf("UpsertFromGithub admin: %v", err)
+	}
+	me, _, _ := identity.UpsertFromGithub(ctx, pool, 14402, "md-member", "Member", "")
+	stranger, _, _ := identity.UpsertFromGithub(ctx, pool, 14403, "md-stranger", "Stranger", "")
+	mine, _ := identity.CreateProject(ctx, pool, "Mine MD", "", "", "", me.ID)
+	theirs, _ := identity.CreateProject(ctx, pool, "Theirs MD", "", "", "", stranger.ID)
+	secret, err := tasks.Create(ctx, pool, tasks.CreateParams{
+		ProjectID: theirs.ID, Type: tasks.TypeTask, Title: "a title nobody else should read",
+	}, tasks.Authorship{UserID: &stranger.ID})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	ts := httptest.NewServer(NewServer(Deps{Pool: pool, Resolver: identity.NewResolver(pool, key, false)}))
+	t.Cleanup(ts.Close)
+	sess, _ := identity.NewSession(ctx, pool, me.ID, "t", "127.0.0.1")
+	cookie := &http.Cookie{Name: identity.SessionCookieName, Value: identity.EncodeCookie(sess.ID, key)}
+	render := func(projectID, content string) *rawResp {
+		t.Helper()
+		body := mustJSON(map[string]any{"project_id": projectID, "content": content})
+		req, _ := http.NewRequest("POST", ts.URL+"/api/markdown/render", strings.NewReader(string(body)))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(cookie)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		raw, _ := io.ReadAll(resp.Body)
+		return &rawResp{StatusCode: resp.StatusCode, Body: raw}
+	}
+
+	// The slug the board has in its URL renders like the uuid does.
+	for _, id := range []string{mine.ID.String(), mine.Slug} {
+		if r := render(id, "**hi**"); r.StatusCode != http.StatusOK {
+			t.Errorf("render against own project %q: %d %s", id, r.StatusCode, r.Body)
+		}
+	}
+
+	// A chip into somebody else's project must not give its title away.
+	chip := "[[task:" + secret.ID.String() + "]]"
+	for _, id := range []string{theirs.ID.String(), theirs.Slug} {
+		r := render(id, chip)
+		if r.StatusCode == http.StatusOK {
+			t.Errorf("rendered against a project the caller is not in (%q): %s", id, r.Body)
+		}
+		if strings.Contains(string(r.Body), "a title nobody else should read") {
+			t.Errorf("a chip leaked another project's task title: %s", r.Body)
+		}
+	}
+
+	if r := render("no-such-project", "x"); r.StatusCode != http.StatusNotFound {
+		t.Errorf("unknown project: %d, want 404", r.StatusCode)
 	}
 }
