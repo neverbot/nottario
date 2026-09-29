@@ -177,6 +177,13 @@ type tasksLinkCommitInput struct {
 	Message   string `json:"message,omitempty" jsonschema:"commit subject for display"`
 }
 
+type tasksUnlinkCommitInput struct {
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	TaskID    string `json:"task_id" jsonschema:"task uuid"`
+	Repo      string `json:"repo" jsonschema:"'owner/repo', exactly as it was linked"`
+	SHA       string `json:"sha" jsonschema:"commit SHA, exactly as it was linked"`
+}
+
 type tasksCommentInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project uuid"`
 	TaskID    string `json:"task_id" jsonschema:"task uuid"`
@@ -679,6 +686,30 @@ func registerTasks(server *sdk.Server, d Deps) {
 			return toolError("task not found")
 		}
 		if err := tasks.LinkCommit(ctx, d.Pool, tid, in.Repo, in.SHA, in.Message, authorshipFor(c)); err != nil {
+			return toolError(err.Error())
+		}
+		return textResult("ok")
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.tasks.unlink_commit",
+		Description: "Removes a commit link from a task: the undo of link_commit, for a commit linked to the wrong task or a sha that no longer exists after an amend or rebase. repo and sha must match the link exactly (see tasks.get include_commits). Errors when the task has no such link, rather than succeeding silently.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksUnlinkCommitInput) (*sdk.CallToolResult, any, error) {
+		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if err := requireProjectAccess(ctx, d, pid); err != nil {
+			return toolError(err.Error())
+		}
+		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
+			return toolError("task not found")
+		}
+		err = tasks.UnlinkCommit(ctx, d.Pool, tid, in.Repo, in.SHA)
+		if errors.Is(err, tasks.ErrNotFound) {
+			return toolError("this task has no link to " + in.Repo + "@" + in.SHA + "; check the exact repo and sha with tasks.get include_commits")
+		}
+		if err != nil {
 			return toolError(err.Error())
 		}
 		return textResult("ok")

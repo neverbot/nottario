@@ -546,3 +546,51 @@ func TestMCP_Tasks_OwnershipWithoutClaimCall(t *testing.T) {
 		t.Errorf("close left the task unowned: %+v", closed)
 	}
 }
+
+// unlink_commit is the undo of link_commit: for a commit linked to the
+// wrong task, or a sha that stopped existing after an amend.
+func TestMCP_Tasks_UnlinkCommit(t *testing.T) {
+	f := newMCPFixture(t, 13396, "unlink-commit")
+	var task map[string]any
+	f.callJSON(t, "nottario.tasks.create", map[string]any{"project_id": f.projectID, "title": "t"}, &task)
+	id := task["id"]
+	link := func(sha string) {
+		f.callJSON(t, "nottario.tasks.link_commit", map[string]any{
+			"project_id": f.projectID, "task_id": id, "repo": "neverbot/nottario", "sha": sha,
+		}, nil)
+	}
+	commits := func() string {
+		var got map[string]any
+		f.callJSON(t, "nottario.tasks.get", map[string]any{
+			"project_id": f.projectID, "task_id": id, "include_commits": true,
+		}, &got)
+		return mustJSONString(got["commits"])
+	}
+	link("aaa1111")
+	link("bbb2222")
+
+	f.callJSON(t, "nottario.tasks.unlink_commit", map[string]any{
+		"project_id": f.projectID, "task_id": id, "repo": "neverbot/nottario", "sha": "aaa1111",
+	}, nil)
+	after := commits()
+	if strings.Contains(after, "aaa1111") {
+		t.Errorf("the unlinked commit is still there: %s", after)
+	}
+	if !strings.Contains(after, "bbb2222") {
+		t.Errorf("unlinking one commit removed another: %s", after)
+	}
+
+	// Removing nothing is a mistake worth hearing about: usually the
+	// agent has the wrong sha.
+	msg := f.callExpectErr(t, "nottario.tasks.unlink_commit", map[string]any{
+		"project_id": f.projectID, "task_id": id, "repo": "neverbot/nottario", "sha": "aaa1111",
+	})
+	if !strings.Contains(msg, "no link") {
+		t.Errorf("a second unlink should say there is no such link, got %q", msg)
+	}
+	if msg := f.callExpectErr(t, "nottario.tasks.unlink_commit", map[string]any{
+		"project_id": f.projectID, "task_id": id, "repo": "", "sha": "bbb2222",
+	}); msg == "" {
+		t.Error("an empty repo was accepted")
+	}
+}

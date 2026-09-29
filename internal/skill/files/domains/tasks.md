@@ -453,6 +453,18 @@ full 40-char hash or a shorter prefix; we store what you send.
 display). Re-linking the same `(task, repo, sha)` updates the
 message in place.
 
+### `nottario.tasks.unlink_commit`
+
+The undo of `link_commit`: `{ project_id, task_id, repo, sha }`.
+Reach for it when a link is wrong — the commit went to the wrong task,
+or you amended or rebased after linking and the old sha no longer
+exists. In the second case, unlink the old sha and link the new one.
+
+`repo` and `sha` must match the link exactly as it was stored; read
+them with `tasks.get { include_commits: true }` rather than guessing.
+A link that does not exist is an error, not a silent success: it
+almost always means the sha is wrong.
+
 ### `nottario.tasks.add_comment`
 
 Body is markdown. The comment is attributed to the calling user and
