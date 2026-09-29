@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/markdown"
 	"github.com/neverbot/nottario/internal/notifications"
 	"github.com/neverbot/nottario/internal/tasks"
 )
@@ -233,13 +234,46 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 		deps, _ := tasks.ListDependenciesOf(r.Context(), d.Pool, tid)
 		commits, _ := tasks.ListCommits(r.Context(), d.Pool, tid)
 		comments, _ := tasks.ListComments(r.Context(), d.Pool, tid)
+
+		// The dialog used to render the description and every comment
+		// with its own POST /api/markdown/render: a task with 40
+		// comments fired 41 requests, all competing for the handful of
+		// connections a browser keeps per origin. Rendering here makes
+		// opening a task one request. A block whose render fails is
+		// sent without HTML, and the component fetches it itself.
+		//
+		// Web-only: MCP responses carry markdown, not HTML.
+		descriptionHTML := ""
+		if t.DescriptionMD != "" {
+			if out, err := markdown.Render(r.Context(), d.Pool, t.DescriptionMD, &t.ProjectID); err == nil {
+				descriptionHTML = out
+			}
+		}
+		rendered := make([]commentView, 0, len(comments))
+		for _, c := range comments {
+			view := commentView{Comment: c}
+			if c.BodyMD != "" {
+				if out, err := markdown.Render(r.Context(), d.Pool, c.BodyMD, &t.ProjectID); err == nil {
+					view.BodyHTML = out
+				}
+			}
+			rendered = append(rendered, view)
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"task":       t,
-			"depends_on": deps,
-			"commits":    commits,
-			"comments":   comments,
+			"task":             t,
+			"description_html": descriptionHTML,
+			"depends_on":       deps,
+			"commits":          commits,
+			"comments":         rendered,
 		})
 	})
+}
+
+// commentView is a comment as the task dialog shows it: the stored
+// markdown plus its rendered HTML.
+type commentView struct {
+	tasks.Comment
+	BodyHTML string `json:"body_html,omitempty"`
 }
 
 type createTaskRequest struct {

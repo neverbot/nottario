@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -87,9 +88,15 @@ func Render(ctx context.Context, pool *pgxpool.Pool, md string, projectID *uuid.
 	//    javascript: URLs etc. We extend it to keep the chip classes
 	//    and the language-foo class on <code> blocks (consumed by
 	//    highlight.js on the client).
-	out := sanitizePolicy().SanitizeBytes(buf.Bytes())
+	out := sanitizer().SanitizeBytes(buf.Bytes())
 	return string(out), nil
 }
+
+// sanitizer is built once: constructing the policy compiles several
+// regular expressions, and doing that on every render made each block
+// of every task pay for it. A bluemonday policy is safe for concurrent
+// use once built.
+var sanitizer = sync.OnceValue(sanitizePolicy)
 
 // sanitizePolicy returns a bluemonday policy tuned for markdown
 // output. UGC base + an allowance for the .chip / .chip-* classes

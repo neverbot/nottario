@@ -539,7 +539,10 @@ class NottarioDocsPage extends LitElement {
   }
 
   updated(c) {
-    if (c.has('projectId')) {
+    // projectId "changes" from undefined on the very first update, but
+    // connectedCallback has already loaded and subscribed for it.
+    // Reacting to that would fetch every endpoint twice on each open.
+    if (c.has('projectId') && c.get('projectId') !== undefined) {
       this.load().then(() => this._applyHash());
       this._subscribe();
     }

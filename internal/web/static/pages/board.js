@@ -947,7 +947,10 @@ class NottarioBoardPage extends LitElement {
   }
 
   updated(c) {
-    if (c.has('projectId')) {
+    // projectId "changes" from undefined on the very first update, but
+    // connectedCallback has already loaded and subscribed for it.
+    // Reacting to that would fetch every endpoint twice on each open.
+    if (c.has('projectId') && c.get('projectId') !== undefined) {
       this.load().then(() => this._applyHash());
       this._subscribe();
     }
@@ -1268,6 +1271,7 @@ class NottarioBoardPage extends LitElement {
       const j = await r.json();
       this.selected = {
         task: j.task,
+        description_html: j.description_html || '',
         deps: j.depends_on || [],
         commits: j.commits || [],
         comments: j.comments || [],
@@ -2277,6 +2281,7 @@ class NottarioBoardPage extends LitElement {
               `
               : html`<nottario-markdown
                        project-id=${this.projectId}
+                       .html=${c.body_html || ''}
                        .source=${c.body || ''}></nottario-markdown>`
           }
           ${this._renderEditedMarker(c.edited_at, c.edited_by_user_id)}
@@ -2490,6 +2495,7 @@ class NottarioBoardPage extends LitElement {
                   : task.description
                     ? html`<nottario-markdown
                               project-id=${this.projectId}
+                              .html=${this.selected.description_html || ''}
                               .source=${task.description}></nottario-markdown>`
                     : html`<p class="empty">No description.</p>`
               }

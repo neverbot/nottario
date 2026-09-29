@@ -541,7 +541,10 @@ class NottarioGantt extends LitElement {
   }
 
   updated(c) {
-    if (c?.has?.('projectId')) {
+    // projectId "changes" from undefined on the very first update, but
+    // connectedCallback has already loaded and subscribed for it.
+    // Reacting to that would fetch every endpoint twice on each open.
+    if (c?.has?.('projectId') && c.get('projectId') !== undefined) {
       this.load();
       this._subscribe();
       this._initialCenterDone = false; // re-centre when project changes
