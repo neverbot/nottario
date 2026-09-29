@@ -158,3 +158,127 @@ func TestApiEvents_StreamDeliversProjectEvents(t *testing.T) {
 		t.Fatal("no event reached the stream")
 	}
 }
+
+// A browser keeps ONE stream for all its tabs, and those tabs can be on
+// different projects, so a stream may follow several. Each one is
+// checked, a token cannot reach past its own project, and the list has
+// a ceiling.
+func TestApiEvents_OneStreamForSeveralProjects(t *testing.T) {
+	pool := testutil.NewPool(t)
+	ctx := t.Context()
+	key := []byte("test-session-key")
+
+	// First user becomes admin; this one must not be, or the membership
+	// checks would be skipped.
+	if _, _, err := identity.UpsertFromGithub(ctx, pool, 14111, "sse-admin", "Admin", ""); err != nil {
+		t.Fatalf("UpsertFromGithub admin: %v", err)
+	}
+	u, _, err := identity.UpsertFromGithub(ctx, pool, 14112, "sse-multi", "Multi", "")
+	if err != nil {
+		t.Fatalf("UpsertFromGithub: %v", err)
+	}
+	a, _ := identity.CreateProject(ctx, pool, "Stream A", "", "", "", u.ID)
+	b, _ := identity.CreateProject(ctx, pool, "Stream B", "", "", "", u.ID)
+	other, _, _ := identity.UpsertFromGithub(ctx, pool, 14113, "sse-stranger", "Stranger", "")
+	c, _ := identity.CreateProject(ctx, pool, "Not Theirs", "", "", "", other.ID)
+
+	hub := realtime.New(nil)
+	ts := httptest.NewServer(NewServer(Deps{Pool: pool, Resolver: identity.NewResolver(pool, key, false), Hub: hub}))
+	t.Cleanup(ts.Close)
+	sess, _ := identity.NewSession(ctx, pool, u.ID, "t", "127.0.0.1")
+	cookie := &http.Cookie{Name: identity.SessionCookieName, Value: identity.EncodeCookie(sess.ID, key)}
+
+	status := func(query, auth string) int {
+		t.Helper()
+		reqCtx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		req, _ := http.NewRequestWithContext(reqCtx, "GET", ts.URL+"/events"+query, nil)
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		} else {
+			req.AddCookie(cookie)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	both := "?project_id=" + a.ID.String() + "&project_id=" + b.ID.String()
+	if got := status(both, ""); got != http.StatusOK {
+		t.Errorf("two projects the user belongs to: %d, want 200", got)
+	}
+	if got := status(both+"&project_id="+c.ID.String(), ""); got != http.StatusForbidden {
+		t.Errorf("slipping in a project the user is not in: %d, want 403", got)
+	}
+
+	// A token bound to A must not follow B, even though its owner can.
+	token, _, err := identity.IssueToken(ctx, pool, u.ID, a.ID, "scoped", nil)
+	if err != nil {
+		t.Fatalf("IssueToken: %v", err)
+	}
+	if got := status("?project_id="+a.ID.String(), "Bearer "+token); got != http.StatusOK {
+		t.Errorf("token on its own project: %d, want 200", got)
+	}
+	if got := status(both, "Bearer "+token); got != http.StatusForbidden {
+		t.Errorf("token following a project outside its scope: %d, want 403", got)
+	}
+
+	var many strings.Builder
+	for i := 0; i < 33; i++ {
+		many.WriteString("&project_id=" + a.ID.String())
+	}
+	if got := status("?"+many.String()[1:], ""); got != http.StatusBadRequest {
+		t.Errorf("an unbounded project list: %d, want 400", got)
+	}
+
+	// And the events really arrive from both projects on one stream.
+	streamCtx, stop := context.WithCancel(t.Context())
+	defer stop()
+	req, _ := http.NewRequestWithContext(streamCtx, "GET", ts.URL+"/events"+both, nil)
+	req.AddCookie(cookie)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	reader := bufio.NewReader(resp.Body)
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatal(err)
+	}
+
+	aID, bID, cID, tid := a.ID, b.ID, c.ID, uuid.New()
+	hub.Publish(realtime.Event{Type: "in.c", ProjectID: &cID, TaskID: &tid})
+	hub.Publish(realtime.Event{Type: "in.a", ProjectID: &aID, TaskID: &tid})
+	hub.Publish(realtime.Event{Type: "in.b", ProjectID: &bID, TaskID: &tid})
+
+	seen := make(chan string, 4)
+	go func() {
+		for {
+			s, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.HasPrefix(s, "data: ") {
+				var ev realtime.Event
+				if json.Unmarshal([]byte(strings.TrimPrefix(s, "data: ")), &ev) == nil {
+					seen <- ev.Type
+				}
+			}
+		}
+	}()
+	var got []string
+	for len(got) < 2 {
+		select {
+		case typ := <-seen:
+			got = append(got, typ)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("events received: %v, want in.a and in.b", got)
+		}
+	}
+	if got[0] != "in.a" || got[1] != "in.b" {
+		t.Errorf("stream delivered %v, want [in.a in.b] and nothing from project C", got)
+	}
+}

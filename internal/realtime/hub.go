@@ -46,8 +46,11 @@ type Hub struct {
 }
 
 type subscriber struct {
-	projectID uuid.UUID
-	ch        chan Event
+	// projects is the set of projects this stream follows. A browser
+	// shares one stream across all its tabs, and those tabs can sit on
+	// different projects, so one subscriber may follow several.
+	projects map[uuid.UUID]struct{}
+	ch       chan Event
 }
 
 // New constructs a Hub. The logger may be nil.
@@ -59,12 +62,18 @@ func New(logger *slog.Logger) *Hub {
 }
 
 // Subscribe registers a new SSE subscriber listening for events in
-// projectID. The returned channel receives Event values; the
-// returned cancel function deregisters the subscriber.
-func (h *Hub) Subscribe(projectID uuid.UUID) (<-chan Event, func()) {
+// every project in projectIDs (none = global events only). The
+// returned channel receives Event values; the returned cancel
+// function deregisters the subscriber.
+func (h *Hub) Subscribe(projectIDs ...uuid.UUID) (<-chan Event, func()) {
 	s := &subscriber{
-		projectID: projectID,
-		ch:        make(chan Event, 64),
+		projects: make(map[uuid.UUID]struct{}, len(projectIDs)),
+		ch:       make(chan Event, 64),
+	}
+	for _, id := range projectIDs {
+		if id != uuid.Nil {
+			s.projects[id] = struct{}{}
+		}
 	}
 	h.mu.Lock()
 	h.subs[s] = struct{}{}
@@ -102,7 +111,10 @@ func (h *Hub) publish(ev Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for s := range h.subs {
-		if ev.ProjectID == nil || *ev.ProjectID != s.projectID {
+		if ev.ProjectID == nil {
+			continue
+		}
+		if _, ok := s.projects[*ev.ProjectID]; !ok {
 			continue
 		}
 		h.deliver(s, ev)
@@ -114,7 +126,7 @@ func (h *Hub) deliver(s *subscriber, ev Event) {
 	case s.ch <- ev:
 	default:
 		h.logger.Warn("dropping event for slow subscriber",
-			"type", ev.Type, "project", s.projectID)
+			"type", ev.Type, "project", ev.ProjectID)
 	}
 }
 
