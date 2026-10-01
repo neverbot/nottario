@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -134,8 +135,7 @@ type tasksCreateInput struct {
 	Title          string `json:"title" jsonschema:"short title"`
 	Description    string `json:"description,omitempty" jsonschema:"markdown body"`
 	Type           string `json:"type,omitempty" jsonschema:"'task' (default), 'bug', 'chore', 'spike' or 'feature'"`
-	Priority       *int   `json:"priority,omitempty" jsonschema:"raw 0-100, need not match a bucket. Prefer priority_key."`
-	PriorityKey    string `json:"priority_key,omitempty" jsonschema:"bucket key from projects.list_priorities"`
+	PriorityKey    string `json:"priority_key,omitempty" jsonschema:"one of the project's priority keys (projects.list_priorities); omitted = the project's default"`
 	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"assignee uuid"`
 	TargetRoleID   string `json:"target_role_id,omitempty" jsonschema:"target role uuid"`
 	ParentTaskID   string `json:"parent_task_id,omitempty" jsonschema:"parent feature task uuid"`
@@ -149,8 +149,7 @@ type tasksUpdateInput struct {
 	Title          *string `json:"title,omitempty"`
 	Description    *string `json:"description,omitempty"`
 	Type           *string `json:"type,omitempty"`
-	Priority       *int    `json:"priority,omitempty" jsonschema:"raw 0-100, need not match a bucket. Prefer priority_key."`
-	PriorityKey    string  `json:"priority_key,omitempty" jsonschema:"bucket key from projects.list_priorities"`
+	PriorityKey    string  `json:"priority_key,omitempty" jsonschema:"one of the project's priority keys (projects.list_priorities)"`
 	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"uuid, or '' to unset"`
 	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"uuid, or '' to unset"`
 	Verbose        bool    `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
@@ -413,7 +412,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.create",
-		Description: "Creates a task. Defaults: state=todo, type=task, priority=50. Pass claim=true when you are filing work you are about to start: the task is created assigned to you and in 'doing', in one call. Slim shape by default — the description you sent is not echoed back.",
+		Description: "Creates a task. Defaults: state=todo, type=task, priority=the project's default (medium unless the project changed it). Pass claim=true when you are filing work you are about to start: the task is created assigned to you and in 'doing', in one call. Slim shape by default — the description you sent is not echoed back.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCreateInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -426,11 +425,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err := requireProjectAccess(ctx, d, pid); err != nil {
 			return toolError(err.Error())
 		}
-		priority := in.Priority
-		if priority == nil && in.PriorityKey != "" {
-			v, err := identity.ResolvePriorityKey(ctx, d.Pool, pid, in.PriorityKey)
+		var priority *int
+		if in.PriorityKey != "" {
+			v, err := resolvePriorityKey(ctx, d, pid, in.PriorityKey)
 			if err != nil {
-				return toolError("unknown priority_key '" + in.PriorityKey + "' (call nottario.projects.list_priorities to see available keys)")
+				return toolError(err.Error())
 			}
 			priority = &v
 		}
@@ -485,11 +484,10 @@ func registerTasks(server *sdk.Server, d Deps) {
 			tt := tasks.Type(*in.Type)
 			up.Type = &tt
 		}
-		up.Priority = in.Priority
-		if up.Priority == nil && in.PriorityKey != "" {
-			v, err := identity.ResolvePriorityKey(ctx, d.Pool, pid, in.PriorityKey)
+		if in.PriorityKey != "" {
+			v, err := resolvePriorityKey(ctx, d, pid, in.PriorityKey)
 			if err != nil {
-				return toolError("unknown priority_key '" + in.PriorityKey + "'")
+				return toolError(err.Error())
 			}
 			up.Priority = &v
 		}
@@ -759,6 +757,27 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		return jsonResult(map[string]any{"inconsistencies": items})
 	})
+}
+
+// resolvePriorityKey maps a priority key to the value the project gave
+// it. Agents set priorities by key only: a raw number that misses every
+// bucket shows up on the board as an unnamed "p70", so the task tools
+// do not take one. An unknown key answers with the keys that do exist,
+// which saves the caller a list_priorities round-trip.
+func resolvePriorityKey(ctx context.Context, d Deps, projectID uuid.UUID, key string) (int, error) {
+	v, err := identity.ResolvePriorityKey(ctx, d.Pool, projectID, key)
+	if err == nil {
+		return v, nil
+	}
+	buckets, lerr := identity.ListPriorities(ctx, d.Pool, projectID)
+	if lerr != nil || len(buckets) == 0 {
+		return 0, errors.New("unknown priority_key '" + key + "' (call nottario.projects.list_priorities to see the valid keys)")
+	}
+	keys := make([]string, len(buckets))
+	for i, b := range buckets {
+		keys[i] = b.Key
+	}
+	return 0, errors.New("unknown priority_key '" + key + "'; this project's keys are: " + strings.Join(keys, ", "))
 }
 
 // requireProjectAccess returns an error when the caller cannot see the project.

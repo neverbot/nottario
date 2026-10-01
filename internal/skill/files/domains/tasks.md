@@ -18,7 +18,7 @@ description: 'Complete reference for the Nottario tasks domain: schema, semantic
 | `title`                 | text                                 | Required.                                                             |
 | `description_md`        | text                                 | Markdown.                                                             |
 | `state`                 | `todo`\|`doing`\|`done`\|`wont_do`   | Lifecycle. `done` and `wont_do` are both terminal.                    |
-| `priority`              | int                                  | 0–100. Higher = picked sooner. Prefer `priority_key`.                |
+| `priority`              | int                                  | 0–100, read-only. Higher = picked sooner. Set it with `priority_key`. |
 | `assignee_user_id`      | uuid \| null                         | Specific user.                                                        |
 | `target_role_id`        | uuid \| null                         | Role-scoped; eligible to any holder.                                 |
 | `actual_start`          | timestamp \| null                    | Set automatically when entering `doing` (kept across re-enters).      |
@@ -154,26 +154,23 @@ a numeric value). Defaults seeded on project creation: `low=30`,
 `medium=60`, `high=90`, `critical=100`. Admins can rename, retune or
 add buckets per project.
 
-**Always pick a key from the project's vocabulary** — call
-`nottario.projects.list_priorities` first and pass the chosen key as
-`priority_key` to `tasks.create` / `tasks.update`. Avoid passing raw
-numbers in `priority` unless you have a deliberate reason to bypass
-the buckets (e.g. inserting between two existing buckets).
+**Priorities are set by key, never by number.** Pass one of the
+project's keys as `priority_key` to `tasks.create` / `tasks.update`;
+`nottario.projects.list_priorities` returns them. The task tools take
+no numeric priority: a number that misses every bucket would show on
+the board as an unnamed `p70` instead of `high`. An unknown key is
+rejected, and the error lists the keys the project does have.
 
-An off-bucket value is accepted, but it costs you the label: the
-kanban card and the Gantt bar render it as `p70` instead of `high`,
-and the coloured dot falls back to ranking the number against the
-catalogue's overall span. If you find yourself reaching for a raw
-number regularly, the project is missing a bucket — ask the humans to
-add one rather than scattering unnamed integers.
-
-The raw value is bounded to 0–100, the same range a bucket may
-occupy; anything outside it is rejected by `tasks.create` /
-`tasks.update`.
+The `priority` number you read back on a task is the value of its
+bucket. Do not try to place a task between two buckets: tasks inside
+a bucket are already ordered oldest first. If the project needs a
+level it does not have, ask the humans to add a bucket in the project
+settings.
 
 ### `nottario.tasks.create`
 
-Defaults: `state=todo`, `type=task`, `priority=50`.
+Defaults: `state=todo`, `type=task`, and the project's default
+priority (`medium` unless the project changed its buckets).
 
 **`claim: true` when the work is yours and starts now.** It creates
 the task already assigned to you and in `doing`, in one call:
@@ -255,9 +252,8 @@ Mutates the fields you pass. Notable nuances:
 
 - Pass `assignee_user_id: ""` (empty string) to **unassign** the
   user. Same for `target_role_id`.
-- Changing `priority` is the canonical way to reorder; pass
-  `priority_key` (resolved against project buckets) rather than a raw
-  number. Raw values outside 0–100 are rejected.
+- Changing the priority is the canonical way to reorder; pass
+  `priority_key`. There is no numeric input.
 - Use this for description edits and renames; do not delete-and-recreate.
 - **Reparenting cascades `cycle_id`**: setting `parent_task_id` on a
   leaf task forces the task's `cycle_id` to match the new parent's

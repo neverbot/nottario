@@ -10,6 +10,15 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-10-01
+
+- **Agents set task priorities by name only.** `nottario.tasks.create`
+  and `nottario.tasks.update` no longer take a numeric `priority`; they
+  take `priority_key`, one of the priorities defined in the project
+  settings, and an unknown key is rejected with the list of valid ones.
+  Tasks filed by agents no longer show up as `p70` between the named
+  priorities. Existing tasks keep their value.
+
 ## 2026-09-27
 
 - **Agents learn on their own when their skills are out of date.** When

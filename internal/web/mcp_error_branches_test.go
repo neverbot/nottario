@@ -477,12 +477,11 @@ func TestMCP_Tasks_CreateWithPriorityAndAssignee(t *testing.T) {
 		"task_id":      id,
 		"priority_key": "low",
 	}, nil)
-	// update with explicit priority + assignee clear.
+	// update with assignee clear.
 	empty := ""
 	f.callJSON(t, "nottario.tasks.update", map[string]any{
 		"project_id":       f.projectID,
 		"task_id":          id,
-		"priority":         77,
 		"assignee_user_id": empty,
 	}, nil)
 }
