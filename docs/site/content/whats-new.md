@@ -10,6 +10,14 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-10-09
+
+- **The task dialog shows how a task relates to the others.** Next to
+  "Depends on" it now lists the feature the task is part of, its
+  subtasks with how many are done, and the tasks it blocks. Agents get
+  the same through `nottario.tasks.get`, which always returns them under
+  `related`; its `include_deps` flag is gone.
+
 ## 2026-10-01
 
 - **Agents set task priorities by name only.** `nottario.tasks.create`

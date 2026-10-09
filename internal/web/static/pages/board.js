@@ -21,6 +21,9 @@ import { closeIcon, trashIcon } from '/static/components/icons.js';
 import '/static/components/chip-filter.js';
 import './gantt.js';
 
+// Empty related block: what the dialog shows until the detail arrives.
+const NO_RELATED = Object.freeze({ parent: null, children: [], depends_on: [], blocks: [] });
+
 class NottarioBoardPage extends LitElement {
   static properties = {
     me: { type: Object },
@@ -535,6 +538,14 @@ class NottarioBoardPage extends LitElement {
       flex-wrap: wrap;
       gap: 6px;
     }
+    /* Progress next to a section title, in the muted case of a count. */
+    .detail .eyebrow .eyebrow-count {
+      margin-left: 6px;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 500;
+      color: var(--fg-muted);
+    }
 
     .detail .commits-list {
       border: 1px solid var(--border);
@@ -839,13 +850,6 @@ class NottarioBoardPage extends LitElement {
     this.view = 'kanban';
     this.project = null;
     this.tasks = [];
-    // Cross-cycle task cache. `this.tasks` only holds rows for the
-    // active cycle, so a deep-linked task or a dependency that lives
-    // in another cycle is invisible to _taskByID. When we discover
-    // such a reference we fetch it once and stash it here; the map
-    // survives cycle switches on purpose so back-and-forth navigation
-    // doesn't re-fetch what we already resolved.
-    this._resolvedTasks = new Map();
     this.roles = [];
     this.members = [];
     this.showCreate = false;
@@ -1010,7 +1014,7 @@ class NottarioBoardPage extends LitElement {
       // resolves.
       this.selected = {
         task: { id: taskId, title: '' },
-        deps: [],
+        related: NO_RELATED,
         commits: [],
         comments: [],
       };
@@ -1278,7 +1282,7 @@ class NottarioBoardPage extends LitElement {
   }
 
   open(t) {
-    this.selected = { task: t, deps: [], commits: [], comments: [] };
+    this.selected = { task: t, related: NO_RELATED, commits: [], comments: [] };
     this.loadDetail(t.id);
   }
 
@@ -1289,40 +1293,11 @@ class NottarioBoardPage extends LitElement {
       this.selected = {
         task: j.task,
         description_html: j.description_html || '',
-        deps: j.depends_on || [],
+        related: { ...NO_RELATED, ...(j.related || {}) },
         commits: j.commits || [],
         comments: j.comments || [],
       };
-      this._resolveReferencedTasks(this.selected.deps);
     }
-  }
-
-  // Fetch task metadata for referenced ids (typically dependencies)
-  // that aren't in the currently-loaded cycle. Populates
-  // `_resolvedTasks` so the deps chips can render title + state
-  // instead of the "(not loaded)" fallback. One request per missing
-  // id, in parallel — deps lists are usually ≤5 so a batch endpoint
-  // isn't worth the surface. Fetch failures are swallowed silently;
-  // the chip keeps its fallback and remains clickable.
-  async _resolveReferencedTasks(ids) {
-    if (!Array.isArray(ids) || ids.length === 0) return;
-    const missing = ids.filter((id) => id && !this._taskByID(id) && !this._resolvedTasks.has(id));
-    if (missing.length === 0) return;
-    const results = await Promise.all(
-      missing.map((id) =>
-        fetch(`/api/projects/${this.projectId}/tasks/${id}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ),
-    );
-    let changed = false;
-    results.forEach((j, i) => {
-      if (j?.task) {
-        this._resolvedTasks.set(missing[i], j.task);
-        changed = true;
-      }
-    });
-    if (changed) this.requestUpdate();
   }
 
   closeDetail() {
@@ -2109,8 +2084,21 @@ class NottarioBoardPage extends LitElement {
     return (this.members || []).find((m) => m.user_id === uid) || null;
   }
 
+  // A related task as the detail lists it. The summary comes with the
+  // detail; when the same task is on the board, its live row wins, so a
+  // state change made elsewhere shows without reopening the dialog.
+  _relatedChip(summary) {
+    return html`<nottario-task-chip
+      project-id=${this.projectId}
+      .task=${this._taskByID(summary.id) || summary}></nottario-task-chip>`;
+  }
+
+  _relatedState(summary) {
+    return (this._taskByID(summary.id) || summary).state;
+  }
+
   _taskByID(id) {
-    return (this.tasks || []).find((t) => t.id === id) || this._resolvedTasks.get(id) || null;
+    return (this.tasks || []).find((t) => t.id === id) || null;
   }
 
   // "Created by" field-line on the task detail header. Shows the
@@ -2308,7 +2296,7 @@ class NottarioBoardPage extends LitElement {
   }
 
   renderDetail() {
-    const { task, deps, commits, comments } = this.selected;
+    const { task, related, commits, comments } = this.selected;
     const role = task.target_role_id ? this.roleByID(task.target_role_id) : null;
     const assignee = this._memberByID(task.assignee_user_id);
     const shortID = (task.id || '').slice(0, 7);
@@ -2473,6 +2461,17 @@ class NottarioBoardPage extends LitElement {
                 </span>
               </div>
 
+              ${
+                related.parent
+                  ? html`
+                    <div class="field-line">
+                      <span class="lbl">Part of</span>
+                      <span class="val">${this._relatedChip(related.parent)}</span>
+                    </div>
+                  `
+                  : null
+              }
+
               ${this._renderCreatedByLine(task)}
             </div>
           </header>
@@ -2521,20 +2520,36 @@ class NottarioBoardPage extends LitElement {
 
 
             ${
-              deps.length
+              related.children.length
+                ? html`
+              <section>
+                <h4 class="eyebrow">
+                  Subtasks
+                  <span class="eyebrow-count">${related.children.filter((c) => this._relatedState(c) === 'done').length} of ${related.children.length} done</span>
+                </h4>
+                <div class="deps-list">${related.children.map((c) => this._relatedChip(c))}</div>
+              </section>
+            `
+                : null
+            }
+
+            ${
+              related.depends_on.length
                 ? html`
               <section>
                 <h4 class="eyebrow">Depends on</h4>
-                <div class="deps-list">
-                  ${deps.map(
-                    (id) => html`
-                    <nottario-task-chip
-                      project-id=${this.projectId}
-                      .task=${this._taskByID(id) || { id, title: id.slice(0, 8) + ' (not loaded)' }}>
-                    </nottario-task-chip>
-                  `,
-                  )}
-                </div>
+                <div class="deps-list">${related.depends_on.map((d) => this._relatedChip(d))}</div>
+              </section>
+            `
+                : null
+            }
+
+            ${
+              related.blocks.length
+                ? html`
+              <section>
+                <h4 class="eyebrow">Blocks</h4>
+                <div class="deps-list">${related.blocks.map((b) => this._relatedChip(b))}</div>
               </section>
             `
                 : null

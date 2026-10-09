@@ -66,6 +66,7 @@ class NottarioTaskChip extends LitElement {
     .state-todo  { color: var(--fg-muted); background: var(--gray-2); }
     .state-doing { color: var(--accent); background: var(--tint-blue); }
     .state-done  { color: var(--success-hover); background: var(--tint-green); opacity: 0.7; }
+    .state-wont_do { color: var(--fg-muted); background: var(--gray-2); text-decoration: line-through; }
 
     /* Missing task fallback: the chip is still rendered (so an
        orphan dependency is visible) but in a muted, italic shape. */
@@ -97,7 +98,7 @@ class NottarioTaskChip extends LitElement {
          aria-label=${a11yLabel}>
         <span class="id">#${short}</span>
         <span class="title">${t.title || t.id}</span>
-        ${t.state ? html`<span class="state state-${t.state}">${t.state}</span>` : null}
+        ${t.state ? html`<span class="state state-${t.state}">${t.state === 'wont_do' ? "won't do" : t.state}</span>` : null}
       </a>
     `;
   }
