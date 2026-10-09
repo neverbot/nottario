@@ -21,7 +21,7 @@ LDFLAGS := -s -w \
 # supported version 2"), which surfaces as a cascade of bogus
 # typecheck errors across packages that compile and vet cleanly.
 # The v2 module path carries the major version.
-GOLANGCI_LINT_VERSION ?= v2.13.2
+GOLANGCI_LINT_VERSION ?= v2.14.0
 SQLC_VERSION          ?= v1.31.1
 # Biome must be pinned for the same reason as golangci-lint: it both
 # lints AND formats, so an unpinned `npx @biomejs/biome` lets a new
