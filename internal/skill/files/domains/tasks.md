@@ -618,8 +618,11 @@ frequency mutations (`tasks.create`, `tasks.update`, `tasks.set_state`,
 and `tasks.list` return only the fields you need to chain the next
 call — id, title, state, priority, role/assignee, updated_at — NOT
 the description or comment body you just sent. `tasks.get` returns the
-full base task but OMITS dependencies, commits and comments unless you
-opt in with `include_deps`, `include_commits`, `include_comments`.
+full base task plus `related`, the tasks it is connected to:
+`parent` (the feature it belongs to, or null), `children` (its
+subtasks), `depends_on` (what it waits for) and `blocks` (what waits
+for it), each as `{id, title, state, type}`. Commits and comments are
+left out unless you opt in with `include_commits` / `include_comments`.
 
 **When NOT to pass `verbose: true`.** Almost always. The slim shape
 carries everything you need to pick the next call (id for routing,
@@ -663,9 +666,11 @@ same goes for `whoami` and `projects.list`: once per session.
 content is stable; reading `skill/domains/tasks.md` twice costs as
 much as reading it once and learns nothing new.
 
-**Pass `include_*` to `tasks.get` deliberately.** Pulling all three
-(deps + commits + comments) on a feature parent with many children
-returns a large payload. Ask for only what your next decision needs.
+**Pass `include_*` to `tasks.get` deliberately.** Commits and comments
+are the large collections; ask for them only when your next decision
+needs them. `related` always comes back and is small, so there is no
+need to list a feature's children or a task's dependencies separately
+when you are already reading the task.
 
 **`tasks.list` returns only open tasks by default.** Closed rows
 (state `done` or `wont_do`) accumulate forever and would dominate

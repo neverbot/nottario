@@ -231,7 +231,11 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		deps, _ := tasks.ListDependenciesOf(r.Context(), d.Pool, tid)
+		related, err := tasks.ListRelated(r.Context(), d.Pool, t)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		commits, _ := tasks.ListCommits(r.Context(), d.Pool, tid)
 		comments, _ := tasks.ListComments(r.Context(), d.Pool, tid)
 
@@ -262,7 +266,7 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"task":             t,
 			"description_html": descriptionHTML,
-			"depends_on":       deps,
+			"related":          related,
 			"commits":          commits,
 			"comments":         rendered,
 		})

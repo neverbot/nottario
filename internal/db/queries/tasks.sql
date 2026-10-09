@@ -346,3 +346,30 @@ UPDATE tasks SET
   updated_at = now()
 WHERE id = sqlc.arg('id')::uuid
   AND assignee_user_id IS NULL;
+
+-- Related-task summaries for the task detail (web dialog and MCP
+-- tasks.get): just enough to label a chip, so the detail never needs a
+-- second request per related task.
+
+-- name: GetTaskSummary :one
+SELECT id, title, state, type FROM tasks WHERE id = $1;
+
+-- name: ListChildSummaries :many
+SELECT id, title, state, type
+FROM tasks
+WHERE parent_task_id = $1
+ORDER BY priority DESC, created_at, id;
+
+-- name: ListDependsOnSummaries :many
+SELECT t.id, t.title, t.state, t.type
+FROM task_dependencies d
+JOIN tasks t ON t.id = d.depends_on_id
+WHERE d.task_id = $1
+ORDER BY t.priority DESC, t.created_at, t.id;
+
+-- name: ListDependentSummaries :many
+SELECT t.id, t.title, t.state, t.type
+FROM task_dependencies d
+JOIN tasks t ON t.id = d.task_id
+WHERE d.depends_on_id = $1
+ORDER BY t.priority DESC, t.created_at, t.id;

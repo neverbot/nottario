@@ -325,6 +325,33 @@ func (q *Queries) GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskFo
 	return i, err
 }
 
+const getTaskSummary = `-- name: GetTaskSummary :one
+
+SELECT id, title, state, type FROM tasks WHERE id = $1
+`
+
+type GetTaskSummaryRow struct {
+	ID    uuid.UUID
+	Title string
+	State string
+	Type  string
+}
+
+// Related-task summaries for the task detail (web dialog and MCP
+// tasks.get): just enough to label a chip, so the detail never needs a
+// second request per related task.
+func (q *Queries) GetTaskSummary(ctx context.Context, id uuid.UUID) (GetTaskSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getTaskSummary, id)
+	var i GetTaskSummaryRow
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.State,
+		&i.Type,
+	)
+	return i, err
+}
+
 const insertTask = `-- name: InsertTask :one
 INSERT INTO tasks (
   project_id, parent_task_id, type, title, description_md,
@@ -408,6 +435,125 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertT
 		&i.CycleID,
 	)
 	return i, err
+}
+
+const listChildSummaries = `-- name: ListChildSummaries :many
+SELECT id, title, state, type
+FROM tasks
+WHERE parent_task_id = $1
+ORDER BY priority DESC, created_at, id
+`
+
+type ListChildSummariesRow struct {
+	ID    uuid.UUID
+	Title string
+	State string
+	Type  string
+}
+
+func (q *Queries) ListChildSummaries(ctx context.Context, parentTaskID *uuid.UUID) ([]ListChildSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listChildSummaries, parentTaskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChildSummariesRow{}
+	for rows.Next() {
+		var i ListChildSummariesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.State,
+			&i.Type,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDependentSummaries = `-- name: ListDependentSummaries :many
+SELECT t.id, t.title, t.state, t.type
+FROM task_dependencies d
+JOIN tasks t ON t.id = d.task_id
+WHERE d.depends_on_id = $1
+ORDER BY t.priority DESC, t.created_at, t.id
+`
+
+type ListDependentSummariesRow struct {
+	ID    uuid.UUID
+	Title string
+	State string
+	Type  string
+}
+
+func (q *Queries) ListDependentSummaries(ctx context.Context, dependsOnID uuid.UUID) ([]ListDependentSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listDependentSummaries, dependsOnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDependentSummariesRow{}
+	for rows.Next() {
+		var i ListDependentSummariesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.State,
+			&i.Type,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDependsOnSummaries = `-- name: ListDependsOnSummaries :many
+SELECT t.id, t.title, t.state, t.type
+FROM task_dependencies d
+JOIN tasks t ON t.id = d.depends_on_id
+WHERE d.task_id = $1
+ORDER BY t.priority DESC, t.created_at, t.id
+`
+
+type ListDependsOnSummariesRow struct {
+	ID    uuid.UUID
+	Title string
+	State string
+	Type  string
+}
+
+func (q *Queries) ListDependsOnSummaries(ctx context.Context, taskID uuid.UUID) ([]ListDependsOnSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listDependsOnSummaries, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDependsOnSummariesRow{}
+	for rows.Next() {
+		var i ListDependsOnSummariesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.State,
+			&i.Type,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTasks = `-- name: ListTasks :many

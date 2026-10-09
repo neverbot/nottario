@@ -164,8 +164,8 @@ func TestMCP_Tasks_LinkCommitAndComment(t *testing.T) {
 	if _, ok := lean["comments"]; ok {
 		t.Errorf("default tasks.get must omit 'comments' key, got %v", lean["comments"])
 	}
-	if _, ok := lean["depends_on"]; ok {
-		t.Errorf("default tasks.get must omit 'depends_on' key, got %v", lean["depends_on"])
+	if _, ok := lean["related"]; !ok {
+		t.Errorf("tasks.get must always return 'related', got keys %v", lean)
 	}
 }
 

@@ -118,6 +118,10 @@ type Querier interface {
 	GetTaskChipByShortID(ctx context.Context, arg GetTaskChipByShortIDParams) (GetTaskChipByShortIDRow, error)
 	GetTaskComment(ctx context.Context, id uuid.UUID) (GetTaskCommentRow, error)
 	GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error)
+	// Related-task summaries for the task detail (web dialog and MCP
+	// tasks.get): just enough to label a chip, so the detail never needs a
+	// second request per related task.
+	GetTaskSummary(ctx context.Context, id uuid.UUID) (GetTaskSummaryRow, error)
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error)
@@ -163,9 +167,12 @@ type Querier interface {
 	// first. `before_version` lets the caller paginate; pass NULL to start
 	// from the top.
 	ListArchRevisions(ctx context.Context, arg ListArchRevisionsParams) ([]ListArchRevisionsRow, error)
+	ListChildSummaries(ctx context.Context, parentTaskID *uuid.UUID) ([]ListChildSummariesRow, error)
 	ListCycles(ctx context.Context, projectID uuid.UUID) ([]Cycle, error)
+	ListDependentSummaries(ctx context.Context, dependsOnID uuid.UUID) ([]ListDependentSummariesRow, error)
 	ListDependents(ctx context.Context, dependsOnID uuid.UUID) ([]uuid.UUID, error)
 	ListDependsOn(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error)
+	ListDependsOnSummaries(ctx context.Context, taskID uuid.UUID) ([]ListDependsOnSummariesRow, error)
 	ListDocumentVersions(ctx context.Context, documentID uuid.UUID) ([]ListDocumentVersionsRow, error)
 	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]ListDocumentsRow, error)
 	ListDoneDependentsInconsistencies(ctx context.Context, projectID uuid.UUID) ([]ListDoneDependentsInconsistenciesRow, error)

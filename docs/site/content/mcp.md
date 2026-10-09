@@ -85,13 +85,14 @@ genuinely need them, or set an explicit `state` filter (e.g.
 `state='done'`) to scope to a closed bucket.
 
 `tasks.get` returns the base task in full (descriptions are the
-reason you called `get` in the first place) but **omits** the
-related collections unless you ask for them:
+reason you called `get` in the first place) together with `related`:
+the parent feature, the subtasks, the tasks it depends on and the tasks
+it blocks, each as `{id, title, state, type}`. Commits and comments are
+**omitted** unless you ask for them:
 
 ```
 nottario.tasks.get {
   project_id, task_id,
-  include_deps: true,
   include_commits: true,
   include_comments: true,
 }
