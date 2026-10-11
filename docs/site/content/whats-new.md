@@ -14,10 +14,13 @@ are cut on demand.
 
 - **Tasks have steps.** A task can carry a short checklist of steps,
   each one line with a done mark, for actions too small to be subtasks.
-  Agents add and tick them with `nottario.tasks.add_steps`,
-  `update_step`, `remove_step` and `move_step`, and `nottario.tasks.get`
-  always returns them. A task can still be closed with steps undone:
-  the close response lists them so the agent tells you what was left.
+  The task dialog lists them to tick, add (pasting several lines adds
+  several), rename, reorder and delete, and the kanban card shows the
+  progress, such as `2/8`. Agents add and tick them with
+  `nottario.tasks.add_steps`, `update_step`, `remove_step` and
+  `move_step`, and `nottario.tasks.get` always returns them. A task can
+  still be closed with steps undone: the close response lists them so
+  the agent tells you what was left. See [the kanban board](/kanban/).
 
 ## 2026-10-09
 

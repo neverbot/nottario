@@ -1,7 +1,8 @@
-import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
 import { priorityBand, priorityLabel } from '/static/priorities.js';
+import { stepProgress } from '/static/steps.js';
 import { formatDateTime, formatRelativeTime } from '/static/time.js';
 import { OutsideClickController } from '/static/components/outside-click.js';
 import { toast } from '/static/components/toast.js';
@@ -17,11 +18,17 @@ import '/static/components/markdown.js';
 import '/static/components/md-editor.js';
 import '/static/components/avatar.js';
 import '/static/components/task-chip.js';
+import '/static/components/task-steps.js';
 import { closeIcon, trashIcon } from '/static/components/icons.js';
 import '/static/components/chip-filter.js';
 import './gantt.js';
 
 // Empty related block: what the dialog shows until the detail arrives.
+// Checklist glyph for the step progress on a card.
+const checklistIcon = html`<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">${svg`
+  <path d="M2 4.2l1.3 1.3L5.8 3M2 10.2l1.3 1.3 2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8 4.5h6M8 10.5h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`}</svg>`;
+
 const NO_RELATED = Object.freeze({ parent: null, children: [], depends_on: [], blocks: [] });
 
 class NottarioBoardPage extends LitElement {
@@ -385,6 +392,17 @@ class NottarioBoardPage extends LitElement {
     .prio.high .dot { background: var(--danger); }
     .prio.medium .dot { background: var(--warning); }
     .prio.low .dot { background: var(--gray-5); }
+
+    /* Step progress on a card: a checklist glyph and done/total in
+       the muted meta type. Turns green once every step is ticked. */
+    .card .steps-progress {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    .card .steps-progress svg { display: block; }
+    .card .steps-progress.complete { color: var(--success-hover); }
 
 
     .error { color: var(--danger); margin-bottom: 8px; font-size: 13px; }
@@ -1287,6 +1305,9 @@ class NottarioBoardPage extends LitElement {
   }
 
   async loadDetail(id) {
+    // When the request left, so the steps list can tell a reply that
+    // predates its own latest change.
+    const requestedAt = performance.now();
     const r = await fetch(`/api/projects/${this.projectId}/tasks/${id}`);
     if (r.ok) {
       const j = await r.json();
@@ -1294,6 +1315,8 @@ class NottarioBoardPage extends LitElement {
         task: j.task,
         description_html: j.description_html || '',
         related: { ...NO_RELATED, ...(j.related || {}) },
+        steps: j.steps || [],
+        stepsAt: requestedAt,
         commits: j.commits || [],
         comments: j.comments || [],
       };
@@ -1618,6 +1641,16 @@ class NottarioBoardPage extends LitElement {
     }
   }
 
+  // The steps component changed the open task's checklist: keep the
+  // dialog's copy and the card's progress in step without a reload.
+  _onStepsChange(taskID, steps) {
+    if (this.selected?.task.id === taskID) {
+      this.selected = { ...this.selected, steps };
+    }
+    const progress = steps.length ? stepProgress(steps) : undefined;
+    this.tasks = (this.tasks || []).map((t) => (t.id === taskID ? { ...t, steps: progress } : t));
+  }
+
   renderCard(t) {
     const role = t.target_role_id ? this.roleByID(t.target_role_id) : null;
     const assignee = t.assignee_user_id ? this._memberByID(t.assignee_user_id) : null;
@@ -1626,7 +1659,8 @@ class NottarioBoardPage extends LitElement {
       `${t.title}, ${t.type}, ${t.state}` +
       (role ? `, role ${role.label}` : '') +
       `, priority ${priorityLabel(t.priority, this.priorities)}` +
-      (assigneeName ? `, assigned to ${assigneeName}` : '');
+      (assigneeName ? `, assigned to ${assigneeName}` : '') +
+      (t.steps ? `, ${t.steps.done} of ${t.steps.total} steps done` : '');
     const dragging = this._draggingID === t.id;
     const isWontDo = t.state === 'wont_do';
     // Cancelled cards aren't draggable: every drop-target column
@@ -1659,6 +1693,13 @@ class NottarioBoardPage extends LitElement {
               ? html`<span class="role-badge"
             style=${`--role-color:${role.color || 'var(--border)'}`}>${role.label}</span>`
               : ''
+          }
+          ${
+            t.steps
+              ? html`<span class=${`steps-progress${t.steps.done === t.steps.total ? ' complete' : ''}`}
+                       title=${`${t.steps.done} of ${t.steps.total} steps done`}
+                       aria-hidden="true">${checklistIcon}${t.steps.done}/${t.steps.total}</span>`
+              : null
           }
         </div>
         ${
@@ -2516,6 +2557,15 @@ class NottarioBoardPage extends LitElement {
                     : html`<p class="empty">No description.</p>`
               }
               ${this._renderEditedMarker(task.edited_at, task.edited_by_user_id)}
+            </section>
+
+            <section>
+              <nottario-task-steps
+                project-id=${this.projectId}
+                .taskId=${task.id}
+                .steps=${this.selected.steps || []}
+                .stepsAt=${this.selected.stepsAt}
+                @steps-change=${(e) => this._onStepsChange(task.id, e.detail.steps)}></nottario-task-steps>
             </section>
 
 

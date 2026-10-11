@@ -19,6 +19,12 @@ a glance who is holding what.
 
 - A click on a card opens the detail dialog with description,
   dependencies, linked commits and comments.
+- **Steps** are a task's short checklist. In the dialog, tick a step,
+  click its text to rename it, drag the grip (or press Alt+Up /
+  Alt+Down) to reorder it, and type in "Add a step" to add one; pasting
+  several lines adds one step per line. A card with steps shows its
+  progress, for example `2/8`, which turns green when every step is
+  done. A task can be closed with steps left undone.
 - Drag a card across columns to change its state. The same
   transitions are reachable from the dialog or via
   `nottario.tasks.set_state` over MCP.
