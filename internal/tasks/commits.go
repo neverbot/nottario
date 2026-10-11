@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -73,3 +74,10 @@ type invalidErr string
 func (e invalidErr) Error() string { return string(e) }
 
 func errInvalid(msg string) error { return invalidErr(msg) }
+
+// IsInvalid reports whether err is a rejected input rather than a
+// failure, so handlers can answer 400 instead of 500.
+func IsInvalid(err error) bool {
+	var e invalidErr
+	return errors.As(err, &e)
+}

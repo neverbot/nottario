@@ -94,6 +94,7 @@ func TestApiProjects_EveryRouteRefusesAForeignToken(t *testing.T) {
 			"{edge_id}", uuid.NewString(),
 			"{dep_id}", uuid.NewString(),
 			"{comment_id}", uuid.NewString(),
+			"{step_id}", uuid.NewString(),
 			"{slug}", "some-node",
 			"{key}", "backend",
 			"{version}", "1",

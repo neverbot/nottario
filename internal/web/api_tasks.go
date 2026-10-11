@@ -236,6 +236,11 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		steps, err := tasks.ListSteps(r.Context(), d.Pool, tid)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		commits, _ := tasks.ListCommits(r.Context(), d.Pool, tid)
 		comments, _ := tasks.ListComments(r.Context(), d.Pool, tid)
 
@@ -267,6 +272,7 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			"task":             t,
 			"description_html": descriptionHTML,
 			"related":          related,
+			"steps":            steps,
 			"commits":          commits,
 			"comments":         rendered,
 		})
