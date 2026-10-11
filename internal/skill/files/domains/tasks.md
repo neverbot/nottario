@@ -43,6 +43,15 @@ form. Re-linking the same `(task_id, repo, sha)` updates the message.
 `(id, task_id, author_user_id, author_token_id, body_md,
 created_at)`. Append-only.
 
+### Step
+
+`(id, position, text, done, done_at, done_by_user_id)`. An ordered
+checklist on a task: short actions worth remembering that need no
+owner, role, dependency, commits or discussion of its own. If an item
+needs any of those, it is a subtask, not a step. A step is one line of
+up to 200 characters; a task holds at most 50. Steps are either done
+or deleted: there is no "skipped" state.
+
 ## Tool surface
 
 ### `nottario.tasks.list`
@@ -303,7 +312,10 @@ nottario.tasks.close {
 ```
 
 Response (slim by default): `{task, comment_id?, linked_commit_count}`.
-`verbose: true` returns the full Task instead of the slim ack.
+`verbose: true` returns the full Task instead of the slim ack. When the
+task closes as `done` with steps still undone, the response also
+carries `pending_steps: [{id, text}]` and a `notice`; tell the human
+which steps were left (§"Steps").
 
 On precondition failure the response shape is the same as
 `set_state` (`{error, preconditions}`) and the whole transaction
@@ -467,6 +479,40 @@ Body is markdown. The comment is attributed to the calling user and
 token. Comments are append-only; there is no edit or delete from
 the agent surface (a human can purge data directly in Postgres if
 needed).
+
+### Steps: `add_steps`, `update_step`, `remove_step`, `move_step`
+
+```
+nottario.tasks.add_steps   { project_id, task_id, texts: ["Write the migration", "Regenerate sqlc"] }  # → {steps}
+nottario.tasks.update_step { project_id, task_id, step_id, done: true }                               # → step
+nottario.tasks.update_step { project_id, task_id, step_id, text: "Regenerate sqlc and commit dbq" }
+nottario.tasks.remove_step { project_id, task_id, step_id }                                            # → {removed: true}
+nottario.tasks.move_step   { project_id, task_id, step_id, position: 0 }                               # → {steps}
+```
+
+`tasks.get` always returns the full list under `steps`; list rows and
+slim task shapes carry only the progress, `steps: {done, total}`, and
+omit it when the task has no steps.
+
+How to use them:
+
+- **When you start a task whose work has more than one distinct
+  action, write its steps.** The list tells the human, and the next
+  agent, what is done and what is left without reading comments.
+- **When new work appears mid-task, add a step** instead of writing a
+  long comment about it. If the new work needs its own owner, role or
+  commits, file a subtask instead.
+- **Tick each step as you finish it,** not all at the end: the progress
+  on the board is only useful while it is current.
+- **Keep steps short and imperative** ("Add the index", not "I think
+  we should probably add an index at some point").
+- **Delete a step that turned out to be unneeded** rather than leaving
+  it pending; a pending step reads as unfinished work.
+- **Before closing, check the steps.** Closing with steps undone is
+  allowed: `tasks.close` and `set_state done` still close the task,
+  and their response adds `pending_steps` and a `notice`. When you see
+  them, **tell the human which steps were left undone**, in your reply,
+  not only in the closing comment.
 
 ## When to file a task before doing the work
 

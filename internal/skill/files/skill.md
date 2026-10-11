@@ -113,6 +113,10 @@ The loop when the human says "carry on" or "do the next thing":
    on it" — the `state=doing` IS the record. Empty pickup comments
    add noise every future reader has to skim past.
 2. **Do the work** in the local repo. Nottario does not store code.
+   When the work has several distinct actions, list them as steps
+   (`tasks.add_steps`) and tick each one as you finish it
+   (`tasks.update_step { done: true }`). Work discovered on the way
+   becomes a new step, not a long comment.
 3. **Close in one call.** `nottario.tasks.close { state: 'done',
    comment: '...', commits: [{repo, sha}, ...] }` runs the closing
    comment, the commit links and the state transition atomically.
@@ -244,6 +248,10 @@ feature", "Block this until X is done").
   Short comments are cheap; missing context is expensive.
 - **Never `set_state done` if the task is not actually finished.** Use
   a comment to record mid-way state instead.
+- **Closing with steps undone is allowed, but say so.** When
+  `tasks.close` or `set_state done` answers with `pending_steps`, tell
+  the human which steps were left undone. Delete steps that turned
+  out to be unneeded instead of leaving them pending.
 - **Keep responses small.** MCP responses are SLIM by default
   (mutations omit description / body, `tasks.get` omits commits and
   comments unless you ask; its related tasks always come back). Closing comments are one line, not a

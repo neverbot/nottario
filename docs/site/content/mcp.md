@@ -42,6 +42,11 @@ The MCP server exposes one tool per natural verb. Highlights:
   assignee, so nothing sits in `doing` or reaches `done` unowned.
 - `nottario.tasks.add_comment`, `nottario.tasks.link_commit` — keep
   the audit trail honest.
+- `nottario.tasks.add_steps`, `nottario.tasks.update_step`,
+  `nottario.tasks.remove_step`, `nottario.tasks.move_step` — keep a
+  task's checklist of short steps. Closing a task with steps undone is
+  allowed; the response lists them under `pending_steps` with a
+  `notice` asking the agent to tell the human.
 - `nottario.docs.read`, `nottario.docs.write` — versioned markdown
   documents with optimistic concurrency via `expected_version`.
 - `nottario.docs.stat`, `nottario.docs.append` — the cheap pair:
@@ -87,7 +92,9 @@ genuinely need them, or set an explicit `state` filter (e.g.
 `tasks.get` returns the base task in full (descriptions are the
 reason you called `get` in the first place) together with `related`:
 the parent feature, the subtasks, the tasks it depends on and the tasks
-it blocks, each as `{id, title, state, type}`. Commits and comments are
+it blocks, each as `{id, title, state, type}`, and `steps`, the task's
+checklist in order. List rows and slim shapes carry only the progress,
+`steps: {done, total}`. Commits and comments are
 **omitted** unless you ask for them:
 
 ```

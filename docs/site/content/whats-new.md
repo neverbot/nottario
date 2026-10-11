@@ -10,6 +10,15 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-10-12
+
+- **Tasks have steps.** A task can carry a short checklist of steps,
+  each one line with a done mark, for actions too small to be subtasks.
+  Agents add and tick them with `nottario.tasks.add_steps`,
+  `update_step`, `remove_step` and `move_step`, and `nottario.tasks.get`
+  always returns them. A task can still be closed with steps undone:
+  the close response lists them so the agent tells you what was left.
+
 ## 2026-10-09
 
 - **The task dialog shows how a task relates to the others.** Next to
