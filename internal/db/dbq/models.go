@@ -276,6 +276,20 @@ type TaskDependency struct {
 	DependsOnID uuid.UUID
 }
 
+type TaskStep struct {
+	ID               uuid.UUID
+	TaskID           uuid.UUID
+	Position         int32
+	Text             string
+	Done             bool
+	DoneAt           pgtype.Timestamptz
+	DoneByUserID     *uuid.UUID
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
 type User struct {
 	ID                      uuid.UUID
 	GithubLogin             string

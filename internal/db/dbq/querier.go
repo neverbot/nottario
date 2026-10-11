@@ -40,6 +40,7 @@ type Querier interface {
 	// as "closed enough" — a feature whose remaining children were all
 	// cancelled deliberately should roll up to done.
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
+	CountTaskSteps(ctx context.Context, taskID uuid.UUID) (int32, error)
 	CountUnread(ctx context.Context, userID uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)
 	DeleteArchEdge(ctx context.Context, arg DeleteArchEdgeParams) (int64, error)
@@ -56,6 +57,7 @@ type Querier interface {
 	// Returns the row count so the caller can tell "removed" from "there
 	// was nothing there", which is a 404 rather than a silent success.
 	DeleteTaskCommit(ctx context.Context, arg DeleteTaskCommitParams) (int64, error)
+	DeleteTaskStep(ctx context.Context, arg DeleteTaskStepParams) (int32, error)
 	// Idempotent: marks the user as a member of the project. Role
 	// assignments live in a separate table so a membership without any
 	// roles is a legal state.
@@ -118,6 +120,7 @@ type Querier interface {
 	GetTaskChipByShortID(ctx context.Context, arg GetTaskChipByShortIDParams) (GetTaskChipByShortIDRow, error)
 	GetTaskComment(ctx context.Context, id uuid.UUID) (GetTaskCommentRow, error)
 	GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error)
+	GetTaskStep(ctx context.Context, arg GetTaskStepParams) (GetTaskStepRow, error)
 	// Related-task summaries for the task detail (web dialog and MCP
 	// tasks.get): just enough to label a chip, so the detail never needs a
 	// second request per related task.
@@ -141,6 +144,7 @@ type Querier interface {
 	InsertSession(ctx context.Context, arg InsertSessionParams) (InsertSessionRow, error)
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (InsertTaskCommentRow, error)
+	InsertTaskStep(ctx context.Context, arg InsertTaskStepParams) (InsertTaskStepRow, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error)
 	// Lightweight roster across every project, deduped (a user with
 	// multiple roles in the same project appears once). Used by the
@@ -206,6 +210,7 @@ type Querier interface {
 	ListSkillOverridePaths(ctx context.Context, pathPrefix string) ([]string, error)
 	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommentsRow, error)
 	ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommitsRow, error)
+	ListTaskSteps(ctx context.Context, taskID uuid.UUID) ([]ListTaskStepsRow, error)
 	// Optional filters: state, type, assignee, target_role, parent_task.
 	// include_children=false (default) restricts to parent IS NULL UNLESS
 	// parent_task_id is explicitly set. open_only=true restricts to
@@ -273,12 +278,17 @@ type Querier interface {
 	SetRolePosition(ctx context.Context, arg SetRolePositionParams) error
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
+	SetTaskStepPosition(ctx context.Context, arg SetTaskStepPositionParams) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
 	// The wont_do transition records actual_end so we can answer "when was
 	// this cancelled?" but leaves actual_start alone — if the task was
 	// briefly in doing, the time the human/agent spent on it before the
 	// cancel decision is preserved.
 	SetTaskWontDo(ctx context.Context, id uuid.UUID) error
+	// Adds delta to the position of every step of the task whose position
+	// lies in [lo, hi]. Used to close the gap a removed step leaves and to
+	// make room for a moved one. Callers hold the task row lock.
+	ShiftTaskSteps(ctx context.Context, arg ShiftTaskStepsParams) error
 	SoftDeleteDocument(ctx context.Context, arg SoftDeleteDocumentParams) error
 	// Fingerprint of a document without its body. Lets a caller decide
 	// whether a write is needed at all: hash the local copy and compare,
@@ -297,6 +307,9 @@ type Querier interface {
 	// whole call fails. convert_to encodes, which is what a digest of the
 	// stored bytes actually means.
 	StatDocument(ctx context.Context, arg StatDocumentParams) (StatDocumentRow, error)
+	// Done / total step counts for a page of tasks. Tasks without steps
+	// produce no row.
+	TaskStepProgress(ctx context.Context, ids []uuid.UUID) ([]TaskStepProgressRow, error)
 	TouchSessionLastSeen(ctx context.Context, id uuid.UUID) error
 	TouchTokenLastUsed(ctx context.Context, id uuid.UUID) error
 	TouchUserLastSeen(ctx context.Context, id uuid.UUID) error
@@ -332,6 +345,10 @@ type Querier interface {
 	// boolean because COALESCE alone can't distinguish "leave alone" from
 	// "set to NULL".
 	UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsParams) (UpdateTaskFieldsRow, error)
+	// Changes the text, the done flag, or both. Ticking stamps done_at and
+	// done_by_user_id; unticking clears them; re-ticking a done step keeps
+	// the original stamp.
+	UpdateTaskStep(ctx context.Context, arg UpdateTaskStepParams) (UpdateTaskStepRow, error)
 	// Human-edit path for title / description / target_role with
 	// optimistic concurrency. The caller echoes the `updated_at` it saw;
 	// if the row has moved on since, the WHERE clause matches nothing and
