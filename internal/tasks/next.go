@@ -61,7 +61,7 @@ func Next(ctx context.Context, pool *pgxpool.Pool, f NextFilter) (*Task, error) 
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 	}
-	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+	if err := enrichTasks(ctx, pool, []*Task{t}); err != nil {
 		return nil, err
 	}
 	return t, nil

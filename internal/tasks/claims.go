@@ -97,7 +97,7 @@ func ClaimNext(ctx context.Context, pool *pgxpool.Pool, f NextFilter, callerUser
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 	}
-	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+	if err := enrichTasks(ctx, pool, []*Task{t}); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -146,7 +146,7 @@ func Claim(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, callerUserID u
 				return nil, err
 			}
 			t := rowToTaskFromForUpdate(row)
-			if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+			if err := enrichTasks(ctx, pool, []*Task{t}); err != nil {
 				return nil, err
 			}
 			return t, nil

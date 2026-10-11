@@ -9,6 +9,16 @@ import (
 	"github.com/neverbot/nottario/internal/identity"
 )
 
+// enrichTasks fills the derived fields every task read returns: the
+// token behind an MCP-created task and the step progress. Both are
+// batched across the slice.
+func enrichTasks(ctx context.Context, db dbq.DBTX, tasks []*Task) error {
+	if err := enrichTaskViaMCP(ctx, db, tasks); err != nil {
+		return err
+	}
+	return enrichTaskStepProgress(ctx, db, tasks)
+}
+
 // enrichTaskViaMCP fills the ViaMCP field of each task whose
 // CreatedByTokenID is non-nil. Tasks with no token id keep ViaMCP =
 // nil (direct-human action) and are not affected.

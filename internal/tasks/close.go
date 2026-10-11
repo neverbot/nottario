@@ -33,6 +33,10 @@ type CloseResult struct {
 	Task         *Task
 	CommentID    *uuid.UUID
 	LinkedCommit int
+	// PendingSteps lists the steps still undone when the task closed
+	// as done. Closing does not require them; the caller tells the
+	// human which were left. Never nil.
+	PendingSteps []Step
 }
 
 // Close atomically attaches commit links + an optional comment and
@@ -100,6 +104,12 @@ func Close(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, p ClosePar
 	if err := setStateTx(ctx, tx, taskID, p.State, by.UserID); err != nil {
 		return nil, err
 	}
+	pending := []Step{}
+	if p.State == StateDone {
+		if pending, err = PendingSteps(ctx, tx, taskID); err != nil {
+			return nil, err
+		}
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
@@ -113,5 +123,6 @@ func Close(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, p ClosePar
 		Task:         t,
 		CommentID:    commentID,
 		LinkedCommit: len(normalised),
+		PendingSteps: pending,
 	}, nil
 }

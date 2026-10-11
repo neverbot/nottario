@@ -167,7 +167,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, p CreateParams, by Authorsh
 		UpdatedAt:        row.UpdatedAt.Time,
 		CycleID:          row.CycleID,
 	}
-	if err := enrichTaskViaMCP(ctx, pool, []*Task{out}); err != nil {
+	if err := enrichTasks(ctx, pool, []*Task{out}); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -233,7 +233,7 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Task, error) {
 		EditedAt:         timestampPtr(row.EditedAt),
 		EditedByUserID:   row.EditedByUserID,
 	}
-	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+	if err := enrichTasks(ctx, pool, []*Task{t}); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -337,7 +337,7 @@ func List(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]Task, error)
 	for i := range out {
 		ptrs[i] = &out[i]
 	}
-	if err := enrichTaskViaMCP(ctx, pool, ptrs); err != nil {
+	if err := enrichTasks(ctx, pool, ptrs); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -444,7 +444,7 @@ func ListPaginated(ctx context.Context, pool *pgxpool.Pool, f ListFilter, limit 
 	for i := range page.Tasks {
 		ptrs[i] = &page.Tasks[i]
 	}
-	if err := enrichTaskViaMCP(ctx, pool, ptrs); err != nil {
+	if err := enrichTasks(ctx, pool, ptrs); err != nil {
 		return Page{}, err
 	}
 	return page, nil
@@ -526,7 +526,7 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateParam
 		EditedAt:         timestampPtr(row.EditedAt),
 		EditedByUserID:   row.EditedByUserID,
 	}
-	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+	if err := enrichTasks(ctx, pool, []*Task{t}); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -612,7 +612,7 @@ func UpdateText(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, p UpdateT
 		EditedAt:         timestampPtr(row.EditedAt),
 		EditedByUserID:   row.EditedByUserID,
 	}
-	if err := enrichTaskViaMCP(ctx, pool, []*Task{t}); err != nil {
+	if err := enrichTasks(ctx, pool, []*Task{t}); err != nil {
 		return nil, err
 	}
 	return t, nil

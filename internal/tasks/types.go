@@ -55,6 +55,8 @@ type Task struct {
 	CycleID          uuid.UUID        `json:"cycle_id"`
 	EditedAt         *time.Time       `json:"edited_at,omitempty"`
 	EditedByUserID   *uuid.UUID       `json:"edited_by_user_id,omitempty"`
+	// Steps counts the task's checklist; nil when it has no steps.
+	Steps *StepProgress `json:"steps,omitempty"`
 }
 
 // Dependency is the directed relation "task depends on another task".
