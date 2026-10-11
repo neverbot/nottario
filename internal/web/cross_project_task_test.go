@@ -29,12 +29,16 @@ func victimState(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) string {
 	comments, _ := tasks.ListComments(t.Context(), pool, id)
 	commits, _ := tasks.ListCommits(t.Context(), pool, id)
 	deps, _ := tasks.ListDependenciesOf(t.Context(), pool, id)
+	steps, _ := tasks.ListSteps(t.Context(), pool, id)
 	var b strings.Builder
 	b.WriteString(string(task.State) + "|" + task.Title + "|" + task.DescriptionMD)
 	if task.AssigneeUserID != nil {
 		b.WriteString("|a=" + task.AssigneeUserID.String())
 	}
 	b.WriteString("|c=" + strconv.Itoa(len(comments)) + "|k=" + strconv.Itoa(len(commits)) + "|d=" + strconv.Itoa(len(deps)))
+	for _, s := range steps {
+		b.WriteString("|s=" + s.Text + "/" + strconv.FormatBool(s.Done))
+	}
 	return b.String()
 }
 
@@ -156,6 +160,7 @@ func TestCrossProject_EveryMCPTaskToolRefusesAForeignTask(t *testing.T) {
 	pre, _ := tasks.Create(ctx, pool, tasks.CreateParams{ProjectID: theirs.ID, Type: tasks.TypeTask, Title: "pre"}, sby)
 	_ = tasks.AddDependency(ctx, pool, victim.ID, pre.ID)
 	_ = tasks.LinkCommit(ctx, pool, victim.ID, "them/repo", "abc1234", "theirs", sby)
+	vsteps, _ := tasks.AddSteps(ctx, pool, victim.ID, []string{"theirs"}, sby)
 	before := victimState(t, pool, victim.ID)
 
 	vid := victim.ID.String()
@@ -173,6 +178,10 @@ func TestCrossProject_EveryMCPTaskToolRefusesAForeignTask(t *testing.T) {
 		{"nottario.tasks.unlink_commit", map[string]any{"task_id": vid, "repo": "them/repo", "sha": "abc1234"}},
 		{"nottario.tasks.add_dependency", map[string]any{"task_id": vid, "depends_on_id": pre.ID.String()}},
 		{"nottario.tasks.remove_dependency", map[string]any{"task_id": vid, "depends_on_id": pre.ID.String()}},
+		{"nottario.tasks.add_steps", map[string]any{"task_id": vid, "texts": []string{"hijacked"}}},
+		{"nottario.tasks.update_step", map[string]any{"task_id": vid, "step_id": vsteps[0].ID.String(), "done": true}},
+		{"nottario.tasks.remove_step", map[string]any{"task_id": vid, "step_id": vsteps[0].ID.String()}},
+		{"nottario.tasks.move_step", map[string]any{"task_id": vid, "step_id": vsteps[0].ID.String(), "position": 0}},
 	}
 	for _, c := range calls {
 		c.args["project_id"] = f.projectID

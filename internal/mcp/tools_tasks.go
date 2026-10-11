@@ -31,6 +31,8 @@ type slimTask struct {
 	TargetRoleID   *uuid.UUID  `json:"target_role_id,omitempty"`
 	AssigneeUserID *uuid.UUID  `json:"assignee_user_id,omitempty"`
 	UpdatedAt      time.Time   `json:"updated_at"`
+	// Steps is the checklist progress; absent when the task has none.
+	Steps *tasks.StepProgress `json:"steps,omitempty"`
 }
 
 func toSlimTask(t *tasks.Task) slimTask {
@@ -44,6 +46,7 @@ func toSlimTask(t *tasks.Task) slimTask {
 		TargetRoleID:   t.TargetRoleID,
 		AssigneeUserID: t.AssigneeUserID,
 		UpdatedAt:      t.UpdatedAt,
+		Steps:          t.Steps,
 	}
 }
 
@@ -264,7 +267,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.get",
-		Description: "Fetches a task with its description and its related tasks: related.parent (the feature it belongs to, or null), related.children (its subtasks), related.depends_on (what it waits for) and related.blocks (what waits for it), each {id, title, state, type}. include_commits / include_comments opt in to those collections (default off, they can be large).",
+		Description: "Fetches a task with its description, its steps (the checklist, in order, each {id, position, text, done}) and its related tasks: related.parent (the feature it belongs to, or null), related.children (its subtasks), related.depends_on (what it waits for) and related.blocks (what waits for it), each {id, title, state, type}. include_commits / include_comments opt in to those collections (default off, they can be large).",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -284,7 +287,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		out := map[string]any{"task": t, "related": related}
+		steps, err := tasks.ListSteps(ctx, d.Pool, tid)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		out := map[string]any{"task": t, "related": related, "steps": steps}
 		if in.IncludeCommits {
 			commits, _ := tasks.ListCommits(ctx, d.Pool, tid)
 			out["commits"] = commits
@@ -521,7 +528,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.set_state",
-		Description: "Transitions state; manages actual_start/end. Moving a task out of 'todo' assigns it to you when it has no assignee. done↔wont_do refused (route via todo). Precondition failure returns {error, preconditions}. Slim shape. Prefer tasks.close for terminal transitions: it links commits and leaves a closing comment in the same call.",
+		Description: "Transitions state; manages actual_start/end. Moving a task out of 'todo' assigns it to you when it has no assignee. done↔wont_do refused (route via todo). Precondition failure returns {error, preconditions}. Slim shape; reaching 'done' with steps undone adds pending_steps and a notice: tell the human which were left. Prefer tasks.close for terminal transitions: it links commits and leaves a closing comment in the same call.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksStateInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -556,12 +563,26 @@ func registerTasks(server *sdk.Server, d Deps) {
 			}
 			return toolError(err.Error())
 		}
-		return jsonResult(taskPayload(t, in.Verbose))
+		if t.State != tasks.StateDone {
+			return jsonResult(taskPayload(t, in.Verbose))
+		}
+		pending, err := tasks.PendingSteps(ctx, d.Pool, tid)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if len(pending) == 0 {
+			return jsonResult(taskPayload(t, in.Verbose))
+		}
+		out, err := payloadMap(taskPayload(t, in.Verbose))
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(pendingNotice(out, pending))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.close",
-		Description: "Atomic close: commit links + closing comment + state (default 'done', also 'wont_do') in one tx. Precondition failure rolls everything back. Ack: {task, comment_id?, linked_commit_count}. Prefer over the legacy 3-call pattern.",
+		Description: "Atomic close: commit links + closing comment + state (default 'done', also 'wont_do') in one tx. Precondition failure rolls everything back. Ack: {task, comment_id?, linked_commit_count}. Closing as done with steps undone is allowed and adds pending_steps and a notice: tell the human which steps were left undone. Prefer over the legacy 3-call pattern.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCloseInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -613,7 +634,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 			"comment_id":          res.CommentID,
 			"linked_commit_count": res.LinkedCommit,
 		}
-		return jsonResult(out)
+		return jsonResult(pendingNotice(out, res.PendingSteps))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
