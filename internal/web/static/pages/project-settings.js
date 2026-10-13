@@ -1,6 +1,7 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { formatDate, formatRelativeTime } from '/static/time.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
+import { approxTokens, formatBytes, formatCount, perCall, shortToolName } from '/static/usage.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import { tableStyles, dialogStyles } from '/static/components/surfaces.js';
 import { formStyles, selectStyles } from '/static/components/forms.js';
@@ -50,6 +51,12 @@ class NottarioProjectSettings extends LitElement {
     _editingRoleId: { state: true },
     _editRoleLabel: { state: true },
     _editRoleColor: { state: true },
+    // MCP usage section: the loaded summary (null until fetched), the
+    // window in days, whether every tool is listed, and a load error.
+    _usage: { state: true },
+    _usageDays: { state: true },
+    _usageAllTools: { state: true },
+    _usageError: { state: true },
   };
 
   static styles = [
@@ -132,6 +139,69 @@ class NottarioProjectSettings extends LitElement {
       padding: 0 6px;
       font-family: ui-monospace, monospace;
     }
+
+    /* MCP usage */
+    .usage {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .usage-head {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .usage-head h3 { margin: 0; font-size: 16px; font-weight: 600; }
+    .usage-head .spacer { flex: 1; }
+    .usage p.helper { margin: 0 0 14px; max-width: 70ch; }
+    .usage-total {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 22px;
+      margin: 0 0 18px;
+      font-size: 13px;
+      color: var(--fg-muted);
+    }
+    .usage-total strong {
+      color: var(--fg);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-right: 4px;
+    }
+    .usage h4 {
+      margin: 18px 0 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .usage td.num, .usage th.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    /* Share of the bytes sent to agents: a thin flat bar behind the
+       number, so the heaviest tools stand out when scanning. */
+    .share {
+      display: inline-block;
+      width: 56px;
+      height: 6px;
+      margin-left: 8px;
+      border-radius: 3px;
+      background: var(--gray-2);
+      vertical-align: middle;
+      overflow: hidden;
+    }
+    .share > span {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+    }
+    .usage .more {
+      margin-top: 8px;
+    }
+    .usage .err { color: var(--danger); }
 
     /* Tokens tab */
     .tokens-header {
@@ -249,6 +319,11 @@ class NottarioProjectSettings extends LitElement {
     this.activeTab = 'general';
     this.error = '';
     this.tokens = null;
+    this._usage = null;
+    this._usageDays = 30;
+    this._usageAllTools = false;
+    this._usageError = '';
+    this._usageLoading = false;
     this.showIssueToken = false;
     this.issuedToken = null;
     this.tokenError = '';
@@ -645,6 +720,153 @@ class NottarioProjectSettings extends LitElement {
         Agents that call <code>nottario.tasks.list</code> without an explicit
         <code>limit</code> get this many tasks per page. Hard range: 1–500.
       </p>
+      ${this._isMember() ? this._renderUsage() : null}
+    `;
+  }
+
+  // ---- MCP usage ----
+
+  async _loadUsage(days) {
+    this._usageDays = days;
+    this._usageError = '';
+    try {
+      const res = await fetch(`/api/projects/${this.projectId}/mcp-usage?days=${days}`);
+      if (!res.ok)
+        throw new Error((await res.json().catch(() => ({}))).error || 'failed to load usage');
+      const data = await res.json();
+      // A slower response for an older window must not overwrite the
+      // one the user picked last.
+      if (this._usageDays === days) this._usage = data;
+    } catch (e) {
+      this._usageError = e.message;
+      this._usage = {
+        days,
+        tools: [],
+        tokens: [],
+        total: { calls: 0, bytes_in: 0, bytes_out: 0, errors: 0 },
+      };
+    }
+  }
+
+  _renderUsage() {
+    if (this._usage === null || this._usage === undefined) {
+      if (!this._usageLoading) {
+        this._usageLoading = true;
+        this._loadUsage(this._usageDays || 30);
+      }
+      return html`<section class="usage"><div class="muted">Loading usage…</div></section>`;
+    }
+    const u = this._usage;
+    const days = this._usageDays || u.days;
+    const total = u.total || {};
+    const tools = u.tools || [];
+    const shown = this._usageAllTools ? tools : tools.slice(0, 12);
+    const maxOut = Math.max(1, ...tools.map((t) => t.bytes_out));
+    return html`
+      <section class="usage" aria-labelledby="usage-title">
+        <div class="usage-head">
+          <h3 id="usage-title">Usage</h3>
+          <div class="spacer"></div>
+          <select class="select" aria-label="Window" @change=${(e) => this._loadUsage(Number(e.target.value))}>
+            ${[7, 30, 90].map((d) => html`<option value=${d} ?selected=${d === days}>Last ${d} days</option>`)}
+          </select>
+        </div>
+        <p class="helper">
+          What agents exchanged with this project over MCP. Everything sent
+          to an agent stays in its context, so this is what Nottario costs
+          it, at roughly four bytes per token.
+        </p>
+        ${this._usageError ? html`<p class="err">${this._usageError}</p>` : null}
+        ${
+          !total.calls
+            ? html`<p class="muted">No MCP calls in the last ${days} days.</p>`
+            : html`
+          <p class="usage-total">
+            <span><strong>${formatCount(total.calls)}</strong>calls</span>
+            <span title="≈ ${formatCount(approxTokens(total.bytes_out))} tokens">
+              <strong>${formatBytes(total.bytes_out)}</strong>sent to agents
+            </span>
+            <span><strong>${formatBytes(total.bytes_in)}</strong>received</span>
+            ${total.errors ? html`<span><strong>${formatCount(total.errors)}</strong>errors</span>` : null}
+          </p>
+
+          <h4>By tool</h4>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th class="num">Calls</th>
+                <th class="num">Sent to agents</th>
+                <th class="num">Per call</th>
+                <th class="num">Received</th>
+                <th class="num">Errors</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${shown.map(
+                (t) => html`
+                <tr>
+                  <td class="mono">${shortToolName(t.tool)}</td>
+                  <td class="num">${formatCount(t.calls)}</td>
+                  <td class="num" title="≈ ${formatCount(approxTokens(t.bytes_out))} tokens">
+                    ${formatBytes(t.bytes_out)}<span class="share" aria-hidden="true"><span style="width:${Math.round((100 * t.bytes_out) / maxOut)}%"></span></span>
+                  </td>
+                  <td class="num">${formatBytes(perCall(t.bytes_out, t.calls))}</td>
+                  <td class="num">${formatBytes(t.bytes_in)}</td>
+                  <td class="num">${t.errors ? formatCount(t.errors) : html`<span class="muted">0</span>`}</td>
+                </tr>`,
+              )}
+            </tbody>
+          </table>
+          ${
+            tools.length > shown.length || this._usageAllTools
+              ? html`<button class="btn secondary more" @click=${() => (this._usageAllTools = !this._usageAllTools)}>
+                  ${this._usageAllTools ? 'Show fewer' : `Show all ${tools.length} tools`}
+                </button>`
+              : null
+          }
+
+          <h4>By token</h4>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Token</th>
+                <th class="num">Calls</th>
+                <th class="num">Sent to agents</th>
+                <th class="num">Received</th>
+                <th>Heaviest tool</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(u.tokens || []).map(
+                (t) => html`
+                <tr>
+                  <td>
+                    ${t.owned_by_caller ? t.name : html`<span class="muted" title="Token names are personal to their owner.">Another member's token</span>`}
+                    ${t.revoked ? html` <span class="muted">(revoked)</span>` : null}
+                  </td>
+                  <td class="num">${formatCount(t.calls)}</td>
+                  <td class="num">${formatBytes(t.bytes_out)}</td>
+                  <td class="num">${formatBytes(t.bytes_in)}</td>
+                  <td class="mono">${t.tools?.length ? shortToolName(t.tools[0].tool) : ''}</td>
+                </tr>`,
+              )}
+              ${
+                u.others
+                  ? html`
+                <tr>
+                  <td class="muted">Other members' tokens</td>
+                  <td class="num">${formatCount(u.others.calls)}</td>
+                  <td class="num">${formatBytes(u.others.bytes_out)}</td>
+                  <td class="num">${formatBytes(u.others.bytes_in)}</td>
+                  <td></td>
+                </tr>`
+                  : null
+              }
+            </tbody>
+          </table>`
+        }
+      </section>
     `;
   }
 

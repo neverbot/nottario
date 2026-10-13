@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/usage"
 )
 
 type usageResp struct {
@@ -93,6 +94,23 @@ func TestMCPUsage_RecordedAndReported(t *testing.T) {
 	theirs := get("Bearer " + otherToken)
 	if len(theirs.Tokens) != 0 || theirs.Others == nil || theirs.Others.Calls != got.Total.Calls || len(theirs.Tools) == 0 {
 		t.Errorf("other member's view: %+v", theirs)
+	}
+
+	// The admin sees the other member's token too, name redacted.
+	_, theirTok, err := identity.IssueToken(f.ctx, pool, other.ID, uuid.MustParse(f.projectID), "secret-name", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := usage.Record(f.ctx, pool, usage.Call{ProjectID: uuid.MustParse(f.projectID), TokenID: theirTok.ID, Tool: "nottario.whoami", BytesOut: 10}); err != nil {
+		t.Fatal(err)
+	}
+	admin := get("Bearer " + f.token)
+	names := map[string]bool{}
+	for _, tk := range admin.Tokens {
+		names[tk.Name] = true
+	}
+	if len(admin.Tokens) != 2 || !names["mcp"] || !names[""] || names["secret-name"] {
+		t.Errorf("admin view: %+v", admin.Tokens)
 	}
 
 	if r := doRaw(t, "GET", f.baseURL+"/api/projects/"+f.projectID+"/mcp-usage?days=0", "Bearer "+f.token, nil); r.StatusCode != http.StatusBadRequest {

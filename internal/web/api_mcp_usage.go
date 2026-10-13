@@ -12,9 +12,9 @@ import (
 )
 
 // mcpUsageView is a project's MCP usage as the settings page shows it.
-// Per-tool totals cover every token; per-token rows only the caller's
-// own tokens (all of them for an admin), the same rule as the token
-// list, with the rest summed under others.
+// Per-tool totals cover every token. Per-token rows follow the token
+// list: members see their own tokens and the rest summed under others;
+// admins see every token, with other people's names redacted.
 type mcpUsageView struct {
 	*usage.Summary
 	Others *usage.Counters `json:"others,omitempty"`
@@ -62,23 +62,28 @@ func MCPUsageHandler(d TokenDeps) http.Handler {
 			return
 		}
 		view := mcpUsageView{Summary: sum}
-		if !c.IsAdmin {
-			mine := sum.Tokens[:0:0]
-			var others usage.Counters
-			for _, t := range sum.Tokens {
-				if t.UserID == c.UserID {
-					mine = append(mine, t)
-					continue
-				}
+		visible := sum.Tokens[:0:0]
+		var others usage.Counters
+		for _, t := range sum.Tokens {
+			t.OwnedByCaller = t.UserID == c.UserID
+			switch {
+			case t.OwnedByCaller:
+				visible = append(visible, t)
+			case c.IsAdmin:
+				// Admins see the row, with the name redacted as in the
+				// token list: credentials are personal to their owner.
+				t.Name = ""
+				visible = append(visible, t)
+			default:
 				others.Calls += t.Calls
 				others.Errors += t.Errors
 				others.BytesIn += t.BytesIn
 				others.BytesOut += t.BytesOut
 			}
-			sum.Tokens = mine
-			if others.Calls > 0 {
-				view.Others = &others
-			}
+		}
+		sum.Tokens = visible
+		if others.Calls > 0 {
+			view.Others = &others
 		}
 		writeJSON(w, http.StatusOK, view)
 	})

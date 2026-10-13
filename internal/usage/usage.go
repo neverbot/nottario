@@ -67,11 +67,14 @@ type ToolUsage struct {
 
 // TokenUsage is one token's totals, with its heaviest tools.
 type TokenUsage struct {
-	TokenID uuid.UUID   `json:"token_id"`
-	Name    string      `json:"name"`
-	UserID  uuid.UUID   `json:"user_id"`
-	Revoked bool        `json:"revoked"`
-	Tools   []ToolUsage `json:"tools"`
+	TokenID uuid.UUID `json:"token_id"`
+	Name    string    `json:"name"`
+	UserID  uuid.UUID `json:"user_id"`
+	Revoked bool      `json:"revoked"`
+	// OwnedByCaller is set by the web layer; a token's name is personal
+	// to its owner, as in the token list.
+	OwnedByCaller bool        `json:"owned_by_caller"`
+	Tools         []ToolUsage `json:"tools"`
 	Counters
 }
 
