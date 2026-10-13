@@ -759,7 +759,8 @@ class NottarioProjectSettings extends LitElement {
     const u = this._usage;
     const days = this._usageDays || u.days;
     const total = u.total || {};
-    const tools = u.tools || [];
+    // Heaviest first by what lands in the agents' context.
+    const tools = [...(u.tools || [])].sort((a, b) => b.bytes_out - a.bytes_out);
     const shown = this._usageAllTools ? tools : tools.slice(0, 12);
     const maxOut = Math.max(1, ...tools.map((t) => t.bytes_out));
     return html`
