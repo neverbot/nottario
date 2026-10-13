@@ -48,6 +48,7 @@ type Querier interface {
 	DeleteArchLock(ctx context.Context, projectID uuid.UUID) error
 	DeleteArchNode(ctx context.Context, id uuid.UUID) error
 	DeleteArchNodeLink(ctx context.Context, arg DeleteArchNodeLinkParams) error
+	DeleteMcpUsageBefore(ctx context.Context, before pgtype.Date) (int64, error)
 	DeleteProjectByID(ctx context.Context, id uuid.UUID) error
 	DeleteProjectPriority(ctx context.Context, arg DeleteProjectPriorityParams) (int64, error)
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
@@ -184,6 +185,9 @@ type Querier interface {
 	// threshold. The threshold is (projects.arch_lock_idle_seconds OR the
 	// caller-supplied default). Used by the background ticker.
 	ListExpiredArchLocks(ctx context.Context, defaultIdleSeconds int32) ([]ListExpiredArchLocksRow, error)
+	// Per token and tool over the window, with the token's name and owner,
+	// so the web layer can show per-tool totals and per-token rows.
+	ListMcpUsageRows(ctx context.Context, arg ListMcpUsageRowsParams) ([]ListMcpUsageRowsRow, error)
 	// One row per (project, role) the user holds. Projects where the
 	// user has zero roles are omitted here on purpose — this feeds the
 	// role-scoped whoami view; use ListProjectIDsForUser to enumerate
@@ -264,6 +268,7 @@ type Querier interface {
 	ProjectIDForTask(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	ProjectSlugExists(ctx context.Context, slug string) (bool, error)
 	ReadDocument(ctx context.Context, arg ReadDocumentParams) (ReadDocumentRow, error)
+	RecordMcpUsage(ctx context.Context, arg RecordMcpUsageParams) error
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
 	// Removes the user from the project entirely; their role assignments
 	// cascade away via membership_roles_membership_fkey.

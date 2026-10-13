@@ -34,6 +34,7 @@ import (
 	"github.com/neverbot/nottario/internal/realtime"
 	"github.com/neverbot/nottario/internal/selfupdate"
 	"github.com/neverbot/nottario/internal/tasks"
+	"github.com/neverbot/nottario/internal/usage"
 	"github.com/neverbot/nottario/internal/version"
 	"github.com/neverbot/nottario/internal/web"
 )
@@ -110,6 +111,9 @@ func run(ctx context.Context, logger *slog.Logger, ready func(net.Addr)) error {
 			logger.Error("rollup reconciler stopped", "err", err)
 		}
 	}()
+
+	// MCP usage counters are kept for usage.Retention.
+	go usage.RunPruner(ctx, pool, logger.With("subsystem", "mcp-usage").Error)
 
 	go func() {
 		if err := backup.Run(ctx, backup.Config{

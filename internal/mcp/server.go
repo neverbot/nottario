@@ -101,6 +101,7 @@ func buildServer(d Deps, instructions string) *sdk.Server {
 	registerSearch(server, d)
 	registerSkill(server, d)
 	registerCycles(server, d)
-	server.AddReceivingMiddleware(toolsetMiddleware)
+	// Outermost first: usage measures what the toolset lets through.
+	server.AddReceivingMiddleware(usageMiddleware(d), toolsetMiddleware)
 	return server
 }

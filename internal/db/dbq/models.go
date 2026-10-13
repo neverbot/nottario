@@ -155,6 +155,17 @@ type InstanceMetum struct {
 	Value string
 }
 
+type McpUsageDaily struct {
+	Day       pgtype.Date
+	ProjectID uuid.UUID
+	TokenID   uuid.UUID
+	Tool      string
+	Calls     int64
+	Errors    int64
+	BytesIn   int64
+	BytesOut  int64
+}
+
 type Membership struct {
 	UserID    uuid.UUID
 	ProjectID uuid.UUID

@@ -22,6 +22,8 @@ type mcpFixture struct {
 	pool      poolHandle
 	userID    string
 	projectID string
+	token     string // the fixture's API token, for plain HTTP calls
+	baseURL   string // the test server, for plain HTTP calls
 }
 
 // poolHandle is satisfied by *pgxpool.Pool but avoids a direct
@@ -88,6 +90,8 @@ func newMCPFixtureQuery(t *testing.T, githubID int64, login, query string) *mcpF
 		pool:      pool,
 		userID:    u.ID.String(),
 		projectID: p.ID.String(),
+		token:     token,
+		baseURL:   ts.URL,
 	}
 }
 

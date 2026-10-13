@@ -130,6 +130,7 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("GET /api/projects/{project_id}/tokens", guard(ListProjectTokensHandler(tok)))
 	mux.Handle("POST /api/projects/{project_id}/tokens", guard(IssueProjectTokenHandler(tok)))
 	mux.Handle("DELETE /api/projects/{project_id}/tokens/{token_id}", guard(RevokeProjectTokenHandler(tok)))
+	mux.Handle("GET /api/projects/{project_id}/mcp-usage", guard(MCPUsageHandler(tok)))
 
 	// Skill bundle served unauthenticated so agents can preview the
 	// catalogue before authenticating. Per-organisation overrides
