@@ -90,58 +90,16 @@ Ordering: `priority DESC, created_at ASC`.
 
 #### Pagination
 
-`tasks.list` is **paginated** with a keyset cursor:
+Keyset pagination: `limit` (1..500; default the project's
+`mcp_page_size`, 50 unless changed in Settings → MCP) and `cursor`
+(empty for the first page, then the previous `next_cursor`). Each
+page is `{tasks, next_cursor, has_more}`; loop while `has_more`. The
+cursor encodes `(priority, created_at, id)`, so concurrent writes do
+not skip or repeat rows.
 
-- `limit` — page size, 1..500. Omit to use the project's configured
-  `mcp_page_size` (default 50, editable in the web UI under
-  *Project settings → MCP*).
-- `cursor` — opaque string. Empty/omitted ⇒ first page. Otherwise pass
-  the previous response's `next_cursor`.
-
-Each response is `{tasks, next_cursor, has_more}`. The canonical walk
-loops while `has_more`:
-
-```text
-cursor = ""
-loop:
-  page = tasks.list { project_id, state: "todo", cursor }
-  process page.tasks
-  if not page.has_more: break
-  cursor = page.next_cursor
-```
-
-Filters can change between calls (e.g. swap `state` mid-walk) without
-corrupting the cursor — the ordering is stable across mutations
-because the cursor encodes `(priority, created_at, id)`.
-
-### Surfacing your own open work
-
-`tasks.next` and `claim_next` look at `todo` only. Neither returns
-your own `doing` rows, so a naïve "what's next" reply hides pickup
-you already committed to in a previous session.
-
-Always pair the two queries when the human asks for a preview:
-
-```text
-// 1. your unfinished pickup from before
-nottario.tasks.list {
-  project_id,
-  assignee_user_id: whoami.user_id,
-  state: 'doing'
-}
-
-// 2. the next eligible todo
-nottario.tasks.next {
-  project_id,
-  assignee_user_id: whoami.user_id
-}
-```
-
-Reply with the `doing` set first (call it out — "still open from
-before"), the eligible `todo` second. The invariant an agent enforces
-across sessions: no `doing` row assigned to `whoami.user_id`
-survives a pickup dialog without the human being explicitly reminded
-of it.
+`tasks.next` and `claim_next` only look at `todo`: before previewing
+new work, list your own `doing` rows (`assignee_user_id: "me"`) and
+report them first (`skill.md` §3).
 
 ### `nottario.tasks.next`
 
@@ -181,82 +139,32 @@ settings.
 
 ### `nottario.tasks.create`
 
-Defaults: `state=todo`, `type=task`, and the project's default
-priority (`medium` unless the project changed its buckets).
+Defaults: `state=todo`, `type=task`, the project's default priority.
+**`claim: true` when the work is yours and starts now**: the task is
+created assigned to you and in `doing`. Leave it out for backlog work,
+work for someone else, or later.
 
-**`claim: true` when the work is yours and starts now.** It creates
-the task already assigned to you and in `doing`, in one call:
-
-```text
-nottario.tasks.create {
-  project_id, title, type, target_role_id, description,
-  claim: true,
-}
-```
-
-Use it every time you file work you are about to start, which is most
-of the tasks you create yourself. Leave it out only when you are
-filing something for the backlog, for somebody else, or for later:
-those are the tasks that belong in `todo` with no owner.
-
-To create a feature with subtasks:
+**One task per role.** Work that spans roles is a `feature` parent
+with one child per role, chained with `add_dependency` in execution
+order; each child is pickable by the right agent, and the parent
+closes itself when they are all done:
 
 ```text
-1. create(type='feature', title='Sign in with Google')        → F
-2. create(parent_task_id=F.id, type='task', target_role_id=design)    → A
-3. create(parent_task_id=F.id, type='task', target_role_id=backend)   → B
-   then add_dependency(B, A)
-4. create(parent_task_id=F.id, type='task', target_role_id=frontend)  → C
-   then add_dependency(C, B)
-5. create(parent_task_id=F.id, type='task', target_role_id=qa)        → D
-   then add_dependency(D, C)
+F  = create { type: "feature", title: "Sign in with Google" }
+B  = create { parent_task_id: F.id, target_role_id: "backend",  title: "OAuth callback + session" }
+Fe = create { parent_task_id: F.id, target_role_id: "frontend", title: "Sign-in button" }
+     add_dependency { task_id: Fe.id, depends_on_id: B.id }
+Q  = create { parent_task_id: F.id, target_role_id: "qa",       title: "Smoke the flow" }
+     add_dependency { task_id: Q.id, depends_on_id: Fe.id }
 ```
 
-The parent transitions to `done` automatically when all its children
-are `done`.
+New tasks land in the active cycle (no `cycle_id` here); move one with
+`tasks.update` afterwards.
 
-`tasks.create` does **not** accept a `cycle_id` argument — every new
-task lands in the project's active cycle. To create a task in a
-different cycle, create it first, then move it with `tasks.update`
-(and reparent the whole feature if the target is a leaf under a
-feature parent — see the cascade note under `tasks.update`).
-
-**Send `title` and `description` as plain UTF-8.** Do not HTML-encode
-ampersands, angle brackets or quotes — `Build & deploy`, not
-`Build &amp; deploy`. The kanban, gantt and detail dialog escape
-these for display, so an encoded payload renders to the user as the
-literal `&amp;`. The server now decodes a small set of common
-entities defensively when it receives them, but the cleanest fix is
-to never encode in the first place. The same rule applies to
-`tasks.update`.
-
-**Do not pre-escape quotes or backslashes either.** The MCP transport
-JSON-encodes the value for you. Write quotes as quotes and newlines
-as real line breaks — never `\"` or the two-character sequence `\n`.
-Pre-escaped forms are stored verbatim and render with the backslash
-visible everywhere. The string you would *type* into a human-facing
-form is the string you send to the tool.
-
-#### One task per role
-
-When a unit of work spans multiple roles (e.g. backend migration +
-frontend reorder UI + qa smoke), **do not file a single multi-role
-task**. Create one task per affected role and link them with
-`add_dependency` in the order they must be executed. Each role-scoped
-task is then individually pickable by the right agent and tracked
-independently.
-
-Typical pattern: group the role-scoped tasks under a `type=feature`
-parent so they share a title and roll up to `done` together.
-
-```text
-1. create(type='feature', title='Roles: add order, drag UI, Gantt lanes')  → F
-2. create(parent_task_id=F.id, target_role_id=backend, title='migration + API')   → B
-3. create(parent_task_id=F.id, target_role_id=frontend, title='drag UI + Gantt')  → Fe
-   then add_dependency(Fe, B)
-4. create(parent_task_id=F.id, target_role_id=qa, title='smoke reorder + lanes')  → Q
-   then add_dependency(Q, Fe)
-```
+**Send text as you would type it.** Plain UTF-8: `Build & deploy`, not
+`Build &amp; deploy`; real quotes and real line breaks, never `\"` or
+a literal `\n`. The transport encodes for you, and pre-escaped text is
+stored and shown verbatim. Same for `tasks.update`.
 
 ### `nottario.tasks.update`
 
@@ -299,150 +207,45 @@ still owe the comment and the commit links.
 
 ### `nottario.tasks.close`
 
-Atomic close: attaches commits, adds a closing comment and
-transitions state, all in one Postgres transaction.
+The only way to finish a task: commit links, closing comment and state
+transition in one transaction.
 
 ```
 nottario.tasks.close {
-  task_id,
-  state: "done",                                  # or "wont_do"
-  comment: "Repro:... Fix:... Test:... abc1234.", # optional, see §"Always leave a closing comment"
-  commits: [
-    { repo: "neverbot/nottario", sha: "abc1234", message: "feat: x" },
-    { repo: "neverbot/nottario", sha: "def5678" }
-  ]
+  project_id, task_id,
+  state: "done",                                   # or "wont_do"
+  comment: "Fix: … Repro: … Test: … abc1234.",
+  commits: [{ repo: "owner/repo", sha: "abc1234", message: "feat: x" }]
 }
+# → {task, comment_id?, linked_commit_count}
 ```
 
-Response (slim by default): `{task, comment_id?, linked_commit_count}`.
-`verbose: true` returns the full Task instead of the slim ack. When the
-task closes as `done` with steps still undone, the response also
-carries `pending_steps: [{id, text}]` and a `notice`; tell the human
-which steps were left (§"Steps").
+- **Link every commit the work produced.** The UI's Commits panel and
+  "what shipped" queries read the links, not the comment. Only
+  documentation or DB-recovery work has none.
+- **Always comment, briefly.** Task / chore / spike: one sentence of
+  what and why, plus the sha. Bug: `Repro: … Fix: … Test: …` in one or
+  two lines, so a future agent can re-trigger it and trust the fix.
+  `wont_do`: why ("superseded by <id>", "out of scope after X"). The
+  commit message and the diff carry the detail. Feature parents close
+  themselves when their children are done.
+- **Steps left undone** do not block the close; the response adds
+  `pending_steps: [{id, text}]` and a `notice`. Tell the human which
+  ones were left.
+- **Never split it** into `link_commit` + `add_comment` + `set_state`:
+  a failure half-way leaves a comment and links on an open task.
 
-On precondition failure the response shape is the same as
-`set_state` (`{error, preconditions}`) and the whole transaction
-rolls back — no orphan comment, no orphan commit link.
-
-#### Closing-the-loop checklist
-
-After every `set_state done`, run the three checks from `skill.md` §4:
-
-1. Is there another open task that describes the same delivery?
-   Close it too instead of letting a duplicate row sit in `todo`.
-2. Did the work add/remove/modify components or their relations?
-   Update `nottario.arch.*` so the diagram matches reality
-   (`domains/architecture.md` §"When to touch the architecture").
-3. Did the human mention side-work? File it with
-   `nottario.tasks.create` BEFORE moving on (see §"The user just
-   mentioned a different task / bug / feature" below).
-
-#### Always link commits before closing
-
-Before `set_state done`, call `nottario.tasks.link_commit { repo,
-sha }` once per commit the task produced. This is non-negotiable
-whenever the work yielded code: the Commits panel in the UI, the
-"what shipped here" queries and any traceability audit all depend on
-the structured link, not on prose in a comment. The bar is: a future
-reader of the closed task can jump straight to the diff without
-grepping git. Tasks that are pure documentation or bug-recovery in
-the DB legitimately have no commit; everything else does.
-
-#### Always leave a closing comment
-
-Before `set_state done` (or `wont_do`, or any terminal state), call
-`nottario.tasks.add_comment` with a short summary of what actually
-happened. The diff is the truth; the closing comment is the **story**
-a future reader needs to understand the diff without reverse-
-engineering it. Skipping this is a low-friction mistake that compounds
-— months later nobody remembers why a task was closed without code,
-why `wont_do` was the right call, or what the bug actually was.
-
-What the comment must carry, by task type:
-
-- **task / chore / spike** — one paragraph: what you delivered, the
-  non-obvious decisions you made, and any follow-up you spotted but
-  did not file as its own task (a small enough loose end to live as a
-  note here instead of a new row). Link the commits inline for
-  readability even though the structured `link_commit` already exists.
-- **bug** — three sections, terse but explicit:
-  1. **Repro** — the exact steps or input that triggered the bug, in
-     past tense. Make it copy-pasteable. The bar: a future agent
-     should be able to re-trigger from this paragraph alone, without
-     reading the original report.
-  2. **Fix** — the change in one or two sentences, focusing on *why*
-     this is the right fix and not just the apparent one. If you
-     rejected an obvious alternative, mention it.
-  3. **Test** — what you ran to confirm: integration test added, manual
-     reproduction now fails to trigger, smoke test in the dev
-     container, etc. "Verified the gate is green" is not a test plan.
-- **feature** parents close automatically when their children flip to
-  `done`; you don't usually comment on the parent. Leave the closing
-  story on each child.
-- **`wont_do`** — say why. "Superseded by `<id>`", "out of scope after
-  user clarified X", "infeasible because Y". A `wont_do` with no
-  comment looks indistinguishable from "forgot about it" to anyone
-  who comes back later.
-
-**The canonical close** is one call:
-
-```text
-nottario.tasks.close {
-  task_id,
-  state: "done",
-  comment: "Fix: deferred the cycle check to inside the tx (was racing the FOR UPDATE). Repro: two concurrent add_dependency calls — used to allow A→B→A intermittently. Test: TestAddDependency_NoCycleUnderRace, 10 iterations under -race.",
-  commits: [
-    { repo: "neverbot/nottario", sha: "abc1234" },
-    { repo: "neverbot/nottario", sha: "def5678" }
-  ]
-}
-```
-
-`tasks.close` runs the commit links, the comment and the state
-transition inside one Postgres transaction. On a precondition failure
-(`state=done` blocked by an open dependency) the whole thing rolls
-back — no orphan comment, no orphan commit link. 
-
-**Do not close a task with `link_commit` + `add_comment` +
-`set_state`.** Those three calls still work, and a failure half-way
-through leaves a comment and links on a task that never closed, which
-you then have to clean up by hand. One `close` call does the same
-thing atomically and costs one response instead of three.
-
-For ordinary close-as-no-code paths (a `wont_do`, a documentation
-task) just drop `commits` and the comment carries the story.
-
-#### Preconditions are enforced
-
-Closing a task (`state: "done"`) is **rejected** when the task has at
-least one direct dependency whose own state is not `done`. The
-response carries a `preconditions` array listing what's still open:
+**Preconditions.** `done` is refused while a direct dependency is not
+`done`; nothing is written and the response lists what is open:
 
 ```jsonc
-{
-  "error": "cannot close task: 2 unresolved preconditions",
-  "preconditions": [
-    { "id": "…", "title": "Backend migration", "state": "doing" },
-    { "id": "…", "title": "API endpoint",      "state": "todo"  }
-  ]
-}
+{ "error": "cannot close task: 1 unresolved precondition",
+  "preconditions": [{ "id": "…", "title": "API endpoint", "state": "todo" }] }
 ```
 
-The fix is always to close the preconditions first, never to bypass.
-Canonical pattern when an agent hits this:
-
-```text
-# walk every unresolved precondition; take the ones still in todo.
-for p in error.preconditions:
-    if p.state == "todo":
-        r = nottario.tasks.claim { project_id, task_id: p.id }
-        if not r.error:   # it is yours now: work on it first
-            ...
-```
-
-Feature parents (`type: feature`) are an exception — the engine rolls
-them up automatically when all their children are `done`, so the
-check is skipped for them.
+Close the preconditions first (claim the ones still in `todo`), never
+work around them. Feature parents are exempt: they roll up on their
+own.
 
 ### `nottario.tasks.add_dependency` / `remove_dependency`
 
@@ -560,70 +363,22 @@ context.
 
 ### "Carry on" — the loop
 
-Use **`nottario.tasks.claim_next`** to atomically pick AND claim the
-next eligible task in one MCP call. It sets `assignee = you` and
-`state = doing` in a single Postgres UPDATE backed by `SELECT … FOR
-UPDATE SKIP LOCKED`, so two agents running this loop in parallel get
-two DIFFERENT tasks — no double-claim, no race.
+The loop itself is in `skill.md` §3. Details:
 
-```
-loop:
-  result = nottario.tasks.claim_next {
-    project_id,
-    assignee_user_id: me.user_id   # optional: include role-matched todos for me
-  }
-  if result.task is null: tell the human "no eligible tasks" and stop
-  task = result.task
-
-  ...do the work in the local repo...
-
-  nottario.tasks.close {
-    task_id: task.id,
-    state: "done",
-    comment: "...",                              # REQUIRED — see §"Always leave a closing comment"
-    commits: [{ repo, sha }, ...]                # whatever the work produced
-  }
-goto loop
-```
-
-#### "Take the next task about topic X"
-
-When the human (or your own judgement) narrows the pickup to a topic,
-discover candidates with `tasks.list`, then **claim a specific id
-atomically** with `nottario.tasks.claim`. The claim either succeeds or
-returns a 409-shaped conflict with details; if it loses the race or
-the task isn't eligible, try the next candidate.
-
-```
-candidates = nottario.tasks.list { project_id, state: "todo" }
-relevant   = filter(candidates, matches=topic_X)   # client-side reasoning
-for t in relevant:                                 # already ordered priority DESC, created_at ASC
-  result = nottario.tasks.claim { project_id, task_id: t.ID }
-  if result.error:
-    # 409: somebody else just took it OR preconditions still pending OR feature has open children
-    # See result.reason, result.current_state, result.current_assignee,
-    #     result.preconditions[], result.pending_children_count.
-    continue
-  task = result   # task is yours, already in doing
-  break
-```
-
-#### "Work on this specific task"
-
-If the human hands you an id, call `claim` directly. Read the
-conflict shape on failure and surface it to the human ("that task is
-already in doing assigned to X", "preconditions still pending: …").
-
-#### Never pick up a task with `next` + `update` + `set_state`
-
-That sequence is **racy**: between any two of those calls another
-agent can slip in and take the same task, and you both end up working
-on it. `tasks.next` is a preview, never a pickup. Take work with
-`claim_next` or `claim`, which do it in one locked statement.
-
-If a task you want is already claimed by another user: leave a
-`nottario.tasks.add_comment` or escalate to the human. Do not
-silently re-assign.
+- `claim_next` is `SELECT … FOR UPDATE SKIP LOCKED`: parallel agents
+  get different tasks. Pass `assignee_user_id: "me"` to include todos
+  targeted at your roles, or `role_id: "backend"` to stay in one lane.
+- **A topic or an id from the human:** find candidates with
+  `tasks.list { state: "todo" }` (already ordered priority desc, then
+  oldest first) and `tasks.claim` them one by one until one succeeds.
+  A failed claim returns `{error, reason, current_state,
+  current_assignee, preconditions, pending_children_count}`: someone
+  took it, a precondition is open, or a feature still has children.
+  Surface that to the human rather than retrying blindly.
+- **Never `next` + `update` + `set_state`.** Another agent can take
+  the task between any two calls.
+- A task someone else holds is theirs: comment or ask the human,
+  never reassign it silently.
 
 ### "I found a bug while doing my task"
 
@@ -638,7 +393,7 @@ nottario.tasks.create {
 
 Then continue with your current task. The general rule (verbatim
 quote, file path, proposed direction, role split) lives in `skill.md`
-§"Filing work as you discover it".
+§5.
 
 ### "The user just mentioned a different task / bug / feature"
 
@@ -667,81 +422,28 @@ nottario.tasks.add_dependency {
 
 ## Token discipline
 
-Keep MCP responses small. Default to the slim shapes; opt in to
-heavier ones deliberately.
+Everything a tool returns stays in your context for the rest of the
+session. Ask for the minimum.
 
-**Default responses are slim.** As of the current build, the high-
-frequency mutations (`tasks.create`, `tasks.update`, `tasks.set_state`,
-`tasks.claim`, `tasks.claim_next`, `tasks.next`, `tasks.add_comment`)
-and `tasks.list` return only the fields you need to chain the next
-call — id, title, state, priority, role/assignee, updated_at — NOT
-the description or comment body you just sent. `tasks.get` returns the
-full base task plus `related`, the tasks it is connected to:
-`parent` (the feature it belongs to, or null), `children` (its
-subtasks), `depends_on` (what it waits for) and `blocks` (what waits
-for it), each as `{id, title, state, type}`. Commits and comments are
-left out unless you opt in with `include_commits` / `include_comments`.
-
-**When NOT to pass `verbose: true`.** Almost always. The slim shape
-carries everything you need to pick the next call (id for routing,
-updated_at for optimistic concurrency, state for the gate). Only pass
-`verbose: true` when you specifically need the description back in
-your context — e.g. an agent is reading a task it didn't create.
-
-**Closing comments are one line per item.** The commit message + the
-diff carry the detail; the closing comment is a pointer, not a
-story. For a bug:
-
-> Repro: <symptom in 6-10 words>. Fix: <one short sentence>. Test: <name + count>. Commit: <sha>.
-
-For an ordinary task: one sentence of "why" + the commit sha. A
-multi-paragraph "Fix" block is a sign the work belongs in the commit
-message or a separate doc, not in a Nottario comment that every future
-agent will re-read.
-
-**No pickup comments.** Right after `tasks.claim` or `claim_next`,
-some agents reflexively add a comment like "starting this", "claimed",
-"picking it up", "I'm on it". Do not. The `state=doing` IS the record
-that pickup happened; the assignee field carries who. The empty
-comment adds no signal and is noise every future reader has to skim
-past. Comment only when you have something a future reader actually
-needs: a closing summary, a mid-work decision you had to make, a
-discovered blocker.
-
-**Close in one call.** `tasks.close` collapses `link_commit` +
-`add_comment` + `set_state` into a single round-trip with one
-response. The slim ack is `{task, comment_id?, linked_commit_count}` —
-you don't pay for a Task echo per call. Splitting it up is only worth
-it when the work was big enough that the closing comment genuinely
-needs to be written in stages.
-
-**Don't re-`tasks.get` what you already know.** If the previous tool
-call returned a task with `id` X and `updated_at` Y, don't fetch it
-again to confirm — pass those values straight into the next call. The
-same goes for `whoami` and `projects.list`: once per session.
-
-**Don't re-read a skill page you already loaded this session.** The
-content is stable; reading `skill/domains/tasks.md` twice costs as
-much as reading it once and learns nothing new.
-
-**Pass `include_*` to `tasks.get` deliberately.** Commits and comments
-are the large collections; ask for them only when your next decision
-needs them. `related` always comes back and is small, so there is no
-need to list a feature's children or a task's dependencies separately
-when you are already reading the task.
-
-**`tasks.list` returns only open tasks by default.** Closed rows
-(state `done` or `wont_do`) accumulate forever and would dominate
-every backlog walk. Pass `include_closed: true` only when you
-genuinely need them, or set an explicit `state` filter
-(`state: 'done'` / `state: 'wont_do'`) to scope to a closed bucket.
-
-**`nottario.search` is slim by default and capped at 20.** The
-hits carry the highlighted `description_html` snippet but not the
-raw `description` fallback that the web UI consumes — your context
-only needs one. Default limit is 20, max 100. Raise it only when
-you genuinely need a wider sweep, and pass `verbose: true` only when
-you want the raw description back (rare).
+- **Responses are slim by default.** Mutations and `tasks.list` return
+  `{id, type, title, state, priority, role, assignee, updated_at,
+  steps}`, never the description or comment you just sent.
+  `tasks.get` adds the description, `related` and the open steps.
+  `verbose: true` brings the full row; you almost never need it.
+- **Opt in deliberately**: `include_commits`, `include_comments`,
+  `include_done_steps` on `tasks.get`; `include_closed` or a closed
+  `state` on `tasks.list` (closed rows pile up forever).
+- **Don't re-fetch.** Reuse the id and fields a previous call gave you;
+  `whoami` once per session; never re-read a page of this bundle you
+  already read this session.
+- **No pickup comments** ("starting this", "on it"): `doing` and the
+  assignee already say it. Comment when a future reader needs it: a
+  decision, a blocker, the close.
+- **Closing comments are a line**, not an essay (§`tasks.close`).
+- **Step writes answer small** (the touched step and the progress);
+  keep the ids `add_steps` returns instead of re-reading the task.
+- **`nottario.search`** is capped at 20 hits by default (max 100) and
+  slim; raise the limit only for a genuinely wide sweep.
 
 ## Things you cannot do (today)
 
