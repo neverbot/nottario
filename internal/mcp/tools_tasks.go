@@ -164,7 +164,7 @@ type tasksCloseInput struct {
 func registerTasks(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.list",
-		Description: "Lists tasks. Slim rows + keyset pagination ({tasks, next_cursor, has_more}). Open-only by default; pass include_closed=true or an explicit state to see done/wont_do. See skill domains/tasks.md for the full reference.",
+		Description: "Lists tasks as slim rows with keyset pagination {tasks, next_cursor, has_more}. Open tasks only, unless include_closed=true or a state filter.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksListInput) (*sdk.CallToolResult, any, error) {
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
@@ -221,7 +221,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.get",
-		Description: "Fetches a task with its description, its open steps (the checklist items still to do, in order, each {id, text, done}; task.steps has the {done, total} count, include_done_steps lists the done ones too) and its related tasks: related.parent (the feature it belongs to, or null), related.children (its subtasks), related.depends_on (what it waits for) and related.blocks (what waits for it), each {id, title, state, type}. include_commits / include_comments opt in to those collections (default off, they can be large).",
+		Description: "A task with its description, its open steps [{id, text, done}] (include_done_steps for all; task.steps counts them) and related {parent, children, depends_on, blocks}, each {id, title, state, type}. include_commits / include_comments opt in to those.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -391,7 +391,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.create",
-		Description: "Creates a task. Defaults: state=todo, type=task, priority=the project's default (medium unless the project changed it). Pass claim=true when you are filing work you are about to start: the task is created assigned to you and in 'doing', in one call. Slim shape by default — the description you sent is not echoed back.",
+		Description: "Creates a task (defaults: todo, type task, the project's default priority). claim=true files it already yours and in doing. Slim ack; the description is not echoed.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCreateInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -501,7 +501,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.set_state",
-		Description: "Transitions state; manages actual_start/end. Moving a task out of 'todo' assigns it to you when it has no assignee. done↔wont_do refused (route via todo). Precondition failure returns {error, preconditions}. Slim shape; reaching 'done' with steps undone adds pending_steps and a notice: tell the human which were left. Prefer tasks.close for terminal transitions: it links commits and leaves a closing comment in the same call.",
+		Description: "Changes a task's state. Leaving todo assigns an unowned task to you; done and wont_do switch via todo. Precondition failure returns {error, preconditions}. Reaching done with steps undone adds pending_steps and a notice: tell the human. For done / wont_do prefer tasks.close.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksStateInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -555,7 +555,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.close",
-		Description: "Atomic close: commit links + closing comment + state (default 'done', also 'wont_do') in one tx. Precondition failure rolls everything back. Ack: {task, comment_id?, linked_commit_count}. Closing as done with steps undone is allowed and adds pending_steps and a notice: tell the human which steps were left undone. Prefer over the legacy 3-call pattern.",
+		Description: "Closes a task in one transaction: optional commit links, a closing comment and the state ('done' by default, or 'wont_do'). Ack {task, comment_id?, linked_commit_count}. Closing done with steps undone adds pending_steps and a notice: tell the human which were left.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCloseInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -684,7 +684,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.unlink_commit",
-		Description: "Removes a commit link from a task: the undo of link_commit, for a commit linked to the wrong task or a sha that no longer exists after an amend or rebase. repo and sha must match the link exactly (see tasks.get include_commits). Errors when the task has no such link, rather than succeeding silently.",
+		Description: "Removes a commit link: linked to the wrong task, or a sha rewritten by amend or rebase. repo and sha must match the link exactly; errors when there is no such link.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksUnlinkCommitInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {

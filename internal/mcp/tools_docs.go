@@ -114,7 +114,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.read",
-		Description: "Only for clients without a shell, or that cannot reach the server over HTTP: with a shell, use docs.download_url instead and read the file. Reads a document: title, kind, content (the complete markdown exactly as written, frontmatter included), parsed frontmatter, current_version. head_only=true returns frontmatter + the first 400 chars with {truncated, body_length} for catalogue checks.",
+		Description: "Only for clients without a shell or HTTP access to the server; otherwise use docs.download_url. Returns the whole document: content (frontmatter included), parsed frontmatter, current_version. head_only=true returns the frontmatter and the first 400 chars.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsReadInput) (*sdk.CallToolResult, any, error) {
 		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
 		if err != nil {
@@ -173,7 +173,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.write",
-		Description: "Creates/updates a document. Pass expected_version = current_version (0 for new). Returns a slim ack {path, current_version, updated_at} — the body you sent is not echoed back. Conflict returns {error:'version_conflict', current_version}. Omitting expected_version is deprecated.",
+		Description: "Creates or replaces a document from text you are composing; for a file on disk use docs.upload_url. Pass expected_version = current_version (0 to create). Ack {path, current_version, updated_at}; a conflict returns {error:'version_conflict', current_version}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsWriteInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -226,7 +226,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.stat",
-		Description: "Fingerprints a document without returning it: {path, current_version, size_bytes, content_sha256, updated_at}. content_sha256 is the SHA-256 of the whole stored file, frontmatter included, so it matches `sha256sum <file>` of a local copy. Use it to decide whether a write is needed instead of reading the document to diff it.",
+		Description: "Fingerprints a document without its body: {path, current_version, size_bytes, content_sha256, updated_at}. content_sha256 equals sha256sum of the whole file, frontmatter included. Use it to decide whether to download or write.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsStatInput) (*sdk.CallToolResult, any, error) {
 		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
 		if err != nil {
@@ -244,7 +244,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.append",
-		Description: "Adds markdown to the end of an existing document. Costs the entry, not the whole document. Pass expected_version = current_version. Returns the same slim ack as docs.write. The document must exist; append never creates.",
+		Description: "Adds markdown to the end of an existing document without resending it. Pass expected_version = current_version. Same ack as docs.write; never creates.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsAppendInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -294,7 +294,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 		// The how-to lives here, in the tool description, which the
 		// client already holds for the whole session. Repeating it in
 		// every response charged the same ~150 tokens per upload.
-		Description: "Signs a single-use URL to create or replace a whole document from a file on disk, so its bytes never pass through your context and you never handle a token. Project documents only. file_sha256 = SHA-256 of the exact bytes you will send (the whole file, frontmatter included); expected_version = current_version from docs.stat, or 0 to create. Returns {upload_url, expires_at, expires_in_seconds}. Then PUT that file to upload_url, e.g. curl -fsS -X PUT --data-binary @<file> '<upload_url>' — quote the URL, it contains '&', and send no Authorization header: the signature is the credential. Valid 5 minutes and usable once, on top of that exact version, so a retry after success answers version_conflict. Failures explain themselves: 403 expired (sign a new URL), 409 someone else wrote first (docs.stat and decide again), 400 the bytes did not match file_sha256 (nothing was written).",
+		Description: "Signs a single-use URL to create or replace a project document from a file on disk. file_sha256 = SHA-256 of the exact file; expected_version = current_version (docs.stat or download_url), 0 to create. Returns {upload_url, expires_at, expires_in_seconds}. Then curl -fsS -X PUT --data-binary @<file> '<upload_url>' (quote it; no Authorization header). Valid 5 minutes, once, on that version: 409 someone wrote first, 403 expired, 400 bytes did not match.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsUploadURLInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -359,7 +359,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.download_url",
-		Description: "Signs a URL to fetch a project document's current version to a file on disk, so its bytes enter your context only if and where you read them. The way to read or edit a document when you have a shell. Returns {download_url, version, expires_in_seconds}. Then curl -fsS -o <file> '<download_url>' (quote the URL; no Authorization header: the signature is the credential). The body is the document exactly as stored, frontmatter included. Valid 5 minutes. To write it back: docs.upload_url with expected_version = version. Before reusing an older local copy, docs.stat tells you whether it is still current.",
+		Description: "Signs a URL to fetch a project document's current version to a file: how to read or edit documents when you have a shell. Returns {download_url, version, expires_in_seconds}. Then curl -fsS -o <file> '<download_url>' (quote it; no Authorization header). Valid 5 minutes. Write it back with docs.upload_url, expected_version = version.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsDownloadURLInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {

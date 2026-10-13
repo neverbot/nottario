@@ -36,6 +36,13 @@ type poolHandle interface {
 // up its session, server and pool on test teardown.
 func newMCPFixture(t *testing.T, githubID int64, login string) *mcpFixture {
 	t.Helper()
+	return newMCPFixtureQuery(t, githubID, login, "")
+}
+
+// newMCPFixtureQuery connects to /mcp with a query string, the way a
+// client configured with a narrowed toolset does.
+func newMCPFixtureQuery(t *testing.T, githubID int64, login, query string) *mcpFixture {
+	t.Helper()
 	pool := testutil.NewPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -65,7 +72,7 @@ func newMCPFixture(t *testing.T, githubID int64, login string) *mcpFixture {
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "qa-test", Version: "v0"}, nil)
 	transport := &sdk.StreamableClientTransport{
-		Endpoint:             ts.URL + "/mcp",
+		Endpoint:             ts.URL + "/mcp" + query,
 		HTTPClient:           httpClient,
 		DisableStandaloneSSE: true,
 	}

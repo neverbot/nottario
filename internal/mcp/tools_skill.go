@@ -30,7 +30,7 @@ const skillInstallInstructions = "First check whether you already have this bund
 func registerSkill(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.skill.install",
-		Description: "Returns {download_url, format, bundle_version, install} for the skill bundle zip. bundle_version = \"sha256:\" + SHA-256 of the SHA256SUMS file shipped inside the zip: compare it with that file in your installed directory and skip the download when equal. Otherwise fetch the URL (5-min HMAC TTL, no Authorization needed), unzip into install.preferred_dir, and remind the human to restart their client. Bundle bytes never traverse the MCP response.",
+		Description: "Returns {download_url, format, bundle_version, install} for the skill bundle zip. If bundle_version equals 'sha256:' + the SHA-256 of your installed SHA256SUMS, nothing to do; otherwise fetch the URL (5 minutes, no Authorization), unzip into install.preferred_dir and tell the human to restart the client.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ SkillInstallInput) (*sdk.CallToolResult, any, error) {
 		version, err := skill.BundleVersion(ctx, d.Pool)
 		if err != nil {

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,7 +64,13 @@ func Handler(d Deps) http.Handler {
 			http.Error(w, `{"error":"missing or invalid Authorization token"}`, http.StatusUnauthorized)
 			return
 		}
+		ts, err := parseToolset(r)
+		if err != nil {
+			http.Error(w, `{"error":`+strconv.Quote(err.Error())+`}`, http.StatusBadRequest)
+			return
+		}
 		ctx := withCaller(r.Context(), c)
+		ctx = withToolset(ctx, ts)
 		ctx = withExternalBaseURL(ctx, externalBaseURLFromRequest(r))
 		streamable.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -94,5 +101,6 @@ func buildServer(d Deps, instructions string) *sdk.Server {
 	registerSearch(server, d)
 	registerSkill(server, d)
 	registerCycles(server, d)
+	server.AddReceivingMiddleware(toolsetMiddleware)
 	return server
 }

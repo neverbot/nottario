@@ -13,7 +13,7 @@ type WhoamiInput struct{}
 func registerWhoami(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.whoami",
-		Description: "Identifies the caller: user, admin status, auth source, (project, role) memberships, and skill_bundle_version, the current skill bundle to compare with the SHA256SUMS you have installed. Call once per session.",
+		Description: "The caller: user, admin flag, auth source, (project, role) memberships and skill_bundle_version. Once per session.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, _ WhoamiInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {

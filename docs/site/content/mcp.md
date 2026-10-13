@@ -25,6 +25,23 @@ scoped to one project (the project the token was issued under).
 An agent using that token can only read or write data in that
 project — admin tokens are not exempt.
 
+### Narrow the tool catalogue
+
+Every tool definition a client loads stays in the agent's context for
+the whole session. Two optional parameters on the MCP URL trim the
+catalogue for one connection:
+
+- `?tools=tasks,docs` keeps only those domains (`arch`, `cycles`,
+  `docs`, `projects`, `search`, `skill`, `tasks`); `whoami` always
+  stays.
+- `?shell=true` is for agents that can run `curl`: it hides
+  `docs.read` and `docs.write`, because such an agent moves documents
+  through `docs.download_url` and `docs.upload_url` instead.
+
+For example, a coding agent that never touches the architecture
+graph: `https://your-host/mcp?tools=tasks,docs,projects,search,skill&shell=true`.
+Without parameters the connection sees every tool.
+
 ## Tools
 
 The MCP server exposes one tool per natural verb. Highlights:
