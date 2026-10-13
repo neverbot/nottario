@@ -10,6 +10,26 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-10-14
+
+- **See how much your agents spend on Nottario.** Settings → MCP has a
+  Usage section with calls, errors and bytes per tool and per token over
+  the last days, so you can tell which agents and tools fill the most
+  context. Counting starts with this release; data is kept 180 days.
+- **Agents can load fewer tools.** The MCP URL takes
+  `?tools=tasks,docs,...` to expose only those domains and
+  `?shell=true` to drop the document tools a client with a shell does
+  not need. Without parameters nothing changes. See [MCP](/mcp/).
+- **Agents read documents through a file.**
+  `nottario.docs.download_url` returns a short-lived signed URL for a
+  document, the read-side twin of `docs.upload_url`, so an agent with a
+  shell no longer pulls whole bodies into its context.
+- **Task responses name roles and people.** MCP task results carry
+  `role: "backend"` and `assignee: "me"` (or a GitHub login) instead of
+  `target_role_id` and `assignee_user_id`, and `nottario.tasks.get`
+  returns a slim shape unless `verbose` is set. Reinstall the skill
+  (`nottario.skill.install`) so agents expect the new shape.
+
 ## 2026-10-12
 
 - **Tasks have steps.** A task can carry a short checklist of steps,
