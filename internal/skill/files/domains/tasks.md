@@ -483,16 +483,21 @@ needed).
 ### Steps: `add_steps`, `update_step`, `remove_step`, `move_step`
 
 ```
-nottario.tasks.add_steps   { project_id, task_id, texts: ["Write the migration", "Regenerate sqlc"] }  # → {steps}
-nottario.tasks.update_step { project_id, task_id, step_id, done: true }                               # → step
+nottario.tasks.add_steps   { project_id, task_id, texts: ["Write the migration", "Regenerate sqlc"] }  # → {steps: new ones, progress}
+nottario.tasks.update_step { project_id, task_id, step_id, done: true }                               # → {id, text, done, progress}
 nottario.tasks.update_step { project_id, task_id, step_id, text: "Regenerate sqlc and commit dbq" }
-nottario.tasks.remove_step { project_id, task_id, step_id }                                            # → {removed: true}
-nottario.tasks.move_step   { project_id, task_id, step_id, position: 0 }                               # → {steps}
+nottario.tasks.remove_step { project_id, task_id, step_id }                                            # → {removed: true, progress}
+nottario.tasks.move_step   { project_id, task_id, step_id, position: 0 }                               # → {moved: true, position}
 ```
 
-`tasks.get` always returns the full list under `steps`; list rows and
-slim task shapes carry only the progress, `steps: {done, total}`, and
-omit it when the task has no steps.
+Each step comes as `{id, text, done}`, and `progress` is
+`{done, total}`. Writes answer with what they touched, never the whole
+checklist: keep the ids `add_steps` gives you, you need them to tick.
+`tasks.get` lists only the **open** steps under `steps`, in order, with
+the count in `task.steps: {done, total}`; pass
+`include_done_steps: true` when you need the done ones too. List rows
+and slim task shapes carry only the progress, `steps: {done, total}`,
+and omit it when the task has no steps.
 
 How to use them:
 
@@ -504,6 +509,10 @@ How to use them:
   commits, file a subtask instead.
 - **Tick each step as you finish it,** not all at the end: the progress
   on the board is only useful while it is current.
+- **Past about 15 steps, look for subtasks.** A list that long usually
+  holds separate deliverables (different commits, roles or review);
+  split those into child tasks and keep steps for the small actions
+  inside each. The cap stays at 50.
 - **Keep steps short and imperative** ("Add the index", not "I think
   we should probably add an index at some point").
 - **Delete a step that turned out to be unneeded** rather than leaving

@@ -117,11 +117,12 @@ type tasksListInput struct {
 }
 
 type taskRefInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"project uuid"`
-	TaskID          string `json:"task_id" jsonschema:"task uuid"`
-	IncludeCommits  bool   `json:"include_commits,omitempty" jsonschema:"tasks.get: include commits"`
-	IncludeComments bool   `json:"include_comments,omitempty" jsonschema:"tasks.get: include comments (can be large)"`
-	Verbose         bool   `json:"verbose,omitempty" jsonschema:"tasks.claim: full Task instead of slim shape"`
+	ProjectID        string `json:"project_id" jsonschema:"project uuid"`
+	TaskID           string `json:"task_id" jsonschema:"task uuid"`
+	IncludeCommits   bool   `json:"include_commits,omitempty" jsonschema:"tasks.get: include commits"`
+	IncludeComments  bool   `json:"include_comments,omitempty" jsonschema:"tasks.get: include comments (can be large)"`
+	IncludeDoneSteps bool   `json:"include_done_steps,omitempty" jsonschema:"tasks.get: list done steps too (default: open steps only)"`
+	Verbose          bool   `json:"verbose,omitempty" jsonschema:"tasks.claim: full Task instead of slim shape"`
 }
 
 type tasksNextInput struct {
@@ -267,7 +268,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.get",
-		Description: "Fetches a task with its description, its steps (the checklist, in order, each {id, position, text, done}) and its related tasks: related.parent (the feature it belongs to, or null), related.children (its subtasks), related.depends_on (what it waits for) and related.blocks (what waits for it), each {id, title, state, type}. include_commits / include_comments opt in to those collections (default off, they can be large).",
+		Description: "Fetches a task with its description, its open steps (the checklist items still to do, in order, each {id, text, done}; task.steps has the {done, total} count, include_done_steps lists the done ones too) and its related tasks: related.parent (the feature it belongs to, or null), related.children (its subtasks), related.depends_on (what it waits for) and related.blocks (what waits for it), each {id, title, state, type}. include_commits / include_comments opt in to those collections (default off, they can be large).",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -291,7 +292,10 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		out := map[string]any{"task": t, "related": related, "steps": steps}
+		if !in.IncludeDoneSteps {
+			steps = openSteps(steps)
+		}
+		out := map[string]any{"task": t, "related": related, "steps": slimSteps(steps)}
 		if in.IncludeCommits {
 			commits, _ := tasks.ListCommits(ctx, d.Pool, tid)
 			out["commits"] = commits

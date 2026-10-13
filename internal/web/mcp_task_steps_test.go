@@ -20,8 +20,10 @@ func TestMCP_TaskSteps(t *testing.T) {
 		f.callJSON(t, "nottario.tasks.create", map[string]any{"project_id": f.projectID, "title": title}, &out)
 		return out.ID
 	}
+	type progress struct{ Done, Total int }
 	type stepsOut struct {
-		Steps []stepView `json:"steps"`
+		Steps    []stepView `json:"steps"`
+		Progress progress   `json:"progress"`
 	}
 	task := mk("with steps")
 	ref := func(extra map[string]any) map[string]any {
@@ -32,41 +34,77 @@ func TestMCP_TaskSteps(t *testing.T) {
 		return args
 	}
 
+	// Writes answer with what they touched and the progress, never the
+	// whole checklist.
 	var added stepsOut
 	f.callJSON(t, "nottario.tasks.add_steps", ref(map[string]any{"texts": []string{"a", "b", "c"}}), &added)
-	if want := []string{"a", "b", "c"}; !reflect.DeepEqual(stepViewTexts(added.Steps), want) {
-		t.Fatalf("add_steps: %v", stepViewTexts(added.Steps))
+	if want := []string{"a", "b", "c"}; !reflect.DeepEqual(stepViewTexts(added.Steps), want) || added.Progress != (progress{0, 3}) {
+		t.Fatalf("add_steps: %v %+v", stepViewTexts(added.Steps), added.Progress)
 	}
-	var ticked stepView
+	var more stepsOut
+	f.callJSON(t, "nottario.tasks.add_steps", ref(map[string]any{"texts": []string{"d"}}), &more)
+	if want := []string{"d"}; !reflect.DeepEqual(stepViewTexts(more.Steps), want) || more.Progress != (progress{0, 4}) {
+		t.Errorf("second add_steps echoes more than the new step: %v %+v", stepViewTexts(more.Steps), more.Progress)
+	}
+	f.callJSON(t, "nottario.tasks.remove_step", ref(map[string]any{"step_id": more.Steps[0].ID}), nil)
+	var ticked struct {
+		stepView
+		Progress progress `json:"progress"`
+	}
 	f.callJSON(t, "nottario.tasks.update_step", ref(map[string]any{"step_id": added.Steps[0].ID, "done": true}), &ticked)
-	if !ticked.Done {
+	if !ticked.Done || ticked.Text != "a" || ticked.Progress != (progress{1, 3}) {
 		t.Errorf("update_step done: %+v", ticked)
 	}
-	var moved stepsOut
+	var moved struct {
+		Moved    bool `json:"moved"`
+		Position int  `json:"position"`
+	}
+	f.callJSON(t, "nottario.tasks.move_step", ref(map[string]any{"step_id": added.Steps[2].ID, "position": 9}), &moved)
+	if !moved.Moved || moved.Position != 2 {
+		t.Errorf("move_step clamped: %+v", moved)
+	}
 	f.callJSON(t, "nottario.tasks.move_step", ref(map[string]any{"step_id": added.Steps[2].ID, "position": 0}), &moved)
-	if want := []string{"c", "a", "b"}; !reflect.DeepEqual(stepViewTexts(moved.Steps), want) {
-		t.Errorf("move_step: %v", stepViewTexts(moved.Steps))
+	if moved.Position != 0 {
+		t.Errorf("move_step: %+v", moved)
 	}
 	var removed struct {
-		Removed bool `json:"removed"`
+		Removed  bool     `json:"removed"`
+		Progress progress `json:"progress"`
 	}
 	f.callJSON(t, "nottario.tasks.remove_step", ref(map[string]any{"step_id": added.Steps[1].ID}), &removed)
-	if !removed.Removed {
-		t.Error("remove_step did not answer removed")
+	if !removed.Removed || removed.Progress != (progress{1, 2}) {
+		t.Errorf("remove_step: %+v", removed)
 	}
 
-	var got struct {
+	// tasks.get lists the open steps and counts the rest; done ones on
+	// request.
+	type getOut struct {
 		Task struct {
-			Steps *struct{ Done, Total int } `json:"steps"`
+			Steps *progress `json:"steps"`
 		} `json:"task"`
 		Steps []stepView `json:"steps"`
 	}
+	var got getOut
 	f.callJSON(t, "nottario.tasks.get", ref(nil), &got)
-	if want := []string{"c", "a"}; !reflect.DeepEqual(stepViewTexts(got.Steps), want) {
+	if want := []string{"c"}; !reflect.DeepEqual(stepViewTexts(got.Steps), want) {
 		t.Errorf("tasks.get steps: %v", stepViewTexts(got.Steps))
 	}
-	if got.Task.Steps == nil || got.Task.Steps.Done != 1 || got.Task.Steps.Total != 2 {
+	if got.Task.Steps == nil || *got.Task.Steps != (progress{1, 2}) {
 		t.Errorf("tasks.get progress: %+v", got.Task.Steps)
+	}
+	var all getOut
+	f.callJSON(t, "nottario.tasks.get", ref(map[string]any{"include_done_steps": true}), &all)
+	if want := []string{"c", "a"}; !reflect.DeepEqual(stepViewTexts(all.Steps), want) {
+		t.Errorf("tasks.get include_done_steps: %v", stepViewTexts(all.Steps))
+	}
+	var shape struct {
+		Steps []map[string]any `json:"steps"`
+	}
+	f.callJSON(t, "nottario.tasks.get", ref(nil), &shape)
+	for k := range shape.Steps[0] {
+		if k != "id" && k != "text" && k != "done" {
+			t.Errorf("tasks.get step carries %q", k)
+		}
 	}
 
 	var page struct {

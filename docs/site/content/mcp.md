@@ -92,8 +92,11 @@ genuinely need them, or set an explicit `state` filter (e.g.
 `tasks.get` returns the base task in full (descriptions are the
 reason you called `get` in the first place) together with `related`:
 the parent feature, the subtasks, the tasks it depends on and the tasks
-it blocks, each as `{id, title, state, type}`, and `steps`, the task's
-checklist in order. List rows and slim shapes carry only the progress,
+it blocks, each as `{id, title, state, type}`, and `steps`, the open
+items of the task's checklist in order, each `{id, text, done}`
+(`include_done_steps: true` lists the done ones too). The step tools
+answer with the step they touched and the progress, not the whole
+list. List rows and slim shapes carry only the progress,
 `steps: {done, total}`. Commits and comments are
 **omitted** unless you ask for them:
 

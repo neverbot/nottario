@@ -39,6 +39,44 @@ type stepsMoveInput struct {
 	Position  int    `json:"position" jsonschema:"0-based target position; clamped to the list"`
 }
 
+// mcpStep is the step shape agents get: order is the list order, and
+// who ticked it when stays in the web UI. Every byte lands in an
+// agent's context.
+type mcpStep struct {
+	ID   uuid.UUID `json:"id"`
+	Text string    `json:"text"`
+	Done bool      `json:"done"`
+}
+
+func slimSteps(ss []tasks.Step) []mcpStep {
+	out := make([]mcpStep, 0, len(ss))
+	for _, s := range ss {
+		out = append(out, mcpStep{ID: s.ID, Text: s.Text, Done: s.Done})
+	}
+	return out
+}
+
+func stepProgress(ss []tasks.Step) tasks.StepProgress {
+	p := tasks.StepProgress{Total: len(ss)}
+	for _, s := range ss {
+		if s.Done {
+			p.Done++
+		}
+	}
+	return p
+}
+
+// openSteps keeps the steps still to do, in order.
+func openSteps(ss []tasks.Step) []tasks.Step {
+	out := make([]tasks.Step, 0, len(ss))
+	for _, s := range ss {
+		if !s.Done {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // pendingStep is a step left undone, as the close response lists it.
 type pendingStep struct {
 	ID   uuid.UUID `json:"id"`
@@ -103,7 +141,7 @@ func parseStepID(s string) (uuid.UUID, error) {
 func registerSteps(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.add_steps",
-		Description: "Appends steps to a task's checklist and returns the whole list {steps}. A step is a short action worth remembering that needs no owner, role, dependency or commits of its own (if it does, file a subtask). Add a step when new work appears mid-task instead of writing a long comment. Each text is one line, up to 200 characters; a task holds at most 50 steps.",
+		Description: "Appends steps to a task's checklist. Returns only the new steps {steps: [{id, text, done}]} and the checklist progress {done, total}. A step is a short action worth remembering that needs no owner, role, dependency or commits of its own (if it does, file a subtask). Add a step when new work appears mid-task instead of writing a long comment. Each text is one line, up to 200 characters; a task holds at most 50 steps.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in stepsAddInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -117,12 +155,13 @@ func registerSteps(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(map[string]any{"steps": steps})
+		added := steps[max(len(steps)-len(in.Texts), 0):]
+		return jsonResult(map[string]any{"steps": slimSteps(added), "progress": stepProgress(steps)})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.update_step",
-		Description: "Ticks or unticks a step (done), rewrites its text, or both. Tick each step as you finish it, not all at the end. Returns the step.",
+		Description: "Ticks or unticks a step (done), rewrites its text, or both. Tick each step as you finish it, not all at the end. Returns the step {id, text, done} and the checklist progress {done, total}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in stepsUpdateInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -140,12 +179,19 @@ func registerSteps(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(s)
+		all, err := tasks.ListSteps(ctx, d.Pool, tid)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(struct {
+			mcpStep
+			Progress tasks.StepProgress `json:"progress"`
+		}{mcpStep{ID: s.ID, Text: s.Text, Done: s.Done}, stepProgress(all)})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.remove_step",
-		Description: "Deletes a step. Use it for a step that turned out to be unneeded: steps are either done or deleted, never left pending to mean 'skipped'.",
+		Description: "Deletes a step. Use it for a step that turned out to be unneeded: steps are either done or deleted, never left pending to mean 'skipped'. Returns {removed, progress}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in stepRefInput) (*sdk.CallToolResult, any, error) {
 		tid, err := resolveStepTask(ctx, d, in.ProjectID, in.TaskID)
 		if err != nil {
@@ -158,12 +204,16 @@ func registerSteps(server *sdk.Server, d Deps) {
 		if err := tasks.RemoveStep(ctx, d.Pool, tid, sid); err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(map[string]any{"removed": true})
+		all, err := tasks.ListSteps(ctx, d.Pool, tid)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(map[string]any{"removed": true, "progress": stepProgress(all)})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.move_step",
-		Description: "Moves a step to a 0-based position (clamped to the list) and returns the whole list {steps} in its new order.",
+		Description: "Moves a step to a 0-based position (clamped to the list). Returns {moved, position} with the position it landed on.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in stepsMoveInput) (*sdk.CallToolResult, any, error) {
 		tid, err := resolveStepTask(ctx, d, in.ProjectID, in.TaskID)
 		if err != nil {
@@ -177,6 +227,12 @@ func registerSteps(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(map[string]any{"steps": steps})
+		pos := -1
+		for i, st := range steps {
+			if st.ID == sid {
+				pos = i
+			}
+		}
+		return jsonResult(map[string]any{"moved": true, "position": pos})
 	})
 }
