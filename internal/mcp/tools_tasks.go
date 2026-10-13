@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -13,52 +12,26 @@ import (
 	"github.com/neverbot/nottario/internal/tasks"
 )
 
-// slimTask is the compact payload mutations return by default. The
-// fields are exactly what an agent needs to chain the next call
-// (id + updated_at for optimistic concurrency + state/role/assignee
-// for the routing decision the agent is about to make), minus the
-// expensive ones (description, created_by, via_mcp, actual_start/end,
-// cycle_id which the project's active cycle covers). A typical
-// claim → comment → done loop drops from ~5 KB to ~600 B of MCP
-// traffic per round-trip.
+// slimTask is the compact payload mutations and lists return by
+// default: what an agent needs to chain the next call and make its
+// routing decision, minus the expensive fields (description,
+// created_by, via_mcp, actual_start/end, cycle_id). Role and assignee
+// come as names, not uuids, and the time to the second; taskView fills
+// them.
 type slimTask struct {
-	ID             uuid.UUID   `json:"id"`
-	Type           tasks.Type  `json:"type"`
-	Title          string      `json:"title"`
-	State          tasks.State `json:"state"`
-	Priority       int         `json:"priority"`
-	ParentTaskID   *uuid.UUID  `json:"parent_task_id,omitempty"`
-	TargetRoleID   *uuid.UUID  `json:"target_role_id,omitempty"`
-	AssigneeUserID *uuid.UUID  `json:"assignee_user_id,omitempty"`
-	UpdatedAt      time.Time   `json:"updated_at"`
+	ID           uuid.UUID   `json:"id"`
+	Type         tasks.Type  `json:"type"`
+	Title        string      `json:"title"`
+	State        tasks.State `json:"state"`
+	Priority     int         `json:"priority"`
+	ParentTaskID *uuid.UUID  `json:"parent_task_id,omitempty"`
+	// Role is the target role's key ("backend").
+	Role string `json:"role,omitempty"`
+	// Assignee is "me" for the caller, otherwise a GitHub login.
+	Assignee  string `json:"assignee,omitempty"`
+	UpdatedAt string `json:"updated_at"`
 	// Steps is the checklist progress; absent when the task has none.
 	Steps *tasks.StepProgress `json:"steps,omitempty"`
-}
-
-func toSlimTask(t *tasks.Task) slimTask {
-	return slimTask{
-		ID:             t.ID,
-		Type:           t.Type,
-		Title:          t.Title,
-		State:          t.State,
-		Priority:       t.Priority,
-		ParentTaskID:   t.ParentTaskID,
-		TargetRoleID:   t.TargetRoleID,
-		AssigneeUserID: t.AssigneeUserID,
-		UpdatedAt:      t.UpdatedAt,
-		Steps:          t.Steps,
-	}
-}
-
-// taskPayload returns either the slim shape (default) or the full
-// *tasks.Task (when the caller asked for verbose). Use this at every
-// MCP mutation return site so the "minimal by default" rule is
-// enforced in one place.
-func taskPayload(t *tasks.Task, verbose bool) any {
-	if verbose {
-		return t
-	}
-	return toSlimTask(t)
 }
 
 // slimComment mirrors slimTask for comments. Body is the big payload
@@ -67,34 +40,14 @@ func taskPayload(t *tasks.Task, verbose bool) any {
 type slimComment struct {
 	ID        uuid.UUID `json:"id"`
 	TaskID    uuid.UUID `json:"task_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt string    `json:"created_at"`
 }
 
 func commentPayload(c *tasks.Comment, verbose bool) any {
 	if verbose {
 		return c
 	}
-	return slimComment{
-		ID:        c.ID,
-		TaskID:    c.TaskID,
-		CreatedAt: c.CreatedAt,
-		UpdatedAt: c.UpdatedAt,
-	}
-}
-
-// slimTaskList trims the per-row description from a list response. Same
-// principle as taskPayload but applied to the multi-row case where the
-// description is the largest field by far.
-func slimTaskList(ts []tasks.Task, verbose bool) any {
-	if verbose {
-		return ts
-	}
-	out := make([]slimTask, len(ts))
-	for i := range ts {
-		out[i] = toSlimTask(&ts[i])
-	}
-	return out
+	return slimComment{ID: c.ID, TaskID: c.TaskID, CreatedAt: agentTime(c.CreatedAt)}
 }
 
 // Common input fragments. Every tool that targets a task carries an
@@ -105,8 +58,8 @@ type tasksListInput struct {
 	ProjectID       string `json:"project_id" jsonschema:"project uuid"`
 	State           string `json:"state,omitempty" jsonschema:"filter: 'todo','doing','done','wont_do'"`
 	Type            string `json:"type,omitempty" jsonschema:"filter: 'task','bug','chore','spike','feature'"`
-	AssigneeUserID  string `json:"assignee_user_id,omitempty" jsonschema:"filter by assignee uuid"`
-	TargetRoleID    string `json:"target_role_id,omitempty" jsonschema:"filter by target_role uuid"`
+	AssigneeUserID  string `json:"assignee_user_id,omitempty" jsonschema:"filter by assignee: 'me' or a user uuid"`
+	TargetRoleID    string `json:"target_role_id,omitempty" jsonschema:"filter by target role: its key ('backend') or uuid"`
 	ParentTaskID    string `json:"parent_task_id,omitempty" jsonschema:"list children of this feature task"`
 	CycleID         string `json:"cycle_id,omitempty" jsonschema:"cycle uuid, or 'all' for every cycle. Omit = active cycle."`
 	IncludeChildren bool   `json:"include_children,omitempty" jsonschema:"include parented tasks too (default: top-level only)"`
@@ -122,14 +75,14 @@ type taskRefInput struct {
 	IncludeCommits   bool   `json:"include_commits,omitempty" jsonschema:"tasks.get: include commits"`
 	IncludeComments  bool   `json:"include_comments,omitempty" jsonschema:"tasks.get: include comments (can be large)"`
 	IncludeDoneSteps bool   `json:"include_done_steps,omitempty" jsonschema:"tasks.get: list done steps too (default: open steps only)"`
-	Verbose          bool   `json:"verbose,omitempty" jsonschema:"tasks.claim: full Task instead of slim shape"`
+	Verbose          bool   `json:"verbose,omitempty" jsonschema:"tasks.get / tasks.claim: full Task instead of the agent shape"`
 }
 
 type tasksNextInput struct {
 	ProjectID      string `json:"project_id" jsonschema:"project uuid"`
 	CycleID        string `json:"cycle_id,omitempty" jsonschema:"cycle uuid, or 'all'. Omit = active cycle."`
-	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"restrict to this user"`
-	RoleID         string `json:"role_id,omitempty" jsonschema:"restrict to this target role"`
+	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"restrict to this user: 'me' or a uuid"`
+	RoleID         string `json:"role_id,omitempty" jsonschema:"restrict to this target role: key ('backend') or uuid"`
 	Verbose        bool   `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
@@ -139,8 +92,8 @@ type tasksCreateInput struct {
 	Description    string `json:"description,omitempty" jsonschema:"markdown body"`
 	Type           string `json:"type,omitempty" jsonschema:"'task' (default), 'bug', 'chore', 'spike' or 'feature'"`
 	PriorityKey    string `json:"priority_key,omitempty" jsonschema:"one of the project's priority keys (projects.list_priorities); omitted = the project's default"`
-	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"assignee uuid"`
-	TargetRoleID   string `json:"target_role_id,omitempty" jsonschema:"target role uuid"`
+	AssigneeUserID string `json:"assignee_user_id,omitempty" jsonschema:"'me' or a user uuid"`
+	TargetRoleID   string `json:"target_role_id,omitempty" jsonschema:"target role key ('backend') or uuid"`
 	ParentTaskID   string `json:"parent_task_id,omitempty" jsonschema:"parent feature task uuid"`
 	Claim          bool   `json:"claim,omitempty" jsonschema:"create it already yours and in 'doing'. Use it whenever you are filing work you are about to start, instead of create + claim."`
 	Verbose        bool   `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
@@ -153,8 +106,8 @@ type tasksUpdateInput struct {
 	Description    *string `json:"description,omitempty"`
 	Type           *string `json:"type,omitempty"`
 	PriorityKey    string  `json:"priority_key,omitempty" jsonschema:"one of the project's priority keys (projects.list_priorities)"`
-	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"uuid, or '' to unset"`
-	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"uuid, or '' to unset"`
+	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"'me', a user uuid, or '' to unset"`
+	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"role key ('backend'), uuid, or '' to unset"`
 	Verbose        bool    `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
@@ -233,11 +186,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if in.Type != "" {
 			f.Type = tasks.Type(in.Type)
 		}
-		if id := optUUID(in.AssigneeUserID); id != nil {
-			f.AssigneeUserID = id
+		if f.AssigneeUserID, err = resolveUserRef(ctx, in.AssigneeUserID); err != nil {
+			return toolError(err.Error())
 		}
-		if id := optUUID(in.TargetRoleID); id != nil {
-			f.TargetRoleID = id
+		if f.TargetRoleID, err = resolveRoleRef(ctx, d, pid, in.TargetRoleID); err != nil {
+			return toolError(err.Error())
 		}
 		if id := optUUID(in.ParentTaskID); id != nil {
 			f.ParentTaskID = id
@@ -260,7 +213,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		next, _ := tasks.EncodeCursor(page.NextCursor)
 		return jsonResult(map[string]any{
-			"tasks":       slimTaskList(page.Tasks, in.Verbose),
+			"tasks":       newTaskView(ctx, d).list(page.Tasks, in.Verbose),
 			"next_cursor": next,
 			"has_more":    page.HasMore,
 		})
@@ -295,7 +248,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if !in.IncludeDoneSteps {
 			steps = openSteps(steps)
 		}
-		out := map[string]any{"task": t, "related": related, "steps": slimSteps(steps)}
+		out := map[string]any{"task": newTaskView(ctx, d).detail(t, in.Verbose), "related": related, "steps": slimSteps(steps)}
 		if in.IncludeCommits {
 			commits, _ := tasks.ListCommits(ctx, d.Pool, tid)
 			out["commits"] = commits
@@ -327,13 +280,21 @@ func registerTasks(server *sdk.Server, d Deps) {
 			return toolError(err.Error())
 		}
 		f := tasks.NextFilter{ProjectID: pid, CycleID: cycleID}
-		if id := optUUID(in.AssigneeUserID); id != nil {
-			f.AssigneeUserID = id
-			roles, _ := identity.UserRoleIDs(ctx, d.Pool, *id, pid)
+		assignee, err := resolveUserRef(ctx, in.AssigneeUserID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if assignee != nil {
+			f.AssigneeUserID = assignee
+			roles, _ := identity.UserRoleIDs(ctx, d.Pool, *assignee, pid)
 			f.UserRoleIDs = roles
 		}
-		if id := optUUID(in.RoleID); id != nil {
-			f.RoleID = id
+		role, err := resolveRoleRef(ctx, d, pid, in.RoleID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if role != nil {
+			f.RoleID = role
 			f.AssigneeUserID = nil
 			f.UserRoleIDs = nil
 		}
@@ -344,7 +305,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(map[string]any{"task": taskPayload(t, in.Verbose)})
+		return jsonResult(map[string]any{"task": newTaskView(ctx, d).payload(t, in.Verbose)})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -370,18 +331,18 @@ func registerTasks(server *sdk.Server, d Deps) {
 			var cerr *tasks.ClaimConflictError
 			if errors.As(err, &cerr) {
 				return jsonResult(map[string]any{
-					"error":                    cerr.Error(),
-					"reason":                   cerr.Reason,
-					"task_id":                  cerr.TaskID,
-					"current_state":            string(cerr.CurrentState),
-					"current_assignee_user_id": cerr.CurrentAssigneeUserID,
-					"preconditions":            cerr.Preconditions,
-					"pending_children_count":   cerr.PendingChildrenCount,
+					"error":                  cerr.Error(),
+					"reason":                 cerr.Reason,
+					"task_id":                cerr.TaskID,
+					"current_state":          string(cerr.CurrentState),
+					"current_assignee":       newTaskView(ctx, d).user(cerr.CurrentAssigneeUserID),
+					"preconditions":          cerr.Preconditions,
+					"pending_children_count": cerr.PendingChildrenCount,
 				})
 			}
 			return toolError(err.Error())
 		}
-		return jsonResult(taskPayload(t, in.Verbose))
+		return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -400,13 +361,21 @@ func registerTasks(server *sdk.Server, d Deps) {
 			return toolError(err.Error())
 		}
 		f := tasks.NextFilter{ProjectID: pid, CycleID: cycleID}
-		if id := optUUID(in.AssigneeUserID); id != nil {
-			f.AssigneeUserID = id
-			roles, _ := identity.UserRoleIDs(ctx, d.Pool, *id, pid)
+		assignee, err := resolveUserRef(ctx, in.AssigneeUserID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if assignee != nil {
+			f.AssigneeUserID = assignee
+			roles, _ := identity.UserRoleIDs(ctx, d.Pool, *assignee, pid)
 			f.UserRoleIDs = roles
 		}
-		if id := optUUID(in.RoleID); id != nil {
-			f.RoleID = id
+		role, err := resolveRoleRef(ctx, d, pid, in.RoleID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if role != nil {
+			f.RoleID = role
 			f.AssigneeUserID = nil
 			f.UserRoleIDs = nil
 		}
@@ -417,7 +386,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(map[string]any{"task": taskPayload(t, in.Verbose)})
+		return jsonResult(map[string]any{"task": newTaskView(ctx, d).payload(t, in.Verbose)})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -457,11 +426,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 			Priority:      priority,
 			Claim:         in.Claim,
 		}
-		if id := optUUID(in.AssigneeUserID); id != nil {
-			params.AssigneeUserID = id
+		if params.AssigneeUserID, err = resolveUserRef(ctx, in.AssigneeUserID); err != nil {
+			return toolError(err.Error())
 		}
-		if id := optUUID(in.TargetRoleID); id != nil {
-			params.TargetRoleID = id
+		if params.TargetRoleID, err = resolveRoleRef(ctx, d, pid, in.TargetRoleID); err != nil {
+			return toolError(err.Error())
 		}
 		if id := optUUID(in.ParentTaskID); id != nil {
 			params.ParentTaskID = id
@@ -470,7 +439,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(taskPayload(t, in.Verbose))
+		return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -505,29 +474,29 @@ func registerTasks(server *sdk.Server, d Deps) {
 			if *in.AssigneeUserID == "" {
 				up.UnsetAssignee = true
 			} else {
-				id, err := uuid.Parse(*in.AssigneeUserID)
+				id, err := resolveUserRef(ctx, *in.AssigneeUserID)
 				if err != nil {
-					return toolError("assignee_user_id must be a uuid or empty string")
+					return toolError(err.Error())
 				}
-				up.AssigneeUserID = &id
+				up.AssigneeUserID = id
 			}
 		}
 		if in.TargetRoleID != nil {
 			if *in.TargetRoleID == "" {
 				up.UnsetTargetRole = true
 			} else {
-				id, err := uuid.Parse(*in.TargetRoleID)
+				id, err := resolveRoleRef(ctx, d, pid, *in.TargetRoleID)
 				if err != nil {
-					return toolError("target_role_id must be a uuid or empty string")
+					return toolError(err.Error())
 				}
-				up.TargetRoleID = &id
+				up.TargetRoleID = id
 			}
 		}
 		t, err := tasks.Update(ctx, d.Pool, tid, up)
 		if err != nil {
 			return toolError(err.Error())
 		}
-		return jsonResult(taskPayload(t, in.Verbose))
+		return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -568,16 +537,16 @@ func registerTasks(server *sdk.Server, d Deps) {
 			return toolError(err.Error())
 		}
 		if t.State != tasks.StateDone {
-			return jsonResult(taskPayload(t, in.Verbose))
+			return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
 		}
 		pending, err := tasks.PendingSteps(ctx, d.Pool, tid)
 		if err != nil {
 			return toolError(err.Error())
 		}
 		if len(pending) == 0 {
-			return jsonResult(taskPayload(t, in.Verbose))
+			return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
 		}
-		out, err := payloadMap(taskPayload(t, in.Verbose))
+		out, err := payloadMap(newTaskView(ctx, d).payload(t, in.Verbose))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -634,7 +603,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 			return toolError(err.Error())
 		}
 		out := map[string]any{
-			"task":                taskPayload(res.Task, in.Verbose),
+			"task":                newTaskView(ctx, d).payload(res.Task, in.Verbose),
 			"comment_id":          res.CommentID,
 			"linked_commit_count": res.LinkedCommit,
 		}

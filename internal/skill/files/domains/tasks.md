@@ -19,8 +19,8 @@ description: 'Complete reference for the Nottario tasks domain: schema, semantic
 | `description_md`        | text                                 | Markdown.                                                             |
 | `state`                 | `todo`\|`doing`\|`done`\|`wont_do`   | Lifecycle. `done` and `wont_do` are both terminal.                    |
 | `priority`              | int                                  | 0–100, read-only. Higher = picked sooner. Set it with `priority_key`. |
-| `assignee_user_id`      | uuid \| null                         | Specific user.                                                        |
-| `target_role_id`        | uuid \| null                         | Role-scoped; eligible to any holder.                                 |
+| `assignee_user_id`      | uuid \| null                         | Specific user. MCP shows it as `assignee`: `"me"` or a login.         |
+| `target_role_id`        | uuid \| null                         | Role-scoped; eligible to any holder. MCP shows `role`: the key.       |
 | `actual_start`          | timestamp \| null                    | Set automatically when entering `doing` (kept across re-enters).      |
 | `actual_end`            | timestamp \| null                    | Set automatically when entering `done`, cleared on revert.            |
 | `created_by_user_id`    | uuid \| null                         | Audit.                                                                |
@@ -60,7 +60,10 @@ Filter parameters (all optional except `project_id`):
 
 - `state` — restrict to one state.
 - `type` — restrict to one task type.
-- `assignee_user_id` / `target_role_id` — restrict assignment.
+- `assignee_user_id` / `target_role_id` — restrict assignment. Pass
+  `"me"` for yourself and a role by its key (`"backend"`); uuids work
+  too. Responses use the same terms: `assignee: "me"` or a login,
+  `role: "backend"`, and `updated_at` in UTC to the second.
 - `parent_task_id` — list children of a specific feature.
 - `include_children: true` — by default only top-level tasks
   (parent_task_id IS NULL) are returned; set this to flatten feature
@@ -429,12 +432,12 @@ The fix is always to close the preconditions first, never to bypass.
 Canonical pattern when an agent hits this:
 
 ```text
-me = nottario.whoami { }
-# walk every unresolved precondition; pick whichever is yours.
+# walk every unresolved precondition; take the ones still in todo.
 for p in error.preconditions:
-    if p.assignee_user_id == me.user_id and p.state == "todo":
-        # work on p first.
-        ...
+    if p.state == "todo":
+        r = nottario.tasks.claim { project_id, task_id: p.id }
+        if not r.error:   # it is yours now: work on it first
+            ...
 ```
 
 Feature parents (`type: feature`) are an exception — the engine rolls
@@ -598,7 +601,7 @@ for t in relevant:                                 # already ordered priority DE
   result = nottario.tasks.claim { project_id, task_id: t.ID }
   if result.error:
     # 409: somebody else just took it OR preconditions still pending OR feature has open children
-    # See result.reason, result.current_state, result.current_assignee_user_id,
+    # See result.reason, result.current_state, result.current_assignee,
     #     result.preconditions[], result.pending_children_count.
     continue
   task = result   # task is yours, already in doing

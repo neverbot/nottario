@@ -52,8 +52,10 @@ token can reach. Cache it once and pass it on every call.
 caller it returns only that one project. Use it if you want the slug
 or name; the id is the same one `whoami` already gave you.
 
-If you need the role catalogue (to assign to "any backend"), call
-`nottario.projects.list_roles` once and cache.
+Roles are named by key everywhere: pass `target_role_id: "backend"`
+and read `role: "backend"` back; `nottario.projects.list_roles` lists
+the keys if you need them. Yourself is `"me"`, in filters and in
+responses (`assignee: "me"`).
 
 ## 3. Work a task end-to-end
 
@@ -83,7 +85,7 @@ forgotten.
 ```text
 nottario.tasks.list {
   project_id,
-  assignee_user_id: whoami.user_id,
+  assignee_user_id: "me",
   state: 'doing'
 }
 ```

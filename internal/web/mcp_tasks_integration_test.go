@@ -235,7 +235,7 @@ func TestMCP_Tasks_SlimResponses(t *testing.T) {
 	if _, ok := cm["body"]; ok {
 		t.Errorf("default tasks.add_comment must omit 'body', got %q", cm["body"])
 	}
-	for _, k := range []string{"id", "task_id", "created_at", "updated_at"} {
+	for _, k := range []string{"id", "task_id", "created_at"} {
 		if _, ok := cm[k]; !ok {
 			t.Errorf("slim tasks.add_comment missing required key %q: %+v", k, cm)
 		}
@@ -505,8 +505,8 @@ func TestMCP_Tasks_OwnershipWithoutClaimCall(t *testing.T) {
 		"title":      "filed and started in one call",
 		"claim":      true,
 	}, &claimed)
-	if claimed["state"] != "doing" || claimed["assignee_user_id"] != f.userID {
-		t.Errorf("claim=true create: state=%v assignee=%v, want doing / %s", claimed["state"], claimed["assignee_user_id"], f.userID)
+	if claimed["state"] != "doing" || claimed["assignee"] != "me" {
+		t.Errorf("claim=true create: state=%v assignee=%v, want doing / me", claimed["state"], claimed["assignee"])
 	}
 
 	var plain map[string]any
@@ -515,7 +515,7 @@ func TestMCP_Tasks_OwnershipWithoutClaimCall(t *testing.T) {
 		"title":      "moved without claiming",
 	}, &plain)
 	id, _ := plain["id"].(string)
-	if plain["assignee_user_id"] != nil {
+	if plain["assignee"] != nil {
 		t.Fatalf("a plain create should not assign anyone: %+v", plain)
 	}
 
@@ -525,7 +525,7 @@ func TestMCP_Tasks_OwnershipWithoutClaimCall(t *testing.T) {
 		"task_id":    id,
 		"state":      "doing",
 	}, &moved)
-	if moved["assignee_user_id"] != f.userID {
+	if moved["assignee"] != "me" {
 		t.Errorf("set_state doing left the task unowned: %+v", moved)
 	}
 
@@ -542,7 +542,7 @@ func TestMCP_Tasks_OwnershipWithoutClaimCall(t *testing.T) {
 		"comment":    "done in passing",
 	}, &closed)
 	task, _ := closed["task"].(map[string]any)
-	if task == nil || task["assignee_user_id"] != f.userID || task["state"] != "done" {
+	if task == nil || task["assignee"] != "me" || task["state"] != "done" {
 		t.Errorf("close left the task unowned: %+v", closed)
 	}
 }

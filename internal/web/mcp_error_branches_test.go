@@ -436,7 +436,7 @@ func TestMCP_Tasks_CreateWithPriorityAndAssignee(t *testing.T) {
 		"assignee_user_id": f.userID,
 		"target_role_id":   roleID,
 	}, &task)
-	if task["assignee_user_id"] != f.userID {
+	if task["assignee"] != "me" || task["role"] != roles.Roles[0]["key"] {
 		t.Errorf("expected assignee on create: %+v", task)
 	}
 
