@@ -103,7 +103,7 @@ func parseStepID(s string) (uuid.UUID, error) {
 func registerSteps(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.add_steps",
-		Description: "Appends steps to a task's checklist and returns the whole list {steps}. A step is a short action worth remembering that needs no owner, role, dependency or commits of its own (if it does, file a subtask). Add a step when new work appears mid-task instead of writing a long comment. Each text is one line, up to 200 characters; a task holds at most 50 steps.",
+		Description: "Appends steps to a task's checklist and returns the whole list {steps}. A step is a short action worth remembering that needs no owner, role, dependency or commits of its own (if it does, file a subtask). Add a step when new work appears mid-task instead of writing a long comment. Each text is one line, up to 200 characters; a task holds at most 500 steps.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in stepsAddInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {

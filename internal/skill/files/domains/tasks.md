@@ -49,7 +49,7 @@ created_at)`. Append-only.
 checklist on a task: short actions worth remembering that need no
 owner, role, dependency, commits or discussion of its own. If an item
 needs any of those, it is a subtask, not a step. A step is one line of
-up to 200 characters; a task holds at most 50. Steps are either done
+up to 200 characters; a task holds at most 500. Steps are either done
 or deleted: there is no "skipped" state.
 
 ## Tool surface

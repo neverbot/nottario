@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/neverbot/nottario/internal/tasks"
 )
 
 // Agents keep a task's checklist through four tools, read it back with
@@ -93,11 +95,12 @@ func TestMCP_TaskSteps(t *testing.T) {
 	// Rejections.
 	f.callExpectErr(t, "nottario.tasks.add_steps", ref(map[string]any{"texts": []string{"two\nlines"}}))
 	f.callExpectErr(t, "nottario.tasks.update_step", ref(map[string]any{"step_id": "nope", "done": true}))
-	many := make([]string, 49)
+	// The task holds two steps here, so one past the room left.
+	many := make([]string, tasks.MaxStepsPerTask-1)
 	for i := range many {
 		many[i] = fmt.Sprintf("s%d", i)
 	}
-	if msg := f.callExpectErr(t, "nottario.tasks.add_steps", ref(map[string]any{"texts": many})); !strings.Contains(msg, "48 more fit") {
+	if msg := f.callExpectErr(t, "nottario.tasks.add_steps", ref(map[string]any{"texts": many})); !strings.Contains(msg, fmt.Sprintf("%d more fit", tasks.MaxStepsPerTask-2)) {
 		t.Errorf("cap message = %q", msg)
 	}
 	other := mk("other")
