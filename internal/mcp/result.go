@@ -7,10 +7,11 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// jsonResult marshals v as pretty JSON and wraps it in a CallToolResult.
-// Tool clients receive a single text content with the JSON payload.
+// jsonResult marshals v as compact JSON and wraps it in a CallToolResult.
+// Tool clients receive a single text content with the JSON payload;
+// it is not indented because every byte lands in an agent's context.
 func jsonResult(v any) (*sdk.CallToolResult, any, error) {
-	b, err := json.MarshalIndent(v, "", "  ")
+	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal result: %w", err)
 	}
