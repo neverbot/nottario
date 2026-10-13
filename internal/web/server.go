@@ -144,6 +144,9 @@ func NewServer(d Deps) http.Handler {
 	// Signed, single-use document upload issued by nottario.docs.upload_url.
 	// The signature is the credential; no token or session is consulted.
 	mux.Handle("PUT /api/docs/upload", UploadDocHandler(d.Pool, sessionKey))
+	// Signed download of one document version, issued by
+	// nottario.docs.download_url. Same credential model as uploads.
+	mux.Handle("GET /api/docs/download", DownloadDocHandler(d.Pool, sessionKey))
 
 	// Real-time event stream for the web UI (and any future SSE client).
 	if d.Hub != nil {

@@ -235,8 +235,8 @@ feature", "Block this until X is done").
 ## Rules of thumb
 
 - **Never touch the API token.** Don't look for it, don't print it,
-  don't call Nottario's HTTP API with it. MCP tools only; for whole
-  files, `docs.upload_url`.
+  don't call Nottario's HTTP API with it. MCP tools only; to read or write
+  documents, `docs.download_url` / `docs.upload_url` with signed URLs.
 - **Re-confirm the project on every call.** Pass `project_id`
   explicitly; do not infer from conversation memory.
 - **Never invent ids.** Always look them up via `list` / `get`.

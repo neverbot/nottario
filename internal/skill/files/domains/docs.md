@@ -83,11 +83,34 @@ YAML is refused on write.
 ### `nottario.docs.list`
 
 Returns lightweight summaries (no body). Use it to navigate, then
-`read` the ones you care about. Filters: `path_prefix`, `kind`.
+download the ones you care about (`docs.download_url`). Filters: `path_prefix`, `kind`.
+
+### `nottario.docs.download_url`
+
+**How you read or edit a document when you have a shell.** Signs a
+URL for the document's current version; fetch it to a file and read
+only what you need from there:
+
+```text
+d = nottario.docs.download_url { project_id, path }   // → {download_url, version, expires_in_seconds}
+curl -fsS -o .scratch/plan.md '<d.download_url>'       // quote it; no Authorization header
+```
+
+The file is the document byte for byte, frontmatter included, so its
+SHA-256 equals `docs.stat`'s `content_sha256`. Keep `d.version`: it is
+the `expected_version` for writing the file back with
+`docs.upload_url`. The URL is valid five minutes and can be fetched
+more than once. Before reusing a copy you downloaded earlier, a
+`docs.stat` tells you whether it is still current.
+
+Why: `docs.read` puts the whole body in your context, every time. A
+downloaded file lets you grep it, read a section, edit it with small
+diffs and upload it back, and it survives a context compaction.
 
 ### `nottario.docs.read`
 
-Returns the whole document (`content`, frontmatter included), the
+**Only for clients without a shell, or that cannot reach the server
+over HTTP.** With a shell, use `docs.download_url`. Returns the whole document (`content`, frontmatter included), the
 parsed frontmatter and the current version number. **Capture `current_version`**: you need it to
 update the document safely.
 
@@ -338,16 +361,17 @@ nottario.docs.write {
 ### "Update a doc safely"
 
 ```text
-doc = nottario.docs.read { ..., path }
-edit doc.content locally (it already includes the frontmatter)
-nottario.docs.write {
-  ..., path,
-  content: new_body,
-  expected_version: doc.current_version,
-  message: "clarify wording",
-}
-// on version_conflict: re-read and retry.
+d = nottario.docs.download_url { project_id, path }
+curl -fsS -o .scratch/doc.md '<d.download_url>'
+edit .scratch/doc.md with small diffs (it already includes the frontmatter)
+u = nottario.docs.upload_url { project_id, path, expected_version: d.version,
+                               file_sha256: <sha256 of the edited file>, message: "clarify wording" }
+curl -fsS -X PUT --data-binary @.scratch/doc.md '<u.upload_url>'
+// on version_conflict: download again, merge, retry.
 ```
+
+Without a shell: `docs.read`, edit `content`, `docs.write` with
+`expected_version: doc.current_version`.
 
 ## Keeping a local file in sync with Nottario
 
@@ -361,19 +385,12 @@ teammate's editor and by another agent over MCP.
 Without discipline, the two diverge. The flow below keeps them in
 lockstep using the optimistic-concurrency primitives:
 
-1. **Before editing** the local file, read the Nottario copy first
-   and stash its `current_version`:
+1. **Before editing** the local file, `docs.stat` the Nottario copy
+   and stash its `current_version`. If its `content_sha256` equals the
+   hash of your local file, they match and you can skip step 2.
 
-   ```text
-   doc = nottario.docs.read {
-     scope: "project",
-     project_id: "...",
-     path: "projects/<id>/context/claude.md",
-   }
-   // remember doc.current_version
-   ```
-
-2. **Compare** Nottario's body against the local file.
+2. **Compare** Nottario's body against the local file (download it
+   with `docs.download_url` to a scratch file and diff).
    - If they match, edit the local file and commit your changes.
    - If Nottario is ahead, merge its changes into your local file
      *first* — somebody (an agent in another session, a teammate)
@@ -425,9 +442,14 @@ Nottario)** — keep them aligned if either changes.
 Keep MCP responses small. Default to the slim shapes; opt in to
 heavier ones deliberately.
 
+**Read documents through a file.** With a shell, `docs.download_url`
+plus `curl -o` is the only way you fetch a body: you read the parts
+you need, edit with diffs, and upload with `docs.upload_url`.
+`docs.read` is for clients without a shell.
+
 **`docs.list` is body-less.** It returns only path / title / kind /
 description / current_version / updated_at per document — no
-markdown body. To get a body you `docs.read` the specific path.
+markdown body. To get a body you download the specific path.
 This is by design: a docs listing in a large project would otherwise
 be dominated by bodies you'll never look at.
 

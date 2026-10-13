@@ -69,6 +69,11 @@ type docsUploadURLInput struct {
 	Message         string `json:"message,omitempty" jsonschema:"change message on the version row"`
 }
 
+type docsDownloadURLInput struct {
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	Path      string `json:"path" jsonschema:"logical path of the document to download"`
+}
+
 type docsDeleteInput struct {
 	docsScopeInput
 	Path            string `json:"path" jsonschema:"logical path"`
@@ -109,7 +114,7 @@ func registerDocs(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.docs.read",
-		Description: "Reads a document: title, kind, content (the complete markdown exactly as written, frontmatter included), parsed frontmatter, current_version. head_only=true returns frontmatter + the first 400 chars with {truncated, body_length} for catalogue checks.",
+		Description: "Only for clients without a shell, or that cannot reach the server over HTTP: with a shell, use docs.download_url instead and read the file. Reads a document: title, kind, content (the complete markdown exactly as written, frontmatter included), parsed frontmatter, current_version. head_only=true returns frontmatter + the first 400 chars with {truncated, body_length} for catalogue checks.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsReadInput) (*sdk.CallToolResult, any, error) {
 		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
 		if err != nil {
@@ -349,6 +354,54 @@ func registerDocs(server *sdk.Server, d Deps) {
 			"upload_url":         base + "/api/docs/upload?" + q.Encode(),
 			"expires_at":         time.Unix(exp, 0).UTC().Format(time.RFC3339),
 			"expires_in_seconds": int(docs.UploadTTL / time.Second),
+		})
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.docs.download_url",
+		Description: "Signs a URL to fetch a project document's current version to a file on disk, so its bytes enter your context only if and where you read them. The way to read or edit a document when you have a shell. Returns {download_url, version, expires_in_seconds}. Then curl -fsS -o <file> '<download_url>' (quote the URL; no Authorization header: the signature is the credential). The body is the document exactly as stored, frontmatter included. Valid 5 minutes. To write it back: docs.upload_url with expected_version = version. Before reusing an older local copy, docs.stat tells you whether it is still current.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsDownloadURLInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(d.SessionKey) == 0 {
+			return toolError(docs.ErrUploadNoKey.Error())
+		}
+		if c.Source != identity.SourceToken || c.TokenID == uuid.Nil {
+			return toolError("download URLs are only issued to API-token callers")
+		}
+		pid, err := uuid.Parse(in.ProjectID)
+		if err != nil {
+			return toolError("project_id must be a uuid")
+		}
+		if err := requireProjectAccess(ctx, d, pid); err != nil {
+			return toolError(err.Error())
+		}
+		st, err := docs.ReadStat(ctx, d.Pool, docs.ScopeProject, &pid, in.Path)
+		if errors.Is(err, docs.ErrNotFound) {
+			return toolError("document not found: " + in.Path)
+		}
+		if err != nil {
+			return toolError(err.Error())
+		}
+		exp := time.Now().Add(docs.DownloadTTL).Unix()
+		q, err := docs.SignDownload(d.SessionKey, docs.DownloadGrant{
+			ProjectID: pid,
+			Path:      st.Path,
+			Version:   st.CurrentVersion,
+			UserID:    c.UserID,
+			TokenID:   c.TokenID,
+			ExpiresAt: exp,
+		})
+		if err != nil {
+			return toolError(err.Error())
+		}
+		base := strings.TrimRight(externalBaseURL(ctx), "/")
+		return jsonResult(map[string]any{
+			"download_url":       base + "/api/docs/download?" + q.Encode(),
+			"version":            st.CurrentVersion,
+			"expires_in_seconds": int(docs.DownloadTTL / time.Second),
 		})
 	})
 

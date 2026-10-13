@@ -52,8 +52,10 @@ The MCP server exposes one tool per natural verb. Highlights:
 - `nottario.docs.stat`, `nottario.docs.append` — the cheap pair:
   fingerprint a document without its body to decide whether a write
   is needed, and add to the end of one without resending it.
-- `nottario.docs.upload_url` — a signed, five-minute, single-use URL to
-  upload a whole document from a file on disk.
+- `nottario.docs.upload_url`, `nottario.docs.download_url` — signed,
+  five-minute URLs to upload a whole document from a file on disk
+  (single use) and to download one to a file, so document bodies do
+  not pass through the agent's context.
 - `nottario.arch.upsert_node`, `nottario.arch.upsert_edge` —
   maintain the architecture graph.
 - `nottario.search` — full-text across tasks, docs and arch nodes.
@@ -145,7 +147,9 @@ the UI invalidates immediately.
 The token is configured once, in the MCP client, by the person
 setting up the agent. Agents are instructed never to read it, search
 for it or reuse it against the HTTP API: everything they need is an
-MCP tool, and for large files `nottario.docs.upload_url` issues a
-short-lived signed URL instead of exposing a credential. A signed
-upload URL stops working after five minutes, after one successful
-upload, or as soon as the token that requested it is revoked.
+MCP tool, and for whole files `nottario.docs.upload_url` and
+`nottario.docs.download_url` issue short-lived signed URLs instead of
+exposing a credential. A signed upload URL stops working after five
+minutes, after one successful upload, or as soon as the token that
+requested it is revoked; a download URL names one version of one
+document and stops working after five minutes or on revocation.

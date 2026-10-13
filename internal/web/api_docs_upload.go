@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/neverbot/nottario/internal/docs"
@@ -53,26 +55,9 @@ func UploadDocHandler(pool *pgxpool.Pool, sessionKey []byte) http.Handler {
 		}
 
 		ctx := r.Context()
-		tok, err := identity.GetToken(ctx, pool, g.TokenID)
-		if err != nil || tok.RevokedAt != nil || tok.ProjectID != g.ProjectID || tok.UserID != g.UserID {
-			writeError(w, http.StatusForbidden, "the token that requested this upload URL is no longer valid for this project")
+		if status, msg := checkSignedCaller(ctx, pool, g.TokenID, g.ProjectID, g.UserID, "upload"); status != 0 {
+			writeError(w, status, msg)
 			return
-		}
-		user, err := identity.GetUser(ctx, pool, g.UserID)
-		if err != nil {
-			writeError(w, http.StatusForbidden, "the user that requested this upload URL no longer exists")
-			return
-		}
-		if !user.IsAdmin {
-			roles, err := identity.UserRoleIDs(ctx, pool, g.UserID, g.ProjectID)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			if len(roles) == 0 {
-				writeError(w, http.StatusForbidden, "not a project member")
-				return
-			}
 		}
 
 		body, err := io.ReadAll(r.Body)
@@ -124,4 +109,29 @@ func UploadDocHandler(pool *pgxpool.Pool, sessionKey []byte) http.Handler {
 			"updated_at":      doc.UpdatedAt,
 		})
 	})
+}
+
+// checkSignedCaller re-checks, at use time, that the token and user a
+// signed docs URL was issued to may still act on the project: the token
+// is live and bound to that project and user, the user exists, and is
+// an admin or a member. A zero status means allowed.
+func checkSignedCaller(ctx context.Context, pool *pgxpool.Pool, tokenID, projectID, userID uuid.UUID, what string) (int, string) {
+	tok, err := identity.GetToken(ctx, pool, tokenID)
+	if err != nil || tok.RevokedAt != nil || tok.ProjectID != projectID || tok.UserID != userID {
+		return http.StatusForbidden, "the token that requested this " + what + " URL is no longer valid for this project"
+	}
+	user, err := identity.GetUser(ctx, pool, userID)
+	if err != nil {
+		return http.StatusForbidden, "the user that requested this " + what + " URL no longer exists"
+	}
+	if !user.IsAdmin {
+		roles, err := identity.UserRoleIDs(ctx, pool, userID, projectID)
+		if err != nil {
+			return http.StatusInternalServerError, err.Error()
+		}
+		if len(roles) == 0 {
+			return http.StatusForbidden, "not a project member"
+		}
+	}
+	return 0, ""
 }

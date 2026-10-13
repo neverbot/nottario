@@ -86,6 +86,11 @@ the order they typically appear in a session:
   that file on top of that version, so the bytes go from disk to the
   server without passing through the agent, and the agent never handles
   a token.
+- `nottario.docs.download_url { project_id, path }` is the read side:
+  a signed URL, valid for five minutes, that serves the document's
+  current version byte for byte, so an agent with a shell fetches it to
+  a file and reads or edits only the parts it needs. `docs.read`
+  remains for clients without a shell.
 
 The pattern is "read → edit → write with expected_version", same
 as a git commit on top of a known tip. The web UI follows the
