@@ -10,10 +10,6 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
-## 2026-10-13
-
-- A task now holds up to 500 steps, up from 50.
-
 ## 2026-10-12
 
 - **Tasks have steps.** A task can carry a short checklist of steps,

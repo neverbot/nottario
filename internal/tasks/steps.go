@@ -19,7 +19,7 @@ import (
 // longer than this, is a task that wants subtasks instead.
 const (
 	MaxStepLen      = 200
-	MaxStepsPerTask = 500
+	MaxStepsPerTask = 50
 )
 
 // ErrStepNotFound is returned when a step id does not exist or belongs

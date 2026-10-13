@@ -2,7 +2,7 @@
 // kanban card. No DOM: the unit tests import this module directly.
 
 export const MAX_STEP_LEN = 200;
-export const MAX_STEPS = 500;
+export const MAX_STEPS = 50;
 
 // A leading list or checkbox marker, as pasted from markdown, a plain
 // list or an agent's plan: "- ", "* ", "+ ", "1. ", "2) ", "- [ ] ",
