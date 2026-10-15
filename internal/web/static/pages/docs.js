@@ -34,6 +34,8 @@ class NottarioDocsPage extends LitElement {
     historyOpen: { state: true },
     historyVersions: { state: true },
     viewingVersion: { state: true },
+    moving: { state: true },
+    movePath: { state: true },
   };
 
   static styles = [
@@ -287,6 +289,24 @@ class NottarioDocsPage extends LitElement {
       text-decoration: underline;
     }
     .reader-strip .sep { color: var(--border); flex-shrink: 0; }
+
+    /* Move replaces the breadcrumb with the path it edits, in the same
+       mono face, so the change reads as editing the path in place. */
+    .reader-strip .move-form {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .reader-strip .move-form input {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      padding: 3px 8px;
+    }
+    .reader-strip .move-form .btn { font-size: 12px; padding: 4px 10px; }
     .reader-strip .actions {
       display: flex;
       align-items: center;
@@ -564,17 +584,26 @@ class NottarioDocsPage extends LitElement {
         return;
       }
       if (!ev.type?.startsWith('doc.')) return;
-      this.load();
-      if (this.selected && ev.path === this.selected.path) {
-        this.open(this.selected.path);
-      }
+      this.load().then(() => {
+        if (!this.selected) return;
+        // Moved or deleted elsewhere: the open document has no row under
+        // its path any more. Say so instead of showing it as current.
+        if (!this.summaries.some((d) => d.path === this.selected.path)) {
+          this.selected = null;
+          this.info = 'The document you were reading was moved or deleted.';
+        } else if (ev.path === this.selected.path) {
+          this.open(this.selected.path);
+        }
+      });
     });
   }
 
   _onKey(e) {
     // Don't hijack typing inside form controls. Slash-to-search and
-    // arrow nav only apply when focus is loose.
-    const tag = e.target?.tagName;
+    // arrow nav only apply when focus is loose. The listener sits on
+    // window, where e.target is retargeted to this page's host; the
+    // real origin is the first entry of the composed path.
+    const tag = (e.composedPath?.()[0] || e.target)?.tagName;
     const isFormFocus = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
     if (e.key === 'Escape') {
@@ -666,6 +695,7 @@ class NottarioDocsPage extends LitElement {
     this.info = '';
     this.editing = false;
     this.viewingVersion = null;
+    this.moving = false;
     try {
       const r = await fetch(
         `/api/docs/read?scope=project&project_id=${this.projectId}&path=${encodeURIComponent(path)}`,
@@ -801,6 +831,74 @@ class NottarioDocsPage extends LitElement {
     } catch (e) {
       this.error = e.message;
       toast.error(`Couldn't delete: ${e.message}`);
+    }
+  }
+
+  startMove() {
+    if (!this.selected) return;
+    this.historyOpen = false;
+    this.moving = true;
+    this.movePath = this.selected.path;
+    // Select the file name, not the folders: renaming is the common case.
+    this.updateComplete.then(() => {
+      const input = this.shadowRoot?.querySelector('.move-form input');
+      if (!input) return;
+      input.focus();
+      const slash = this.movePath.lastIndexOf('/') + 1;
+      const dot = this.movePath.toLowerCase().endsWith('.md')
+        ? this.movePath.length - 3
+        : this.movePath.length;
+      input.setSelectionRange(slash, dot);
+    });
+  }
+
+  cancelMove() {
+    this.moving = false;
+    this.movePath = '';
+  }
+
+  _onMoveKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.cancelMove();
+    }
+  }
+
+  async saveMove(e) {
+    e?.preventDefault();
+    const from = this.selected.path;
+    const to = (this.movePath || '').trim();
+    if (!to || to === from) {
+      this.cancelMove();
+      return;
+    }
+    try {
+      const r = await fetch('/api/docs/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'project',
+          project_id: this.projectId,
+          path: from,
+          new_path: to,
+          expected_version: this.selected.current_version,
+        }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (r.status === 409 && body.error === 'version_conflict') {
+        throw new Error('Someone else changed this document. Refresh and retry.');
+      }
+      if (!r.ok) throw new Error(body.message || body.error || 'move failed');
+      this.moving = false;
+      await this.load();
+      // Re-read rather than keep the move's answer: the reader needs the
+      // rendered body, which only the read endpoint returns. open() also
+      // clears the "moved elsewhere" notice the realtime echo may set.
+      await this.open(body.path);
+      toast.success(`Doc moved to ${body.path}`);
+    } catch (err) {
+      toast.error(`Couldn't move: ${err.message}`);
     }
   }
 
@@ -1111,6 +1209,20 @@ class NottarioDocsPage extends LitElement {
       <div class="reader-col">
         <div class="reader-header">
         <div class="reader-strip">
+          ${
+            this.moving
+              ? html`
+          <form class="move-form" @submit=${(e) => this.saveMove(e)}>
+            <input type="text" aria-label="New path" spellcheck="false"
+                   .value=${this.movePath}
+                   @input=${(e) => {
+                     this.movePath = e.target.value;
+                   }}
+                   @keydown=${(e) => this._onMoveKey(e)}>
+            <button class="btn primary" type="submit">Move</button>
+            <button class="btn ghost" type="button" @click=${() => this.cancelMove()}>Cancel</button>
+          </form>`
+              : html`
           <div class="crumbs">
             ${
               projectHead
@@ -1127,7 +1239,8 @@ class NottarioDocsPage extends LitElement {
                 : null
             }
             <span class="crumb-seg last" title=${last}>${last}</span>
-          </div>
+          </div>`
+          }
           <span class=${`badge ${s.kind}`}>${s.kind}</span>
           <button class=${`version-btn ${this.historyOpen ? 'open' : ''}`}
                   @click=${() => this.toggleHistory()}>v${s.current_version}</button>
@@ -1137,6 +1250,7 @@ class NottarioDocsPage extends LitElement {
                 ? null
                 : html`
               <button class="btn ghost" @click=${() => this.startEdit()}>Edit</button>
+              ${this.moving ? null : html`<button class="btn ghost" title="Move or rename" @click=${() => this.startMove()}>Move</button>`}
             `
             }
             <div class="pop-anchor">
