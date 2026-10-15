@@ -10,6 +10,15 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-10-15
+
+- **Documents can be moved and renamed.** The **Move** button in the
+  document view, and `nottario.docs.move` for agents, give a document a
+  new path while keeping its whole history; architecture nodes linked
+  to it follow the new path. Before, a rename meant writing a copy and
+  deleting the original, which restarted the history. See
+  [Documents](/docs/).
+
 ## 2026-10-14
 
 - **See how much your agents spend on Nottario.** Settings → MCP has a

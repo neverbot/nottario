@@ -287,6 +287,23 @@ next version number. Same `expected_version` semantics as `write`:
 pass the `current_version` from your most recent read, and never omit
 it — a delete that races another edit destroys it silently.
 
+### `nottario.docs.move`
+
+```text
+nottario.docs.move { project_id, path, new_path, expected_version }
+```
+
+Renames or moves a document in place: same document, same history,
+plus one version recording "moved from <path>". Architecture nodes
+linked to the old path follow it. This is the only way to rename;
+write + delete restarts the history at v1 and leaves architecture
+links pointing at nothing. When the repo file behind a document moves,
+move the document too, so the path keeps matching the file and no
+mapping note is needed. Fails if `new_path` holds a document, even a
+deleted one (writing to a deleted path restores it). Ack
+`{path, current_version}`. The old path is free afterwards; nothing
+redirects from it.
+
 ### `nottario.docs.history`, `nottario.docs.read_version`
 
 Inspect history and pull a specific version body. Useful when the
@@ -496,7 +513,6 @@ token. You should never have the token in the first place — see
 ## Things you cannot do (today)
 
 - Edit a comment or version body retroactively.
-- Move (rename a path) — write the new path and delete the old.
 - Attach images or binaries (planned for a later milestone).
 - Modify global documents. Tokens are refused even for admins; global
   writes need a signed-in admin in the web app.

@@ -91,6 +91,10 @@ the order they typically appear in a session:
   current version byte for byte, so an agent with a shell fetches it to
   a file and reads or edits only the parts it needs. `docs.read`
   remains for clients without a shell.
+- `nottario.docs.move { project_id, path, new_path, expected_version }`
+  renames a document in place, keeping its history and moving the
+  architecture links that pointed at the old path. The web UI does the
+  same from the **Move** button next to Edit.
 
 The pattern is "read → edit → write with expected_version", same
 as a git commit on top of a known tip. The web UI follows the

@@ -66,6 +66,8 @@ The MCP server exposes one tool per natural verb. Highlights:
   `notice` asking the agent to tell the human.
 - `nottario.docs.read`, `nottario.docs.write` — versioned markdown
   documents with optimistic concurrency via `expected_version`.
+- `nottario.docs.move` — rename a document, keeping its history and
+  its architecture links.
 - `nottario.docs.stat`, `nottario.docs.append` — the cheap pair:
   fingerprint a document without its body to decide whether a write
   is needed, and add to the end of one without resending it.
