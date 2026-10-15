@@ -216,7 +216,9 @@ class NottarioSearchBox extends LitElement {
     // the user is already typing into a text field.
     this._slashHandler = (e) => {
       if (e.key !== '/') return;
-      const t = e.target;
+      // On window, e.target is the outermost shadow host; the element
+      // the user is typing in is the first entry of the composed path.
+      const t = e.composedPath?.()[0] || e.target;
       const tag = t?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || t?.isContentEditable) return;
       e.preventDefault();
