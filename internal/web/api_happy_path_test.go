@@ -432,7 +432,7 @@ func TestHappyPath_ArchitectureDiagram(t *testing.T) {
 	w.call("DELETE", w.project("/arch/kinds/datastore"), nil)
 }
 
-// Documents: write, read, list, search, history, and the delete that
+// Documents: write, read, list, search, history, move, and the delete that
 // keeps the history.
 func TestHappyPath_Documents(t *testing.T) {
 	w, _, _ := newWalk(t)
@@ -490,9 +490,22 @@ func TestHappyPath_Documents(t *testing.T) {
 		t.Errorf("version 1 should predate the second edit: %s", v1.body)
 	}
 
+	const moved = "context/team-handbook.md"
+	w.call("POST", "/api/docs/move", map[string]any{
+		"scope": "project", "project_id": pid, "path": path, "new_path": moved,
+		"expected_version": 2,
+	})
+	if after := w.call("GET", "/api/docs?"+url.Values{"scope": {"project"}, "project_id": {pid}}.Encode(), nil); !after.contains(moved) || after.contains(`"`+path+`"`) {
+		t.Errorf("the listing should show only the new path after a move: %s", after.body)
+	}
+	w.call("POST", "/api/docs/move", map[string]any{
+		"scope": "project", "project_id": pid, "path": moved, "new_path": path,
+		"expected_version": 3,
+	})
+
 	w.call("POST", "/api/docs/delete", map[string]any{
 		"scope": "project", "project_id": pid, "path": path,
-		"expected_version": 2, "message": "no longer needed",
+		"expected_version": 4, "message": "no longer needed",
 	})
 	if still := w.call("GET", "/api/docs?"+url.Values{"scope": {"project"}, "project_id": {pid}}.Encode(), nil); still.contains(path) {
 		t.Errorf("a deleted document still shows in the listing: %s", still.body)

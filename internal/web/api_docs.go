@@ -274,6 +274,66 @@ func DeleteDocHandler(d DocsDeps) http.Handler {
 	})
 }
 
+type moveDocRequest struct {
+	Scope           string `json:"scope"`
+	ProjectID       string `json:"project_id"`
+	Path            string `json:"path"`
+	NewPath         string `json:"new_path"`
+	Message         string `json:"message"`
+	ExpectedVersion *int   `json:"expected_version"`
+}
+
+// MoveDocHandler moves a document to a new path, keeping its history.
+func MoveDocHandler(d DocsDeps) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := d.caller(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		var req moveDocRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		scope, pid, err := d.resolveScope(r.Context(), c, req.Scope, req.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := requireWriteGlobal(c, scope); err != nil {
+			writeError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		doc, err := docs.Move(r.Context(), d.Pool, docs.MoveParams{
+			Scope: scope, ProjectID: pid, Path: req.Path, NewPath: req.NewPath,
+			Message: req.Message, ExpectedVersion: req.ExpectedVersion,
+		}, d.authorship(c))
+		var vc *docs.VersionConflictError
+		var taken *docs.PathTakenError
+		switch {
+		case errors.As(err, &vc):
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":           "version_conflict",
+				"current_version": vc.CurrentVersion,
+				"message":         "re-read the document and retry with the latest current_version",
+			})
+		case errors.As(err, &taken):
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":   "path_taken",
+				"deleted": taken.Deleted,
+				"message": taken.Error(),
+			})
+		case errors.Is(err, docs.ErrNotFound):
+			writeError(w, http.StatusNotFound, "document not found")
+		case err != nil:
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			writeJSON(w, http.StatusOK, doc)
+		}
+	})
+}
+
 // SearchDocsHandler runs a full-text search.
 func SearchDocsHandler(d DocsDeps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

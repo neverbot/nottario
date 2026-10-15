@@ -157,6 +157,76 @@ func (q *Queries) GetDocumentForDelete(ctx context.Context, arg GetDocumentForDe
 	return i, err
 }
 
+const getDocumentForMove = `-- name: GetDocumentForMove :one
+SELECT id, current_version, title, description, content_md, frontmatter
+FROM documents
+WHERE scope = $1::text
+  AND project_id IS NOT DISTINCT FROM $2::uuid
+  AND path = $3::text
+  AND deleted_at IS NULL
+FOR UPDATE
+`
+
+type GetDocumentForMoveParams struct {
+	Scope     string
+	ProjectID *uuid.UUID
+	Path      string
+}
+
+type GetDocumentForMoveRow struct {
+	ID             uuid.UUID
+	CurrentVersion int32
+	Title          string
+	Description    string
+	ContentMd      string
+	Frontmatter    []byte
+}
+
+// Locks the live document being moved and returns what the "moved"
+// version row has to carry over unchanged.
+func (q *Queries) GetDocumentForMove(ctx context.Context, arg GetDocumentForMoveParams) (GetDocumentForMoveRow, error) {
+	row := q.db.QueryRow(ctx, getDocumentForMove, arg.Scope, arg.ProjectID, arg.Path)
+	var i GetDocumentForMoveRow
+	err := row.Scan(
+		&i.ID,
+		&i.CurrentVersion,
+		&i.Title,
+		&i.Description,
+		&i.ContentMd,
+		&i.Frontmatter,
+	)
+	return i, err
+}
+
+const getDocumentPathHolder = `-- name: GetDocumentPathHolder :one
+SELECT id, (deleted_at IS NOT NULL)::boolean AS deleted
+FROM documents
+WHERE scope = $1::text
+  AND project_id IS NOT DISTINCT FROM $2::uuid
+  AND path = $3::text
+`
+
+type GetDocumentPathHolderParams struct {
+	Scope     string
+	ProjectID *uuid.UUID
+	Path      string
+}
+
+type GetDocumentPathHolderRow struct {
+	ID      uuid.UUID
+	Deleted bool
+}
+
+// Whatever row holds a path, deleted or not: the unique key on
+// (scope, project_id, path) covers soft-deleted rows too, so a move
+// onto a deleted document's path would collide with it.
+func (q *Queries) GetDocumentPathHolder(ctx context.Context, arg GetDocumentPathHolderParams) (GetDocumentPathHolderRow, error) {
+	row := q.db.QueryRow(ctx, getDocumentPathHolder, arg.Scope, arg.ProjectID, arg.Path)
+	var i GetDocumentPathHolderRow
+	err := row.Scan(&i.ID, &i.Deleted)
+	return i, err
+}
+
 const getDocumentVersion = `-- name: GetDocumentVersion :one
 SELECT id, document_id, version, title, description, content_md, frontmatter,
        message, author_user_id, author_token_id, created_at
@@ -444,6 +514,82 @@ func (q *Queries) ListDocuments(ctx context.Context, arg ListDocumentsParams) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveDocument = `-- name: MoveDocument :one
+UPDATE documents
+SET path = $1::text,
+    title = $2::text,
+    current_version = $3::int,
+    updated_by_user_id = $4::uuid,
+    updated_by_token_id = $5::uuid
+WHERE id = $6::uuid
+RETURNING id, scope, project_id, path, kind, title, description, content_md,
+          frontmatter, current_version, deleted_at,
+          created_by_user_id, created_by_token_id,
+          updated_by_user_id, updated_by_token_id,
+          created_at, updated_at
+`
+
+type MoveDocumentParams struct {
+	NewPath          string
+	Title            string
+	CurrentVersion   int32
+	UpdatedByUserID  *uuid.UUID
+	UpdatedByTokenID *uuid.UUID
+	ID               uuid.UUID
+}
+
+type MoveDocumentRow struct {
+	ID               uuid.UUID
+	Scope            string
+	ProjectID        *uuid.UUID
+	Path             string
+	Kind             string
+	Title            string
+	Description      string
+	ContentMd        string
+	Frontmatter      []byte
+	CurrentVersion   int32
+	DeletedAt        pgtype.Timestamptz
+	CreatedByUserID  *uuid.UUID
+	CreatedByTokenID *uuid.UUID
+	UpdatedByUserID  *uuid.UUID
+	UpdatedByTokenID *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) MoveDocument(ctx context.Context, arg MoveDocumentParams) (MoveDocumentRow, error) {
+	row := q.db.QueryRow(ctx, moveDocument,
+		arg.NewPath,
+		arg.Title,
+		arg.CurrentVersion,
+		arg.UpdatedByUserID,
+		arg.UpdatedByTokenID,
+		arg.ID,
+	)
+	var i MoveDocumentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Scope,
+		&i.ProjectID,
+		&i.Path,
+		&i.Kind,
+		&i.Title,
+		&i.Description,
+		&i.ContentMd,
+		&i.Frontmatter,
+		&i.CurrentVersion,
+		&i.DeletedAt,
+		&i.CreatedByUserID,
+		&i.CreatedByTokenID,
+		&i.UpdatedByUserID,
+		&i.UpdatedByTokenID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const readDocument = `-- name: ReadDocument :one

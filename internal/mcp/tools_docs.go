@@ -81,6 +81,14 @@ type docsDeleteInput struct {
 	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"must equal current_version"`
 }
 
+type docsMoveInput struct {
+	docsScopeInput
+	Path            string `json:"path" jsonschema:"current logical path"`
+	NewPath         string `json:"new_path" jsonschema:"path to move it to"`
+	Message         string `json:"message,omitempty" jsonschema:"change message; default 'moved from <path>'"`
+	ExpectedVersion *int   `json:"expected_version,omitempty" jsonschema:"must equal current_version"`
+}
+
 type docsHistoryInput struct {
 	docsScopeInput
 	Path string `json:"path" jsonschema:"logical path"`
@@ -444,6 +452,44 @@ func registerDocs(server *sdk.Server, d Deps) {
 			return toolError(err.Error())
 		}
 		return textResult("ok")
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.docs.move",
+		Description: "Moves or renames a document: same document and history plus a version recording the move; architecture links follow it. Never rename by write + delete. Pass expected_version = current_version. Fails if new_path holds a document, even a deleted one. Ack {path, current_version}.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in docsMoveInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		scope, pid, err := resolveDocScope(ctx, d, in.docsScopeInput)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if scope == docs.ScopeGlobal {
+			if err := identity.RequireGlobalWrite(c); err != nil {
+				return toolError(err.Error())
+			}
+		}
+		doc, err := docs.Move(ctx, d.Pool, docs.MoveParams{
+			Scope: scope, ProjectID: pid, Path: in.Path, NewPath: in.NewPath,
+			Message: in.Message, ExpectedVersion: in.ExpectedVersion,
+		}, docs.Authorship{UserID: ptrUUID(c.UserID), TokenID: ptrUUID(c.TokenID)})
+		var vc *docs.VersionConflictError
+		if errors.As(err, &vc) {
+			return jsonResult(map[string]any{
+				"error":           "version_conflict",
+				"current_version": vc.CurrentVersion,
+				"message":         "re-read the document and retry with the latest current_version",
+			})
+		}
+		if errors.Is(err, docs.ErrNotFound) {
+			return toolError("document not found")
+		}
+		if err != nil {
+			return toolError(err.Error())
+		}
+		return jsonResult(map[string]any{"path": doc.Path, "current_version": doc.CurrentVersion})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{

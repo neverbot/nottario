@@ -190,3 +190,24 @@ WHERE project_id = $1 AND node_id = $2 AND link_type = $3 AND target_id = $4;
 SELECT project_id, node_id, link_type, target_id, created_at
 FROM arch_node_links WHERE node_id = $1
 ORDER BY link_type, target_id;
+
+-- name: RepathArchDocLinks :exec
+-- Points a project's architecture doc links at a moved document's new
+-- path. A node that already links the new path keeps that one link.
+UPDATE arch_node_links l
+SET target_id = sqlc.arg('new_path')::text
+WHERE l.project_id = sqlc.arg('project_id')::uuid
+  AND l.link_type = 'doc'
+  AND l.target_id = sqlc.arg('old_path')::text
+  AND NOT EXISTS (
+      SELECT 1 FROM arch_node_links o
+      WHERE o.node_id = l.node_id
+        AND o.link_type = 'doc'
+        AND o.target_id = sqlc.arg('new_path')::text
+  );
+
+-- name: DeleteArchDocLinksTo :exec
+DELETE FROM arch_node_links
+WHERE project_id = sqlc.arg('project_id')::uuid
+  AND link_type = 'doc'
+  AND target_id = sqlc.arg('path')::text;

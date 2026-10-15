@@ -43,6 +43,7 @@ type Querier interface {
 	CountTaskSteps(ctx context.Context, taskID uuid.UUID) (int32, error)
 	CountUnread(ctx context.Context, userID uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)
+	DeleteArchDocLinksTo(ctx context.Context, arg DeleteArchDocLinksToParams) error
 	DeleteArchEdge(ctx context.Context, arg DeleteArchEdgeParams) (int64, error)
 	DeleteArchKind(ctx context.Context, arg DeleteArchKindParams) (int64, error)
 	DeleteArchLock(ctx context.Context, projectID uuid.UUID) error
@@ -96,6 +97,13 @@ type Querier interface {
 	// body_offset are whatever the document already declared.
 	GetDocumentForAppend(ctx context.Context, arg GetDocumentForAppendParams) (GetDocumentForAppendRow, error)
 	GetDocumentForDelete(ctx context.Context, arg GetDocumentForDeleteParams) (GetDocumentForDeleteRow, error)
+	// Locks the live document being moved and returns what the "moved"
+	// version row has to carry over unchanged.
+	GetDocumentForMove(ctx context.Context, arg GetDocumentForMoveParams) (GetDocumentForMoveRow, error)
+	// Whatever row holds a path, deleted or not: the unique key on
+	// (scope, project_id, path) covers soft-deleted rows too, so a move
+	// onto a deleted document's path would collide with it.
+	GetDocumentPathHolder(ctx context.Context, arg GetDocumentPathHolderParams) (GetDocumentPathHolderRow, error)
 	GetDocumentVersion(ctx context.Context, arg GetDocumentVersionParams) (DocumentVersion, error)
 	GetParentStateAndGrandparent(ctx context.Context, id uuid.UUID) (GetParentStateAndGrandparentRow, error)
 	GetPreferences(ctx context.Context, userID uuid.UUID) ([]byte, error)
@@ -252,6 +260,7 @@ type Querier interface {
 	// both lock acquisition (base_version) and snapshot insertion.
 	MaxArchRevisionVersion(ctx context.Context, projectID uuid.UUID) (int32, error)
 	MoveArchNode(ctx context.Context, arg MoveArchNodeParams) (MoveArchNodeRow, error)
+	MoveDocument(ctx context.Context, arg MoveDocumentParams) (MoveDocumentRow, error)
 	// For every feature in `from_cycle` that isn't done, move it AND
 	// all its recursive descendants to `to_cycle`. Done children of
 	// those features get re-stamped (they had cycle_id = from_cycle).
@@ -273,6 +282,9 @@ type Querier interface {
 	// Removes the user from the project entirely; their role assignments
 	// cascade away via membership_roles_membership_fkey.
 	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
+	// Points a project's architecture doc links at a moved document's new
+	// path. A node that already links the new path keeps that one link.
+	RepathArchDocLinks(ctx context.Context, arg RepathArchDocLinksParams) error
 	RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) (int64, error)
 	RoleExistsInProject(ctx context.Context, arg RoleExistsInProjectParams) (bool, error)
 	// Multi-config tsquery: simple || english || spanish, matching the

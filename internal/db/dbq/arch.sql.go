@@ -101,6 +101,23 @@ func (q *Queries) CountNodesByKind(ctx context.Context, arg CountNodesByKindPara
 	return n, err
 }
 
+const deleteArchDocLinksTo = `-- name: DeleteArchDocLinksTo :exec
+DELETE FROM arch_node_links
+WHERE project_id = $1::uuid
+  AND link_type = 'doc'
+  AND target_id = $2::text
+`
+
+type DeleteArchDocLinksToParams struct {
+	ProjectID uuid.UUID
+	Path      string
+}
+
+func (q *Queries) DeleteArchDocLinksTo(ctx context.Context, arg DeleteArchDocLinksToParams) error {
+	_, err := q.db.Exec(ctx, deleteArchDocLinksTo, arg.ProjectID, arg.Path)
+	return err
+}
+
 const deleteArchEdge = `-- name: DeleteArchEdge :execrows
 DELETE FROM arch_edges WHERE project_id = $1 AND id = $2
 `
@@ -648,6 +665,33 @@ func (q *Queries) MoveArchNode(ctx context.Context, arg MoveArchNodeParams) (Mov
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const repathArchDocLinks = `-- name: RepathArchDocLinks :exec
+UPDATE arch_node_links l
+SET target_id = $1::text
+WHERE l.project_id = $2::uuid
+  AND l.link_type = 'doc'
+  AND l.target_id = $3::text
+  AND NOT EXISTS (
+      SELECT 1 FROM arch_node_links o
+      WHERE o.node_id = l.node_id
+        AND o.link_type = 'doc'
+        AND o.target_id = $1::text
+  )
+`
+
+type RepathArchDocLinksParams struct {
+	NewPath   string
+	ProjectID uuid.UUID
+	OldPath   string
+}
+
+// Points a project's architecture doc links at a moved document's new
+// path. A node that already links the new path keeps that one link.
+func (q *Queries) RepathArchDocLinks(ctx context.Context, arg RepathArchDocLinksParams) error {
+	_, err := q.db.Exec(ctx, repathArchDocLinks, arg.NewPath, arg.ProjectID, arg.OldPath)
+	return err
 }
 
 const updateArchNode = `-- name: UpdateArchNode :one

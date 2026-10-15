@@ -196,3 +196,38 @@ VALUES (
     sqlc.narg('author_user_id')::uuid,
     sqlc.narg('author_token_id')::uuid
 );
+
+-- name: GetDocumentForMove :one
+-- Locks the live document being moved and returns what the "moved"
+-- version row has to carry over unchanged.
+SELECT id, current_version, title, description, content_md, frontmatter
+FROM documents
+WHERE scope = sqlc.arg('scope')::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND path = sqlc.arg('path')::text
+  AND deleted_at IS NULL
+FOR UPDATE;
+
+-- name: GetDocumentPathHolder :one
+-- Whatever row holds a path, deleted or not: the unique key on
+-- (scope, project_id, path) covers soft-deleted rows too, so a move
+-- onto a deleted document's path would collide with it.
+SELECT id, (deleted_at IS NOT NULL)::boolean AS deleted
+FROM documents
+WHERE scope = sqlc.arg('scope')::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND path = sqlc.arg('path')::text;
+
+-- name: MoveDocument :one
+UPDATE documents
+SET path = sqlc.arg('new_path')::text,
+    title = sqlc.arg('title')::text,
+    current_version = sqlc.arg('current_version')::int,
+    updated_by_user_id = sqlc.narg('updated_by_user_id')::uuid,
+    updated_by_token_id = sqlc.narg('updated_by_token_id')::uuid
+WHERE id = sqlc.arg('id')::uuid
+RETURNING id, scope, project_id, path, kind, title, description, content_md,
+          frontmatter, current_version, deleted_at,
+          created_by_user_id, created_by_token_id,
+          updated_by_user_id, updated_by_token_id,
+          created_at, updated_at;
