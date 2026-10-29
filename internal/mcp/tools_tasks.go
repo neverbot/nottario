@@ -106,8 +106,8 @@ type tasksUpdateInput struct {
 	Description    *string `json:"description,omitempty"`
 	Type           *string `json:"type,omitempty"`
 	PriorityKey    string  `json:"priority_key,omitempty" jsonschema:"one of the project's priority keys (projects.list_priorities)"`
-	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"'me', a user uuid, or '' to unset"`
-	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"role key ('backend'), uuid, or '' to unset"`
+	AssigneeUserID *string `json:"assignee_user_id,omitempty" jsonschema:"'me', a user uuid, or 'none' to unset"`
+	TargetRoleID   *string `json:"target_role_id,omitempty" jsonschema:"role key ('backend'), uuid, or 'none' to unset"`
 	Verbose        bool    `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
@@ -115,6 +115,7 @@ type tasksStateInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project uuid"`
 	TaskID    string `json:"task_id" jsonschema:"task uuid"`
 	State     string `json:"state" jsonschema:"'todo','doing','done','wont_do'"`
+	Release   bool   `json:"release,omitempty" jsonschema:"with state 'todo': also clear the assignee, handing the task back"`
 	Verbose   bool   `json:"verbose,omitempty" jsonschema:"full Task instead of slim shape"`
 }
 
@@ -444,7 +445,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.update",
-		Description: "Updates task fields. Pass '' in assignee_user_id / target_role_id to unset. Slim shape by default.",
+		Description: "Updates task fields. Pass 'none' in assignee_user_id / target_role_id to unset. Slim shape by default.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksUpdateInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -471,7 +472,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 			up.Priority = &v
 		}
 		if in.AssigneeUserID != nil {
-			if *in.AssigneeUserID == "" {
+			if isUnsetRef(*in.AssigneeUserID) {
 				up.UnsetAssignee = true
 			} else {
 				id, err := resolveUserRef(ctx, *in.AssigneeUserID)
@@ -482,7 +483,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 			}
 		}
 		if in.TargetRoleID != nil {
-			if *in.TargetRoleID == "" {
+			if isUnsetRef(*in.TargetRoleID) {
 				up.UnsetTargetRole = true
 			} else {
 				id, err := resolveRoleRef(ctx, d, pid, *in.TargetRoleID)
@@ -501,7 +502,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.set_state",
-		Description: "Changes a task's state. Leaving todo assigns an unowned task to you; done and wont_do switch via todo. Precondition failure returns {error, preconditions}. Reaching done with steps undone adds pending_steps and a notice: tell the human. For done / wont_do prefer tasks.close.",
+		Description: "Changes a task's state. Leaving todo assigns an unowned task to you; back to todo with release=true also unassigns it, to give the work back; done and wont_do switch via todo. Precondition failure returns {error, preconditions}. Reaching done with steps undone adds pending_steps and a notice: tell the human. For done / wont_do prefer tasks.close.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksStateInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -516,6 +517,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		}
 		if err := tasks.RequireInProject(ctx, d.Pool, pid, tid); err != nil {
 			return toolError("task not found")
+		}
+		if in.Release && tasks.State(in.State) != tasks.StateTodo {
+			return toolError("release only applies when moving a task back to todo")
 		}
 		t, err := tasks.SetState(ctx, d.Pool, tid, tasks.State(in.State), callerActor(c))
 		if err != nil {
@@ -535,6 +539,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 				})
 			}
 			return toolError(err.Error())
+		}
+		if in.Release && t.AssigneeUserID != nil {
+			if t, err = tasks.Update(ctx, d.Pool, tid, tasks.UpdateParams{UnsetAssignee: true}); err != nil {
+				return toolError(err.Error())
+			}
 		}
 		if t.State != tasks.StateDone {
 			return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))

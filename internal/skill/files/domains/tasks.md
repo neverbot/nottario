@@ -170,8 +170,9 @@ stored and shown verbatim. Same for `tasks.update`.
 
 Mutates the fields you pass. Notable nuances:
 
-- Pass `assignee_user_id: ""` (empty string) to **unassign** the
-  user. Same for `target_role_id`.
+- Pass `assignee_user_id: "none"` to **unassign** the user. Same for
+  `target_role_id`. Not `null`, which means "leave as is", and not an
+  empty string, which some clients drop on the way.
 - Changing the priority is the canonical way to reorder; pass
   `priority_key`. There is no numeric input.
 - Use this for description edits and renames; do not delete-and-recreate.
@@ -186,7 +187,8 @@ Mutates the fields you pass. Notable nuances:
 Moves a task between states and manages `actual_start` /
 `actual_end` for you:
 
-- `todo` → clears both, and the task goes back to having no owner.
+- `todo` → clears both. The assignee stays; to give the work back,
+  pass `release: true`, which also unassigns the task in the same call.
 - `doing` → fills `actual_start` (only if currently null).
 - `done` → fills `actual_end` and preserves any earlier `actual_start`.
 

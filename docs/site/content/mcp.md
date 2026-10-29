@@ -57,6 +57,9 @@ The MCP server exposes one tool per natural verb. Highlights:
 - `nottario.tasks.set_state` — transitions with precondition checks.
   Moving a task out of `todo` assigns it to the caller when it has no
   assignee, so nothing sits in `doing` or reaches `done` unowned.
+  Back to `todo` with `release: true` also unassigns it, so an agent
+  can give the work back; `tasks.update` unsets the assignee or the
+  role with `"none"`.
 - `nottario.tasks.add_comment`, `nottario.tasks.link_commit` — keep
   the audit trail honest.
 - `nottario.tasks.add_steps`, `nottario.tasks.update_step`,

@@ -150,6 +150,15 @@ func resolveRoleRef(ctx context.Context, d Deps, projectID uuid.UUID, s string) 
 	return nil, errors.New("unknown role " + s + "; this project's roles are: " + strings.Join(keys, ", "))
 }
 
+// isUnsetRef reports whether a user or role reference asks to clear the
+// field. "none" is the spelling agents use: some MCP clients drop empty
+// strings, and null already means "leave as is". The empty string still
+// works for clients that send it.
+func isUnsetRef(s string) bool {
+	s = strings.TrimSpace(s)
+	return s == "" || strings.EqualFold(s, "none")
+}
+
 // resolveUserRef reads a user given as "me" or a uuid. Empty means none.
 func resolveUserRef(ctx context.Context, s string) (*uuid.UUID, error) {
 	s = strings.TrimSpace(s)
