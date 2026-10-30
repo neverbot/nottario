@@ -19,13 +19,19 @@ import { copyToClipboard } from '/static/utils/clipboard.js';
 //   projectId the project the card lives in. Global views leave it
 //             empty: the card then answers through question.project.id
 //             and, with showTask, leads the header with a project chip.
-//   compact   folded header and no frame, for Live rows and the task
-//             dialog, where the surrounding row is the frame
+//   compact   no frame and a header folded to one line (state, task
+//             link, age), for Live rows and the task dialog, where the
+//             surrounding row is the frame
 //   showTask  name the task (as a link to it) in the header
 //
 // Events (bubbling, composed):
 //   question-answered  { question }        the answer was saved; detail
-//                                          carries the updated view
+//                                          carries the updated view. The
+//                                          card already replaced its own
+//                                          question with it; parents
+//                                          should replace their copy too,
+//                                          or their next render puts the
+//                                          stale one back
 //   question-stale     { question, code }  the server refused the answer
 //                                          because the question moved on
 //                                          (409: already_delivered or
@@ -123,6 +129,15 @@ export class NottarioQuestionCard extends LitElement {
         margin-bottom: 8px;
       }
       :host([compact]) header { margin-bottom: 6px; }
+      header.folded { flex-wrap: nowrap; min-width: 0; }
+      header.folded .task {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      header.folded .state,
+      header.folded time { flex: none; }
       header .sep { color: var(--gray-4); }
       header .task {
         color: var(--fg);
@@ -213,7 +228,7 @@ export class NottarioQuestionCard extends LitElement {
       .opt-main .badge { margin-left: 6px; }
       .badge.recommended {
         background: var(--tint-blue);
-        border-color: var(--search-hit);
+        border-color: var(--tint-blue-border);
         color: var(--tint-blue-fg);
       }
       .opt-desc,
@@ -559,7 +574,8 @@ export class NottarioQuestionCard extends LitElement {
     const q = this.question;
     if (!q) return nothing;
     return html`
-      <article class="card ${q.state}" aria-labelledby="${this._uid}-body">
+      <article class="card ${q.state}" aria-label=${q.excerpt || 'Question'}
+               aria-describedby="${this._uid}-body">
         ${this._renderHeader(q)}
         <div class="body" id="${this._uid}-body">
           ${
@@ -574,6 +590,7 @@ export class NottarioQuestionCard extends LitElement {
   }
 
   _renderHeader(q) {
+    if (this.compact) return this._renderFoldedHeader(q);
     const parts = [];
     if (this.showTask && !this.projectId && q.project) {
       parts.push(html`<span class="project">${q.project.name}</span>`);
@@ -595,6 +612,22 @@ export class NottarioQuestionCard extends LitElement {
       <header>
         ${this._renderStatePill(q)}
         ${joined}
+        <time datetime=${q.created_at} title=${formatDateTime(q.created_at)}>
+          ${formatRelativeTime(q.created_at)}
+        </time>
+      </header>
+    `;
+  }
+
+  // _renderFoldedHeader is the one-line header of compact cards: the
+  // state, the task (when shown) and the age; the row around the card
+  // already says the rest.
+  _renderFoldedHeader(q) {
+    const href = q.task ? `/projects/${this._pid}/board/kanban#task=${q.task.id}` : '';
+    return html`
+      <header class="folded">
+        ${this._renderStatePill(q)}
+        ${this.showTask && q.task ? html`<a class="task" href=${href}>${q.task.title}</a>` : nothing}
         <time datetime=${q.created_at} title=${formatDateTime(q.created_at)}>
           ${formatRelativeTime(q.created_at)}
         </time>
@@ -667,7 +700,7 @@ export class NottarioQuestionCard extends LitElement {
     return html`
       <div class="options"
            role=${multi ? 'group' : 'radiogroup'}
-           aria-labelledby="${this._uid}-body">
+           aria-label=${q.excerpt || 'Answer options'}>
         ${options.map((o, i) => {
           const recommended = o.key === q.recommended_key;
           return html`

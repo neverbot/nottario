@@ -6,12 +6,14 @@
 // one client whose conversations reopen with `claude --resume <id>`.
 //
 // The server stores the MCP clientInfo name, or the first token of the
-// User-Agent, filtered to [A-Za-z0-9._-]. The exact value Claude Code
-// sends is not confirmed yet ("claude-code", "claude-cli", ...), so any
-// client starting with "claude" counts. Adjust this one rule after
-// checking real rows in agent_sessions.client.
+// User-Agent, filtered to [A-Za-z0-9._-]. Claude Code names itself
+// "claude-code" in clientInfo and "claude-cli" in its User-Agent, which
+// is what a stateless server usually sees. Not yet confirmed against
+// real rows: check agent_sessions.client and adjust this list.
+const CLAUDE_CODE_CLIENTS = new Set(['claude-code', 'claude-cli']);
+
 export function isClaudeCode(client) {
-  return typeof client === 'string' && client.toLowerCase().startsWith('claude');
+  return typeof client === 'string' && CLAUDE_CODE_CLIENTS.has(client.toLowerCase());
 }
 
 // resumeCommand returns the shell command that reopens an agent's

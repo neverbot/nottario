@@ -164,7 +164,10 @@ class NottarioMdEditor extends LitElement {
   }
 
   updated(changed) {
-    if (changed.has('_tab') && this._tab === 'write') {
+    // On the first update Lit reports _tab as changed from undefined;
+    // firstUpdated owns that focus (and honours noAutofocus), so only a
+    // real switch back to Write focuses here.
+    if (changed.has('_tab') && changed.get('_tab') !== undefined && this._tab === 'write') {
       this._focusTextarea();
     }
   }

@@ -247,6 +247,23 @@ describe('Multiplexer', () => {
     assert.deepEqual(got, ['realtime.disconnected', 'realtime.reconnected']);
   });
 
+  it('ends the outage when a replacement goes live before the old stream recovers', () => {
+    const got = [];
+    mux.subscribe('a', 'p1', (e) => got.push(e.type));
+    live()[0].open();
+    live()[0].blip(); // the live stream drops…
+    mux.subscribe('b', 'p2', () => {}); // …and a wider one is needed
+    FakeStream.all.at(-1).open(); // the replacement connects first
+    assert.deepEqual(got, ['realtime.disconnected', 'realtime.reconnected']);
+    // Not stuck: the next drop is a new outage.
+    FakeStream.all.at(-1).blip();
+    assert.deepEqual(got, [
+      'realtime.disconnected',
+      'realtime.reconnected',
+      'realtime.disconnected',
+    ]);
+  });
+
   it('reports one disconnect across the retries of a dead stream', () => {
     const got = [];
     mux.subscribe('a', 'p1', (e) => got.push(e.type));

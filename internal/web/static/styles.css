@@ -48,6 +48,7 @@
      accessible contrast (AAA on white). */
   --tint-blue:    #ddf4ff;
   --tint-blue-fg: #0550ae;
+  --tint-blue-border: rgba(84, 174, 255, 0.4); /* GitHub accent-muted */
   --tint-green:   #dafbe1;
   --tint-green-fg:#116329;
   --tint-yellow:  #fff8c5;

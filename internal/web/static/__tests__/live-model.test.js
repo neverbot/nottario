@@ -17,11 +17,13 @@ describe('isClaudeCode', () => {
   it('accepts every client name Claude Code may send', () => {
     assert.ok(isClaudeCode('claude-code'));
     assert.ok(isClaudeCode('claude-cli'));
-    assert.ok(isClaudeCode('Claude'));
+    assert.ok(isClaudeCode('Claude-Code'));
   });
 
   it('rejects other clients and missing values', () => {
     assert.ok(!isClaudeCode('cursor'));
+    assert.ok(!isClaudeCode('claude-ai'));
+    assert.ok(!isClaudeCode('claude'));
     assert.ok(!isClaudeCode('codex-mcp-client'));
     assert.ok(!isClaudeCode(''));
     assert.ok(!isClaudeCode(null));

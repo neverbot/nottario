@@ -143,7 +143,9 @@ export class Multiplexer {
           this._pending = null;
           this._close(previous);
         }
-        if (this._missed && this._active === conn) {
+        // A replacement can go live while the old stream was still
+        // recovering from a drop (_down): that ends the outage too.
+        if ((this._missed || this._down) && this._active === conn) {
           this._missed = false;
           this._reconnected();
         }
