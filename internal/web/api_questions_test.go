@@ -243,16 +243,32 @@ func TestApiQuestions(t *testing.T) {
 		t.Fatalf("cross-project question: %d %s", r.StatusCode, r.Body)
 	}
 
-	// The task detail lists the task's questions in every state.
+	// The task detail lists the task's questions in every state, and an
+	// in-progress step names the session working on it.
+	if _, _, err := tasks.StartStep(ctx, pool, tk.ID, steps[0].ID, &sess.ID, by); err != nil {
+		t.Fatal(err)
+	}
 	var detail struct {
 		Questions []struct {
 			ID    string `json:"id"`
 			State string `json:"state"`
 		} `json:"questions"`
+		Steps []struct {
+			StartedAt *string `json:"started_at"`
+			Session   *struct {
+				ID    string `json:"id"`
+				Label string `json:"label"`
+				Key   string `json:"key"`
+			} `json:"session"`
+		} `json:"steps"`
 	}
 	getJSON("/api/projects/"+p.ID.String()+"/tasks/"+tk.ID.String(), me, &detail)
 	if len(detail.Questions) != 2 {
 		t.Fatalf("detail questions = %+v", detail.Questions)
+	}
+	if len(detail.Steps) != 1 || detail.Steps[0].StartedAt == nil || detail.Steps[0].Session == nil ||
+		detail.Steps[0].Session.Label != "Backend agent" || detail.Steps[0].Session.ID != sess.ID.String() {
+		t.Fatalf("detail steps = %+v", detail.Steps)
 	}
 
 	// Closing the task reports the questions it withdrew.

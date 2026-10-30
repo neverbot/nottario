@@ -316,6 +316,8 @@ class NottarioNotificationsBell extends LitElement {
         return html`<span>${actorName} commented on <strong>${title}</strong></span>`;
       case 'task_closed':
         return html`<span><strong>${title}</strong> was closed by ${actorName}</span>`;
+      case 'question_asked':
+        return html`<span><strong>${title}</strong> has a question for you</span>`;
       default:
         return html`<span>${n.body}</span>`;
     }
@@ -323,6 +325,7 @@ class NottarioNotificationsBell extends LitElement {
 
   _hrefFor(n) {
     if (!n.task?.project_id || !n.task?.id) return '#';
+    if (n.kind === 'question_asked') return `/projects/${n.task.project_id}/questions`;
     return `/projects/${n.task.project_id}/board/kanban#task=${n.task.id}`;
   }
 

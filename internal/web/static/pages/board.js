@@ -1,4 +1,5 @@
 import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
+import { repeat } from '/static/vendor/lit/directives/repeat.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
 import { priorityBand, priorityLabel } from '/static/priorities.js';
@@ -19,9 +20,15 @@ import '/static/components/md-editor.js';
 import '/static/components/avatar.js';
 import '/static/components/task-chip.js';
 import '/static/components/task-steps.js';
+import '/static/components/question-card.js';
 import { closeIcon, trashIcon } from '/static/components/icons.js';
 import '/static/components/chip-filter.js';
 import './gantt.js';
+
+// "1 question" / "3 questions" for the card pill.
+function questionsLabel(n) {
+  return `${n} question${n === 1 ? '' : 's'}`;
+}
 
 // Empty related block: what the dialog shows until the detail arrives.
 // Checklist glyph for the step progress on a card.
@@ -403,6 +410,19 @@ class NottarioBoardPage extends LitElement {
     }
     .card .steps-progress svg { display: block; }
     .card .steps-progress.complete { color: var(--success-hover); }
+    /* Open questions on a card: amber, the one colour kept for work
+       waiting on a person. */
+    .card .questions-pill {
+      display: inline-block;
+      padding: 0 7px;
+      border: 1px solid var(--attention-muted);
+      border-radius: 2em;
+      background: var(--attention-subtle);
+      color: var(--attention-fg);
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 18px;
+    }
 
 
     .error { color: var(--danger); margin-bottom: 8px; font-size: 13px; }
@@ -550,6 +570,32 @@ class NottarioBoardPage extends LitElement {
       font-weight: 600;
       margin: 0 0 8px;
     }
+
+    /* Questions section: open questions as full cards, the rest folded
+       below a disclosure. */
+    .detail .questions-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    /* Compact cards carry no frame; a rule between them keeps two
+       questions from reading as one. */
+    .detail .questions-list > li + li {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .detail .questions-list nottario-question-card { scroll-margin: 80px; }
+    .detail .questions-rest { margin-top: 8px; }
+    .detail .questions-rest > summary {
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--fg-muted);
+      padding: 2px 0;
+    }
+    .detail .questions-rest > summary:hover { color: var(--accent); }
+    .detail .questions-rest[open] > summary { margin-bottom: 8px; }
+    .detail .eyebrow .eyebrow-count.attention { color: var(--attention-fg); }
 
     .detail .deps-list {
       display: flex;
@@ -1092,6 +1138,13 @@ class NottarioBoardPage extends LitElement {
       } else if (ev.type === 'realtime.reconnected' || ev.type.startsWith('task.')) {
         this.load();
         if (this.selected) this.loadDetail(this.selected.task.id);
+      } else if (ev.type.startsWith('question.')) {
+        // A question changes a card's open count and, for the open
+        // task, its Questions section and step markers.
+        this.load();
+        if (this.selected && (!ev.task_id || ev.task_id === this.selected.task.id)) {
+          this.loadDetail(this.selected.task.id);
+        }
       }
       // Cycle lifecycle: a new cycle opened or the active one closed.
       // If we were explicitly viewing the cycle that just closed, snap
@@ -1300,6 +1353,7 @@ class NottarioBoardPage extends LitElement {
   }
 
   open(t) {
+    this._answeredHere = new Set();
     this.selected = { task: t, related: NO_RELATED, commits: [], comments: [] };
     this.loadDetail(t.id);
   }
@@ -1317,6 +1371,7 @@ class NottarioBoardPage extends LitElement {
         related: { ...NO_RELATED, ...(j.related || {}) },
         steps: j.steps || [],
         stepsAt: requestedAt,
+        questions: j.questions || [],
         commits: j.commits || [],
         comments: j.comments || [],
       };
@@ -1325,6 +1380,7 @@ class NottarioBoardPage extends LitElement {
 
   closeDetail() {
     this.selected = null;
+    this._answeredHere = new Set();
     this._edit = { field: null, titleDraft: '', descDraft: '' };
     this._commentEditID = null;
     this._commentDrafts = {};
@@ -1651,6 +1707,76 @@ class NottarioBoardPage extends LitElement {
     this.tasks = (this.tasks || []).map((t) => (t.id === taskID ? { ...t, steps: progress } : t));
   }
 
+  // ---- Questions in the task dialog --------------------------------
+  //
+  // Open questions come first as full cards; the rest (answered,
+  // delivered, withdrawn) fold under a disclosure. A question answered
+  // from this dialog stays among the open ones until the dialog closes,
+  // so the confirmation does not jump away from under the cursor.
+  _renderQuestions() {
+    const all = this.selected?.questions || [];
+    if (!all.length) return null;
+    const here = this._answeredHere || new Set();
+    // Oldest first, so a card answered here keeps its place.
+    const open = all
+      .filter((q) => q.state === 'open' || here.has(q.id))
+      .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+    const rest = all.filter((q) => q.state !== 'open' && !here.has(q.id));
+    const openCount = all.filter((q) => q.state === 'open').length;
+    const card = (q) => html`<li><nottario-question-card
+        compact
+        data-id=${q.id}
+        project-id=${this.projectId}
+        .question=${q}></nottario-question-card></li>`;
+    return html`
+      <section @question-answered=${(e) => this._onQuestionAnswered(e)}
+               @question-stale=${() => this.selected && this.loadDetail(this.selected.task.id)}>
+        <h4 class="eyebrow">
+          Questions
+          ${
+            openCount
+              ? html`<span class="eyebrow-count attention">${openCount} open</span>`
+              : html`<span class="eyebrow-count">none open</span>`
+          }
+        </h4>
+        ${open.length ? html`<ol class="questions-list">${repeat(open, (q) => q.id, card)}</ol>` : null}
+        ${
+          rest.length
+            ? html`
+          <details class="questions-rest" ?open=${!open.length}>
+            <summary>${rest.length} earlier question${rest.length === 1 ? '' : 's'}</summary>
+            <ol class="questions-list">${repeat(rest, (q) => q.id, card)}</ol>
+          </details>`
+            : null
+        }
+      </section>
+    `;
+  }
+
+  _focusQuestionCard(id) {
+    const card = this.renderRoot.querySelector(
+      `nottario-question-card[data-id="${CSS.escape(id)}"]`,
+    );
+    if (!card) return;
+    card.scrollIntoView({
+      block: 'nearest',
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    });
+    card.focus();
+  }
+
+  _onQuestionAnswered(e) {
+    const q = e.detail?.question;
+    if (!q || !this.selected) return;
+    this._answeredHere = new Set(this._answeredHere || []).add(q.id);
+    this.selected = {
+      ...this.selected,
+      questions: (this.selected.questions || []).map((x) => (x.id === q.id ? q : x)),
+    };
+    this.loadDetail(this.selected.task.id);
+    this.load();
+  }
+
   renderCard(t) {
     const role = t.target_role_id ? this.roleByID(t.target_role_id) : null;
     const assignee = t.assignee_user_id ? this._memberByID(t.assignee_user_id) : null;
@@ -1660,7 +1786,8 @@ class NottarioBoardPage extends LitElement {
       (role ? `, role ${role.label}` : '') +
       `, priority ${priorityLabel(t.priority, this.priorities)}` +
       (assigneeName ? `, assigned to ${assigneeName}` : '') +
-      (t.steps ? `, ${t.steps.done} of ${t.steps.total} steps done` : '');
+      (t.steps ? `, ${t.steps.done} of ${t.steps.total} steps done` : '') +
+      (t.questions_open > 0 ? `, ${questionsLabel(t.questions_open)} waiting for you` : '');
     const dragging = this._draggingID === t.id;
     const isWontDo = t.state === 'wont_do';
     // Cancelled cards aren't draggable: every drop-target column
@@ -1699,6 +1826,11 @@ class NottarioBoardPage extends LitElement {
               ? html`<span class=${`steps-progress${t.steps.done === t.steps.total ? ' complete' : ''}`}
                        title=${`${t.steps.done} of ${t.steps.total} steps done`}
                        aria-hidden="true">${checklistIcon}${t.steps.done}/${t.steps.total}</span>`
+              : null
+          }
+          ${
+            t.questions_open > 0
+              ? html`<span class="questions-pill" aria-hidden="true">${questionsLabel(t.questions_open)}</span>`
               : null
           }
         </div>
@@ -2565,8 +2697,12 @@ class NottarioBoardPage extends LitElement {
                 .taskId=${task.id}
                 .steps=${this.selected.steps || []}
                 .stepsAt=${this.selected.stepsAt}
+                .questions=${this.selected.questions || []}
+                @step-question=${(e) => this._focusQuestionCard(e.detail.questionId)}
                 @steps-change=${(e) => this._onStepsChange(task.id, e.detail.steps)}></nottario-task-steps>
             </section>
+
+            ${this._renderQuestions()}
 
 
             ${

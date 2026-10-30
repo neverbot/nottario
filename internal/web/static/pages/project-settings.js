@@ -21,6 +21,8 @@ import '/static/components/avatar.js';
 import '/static/components/tabs.js';
 import '/static/components/page-header.js';
 
+const IDLE_RANGE_MSG = 'Enter a whole number of minutes from 5 to 1440.';
+
 class NottarioProjectSettings extends LitElement {
   static properties = {
     me: { type: Object },
@@ -57,6 +59,9 @@ class NottarioProjectSettings extends LitElement {
     _usageDays: { state: true },
     _usageAllTools: { state: true },
     _usageError: { state: true },
+    // Inline validation message for the Live idle-minutes field in
+    // Settings > General; empty when the value is valid.
+    _idleError: { state: true },
   };
 
   static styles = [
@@ -114,6 +119,9 @@ class NottarioProjectSettings extends LitElement {
     /* project-settings-only override: separation from inline name. */
     .badge.admin { margin-left: 6px; }
     .error { color: var(--danger); margin-bottom: 8px; font-size: 13px; }
+    .idle-input { max-width: 96px; font-variant-numeric: tabular-nums; }
+    .idle-input[aria-invalid='true'] { border-color: var(--danger); }
+    .field-error { color: var(--danger); font-size: 12px; margin-top: 4px; }
     .owner-row {
       display: flex;
       align-items: center;
@@ -654,6 +662,7 @@ class NottarioProjectSettings extends LitElement {
           <dt><strong>Project type</strong></dt><dd>${p.project_type || html`<span class="muted">none</span>`}</dd>
           <dt><strong>Default view</strong></dt><dd>${currentView.label}</dd>
           <dt><strong>Cycle label</strong></dt><dd>${p.cycle_label || 'sprint'}</dd>
+          <dt><strong>Live idle after</strong></dt><dd>${p.live_idle_minutes || 30} minutes</dd>
         </dl>
       `;
     }
@@ -686,6 +695,21 @@ class NottarioProjectSettings extends LitElement {
         </nottario-field>
         <nottario-field label="Cycle label" hint="e.g. sprint, iteration, milestone — used when auto-naming new cycles">
           <input name="cycle_label" .value=${p.cycle_label || 'sprint'} style="max-width:260px">
+        </nottario-field>
+        <nottario-field label="Live: mark work idle after" hint="minutes without agent activity, 5 to 1440">
+          <input name="live_idle_minutes" class="idle-input"
+                 aria-label="Live: mark work idle after, in minutes" type="number" min="5" max="1440" step="1" required
+                 .value=${String(p.live_idle_minutes || 30)}
+                 aria-invalid=${this._idleError ? 'true' : 'false'}
+                 aria-describedby="idle-error"
+                 @invalid=${(e) => {
+                   e.preventDefault();
+                   this._idleError = IDLE_RANGE_MSG;
+                 }}
+                 @input=${() => {
+                   this._idleError = '';
+                 }}>
+          ${this._idleError ? html`<div class="field-error" id="idle-error" role="alert">${this._idleError}</div>` : null}
         </nottario-field>
         <div class="actions-row" style="justify-content:flex-end;margin-top:8px">
           <button type="submit" class="btn primary">Save changes</button>
@@ -881,6 +905,14 @@ class NottarioProjectSettings extends LitElement {
       default_view: f.default_view.value,
       cycle_label: f.cycle_label.value.trim(),
     };
+    const idle = Number(f.live_idle_minutes.value);
+    if (!Number.isInteger(idle) || idle < 5 || idle > 1440) {
+      e.preventDefault();
+      this._idleError = IDLE_RANGE_MSG;
+      return;
+    }
+    this._idleError = '';
+    payload.live_idle_minutes = idle;
     try {
       await formButton(e, async () => {
         const res = await fetch(`/api/projects/${this.projectId}`, {
@@ -892,6 +924,7 @@ class NottarioProjectSettings extends LitElement {
         await this.load();
       });
     } catch (err) {
+      if (/idle/i.test(err.message)) this._idleError = IDLE_RANGE_MSG;
       this.error = err.message;
       toast.error(`Couldn't save: ${err.message}`);
     }

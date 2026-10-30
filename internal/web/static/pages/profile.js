@@ -420,6 +420,11 @@ class NottarioProfilePage extends LitElement {
                   "A task I'm assigned to or created is closed",
                   "Fires when someone else transitions it to done or won't do.",
                 )}
+                ${this._renderPref(
+                  'question_asked',
+                  'An agent asks me a question',
+                  'Fires when an agent using your token files a question.',
+                )}
               </div>
             `
             : html`<div class="empty">Loading…</div>`

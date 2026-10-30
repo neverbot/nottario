@@ -8,6 +8,7 @@ import {
   stepProgress,
   stepTextsFromPaste,
 } from '/static/steps.js';
+import { sessionName } from '/static/live-model.js';
 
 // <nottario-task-steps> is the checklist inside the task dialog: tick,
 // add (one line, or several pasted at once), rename in place, delete
@@ -20,8 +21,17 @@ import {
 // with the list it now shows, so the board can update the card count
 // without reloading.
 //
-// Properties: projectId, taskId, steps ([{id, position, text, done}])
-// and stepsAt, the performance.now() at which the board requested them.
+// Properties: projectId, taskId, steps ([{id, position, text, done,
+// started_at?, session?}]), stepsAt, the performance.now() at which the
+// board requested them, and questions, the task's questions (an open
+// one that points at a step puts an amber "?" on it).
+//
+// An in-progress step reads "In progress · <session>". Write responses
+// carry no session, so the names seen on the board's lists are kept
+// per step until the step stops being in progress.
+//
+// Event step-question { questionId }: the "?" on a step was clicked;
+// the board focuses that question's card.
 
 const gripIcon = html`<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">${svg`
   <circle cx="5.5" cy="3.5" r="1.2" fill="currentColor"/><circle cx="10.5" cy="3.5" r="1.2" fill="currentColor"/>
@@ -34,6 +44,7 @@ export class NottarioTaskSteps extends LitElement {
     taskId: { type: String },
     steps: { type: Array },
     stepsAt: { type: Number },
+    questions: { type: Array },
     _steps: { state: true },
     _editingId: { state: true },
     _draft: { state: true },
@@ -79,7 +90,7 @@ export class NottarioTaskSteps extends LitElement {
          a long list reads as a list, not a toolbar. */
       .step {
         display: grid;
-        grid-template-columns: 14px 16px 1fr 28px;
+        grid-template-columns: 14px 16px 1fr auto 28px;
         align-items: start;
         column-gap: 6px;
         padding: 3px 0;
@@ -140,6 +151,52 @@ export class NottarioTaskSteps extends LitElement {
       .text:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 0;
+      }
+      .main { min-width: 0; }
+      /* Who is working on a step, under its text. */
+      .progress {
+        display: block;
+        padding: 0 5px 2px;
+        font-size: 11px;
+        line-height: 16px;
+        color: var(--fg-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .progress .dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin-right: 5px;
+        border-radius: 50%;
+        background: var(--success);
+        vertical-align: 1px;
+      }
+      /* An open question on the step: amber, the colour for work
+         waiting on a person. */
+      .ask {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        padding: 0;
+        border: 1px solid var(--attention-muted);
+        border-radius: 50%;
+        background: var(--attention-subtle);
+        color: var(--attention-fg);
+        font: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .ask:hover { border-color: var(--attention-emphasis); }
+      .ask:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
       }
       .step.done .text {
         color: var(--fg-muted);
@@ -258,6 +315,13 @@ export class NottarioTaskSteps extends LitElement {
     // until then the list on screen is the newer one.
     const fresh =
       this._inflight === 0 && (this.stepsAt ?? Number.POSITIVE_INFINITY) >= this._savedAt;
+    if (changed.has('taskId')) this._sessions = new Map();
+    if (changed.has('steps')) {
+      this._sessions ??= new Map();
+      for (const st of this.steps || []) {
+        if (st.session) this._sessions.set(st.id, st.session);
+      }
+    }
     if (changed.has('taskId') || (changed.has('steps') && fresh)) {
       this._steps = [...(this.steps || [])];
     }
@@ -542,8 +606,21 @@ export class NottarioTaskSteps extends LitElement {
 
   // ---- Render -------------------------------------------------------
 
+  _focusQuestion(q) {
+    this.dispatchEvent(
+      new CustomEvent('step-question', {
+        detail: { questionId: q.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   _renderStep(step, index) {
     const editing = this._editingId === step.id;
+    const inProgress = !!step.started_at && !step.done;
+    const who = inProgress ? sessionName(step.session || this._sessions?.get(step.id)) : '';
+    const ask = (this.questions || []).find((q) => q.state === 'open' && q.step?.id === step.id);
     const dragging = this._dragId === step.id;
     const dropClass =
       this._dragId && !dragging
@@ -566,6 +643,7 @@ export class NottarioTaskSteps extends LitElement {
                aria-describedby="steps-help"
                @change=${(e) => this._toggle(step, e.target.checked)}
                @keydown=${(e) => this._onRowKey(e, step, index)}>
+        <div class="main">
         ${
           editing
             ? html`<input class="field" id=${`edit-${step.id}`}
@@ -583,6 +661,21 @@ export class NottarioTaskSteps extends LitElement {
                      aria-describedby="steps-help"
                      @click=${() => this._beginEdit(step)}
                      @keydown=${(e) => this._onRowKey(e, step, index)}>${step.text}</button>`
+        }
+        ${
+          inProgress
+            ? html`<span class="progress"><span class="dot" aria-hidden="true"></span>In progress${
+                who ? ` · ${who}` : ''
+              }</span>`
+            : null
+        }
+        </div>
+        ${
+          ask
+            ? html`<button class="ask" title="Open question on this step"
+                     aria-label=${`Open question on step: ${step.text}`}
+                     @click=${() => this._focusQuestion(ask)}>?</button>`
+            : html`<span></span>`
         }
         <button class="icon-btn danger" title="Delete step" aria-label=${`Delete step: ${step.text}`}
                 @click=${() => this._remove(step)}>${trashIcon(13)}</button>

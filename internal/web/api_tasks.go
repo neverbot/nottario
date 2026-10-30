@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/neverbot/nottario/internal/agents"
 	"github.com/neverbot/nottario/internal/cycles"
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/markdown"
@@ -243,6 +244,11 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		stepViews, err := buildStepViews(r.Context(), d.Pool, steps)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		commits, _ := tasks.ListCommits(r.Context(), d.Pool, tid)
 		comments, _ := tasks.ListComments(r.Context(), d.Pool, tid)
 
@@ -287,11 +293,44 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			"questions":        questionViews,
 			"description_html": descriptionHTML,
 			"related":          related,
-			"steps":            steps,
+			"steps":            stepViews,
 			"commits":          commits,
 			"comments":         rendered,
 		})
 	})
+}
+
+// stepDetailView is a step as the task dialog shows it: an in-progress step
+// also names the agent session working on it.
+type stepDetailView struct {
+	tasks.Step
+	Session *questionSessionRef `json:"session,omitempty"`
+}
+
+// buildStepViews resolves the sessions of in-progress steps in one
+// batched lookup.
+func buildStepViews(ctx context.Context, pool *pgxpool.Pool, steps []tasks.Step) ([]stepDetailView, error) {
+	var ids []uuid.UUID
+	for _, s := range steps {
+		if s.InProgress() && s.StartedSessionID != nil {
+			ids = append(ids, *s.StartedSessionID)
+		}
+	}
+	sessions, err := agents.ByIDs(ctx, pool, uniqueIDs(ids))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]stepDetailView, 0, len(steps))
+	for _, s := range steps {
+		v := stepDetailView{Step: s}
+		if s.InProgress() && s.StartedSessionID != nil {
+			if sess, ok := sessions[*s.StartedSessionID]; ok {
+				v.Session = &questionSessionRef{ID: sess.ID, Label: sess.Label, Key: sess.Key, Client: sess.Client}
+			}
+		}
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 // commentView is a comment as the task dialog shows it: the stored
