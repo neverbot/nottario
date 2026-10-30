@@ -87,7 +87,7 @@ type questionView struct {
 const excerptLen = 140
 
 var (
-	mdChip     = regexp.MustCompile(`\[\[([^\[\]]*)\]\]`)
+	mdChip     = regexp.MustCompile(`\[\[(?:[^\[\]|]*\|)?([^\[\]|]*)\]\]`)
 	mdLink     = regexp.MustCompile(`\[([^\[\]]*)\]\([^()\s]*\)`)
 	mdHeading  = regexp.MustCompile(`(?m)^\s{0,3}#{1,6}\s+`)
 	mdStrong   = regexp.MustCompile(`(\*\*|__)(\S|\S.*?\S)(\*\*|__)`)

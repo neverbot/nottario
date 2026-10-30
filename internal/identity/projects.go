@@ -226,10 +226,16 @@ func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Proj
 
 // UpdateProject mutates the human-editable fields. defaultView is
 // optional: when empty, the column is left untouched; otherwise it
-// must be a key from ValidDefaultViews.
-func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, description, primaryLanguage, projectType, defaultView, cycleLabel string) (*Project, error) {
+// must be a key from ValidDefaultViews. liveIdleMinutes is optional and
+// is written in the same transaction.
+func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, description, primaryLanguage, projectType, defaultView, cycleLabel string, liveIdleMinutes *int) (*Project, error) {
 	if defaultView != "" && !ValidDefaultViews[defaultView] {
 		return nil, errors.New("invalid default_view")
+	}
+	if liveIdleMinutes != nil {
+		if err := ValidateLiveIdleMinutes(*liveIdleMinutes); err != nil {
+			return nil, err
+		}
 	}
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -259,6 +265,13 @@ func UpdateProject(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, 
 		if err := q.UpdateProjectCycleLabel(ctx, dbq.UpdateProjectCycleLabelParams{
 			ID:         id,
 			CycleLabel: cycleLabel,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if liveIdleMinutes != nil {
+		if err := q.UpdateProjectLiveIdleMinutes(ctx, dbq.UpdateProjectLiveIdleMinutesParams{
+			ID: id, Minutes: int32(*liveIdleMinutes), //nolint:gosec // validated range
 		}); err != nil {
 			return nil, err
 		}

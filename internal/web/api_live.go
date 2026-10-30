@@ -14,7 +14,7 @@ import (
 type liveTaskRef struct {
 	ID        uuid.UUID `json:"id"`
 	Title     string    `json:"title"`
-	Type      string    `json:"type,omitempty"`
+	Type      string    `json:"type"`
 	ProjectID uuid.UUID `json:"project_id"`
 }
 
@@ -22,12 +22,6 @@ type liveRoleRef struct {
 	ID   uuid.UUID `json:"id"`
 	Key  string    `json:"key"`
 	Name string    `json:"name"`
-}
-
-type liveAssigneeRef struct {
-	ID        uuid.UUID `json:"id"`
-	Login     string    `json:"login"`
-	AvatarURL string    `json:"avatar_url"`
 }
 
 type liveStepView struct {
@@ -40,7 +34,7 @@ type liveStepView struct {
 type liveWorkingView struct {
 	Task           liveTaskRef         `json:"task"`
 	Role           *liveRoleRef        `json:"role"`
-	Assignee       *liveAssigneeRef    `json:"assignee"`
+	Assignee       *questionUserRef    `json:"assignee"`
 	StartedAt      *time.Time          `json:"started_at"`
 	LastActivityAt time.Time           `json:"last_activity_at"`
 	Idle           bool                `json:"idle"`
@@ -53,7 +47,7 @@ type liveWorkingView struct {
 type liveFinishedView struct {
 	Task     liveTaskRef      `json:"task"`
 	State    string           `json:"state"`
-	Assignee *liveAssigneeRef `json:"assignee"`
+	Assignee *questionUserRef `json:"assignee"`
 	EndedAt  time.Time        `json:"ended_at"`
 }
 
@@ -92,7 +86,7 @@ func LiveHandler(d TaskDeps) http.Handler {
 			}
 			projectIDs = ids
 		}
-		now := time.Now()
+		now := time.Now().UTC()
 		board, err := live.Build(r.Context(), d.Pool, projectIDs, c.UserID, now)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -131,7 +125,7 @@ func LiveHandler(d TaskDeps) http.Handler {
 				roleByID[row.ID] = liveRoleRef{ID: row.ID, Key: row.Key, Name: row.Label}
 			}
 		}
-		userByID := map[uuid.UUID]liveAssigneeRef{}
+		userByID := map[uuid.UUID]questionUserRef{}
 		if userIDs = uniqueIDs(userIDs); len(userIDs) > 0 {
 			rows, err := db.GetUsersBrief(r.Context(), userIDs)
 			if err != nil {
@@ -139,10 +133,10 @@ func LiveHandler(d TaskDeps) http.Handler {
 				return
 			}
 			for _, row := range rows {
-				userByID[row.ID] = liveAssigneeRef{ID: row.ID, Login: row.GithubLogin, AvatarURL: row.AvatarUrl}
+				userByID[row.ID] = questionUserRef{ID: row.ID, Login: row.GithubLogin, DisplayName: row.DisplayName, AvatarURL: row.AvatarUrl}
 			}
 		}
-		assignee := func(id *uuid.UUID) *liveAssigneeRef {
+		assignee := func(id *uuid.UUID) *questionUserRef {
 			if id == nil {
 				return nil
 			}
@@ -181,18 +175,19 @@ func LiveHandler(d TaskDeps) http.Handler {
 		finished := make([]liveFinishedView, 0, len(board.Finished))
 		for _, f := range board.Finished {
 			finished = append(finished, liveFinishedView{
-				Task:     liveTaskRef{ID: f.TaskID, Title: f.Title, ProjectID: f.ProjectID},
+				Task:     liveTaskRef{ID: f.TaskID, Title: f.Title, Type: f.Type, ProjectID: f.ProjectID},
 				State:    f.State,
 				Assignee: assignee(f.AssigneeUserID),
 				EndedAt:  f.EndedAt,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"now":      now,
-			"projects": board.Projects,
-			"waiting":  waiting,
-			"working":  working,
-			"finished": finished,
+			"now":       now,
+			"projects":  board.Projects,
+			"waiting":   waiting,
+			"working":   working,
+			"finished":  finished,
+			"truncated": board.Truncated,
 		})
 	})
 }

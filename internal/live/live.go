@@ -24,6 +24,22 @@ type Board struct {
 	Projects []Project            `json:"projects"`
 	Working  []Item               `json:"working"`
 	Finished []Finished           `json:"finished"`
+	// Truncated says which blocks hit their cap and dropped rows.
+	Truncated Truncated `json:"truncated"`
+}
+
+// Caps on each block of the board.
+const (
+	WorkingCap  = 200
+	FinishedCap = 100
+	WaitingCap  = 50
+)
+
+// Truncated marks the blocks that hold more rows than they show.
+type Truncated struct {
+	Working  bool `json:"working"`
+	Finished bool `json:"finished"`
+	Waiting  bool `json:"waiting"`
 }
 
 // Project carries the per-project Live settings.
@@ -72,6 +88,7 @@ type Finished struct {
 	TaskID         uuid.UUID
 	ProjectID      uuid.UUID
 	Title          string
+	Type           string
 	State          string
 	AssigneeUserID *uuid.UUID
 	EndedAt        time.Time
@@ -103,6 +120,9 @@ func Build(ctx context.Context, db dbq.DBTX, projectIDs []uuid.UUID, recipient u
 	working, err := q.LiveWorkingTasks(ctx, projectIDs)
 	if err != nil {
 		return nil, err
+	}
+	if len(working) > WorkingCap {
+		working, b.Truncated.Working = working[:WorkingCap], true
 	}
 	taskIDs := make([]uuid.UUID, 0, len(working))
 	for _, w := range working {
@@ -166,14 +186,15 @@ func Build(ctx context.Context, db dbq.DBTX, projectIDs []uuid.UUID, recipient u
 		it := Item{
 			TaskID: w.ID, ProjectID: w.ProjectID, Title: w.Title, Type: w.Type,
 			RoleID: w.TargetRoleID, AssigneeUserID: w.AssigneeUserID,
-			LastActivityAt: w.LastActivityAt.Time,
-			Idle:           now.Sub(w.LastActivityAt.Time) > idleAfter[w.ProjectID],
+			LastActivityAt: w.LastActivityAt.Time.UTC(),
+			Idle:           now.Sub(w.LastActivityAt.Time) > idleFor(idleAfter, w.ProjectID),
 			Session:        sessionRef(w.ActiveSessionID),
 			Steps:          stepsByTask[w.ID],
 			QuestionsOpen:  open[w.ID],
 		}
 		if w.ActualStart.Valid {
 			t := w.ActualStart.Time
+			t = t.UTC()
 			it.StartedAt = &t
 		}
 		if p, ok := progress[w.ID]; ok {
@@ -188,25 +209,38 @@ func Build(ctx context.Context, db dbq.DBTX, projectIDs []uuid.UUID, recipient u
 	if err != nil {
 		return nil, err
 	}
+	if len(finished) > FinishedCap {
+		finished, b.Truncated.Finished = finished[:FinishedCap], true
+	}
 	for _, f := range finished {
 		b.Finished = append(b.Finished, Finished{
-			TaskID: f.ID, ProjectID: f.ProjectID, Title: f.Title, State: f.State,
-			AssigneeUserID: f.AssigneeUserID, EndedAt: f.ActualEnd.Time,
+			TaskID: f.ID, ProjectID: f.ProjectID, Title: f.Title, Type: f.Type, State: f.State,
+			AssigneeUserID: f.AssigneeUserID, EndedAt: f.ActualEnd.Time.UTC(),
 		})
 	}
 
 	openState := questions.StateOpen
 	waiting, err := questions.List(ctx, db, questions.ListFilter{
-		ProjectIDs: projectIDs, State: &openState, RecipientUserID: &recipient, Limit: waitingLimit,
+		ProjectIDs: projectIDs, State: &openState, RecipientUserID: &recipient, Limit: WaitingCap + 1,
 	})
 	if err != nil {
 		return nil, err
+	}
+	if len(waiting) > WaitingCap {
+		waiting, b.Truncated.Waiting = waiting[:WaitingCap], true
 	}
 	b.Waiting = waiting
 	return b, nil
 }
 
-// waitingLimit caps the Waiting block.
-const waitingLimit = 100
+// defaultIdleAfter applies to a project missing from the settings read.
+const defaultIdleAfter = 30 * time.Minute
+
+func idleFor(m map[uuid.UUID]time.Duration, id uuid.UUID) time.Duration {
+	if d, ok := m[id]; ok {
+		return d
+	}
+	return defaultIdleAfter
+}
 
 func tstz(t time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: t, Valid: true} }

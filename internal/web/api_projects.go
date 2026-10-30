@@ -135,23 +135,10 @@ func UpdateProjectHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if req.LiveIdleMinutes != nil {
-			if err := identity.ValidateLiveIdleMinutes(*req.LiveIdleMinutes); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-		}
-		p, err := identity.UpdateProject(r.Context(), d.Pool, id, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, req.DefaultView, req.CycleLabel)
+		p, err := identity.UpdateProject(r.Context(), d.Pool, id, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, req.DefaultView, req.CycleLabel, req.LiveIdleMinutes)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
-		}
-		if req.LiveIdleMinutes != nil {
-			p, err = identity.UpdateProjectLiveIdleMinutes(r.Context(), d.Pool, id, *req.LiveIdleMinutes)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
 		}
 		writeJSON(w, http.StatusOK, p)
 	})

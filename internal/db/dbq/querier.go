@@ -277,6 +277,7 @@ type Querier interface {
 	// are included so the audit view is honest.
 	ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	// Caps are one over what Build keeps, so it can tell a block was cut.
 	LiveFinishedTasks(ctx context.Context, arg LiveFinishedTasksParams) ([]LiveFinishedTasksRow, error)
 	LiveInProgressSteps(ctx context.Context, ids []uuid.UUID) ([]LiveInProgressStepsRow, error)
 	// Tasks in doing across the given projects, most recently active

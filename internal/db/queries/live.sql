@@ -8,15 +8,16 @@ FROM tasks t
 LEFT JOIN task_activity a ON a.task_id = t.id
 WHERE t.project_id = ANY(sqlc.arg('project_ids')::uuid[]) AND t.state = 'doing'
 ORDER BY 8 DESC, t.id
-LIMIT 200;
+LIMIT 201;
 
 -- name: LiveFinishedTasks :many
-SELECT t.id, t.project_id, t.title, t.state, t.assignee_user_id, t.actual_end
+-- Caps are one over what Build keeps, so it can tell a block was cut.
+SELECT t.id, t.project_id, t.title, t.type, t.state, t.assignee_user_id, t.actual_end
 FROM tasks t
 WHERE t.project_id = ANY(sqlc.arg('project_ids')::uuid[])
   AND t.state IN ('done', 'wont_do') AND t.actual_end >= sqlc.arg('since')::timestamptz
 ORDER BY t.actual_end DESC
-LIMIT 100;
+LIMIT 101;
 
 -- name: LiveInProgressSteps :many
 SELECT id, task_id, position, text, started_at, started_session_id

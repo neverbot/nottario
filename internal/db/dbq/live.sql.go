@@ -43,12 +43,12 @@ func (q *Queries) GetRolesBrief(ctx context.Context, ids []uuid.UUID) ([]GetRole
 }
 
 const liveFinishedTasks = `-- name: LiveFinishedTasks :many
-SELECT t.id, t.project_id, t.title, t.state, t.assignee_user_id, t.actual_end
+SELECT t.id, t.project_id, t.title, t.type, t.state, t.assignee_user_id, t.actual_end
 FROM tasks t
 WHERE t.project_id = ANY($1::uuid[])
   AND t.state IN ('done', 'wont_do') AND t.actual_end >= $2::timestamptz
 ORDER BY t.actual_end DESC
-LIMIT 100
+LIMIT 101
 `
 
 type LiveFinishedTasksParams struct {
@@ -60,11 +60,13 @@ type LiveFinishedTasksRow struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	Title          string
+	Type           string
 	State          string
 	AssigneeUserID *uuid.UUID
 	ActualEnd      pgtype.Timestamptz
 }
 
+// Caps are one over what Build keeps, so it can tell a block was cut.
 func (q *Queries) LiveFinishedTasks(ctx context.Context, arg LiveFinishedTasksParams) ([]LiveFinishedTasksRow, error) {
 	rows, err := q.db.Query(ctx, liveFinishedTasks, arg.ProjectIds, arg.Since)
 	if err != nil {
@@ -78,6 +80,7 @@ func (q *Queries) LiveFinishedTasks(ctx context.Context, arg LiveFinishedTasksPa
 			&i.ID,
 			&i.ProjectID,
 			&i.Title,
+			&i.Type,
 			&i.State,
 			&i.AssigneeUserID,
 			&i.ActualEnd,
@@ -143,7 +146,7 @@ FROM tasks t
 LEFT JOIN task_activity a ON a.task_id = t.id
 WHERE t.project_id = ANY($1::uuid[]) AND t.state = 'doing'
 ORDER BY 8 DESC, t.id
-LIMIT 200
+LIMIT 201
 `
 
 type LiveWorkingTasksRow struct {

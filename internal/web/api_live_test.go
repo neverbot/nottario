@@ -24,7 +24,8 @@ func TestExcerptOfStripsMarkdown(t *testing.T) {
 		"run `go test` first":                           "run go test first",
 		"## Heading\nthen text":                         "Heading then text",
 		"see [the docs](https://x.test/a_b) now":        "see the docs now",
-		"relates to [[task:abc|Fix login]] and [[doc]]": "relates to task:abc|Fix login and doc",
+		"relates to [[task:abc|Fix login]] and [[doc]]": "relates to Fix login and doc",
+		"see [[task:abc]] now":                          "see task:abc now",
 		"*a* *b* and _c_ _d_":                           "a b and c d",
 		"snake_case_name and 2*3*4 stay":                "snake_case_name and 2*3*4 stay",
 		"  spaced \n\n out  ":                           "spaced out",
@@ -157,7 +158,8 @@ func TestApiLive(t *testing.T) {
 				Name string `json:"name"`
 			} `json:"role"`
 			Assignee *struct {
-				Login string `json:"login"`
+				Login       string `json:"login"`
+				DisplayName string `json:"display_name"`
 			} `json:"assignee"`
 			StartedAt      *string `json:"started_at"`
 			LastActivityAt string  `json:"last_activity_at"`
@@ -180,9 +182,13 @@ func TestApiLive(t *testing.T) {
 			} `json:"progress"`
 			QuestionsOpen int `json:"questions_open"`
 		} `json:"working"`
+		Truncated struct {
+			Working, Finished, Waiting bool
+		} `json:"truncated"`
 		Finished []struct {
 			Task struct {
 				Title string `json:"title"`
+				Type  string `json:"type"`
 			} `json:"task"`
 			State   string `json:"state"`
 			EndedAt string `json:"ended_at"`
@@ -211,7 +217,7 @@ func TestApiLive(t *testing.T) {
 	w := lv.Working[0]
 	if w.Task.Title != "in flight" || w.Task.Type != "task" || w.Task.ProjectID != p.ID.String() ||
 		w.Role == nil || w.Role.Key != role.Key || w.Role.Name != role.Label ||
-		w.Assignee == nil || w.Assignee.Login != "live-api" || w.StartedAt == nil || w.LastActivityAt == "" || w.Idle ||
+		w.Assignee == nil || w.Assignee.Login != "live-api" || w.Assignee.DisplayName != "Live API" || !strings.HasSuffix(w.LastActivityAt, "Z") || lv.Truncated.Working || lv.Truncated.Finished || lv.Truncated.Waiting || w.StartedAt == nil || w.LastActivityAt == "" || w.Idle ||
 		w.Session == nil || w.Session.Key != "conv-9" || w.Session.Label != "Agent nine" ||
 		len(w.Steps) != 1 || w.Steps[0].Text != "s one" || w.Steps[0].Session == nil || w.Steps[0].Session.Key != "conv-9" ||
 		w.Progress == nil || w.Progress.Total != 2 || w.QuestionsOpen != 1 {
@@ -220,7 +226,7 @@ func TestApiLive(t *testing.T) {
 	if len(lv.Waiting) != 1 || lv.Waiting[0].Excerpt != "Which one?" || !lv.Waiting[0].ForMe || lv.Waiting[0].Task == nil {
 		t.Fatalf("waiting = %+v", lv.Waiting)
 	}
-	if len(lv.Finished) != 1 || lv.Finished[0].Task.Title != "just done" || lv.Finished[0].State != "done" || lv.Finished[0].EndedAt == "" {
+	if len(lv.Finished) != 1 || lv.Finished[0].Task.Title != "just done" || lv.Finished[0].Task.Type != "task" || lv.Finished[0].State != "done" || lv.Finished[0].EndedAt == "" {
 		t.Fatalf("finished = %+v", lv.Finished)
 	}
 
