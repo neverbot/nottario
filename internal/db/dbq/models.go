@@ -326,14 +326,14 @@ type TaskQuestion struct {
 	AnswerText        string
 	AnswerNote        string
 	AnsweredByUserID  *uuid.UUID
-	AnsweredByTokenID *uuid.UUID
-	AnswerChannel     string
 	AnsweredAt        pgtype.Timestamptz
 	DeliveredAt       pgtype.Timestamptz
 	WithdrawnAt       pgtype.Timestamptz
 	WithdrawnReason   string
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
+	AnsweredByTokenID *uuid.UUID
+	AnswerChannel     string
 }
 
 type TaskStep struct {
