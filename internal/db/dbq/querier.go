@@ -126,11 +126,13 @@ type Querier interface {
 	GetProjectArchIdleSeconds(ctx context.Context, projectID uuid.UUID) (pgtype.Int4, error)
 	GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (GetProjectByIDOrSlugRow, error)
 	GetProjectCycleLabel(ctx context.Context, id uuid.UUID) (string, error)
+	GetProjectsBrief(ctx context.Context, ids []uuid.UUID) ([]GetProjectsBriefRow, error)
 	// Reads a single skill-override document, exactly as it was written
 	// (frontmatter included), keyed by its full path
 	// (e.g. 'global/skills/domains/tasks.md'). Returns ErrNoRows when
 	// there is no override for that path.
 	GetSkillOverride(ctx context.Context, path string) (string, error)
+	GetStepsBrief(ctx context.Context, ids []uuid.UUID) ([]GetStepsBriefRow, error)
 	GetTask(ctx context.Context, id uuid.UUID) (GetTaskRow, error)
 	// Queries used by the markdown renderer to resolve cross-domain chip
 	// references ([[task:N]], [[doc:path]], [[arch:slug]]) into the
@@ -149,8 +151,11 @@ type Querier interface {
 	// tasks.get): just enough to label a chip, so the detail never needs a
 	// second request per related task.
 	GetTaskSummary(ctx context.Context, id uuid.UUID) (GetTaskSummaryRow, error)
+	// Batch lookup for the question views: no N+1.
+	GetTasksBrief(ctx context.Context, ids []uuid.UUID) ([]GetTasksBriefRow, error)
 	GetUserByGithubID(ctx context.Context, githubID int64) (GetUserByGithubIDRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
+	GetUsersBrief(ctx context.Context, ids []uuid.UUID) ([]GetUsersBriefRow, error)
 	InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error)
 	InsertArchLock(ctx context.Context, arg InsertArchLockParams) error
 	InsertArchNode(ctx context.Context, arg InsertArchNodeParams) (InsertArchNodeRow, error)

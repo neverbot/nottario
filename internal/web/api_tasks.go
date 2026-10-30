@@ -11,6 +11,7 @@ import (
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/markdown"
 	"github.com/neverbot/nottario/internal/notifications"
+	"github.com/neverbot/nottario/internal/questions"
 	"github.com/neverbot/nottario/internal/tasks"
 )
 
@@ -268,8 +269,18 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			}
 			rendered = append(rendered, view)
 		}
+		var questionViews []questionView
+		if qs, err := questions.List(r.Context(), d.Pool, questions.ListFilter{
+			ProjectIDs: []uuid.UUID{pid}, TaskID: &tid, Limit: questions.MaxListLimit,
+		}); err == nil {
+			questionViews, _ = buildQuestionViews(r.Context(), d.Pool, qs)
+		}
+		if questionViews == nil {
+			questionViews = []questionView{}
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"task":             t,
+			"questions":        questionViews,
 			"description_html": descriptionHTML,
 			"related":          related,
 			"steps":            steps,
@@ -458,7 +469,7 @@ func SetTaskStateHandler(d TaskDeps) http.Handler {
 		// Snapshot state pre-write so the Notifier can tell whether
 		// the transition actually crossed into a closed state.
 		prev, _ := tasks.Get(r.Context(), d.Pool, tid)
-		t, _, err := tasks.SetState(r.Context(), d.Pool, tid, req.State, actorFrom(c))
+		t, withdrawn, err := tasks.SetState(r.Context(), d.Pool, tid, req.State, actorFrom(c))
 		if err != nil {
 			// Surface the unresolved-precondition detail to clients so
 			// they can render a useful message without an extra round-trip.
@@ -492,7 +503,12 @@ func SetTaskStateHandler(d TaskDeps) http.Handler {
 			actor := actorFrom(c)
 			d.Notifier.OnStateChanged(r.Context(), t, prevState, actor)
 		}
-		writeJSON(w, http.StatusOK, t)
+		// The task row, plus how many open questions the close withdrew
+		// when there were any.
+		writeJSON(w, http.StatusOK, struct {
+			*tasks.Task
+			WithdrawnQuestions int `json:"withdrawn_questions,omitempty"`
+		}{t, withdrawn})
 	})
 }
 

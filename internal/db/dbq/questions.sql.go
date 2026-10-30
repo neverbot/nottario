@@ -124,6 +124,65 @@ func (q *Queries) CountOpenTaskQuestions(ctx context.Context, ids []uuid.UUID) (
 	return items, nil
 }
 
+const getProjectsBrief = `-- name: GetProjectsBrief :many
+SELECT id, name, slug FROM projects WHERE id = ANY($1::uuid[])
+`
+
+type GetProjectsBriefRow struct {
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
+
+func (q *Queries) GetProjectsBrief(ctx context.Context, ids []uuid.UUID) ([]GetProjectsBriefRow, error) {
+	rows, err := q.db.Query(ctx, getProjectsBrief, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetProjectsBriefRow{}
+	for rows.Next() {
+		var i GetProjectsBriefRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStepsBrief = `-- name: GetStepsBrief :many
+SELECT id, text FROM task_steps WHERE id = ANY($1::uuid[])
+`
+
+type GetStepsBriefRow struct {
+	ID   uuid.UUID
+	Text string
+}
+
+func (q *Queries) GetStepsBrief(ctx context.Context, ids []uuid.UUID) ([]GetStepsBriefRow, error) {
+	rows, err := q.db.Query(ctx, getStepsBrief, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetStepsBriefRow{}
+	for rows.Next() {
+		var i GetStepsBriefRow
+		if err := rows.Scan(&i.ID, &i.Text); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTaskQuestion = `-- name: GetTaskQuestion :one
 SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
 WHERE id = $1::uuid AND project_id = $2::uuid
@@ -209,6 +268,74 @@ func (q *Queries) GetTaskQuestionForUpdate(ctx context.Context, arg GetTaskQuest
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getTasksBrief = `-- name: GetTasksBrief :many
+SELECT id, project_id, title FROM tasks WHERE id = ANY($1::uuid[])
+`
+
+type GetTasksBriefRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Title     string
+}
+
+// Batch lookup for the question views: no N+1.
+func (q *Queries) GetTasksBrief(ctx context.Context, ids []uuid.UUID) ([]GetTasksBriefRow, error) {
+	rows, err := q.db.Query(ctx, getTasksBrief, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTasksBriefRow{}
+	for rows.Next() {
+		var i GetTasksBriefRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Title); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUsersBrief = `-- name: GetUsersBrief :many
+SELECT id, github_login, display_name, COALESCE(avatar_url, '')::text AS avatar_url
+FROM users WHERE id = ANY($1::uuid[])
+`
+
+type GetUsersBriefRow struct {
+	ID          uuid.UUID
+	GithubLogin string
+	DisplayName string
+	AvatarUrl   string
+}
+
+func (q *Queries) GetUsersBrief(ctx context.Context, ids []uuid.UUID) ([]GetUsersBriefRow, error) {
+	rows, err := q.db.Query(ctx, getUsersBrief, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetUsersBriefRow{}
+	for rows.Next() {
+		var i GetUsersBriefRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GithubLogin,
+			&i.DisplayName,
+			&i.AvatarUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const insertTaskQuestion = `-- name: InsertTaskQuestion :one

@@ -35,6 +35,7 @@ var AllowedPrefKeys = map[string]struct{}{
 	notifications.KindTaskAssigned:  {},
 	notifications.KindTaskCommented: {},
 	notifications.KindTaskClosed:    {},
+	notifications.KindQuestionAsked: {},
 }
 
 func (d NotificationsDeps) caller(r *http.Request) (identity.Caller, bool) {

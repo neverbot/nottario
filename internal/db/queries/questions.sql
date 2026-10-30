@@ -94,3 +94,17 @@ SELECT * FROM task_questions
 WHERE task_id = sqlc.arg('task_id')::uuid AND project_id = sqlc.arg('project_id')::uuid
   AND (state = 'open' OR (state = 'answered' AND delivered_at IS NULL))
 ORDER BY created_at;
+
+-- name: GetTasksBrief :many
+-- Batch lookup for the question views: no N+1.
+SELECT id, project_id, title FROM tasks WHERE id = ANY(sqlc.arg('ids')::uuid[]);
+
+-- name: GetStepsBrief :many
+SELECT id, text FROM task_steps WHERE id = ANY(sqlc.arg('ids')::uuid[]);
+
+-- name: GetProjectsBrief :many
+SELECT id, name, slug FROM projects WHERE id = ANY(sqlc.arg('ids')::uuid[]);
+
+-- name: GetUsersBrief :many
+SELECT id, github_login, display_name, COALESCE(avatar_url, '')::text AS avatar_url
+FROM users WHERE id = ANY(sqlc.arg('ids')::uuid[]);
