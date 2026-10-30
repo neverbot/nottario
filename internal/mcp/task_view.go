@@ -76,16 +76,17 @@ func (v *taskView) user(id *uuid.UUID) string {
 
 func (v *taskView) slim(t *tasks.Task) slimTask {
 	return slimTask{
-		ID:           t.ID,
-		Type:         t.Type,
-		Title:        t.Title,
-		State:        t.State,
-		Priority:     t.Priority,
-		ParentTaskID: t.ParentTaskID,
-		Role:         v.role(t.ProjectID, t.TargetRoleID),
-		Assignee:     v.user(t.AssigneeUserID),
-		UpdatedAt:    agentTime(t.UpdatedAt),
-		Steps:        t.Steps,
+		ID:            t.ID,
+		Type:          t.Type,
+		Title:         t.Title,
+		State:         t.State,
+		Priority:      t.Priority,
+		ParentTaskID:  t.ParentTaskID,
+		Role:          v.role(t.ProjectID, t.TargetRoleID),
+		Assignee:      v.user(t.AssigneeUserID),
+		UpdatedAt:     agentTime(t.UpdatedAt),
+		Steps:         t.Steps,
+		QuestionsOpen: t.QuestionsOpen,
 	}
 }
 

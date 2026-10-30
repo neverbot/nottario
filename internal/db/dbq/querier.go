@@ -16,6 +16,8 @@ type Querier interface {
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
 	// Records or replaces an answer. The caller holds the row lock and has
 	// checked the question is open, or answered and not yet delivered.
+	// answered_at moves on every edit, so Take hands answers over in the
+	// order of their last edit.
 	AnswerTaskQuestion(ctx context.Context, arg AnswerTaskQuestionParams) (TaskQuestion, error)
 	ArchKindExists(ctx context.Context, arg ArchKindExistsParams) (bool, error)
 	ArchNodeCycleCheck(ctx context.Context, arg ArchNodeCycleCheckParams) (bool, error)
@@ -75,6 +77,9 @@ type Querier interface {
 	GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow, error)
 	GetActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
+	// Looks a session up without creating it, for the reads that take a
+	// session (questions.take, questions.list).
+	GetAgentSessionByKey(ctx context.Context, arg GetAgentSessionByKeyParams) (AgentSession, error)
 	GetAgentSessionsByIDs(ctx context.Context, ids []uuid.UUID) ([]AgentSession, error)
 	// Resolves an architecture node chip by slug.
 	GetArchChipBySlug(ctx context.Context, arg GetArchChipBySlugParams) (GetArchChipBySlugRow, error)

@@ -83,3 +83,17 @@ func TestMCP_ToolsetRejectsUnknownDomain(t *testing.T) {
 		t.Errorf("unknown domain: %d %s", r.StatusCode, r.Body)
 	}
 }
+
+// questions is its own toolset domain.
+func TestMCPQuestionsToolset(t *testing.T) {
+	f := newMCPFixtureQuery(t, 9812, "questions-only", "?tools=questions")
+	got := listToolNames(t, f)
+	for _, n := range []string{"nottario.questions.ask", "nottario.questions.take", "nottario.questions.list", "nottario.questions.withdraw", "nottario.whoami"} {
+		if !got[n] {
+			t.Errorf("questions toolset lacks %s", n)
+		}
+	}
+	if got["nottario.tasks.get"] {
+		t.Error("questions toolset shows tasks.get")
+	}
+}

@@ -5,12 +5,14 @@ package agents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/neverbot/nottario/internal/db/dbq"
 )
 
@@ -110,4 +112,24 @@ func ByIDs(ctx context.Context, db dbq.DBTX, ids []uuid.UUID) (map[uuid.UUID]Ses
 		out[r.ID] = fromRow(dbq.AgentSession(r))
 	}
 	return out, nil
+}
+
+// Find returns the user's session with this key in the project, or nil
+// when there is none. Unlike Touch it never creates one.
+func Find(ctx context.Context, db dbq.DBTX, projectID, userID uuid.UUID, key string) (*Session, error) {
+	key, err := NormaliseKey(key)
+	if err != nil {
+		return nil, err
+	}
+	row, err := dbq.New(db).GetAgentSessionByKey(ctx, dbq.GetAgentSessionByKeyParams{
+		ProjectID: projectID, UserID: userID, SessionKey: key,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	s := fromRow(row)
+	return &s, nil
 }

@@ -32,6 +32,8 @@ type slimTask struct {
 	UpdatedAt string `json:"updated_at"`
 	// Steps is the checklist progress; absent when the task has none.
 	Steps *tasks.StepProgress `json:"steps,omitempty"`
+	// QuestionsOpen counts questions waiting for the human.
+	QuestionsOpen int `json:"questions_open,omitempty"`
 }
 
 // slimComment mirrors slimTask for comments. Body is the big payload
@@ -235,7 +237,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.get",
-		Description: "A task with its description, its open steps [{id, text, done, in_progress when a session started it}] (include_done_steps for all; task.steps counts them) and related {parent, children, depends_on, blocks}, each {id, title, state, type}. include_commits / include_comments opt in to those.",
+		Description: "A task with its description, its open steps [{id, text, done, in_progress when a session started it}] (include_done_steps for all; task.steps counts them) and related {parent, children, depends_on, blocks}, each {id, title, state, type}, and its questions still open or answered and not taken. include_commits / include_comments opt in to those.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -263,6 +265,13 @@ func registerTasks(server *sdk.Server, d Deps) {
 			steps = openSteps(steps)
 		}
 		out := map[string]any{"task": newTaskView(ctx, d).detail(t, in.Verbose), "related": related, "steps": slimSteps(steps)}
+		qs, err := taskQuestions(ctx, d, pid, tid)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		if len(qs) > 0 {
+			out["questions"] = qs
+		}
 		if in.IncludeCommits {
 			commits, _ := tasks.ListCommits(ctx, d.Pool, tid)
 			out["commits"] = commits
@@ -576,26 +585,26 @@ func registerTasks(server *sdk.Server, d Deps) {
 				return toolError(err.Error())
 			}
 		}
-		if t.State != tasks.StateDone {
+		if !tasks.IsClosed(t.State) {
 			return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
 		}
-		pending, err := tasks.PendingSteps(ctx, d.Pool, tid)
-		if err != nil {
-			return toolError(err.Error())
+		var pending []tasks.Step
+		if t.State == tasks.StateDone {
+			if pending, err = tasks.PendingSteps(ctx, d.Pool, tid); err != nil {
+				return toolError(err.Error())
+			}
 		}
-		if len(pending) == 0 {
-			return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
-		}
+		w := withdrawTaskQuestions(ctx, d, t)
 		out, err := payloadMap(newTaskView(ctx, d).payload(t, in.Verbose))
 		if err != nil {
 			return nil, nil, err
 		}
-		return jsonResult(pendingNotice(out, pending))
+		return jsonResult(withdrawalNotice(pendingNotice(out, pending), w))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.close",
-		Description: "Closes a task in one transaction: optional commit links, a closing comment and the state ('done' by default, or 'wont_do'). Ack {task, comment_id?, linked_commit_count}. Closing done with steps undone adds pending_steps and a notice: tell the human which were left.",
+		Description: "Closes a task in one transaction: optional commit links, a closing comment and the state ('done' by default, or 'wont_do'). Ack {task, comment_id?, linked_commit_count}. Closing done with steps undone adds pending_steps and a notice: tell the human which were left. Open questions are withdrawn (withdrawn_questions).",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksCloseInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -642,12 +651,13 @@ func registerTasks(server *sdk.Server, d Deps) {
 			}
 			return toolError(err.Error())
 		}
+		w := withdrawTaskQuestions(ctx, d, res.Task)
 		out := map[string]any{
 			"task":                newTaskView(ctx, d).payload(res.Task, in.Verbose),
 			"comment_id":          res.CommentID,
 			"linked_commit_count": res.LinkedCommit,
 		}
-		return jsonResult(pendingNotice(out, res.PendingSteps))
+		return jsonResult(withdrawalNotice(pendingNotice(out, res.PendingSteps), w))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -36,6 +37,7 @@ const (
 	KindTaskAssigned  = "task_assigned"
 	KindTaskCommented = "task_commented"
 	KindTaskClosed    = "task_closed"
+	KindQuestionAsked = "question_asked"
 )
 
 // Notifier writes notification rows and pings the realtime hub.
@@ -125,6 +127,46 @@ func (n *Notifier) OnStateChanged(ctx context.Context, task *tasks.Task, prevSta
 	}
 	body := fmt.Sprintf("%q was %s", task.Title, verb)
 	n.emit(ctx, task, KindTaskClosed, actorUserID, recipients, body)
+}
+
+// OnQuestionAsked tells the recipient an agent is waiting on them.
+// Unlike the task kinds it does not skip the actor: the human whose
+// agent asked is exactly who must answer.
+func (n *Notifier) OnQuestionAsked(ctx context.Context, task *tasks.Task, recipient uuid.UUID, excerpt string) {
+	if !n.Enabled() || task == nil || recipient == uuid.Nil {
+		return
+	}
+	body := fmt.Sprintf("Question on %q: %s", task.Title, cutWords(excerpt, questionExcerptLen))
+	n.emit(ctx, task, KindQuestionAsked, nil, []uuid.UUID{recipient}, body)
+}
+
+// questionExcerptLen bounds the question text in a notification, in
+// characters.
+const questionExcerptLen = 140
+
+// cutWords flattens s to one line and cuts it to at most n characters,
+// at a word boundary when there is one, marking the cut with an
+// ellipsis.
+func cutWords(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	cut := r[:n-1]
+	if i := lastSpace(cut); i > 0 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(string(cut), " ") + "…"
+}
+
+func lastSpace(r []rune) int {
+	for i := len(r) - 1; i >= 0; i-- {
+		if r[i] == ' ' {
+			return i
+		}
+	}
+	return -1
 }
 
 // stakeholders returns the union of assignee and creator, dedup'd

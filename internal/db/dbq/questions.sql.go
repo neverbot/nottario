@@ -31,6 +31,8 @@ type AnswerTaskQuestionParams struct {
 
 // Records or replaces an answer. The caller holds the row lock and has
 // checked the question is open, or answered and not yet delivered.
+// answered_at moves on every edit, so Take hands answers over in the
+// order of their last edit.
 func (q *Queries) AnswerTaskQuestion(ctx context.Context, arg AnswerTaskQuestionParams) (TaskQuestion, error) {
 	row := q.db.QueryRow(ctx, answerTaskQuestion,
 		arg.Keys,

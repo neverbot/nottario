@@ -29,7 +29,7 @@ type toolset struct {
 
 // toolDomains are the values ?tools= accepts: the second segment of a
 // tool name (nottario.<domain>.<verb>).
-var toolDomains = []string{"arch", "cycles", "docs", "projects", "search", "skill", "tasks"}
+var toolDomains = []string{"arch", "cycles", "docs", "projects", "questions", "search", "skill", "tasks"}
 
 // shellHidden are the tools a client with a shell does without.
 var shellHidden = []string{"nottario.docs.read", "nottario.docs.write"}

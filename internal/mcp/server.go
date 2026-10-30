@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/notifications"
 	"github.com/neverbot/nottario/internal/version"
 )
 
@@ -20,6 +21,8 @@ type Deps struct {
 	// BundleVersionTTL bounds how long the advertised skill bundle
 	// version may lag an override edit. Zero means the default.
 	BundleVersionTTL time.Duration
+	// Notifier tells humans an agent asked them something; nil-safe.
+	Notifier *notifications.Notifier
 
 	bundles *bundleVersions
 }
@@ -101,6 +104,7 @@ func buildServer(d Deps, instructions string) *sdk.Server {
 	registerSearch(server, d)
 	registerSkill(server, d)
 	registerCycles(server, d)
+	registerQuestions(server, d)
 	// Outermost first: usage measures what the toolset lets through.
 	server.AddReceivingMiddleware(usageMiddleware(d), toolsetMiddleware)
 	return server

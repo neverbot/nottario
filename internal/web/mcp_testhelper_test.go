@@ -11,6 +11,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/neverbot/nottario/internal/identity"
+	"github.com/neverbot/nottario/internal/notifications"
 	"github.com/neverbot/nottario/internal/testutil"
 )
 
@@ -65,6 +66,7 @@ func newMCPFixtureQuery(t *testing.T, githubID int64, login, query string) *mcpF
 	srv := NewServer(Deps{
 		Pool:     pool,
 		Resolver: identity.NewResolver(pool, []byte("test-session-key"), false),
+		Notifier: notifications.New(pool, nil, nil, true),
 	})
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)

@@ -15,3 +15,11 @@ RETURNING id, project_id, token_id, user_id, session_key, label, client, created
 -- name: GetAgentSessionsByIDs :many
 SELECT id, project_id, token_id, user_id, session_key, label, client, created_at, last_seen_at
 FROM agent_sessions WHERE id = ANY(sqlc.arg('ids')::uuid[]);
+
+-- name: GetAgentSessionByKey :one
+-- Looks a session up without creating it, for the reads that take a
+-- session (questions.take, questions.list).
+SELECT id, project_id, token_id, user_id, session_key, label, client, created_at, last_seen_at
+FROM agent_sessions
+WHERE project_id = sqlc.arg('project_id')::uuid AND user_id = sqlc.arg('user_id')::uuid
+  AND session_key = sqlc.arg('session_key')::text;

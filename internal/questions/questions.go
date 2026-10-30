@@ -39,6 +39,18 @@ const (
 	StateWithdrawn State = "withdrawn"
 )
 
+// ParseState reads a state filter: open, answered or withdrawn, or
+// "all" for no filter (nil).
+func ParseState(s string) (*State, error) {
+	switch st := State(strings.ToLower(strings.TrimSpace(s))); st {
+	case "all":
+		return nil, nil
+	case StateOpen, StateAnswered, StateWithdrawn:
+		return &st, nil
+	}
+	return nil, errInvalid(fmt.Sprintf("unknown state %q; valid: open, answered, withdrawn, all", s))
+}
+
 // Option is one choice of a choice question. Keys are "1" to "9", in
 // the order the agent listed the options.
 type Option struct {
@@ -57,6 +69,8 @@ type Reply struct {
 }
 
 // Question is one question an agent asked about a task.
+// AskedByTokenID is the API token it came through, set when an agent
+// asked over MCP.
 type Question struct {
 	ID                uuid.UUID  `json:"id"`
 	ProjectID         uuid.UUID  `json:"project_id"`
@@ -64,6 +78,7 @@ type Question struct {
 	StepID            *uuid.UUID `json:"step_id,omitempty"`
 	SessionID         *uuid.UUID `json:"session_id,omitempty"`
 	AskedByUserID     *uuid.UUID `json:"asked_by_user_id,omitempty"`
+	AskedByTokenID    *uuid.UUID `json:"asked_by_token_id,omitempty"`
 	RecipientUserID   *uuid.UUID `json:"recipient_user_id,omitempty"`
 	AnsweredByUserID  *uuid.UUID `json:"answered_by_user_id,omitempty"`
 	Kind              Kind       `json:"kind"`
@@ -264,6 +279,7 @@ func fromRow(r dbq.TaskQuestion) (*Question, error) {
 		StepID:            r.StepID,
 		SessionID:         r.SessionID,
 		AskedByUserID:     r.AskedByUserID,
+		AskedByTokenID:    r.AskedByTokenID,
 		RecipientUserID:   r.RecipientUserID,
 		AnsweredByUserID:  r.AnsweredByUserID,
 		Kind:              Kind(r.Kind),

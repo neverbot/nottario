@@ -22,6 +22,8 @@ FOR UPDATE;
 -- name: AnswerTaskQuestion :one
 -- Records or replaces an answer. The caller holds the row lock and has
 -- checked the question is open, or answered and not yet delivered.
+-- answered_at moves on every edit, so Take hands answers over in the
+-- order of their last edit.
 UPDATE task_questions SET state = 'answered',
   answer_keys = sqlc.arg('keys')::text[], answer_text = sqlc.arg('text')::text,
   answer_note = sqlc.arg('note')::text, answered_by_user_id = sqlc.arg('user_id')::uuid,

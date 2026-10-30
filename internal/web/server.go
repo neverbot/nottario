@@ -157,7 +157,7 @@ func NewServer(d Deps) http.Handler {
 	// MCP endpoint — Streamable HTTP transport with Bearer-token auth.
 	// Methods are enumerated explicitly so this route does not conflict
 	// with the SPA catch-all on GET /.
-	mcpHandler := mcpserver.Handler(mcpserver.Deps{Pool: d.Pool, Resolver: d.Resolver, SessionKey: sessionKey})
+	mcpHandler := mcpserver.Handler(mcpserver.Deps{Pool: d.Pool, Resolver: d.Resolver, SessionKey: sessionKey, Notifier: d.Notifier})
 	for _, method := range []string{"GET", "POST", "DELETE", "OPTIONS"} {
 		mux.Handle(method+" /mcp", mcpHandler)
 		mux.Handle(method+" /mcp/", mcpHandler)

@@ -4,7 +4,9 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/neverbot/nottario/internal/db/dbq"
@@ -282,5 +284,34 @@ func TestNotifier_PublishesRealtime(t *testing.T) {
 		}
 	default:
 		t.Errorf("no realtime event published")
+	}
+}
+
+// A question notifies its recipient even when they are the actor, with
+// the question cut to an excerpt on a word boundary; the preference
+// toggle still applies.
+func TestNotifier_OnQuestionAsked(t *testing.T) {
+	n, pool := mkNotifier(t, true)
+	fx := seedFixture(t, pool)
+	long := strings.Repeat("word ", 40) + "tail"
+	n.OnQuestionAsked(t.Context(), fx.task, fx.creator.ID, long)
+
+	var body string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT body FROM notifications WHERE user_id = $1 AND kind = 'question_asked'`, fx.creator.ID).Scan(&body); err != nil {
+		t.Fatalf("read notification: %v", err)
+	}
+	excerpt := strings.TrimPrefix(body, `Question on "Fix the thing": `)
+	if !strings.HasSuffix(excerpt, "word…") || utf8.RuneCountInString(excerpt) > 140 {
+		t.Fatalf("excerpt = %q (%d runes)", excerpt, utf8.RuneCountInString(excerpt))
+	}
+
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE users SET notification_preferences = '{"question_asked": false}' WHERE id = $1`, fx.assignee.ID); err != nil {
+		t.Fatal(err)
+	}
+	n.OnQuestionAsked(t.Context(), fx.task, fx.assignee.ID, "muted?")
+	if got := countFor(t, pool, fx.assignee.ID); got != 0 {
+		t.Errorf("muted recipient rows = %d, want 0", got)
 	}
 }

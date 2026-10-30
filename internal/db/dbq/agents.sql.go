@@ -11,6 +11,38 @@ import (
 	"github.com/google/uuid"
 )
 
+const getAgentSessionByKey = `-- name: GetAgentSessionByKey :one
+SELECT id, project_id, token_id, user_id, session_key, label, client, created_at, last_seen_at
+FROM agent_sessions
+WHERE project_id = $1::uuid AND user_id = $2::uuid
+  AND session_key = $3::text
+`
+
+type GetAgentSessionByKeyParams struct {
+	ProjectID  uuid.UUID
+	UserID     uuid.UUID
+	SessionKey string
+}
+
+// Looks a session up without creating it, for the reads that take a
+// session (questions.take, questions.list).
+func (q *Queries) GetAgentSessionByKey(ctx context.Context, arg GetAgentSessionByKeyParams) (AgentSession, error) {
+	row := q.db.QueryRow(ctx, getAgentSessionByKey, arg.ProjectID, arg.UserID, arg.SessionKey)
+	var i AgentSession
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.TokenID,
+		&i.UserID,
+		&i.SessionKey,
+		&i.Label,
+		&i.Client,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+	)
+	return i, err
+}
+
 const getAgentSessionsByIDs = `-- name: GetAgentSessionsByIDs :many
 SELECT id, project_id, token_id, user_id, session_key, label, client, created_at, last_seen_at
 FROM agent_sessions WHERE id = ANY($1::uuid[])
