@@ -2,6 +2,7 @@ import { LitElement, html, css, svg } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { EscController } from '/static/components/esc.js';
 import { priorityBand, priorityLabel } from '/static/priorities.js';
+import { stepProgress } from '/static/steps.js';
 import { formatRelativeTime } from '/static/time.js';
 import { OutsideClickController } from '/static/components/outside-click.js';
 import { toast } from '/static/components/toast.js';
@@ -492,11 +493,22 @@ class NottarioBoardPage extends LitElement {
     this._subscribe();
     this._hashHandler = () => this._applyHash();
     window.addEventListener('hashchange', this._hashHandler);
-    // The task dialog lives in the app shell; a write made from it
-    // reloads the columns at once instead of waiting for the realtime
-    // event.
+    // The task dialog lives in the app shell. A write made from it
+    // updates the columns at once instead of waiting for the realtime
+    // event: steps patch the card's progress in place, comments and
+    // commits change nothing on a card, anything else reloads.
     this._taskChanged = (e) => {
-      if (e.detail?.projectId === this.projectId) this._queueRefresh();
+      const d = e.detail || {};
+      if (d.projectId !== this.projectId) return;
+      if (d.kind === 'comment' || d.kind === 'commit') return;
+      if (d.kind === 'step' && d.task?.id && Array.isArray(d.steps)) {
+        const progress = d.steps.length ? stepProgress(d.steps) : undefined;
+        this.tasks = (this.tasks || []).map((t) =>
+          t.id === d.task.id ? { ...t, steps: progress } : t,
+        );
+        return;
+      }
+      this._queueRefresh();
     };
     window.addEventListener('task-changed', this._taskChanged);
   }

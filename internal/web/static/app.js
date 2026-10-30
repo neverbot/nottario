@@ -86,6 +86,7 @@ class NottarioShell extends LitElement {
     window.addEventListener('popstate', () => {
       this.route = window.location.pathname;
       this._syncTask();
+      this._afterBack();
     });
     window.addEventListener('hashchange', () => this._syncTask());
     window.addEventListener('nottario-navigate', (e) => {
@@ -129,6 +130,12 @@ class NottarioShell extends LitElement {
 
   openTask(taskId, projectId) {
     if (!taskId || !projectId) return;
+    // A close is still walking back through history: pushing now would
+    // land before the back and be undone by it. Open once it settled.
+    if (this._pendingBack) {
+      this._pendingOpen = { taskId, projectId };
+      return;
+    }
     // Built from the live location so the page's own hash state (board
     // cycle and filters, docs path, ...) is kept.
     const { pathname, search } = window.location;
@@ -146,6 +153,12 @@ class NottarioShell extends LitElement {
     this._task = null;
     if (window.history.state?.taskDialog) {
       // The entry is ours: going back lands on the page as it was.
+      // history.back() is asynchronous; an open requested before its
+      // popstate waits for it (_afterBack). The timer covers a back
+      // that never reports (a cross-document entry).
+      this._pendingBack = true;
+      clearTimeout(this._backTimer);
+      this._backTimer = setTimeout(() => this._afterBack(), 1000);
       window.history.back();
     } else {
       // A deep link (reload, pasted URL): drop the task from the hash
@@ -160,10 +173,22 @@ class NottarioShell extends LitElement {
     this._restoreFocus();
   }
 
-  _restoreFocus() {
+  _afterBack() {
+    if (!this._pendingBack) return;
+    this._pendingBack = false;
+    clearTimeout(this._backTimer);
+    const next = this._pendingOpen;
+    this._pendingOpen = null;
+    if (next) this.openTask(next.taskId, next.projectId);
+  }
+
+  // The page behind is inert while the dialog shows; focus can only go
+  // back once the render that lifts it has landed.
+  async _restoreFocus() {
     const el = this._returnFocus;
     this._returnFocus = null;
-    if (el?.isConnected) el.focus?.({ preventScroll: true });
+    await this.updateComplete;
+    if (el?.isConnected && !this._task) el.focus?.({ preventScroll: true });
   }
 
   _onTaskLinkClick(e) {
@@ -240,6 +265,7 @@ class NottarioShell extends LitElement {
     if (!this.me) return null;
     return html`
       <nottario-topbar
+        ?inert=${!!this._task}
         .me=${this.me}
         .route=${this.route}
         @nottario-logout=${() => this.logout()}>
@@ -331,15 +357,15 @@ class NottarioShell extends LitElement {
 
   render() {
     return html`
-      <a class="skip-link" href="#main-content"
+      <a class="skip-link" href="#main-content" ?inert=${!!this._task}
          @click=${(e) => {
            e.preventDefault();
            const m = this.shadowRoot?.getElementById('main-content');
            m?.focus();
          }}>Skip to main content</a>
       ${this.renderTopbar()}
-      ${this.me ? html`<nottario-update-banner .me=${this.me}></nottario-update-banner>` : null}
-      <main id="main-content" tabindex="-1">${this.renderBody()}</main>
+      ${this.me ? html`<nottario-update-banner ?inert=${!!this._task} .me=${this.me}></nottario-update-banner>` : null}
+      <main id="main-content" tabindex="-1" ?inert=${!!this._task}>${this.renderBody()}</main>
       ${
         this.me
           ? html`<nottario-task-dialog

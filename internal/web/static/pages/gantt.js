@@ -404,7 +404,11 @@ class NottarioGantt extends LitElement {
   // open the task dialog (the historical single-click behaviour).
   // Otherwise replace the selection with this task's connected set.
   // A double click, or Enter on a focused bar, opens it straight away.
-  _onTaskClick(t) {
+  _onTaskClick(t, e) {
+    // The second click of a double click belongs to the dblclick
+    // handler, which opens the dialog itself: acting here too would
+    // open it twice.
+    if (e?.detail > 1) return;
     if (this._selectedSet.has(t.id)) {
       this._emitSelect(t);
       return;
@@ -1604,7 +1608,7 @@ class NottarioGantt extends LitElement {
            @click=${() => this._clearSelection()}>
         ${this._renderHoverCard()}
         <svg width=${width} height=${totalHeight}
-             role="img"
+             role="group"
              aria-label=${`Gantt chart with ${(this.tasks || []).length} tasks`}>
           <defs>
             <marker id="dep-arrowhead" viewBox="0 0 10 10" refX="0" refY="5"
@@ -1806,12 +1810,14 @@ class NottarioGantt extends LitElement {
                     style=${barStyle}
                     @click=${(e) => {
                       e.stopPropagation();
-                      this._onTaskClick(t);
+                      this._onTaskClick(t, e);
                     }}
                     @dblclick=${(e) => {
                       e.stopPropagation();
                       this._emitSelect(t);
                     }}
+                    role="button"
+                    aria-label=${`${t.title}, ${t.state.replace('_', ' ')}. Enter opens the task.`}
                     @keydown=${(e) => {
                       // Enter on a focused bar opens the task dialog,
                       // the keyboard twin of a double click.
@@ -1955,6 +1961,11 @@ class NottarioGantt extends LitElement {
   }
 
   _emitSelect(t) {
+    // A double click on a bar that was already selected opens on its
+    // first click and again on dblclick; one open is enough.
+    const now = performance.now();
+    if (this._lastEmit?.id === t.id && now - this._lastEmit.at < 600) return;
+    this._lastEmit = { id: t.id, at: now };
     this.dispatchEvent(
       new CustomEvent('task-selected', {
         detail: { task: t },

@@ -58,15 +58,19 @@ export function hashWithoutTask(hash) {
   return s ? `#${s}` : '';
 }
 
+// Task and project ids are UUIDs. Anything else in a hash (a typo, a
+// crafted "../../me") is ignored rather than spliced into an API path.
+const ID_RE = /^[0-9a-f-]{36}$/i;
+
 // parseTaskHash reads the open task from a location: { taskId,
-// projectId } or null when the hash names no task or no project can be
-// resolved for it.
+// projectId } or null when the hash names no task, no project can be
+// resolved for it, or either id is not UUID-shaped.
 export function parseTaskHash(pathname, hash) {
   const p = new URLSearchParams((hash || '').replace(/^#/, ''));
   const taskId = p.get('task');
-  if (!taskId) return null;
+  if (!taskId || !ID_RE.test(taskId)) return null;
   const projectId = p.get('project') || projectFromPath(pathname);
-  if (!projectId) return null;
+  if (!projectId || !ID_RE.test(projectId)) return null;
   return { taskId, projectId };
 }
 

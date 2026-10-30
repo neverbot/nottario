@@ -79,46 +79,58 @@ describe('taskHash / hashWithoutTask', () => {
 });
 
 describe('parseTaskHash', () => {
+  const T = '5fbe3c57-6c98-4d1c-8368-fcc75d1ccff9';
+  const P = 'e55a6659-991b-4d36-8894-16b8dac4486c';
+  const P2 = 'fcedb5de-663d-4064-96a3-d8b1388f6340';
   it('resolves the project from the route', () => {
-    assert.deepEqual(parseTaskHash('/projects/p1/board/gantt', '#task=t1'), {
-      taskId: 't1',
-      projectId: 'p1',
+    assert.deepEqual(parseTaskHash(`/projects/${P}/board/gantt`, `#task=${T}`), {
+      taskId: T,
+      projectId: P,
     });
   });
   it('prefers the explicit project', () => {
-    assert.deepEqual(parseTaskHash('/projects/p1/docs', '#task=t1&project=p2'), {
-      taskId: 't1',
-      projectId: 'p2',
+    assert.deepEqual(parseTaskHash(`/projects/${P}/docs`, `#task=${T}&project=${P2}`), {
+      taskId: T,
+      projectId: P2,
     });
-    assert.deepEqual(parseTaskHash('/live', '#task=t1&project=p2'), {
-      taskId: 't1',
-      projectId: 'p2',
+    assert.deepEqual(parseTaskHash('/live', `#task=${T}&project=${P}`), {
+      taskId: T,
+      projectId: P,
     });
   });
   it('is null without a task or a project', () => {
-    assert.equal(parseTaskHash('/projects/p1/board', '#cycle=c1'), null);
-    assert.equal(parseTaskHash('/live', '#task=t1'), null);
+    assert.equal(parseTaskHash(`/projects/${P}/board`, '#cycle=c1'), null);
+    assert.equal(parseTaskHash('/live', `#task=${T}`), null);
     assert.equal(parseTaskHash('/live', ''), null);
+  });
+  it('ignores ids that are not UUID-shaped', () => {
+    assert.equal(parseTaskHash(`/projects/${P}/board`, '#task=../../me'), null);
+    assert.equal(parseTaskHash(`/projects/${P}/board`, '#task=t1'), null);
+    assert.equal(parseTaskHash('/live', `#task=${T}&project=../x`), null);
+    assert.equal(parseTaskHash('/projects/p1/board', `#task=${T}`), null);
   });
 });
 
 describe('parseTaskURL', () => {
   const origin = 'http://localhost:8080';
+  const T = '5fbe3c57-6c98-4d1c-8368-fcc75d1ccff9';
+  const P = 'e55a6659-991b-4d36-8894-16b8dac4486c';
   it('reads the legacy kanban form from markdown chips', () => {
-    assert.deepEqual(parseTaskURL('/projects/p1/board/kanban#task=t1', origin), {
-      taskId: 't1',
-      projectId: 'p1',
+    assert.deepEqual(parseTaskURL(`/projects/${P}/board/kanban#task=${T}`, origin), {
+      taskId: T,
+      projectId: P,
     });
   });
   it('reads absolute same-origin links', () => {
-    assert.deepEqual(parseTaskURL('http://localhost:8080/live#task=t1&project=p1', origin), {
-      taskId: 't1',
-      projectId: 'p1',
+    assert.deepEqual(parseTaskURL(`http://localhost:8080/live#task=${T}&project=${P}`, origin), {
+      taskId: T,
+      projectId: P,
     });
   });
-  it('ignores other origins and non-task links', () => {
-    assert.equal(parseTaskURL('https://github.com/x/y#task=t1&project=p1', origin), null);
-    assert.equal(parseTaskURL('/projects/p1/docs#path=x', origin), null);
+  it('ignores other origins, bad ids and non-task links', () => {
+    assert.equal(parseTaskURL(`https://github.com/x/y#task=${T}&project=${P}`, origin), null);
+    assert.equal(parseTaskURL(`/projects/${P}/board#task=../../me`, origin), null);
+    assert.equal(parseTaskURL(`/projects/${P}/docs#path=x`, origin), null);
     assert.equal(parseTaskURL('', origin), null);
   });
 });

@@ -90,6 +90,17 @@ class NottarioTaskDialog extends LitElement {
        and the confirm dialog (70) it raises itself. */
     .dialog { z-index: 55; }
     .panel.detail:focus { outline: none; }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
 
     /* ---- Task-detail dialog ---- */
 
@@ -595,8 +606,14 @@ class NottarioTaskDialog extends LitElement {
   }
 
   willUpdate(c) {
-    if (c.has('projectId') && this.projectId && this.projectId !== this._loadedProject) {
-      this._loadProject();
+    if (c.has('projectId') && this.projectId !== this._loadedProject) {
+      // Never show another project's roles, members or priorities,
+      // not even for the round trip.
+      this.roles = [];
+      this.members = [];
+      this.priorities = [];
+      this._loadedProject = null;
+      if (this.projectId) this._loadProject();
     }
     if (c.has('taskId') || c.has('projectId')) {
       if (this.taskId && this.projectId) this._open();
@@ -630,7 +647,10 @@ class NottarioTaskDialog extends LitElement {
   _open() {
     const id = this.taskId;
     if (this.selected?.task.id === id && this._subscribedProject === this.projectId) return;
+    this._closing = false;
     this._resetEditState();
+    // A failed project load is retried the next time a task opens.
+    if (this._loadedProject !== this.projectId && !this._projectLoading) this._loadProject();
     this.selected = {
       task: { id, title: '' },
       related: NO_RELATED,
@@ -648,26 +668,35 @@ class NottarioTaskDialog extends LitElement {
     clearTimeout(this._refreshTimer);
     this._refreshTimer = null;
     this.selected = null;
+    this._closing = false;
     this._resetEditState();
   }
 
   // Roles, members and priorities of the task's project: the meta
   // strip's dropdowns and the names on comments come from them.
+  // _loadedProject is set only once all three arrived, so a failure
+  // is retried on the next open.
   async _loadProject() {
     const pid = this.projectId;
-    this._loadedProject = pid;
+    this._projectLoading = pid;
     try {
       const [rr, mr, qr] = await Promise.all([
         fetch(`/api/projects/${pid}/roles`),
         fetch(`/api/projects/${pid}/members`),
         fetch(`/api/projects/${pid}/priorities`),
       ]);
+      if (!rr.ok || !mr.ok || !qr.ok) throw new Error('project data');
+      const [rj, mj, qj] = await Promise.all([rr.json(), mr.json(), qr.json()]);
       if (this.projectId !== pid) return;
-      this.roles = rr.ok ? (await rr.json()).roles || [] : [];
-      this.members = mr.ok ? (await mr.json()).members || [] : [];
-      this.priorities = qr.ok ? (await qr.json()).priorities || [] : [];
+      this.roles = rj.roles || [];
+      this.members = mj.members || [];
+      this.priorities = qj.priorities || [];
+      this._loadedProject = pid;
     } catch (_) {
-      // The dialog still works without them; the dropdowns stay empty.
+      // The dialog still works without them; the dropdowns stay empty
+      // until the next open retries.
+    } finally {
+      if (this._projectLoading === pid) this._projectLoading = null;
     }
   }
 
@@ -716,59 +745,82 @@ class NottarioTaskDialog extends LitElement {
     // predates its own latest change.
     const requestedAt = performance.now();
     const pid = this.projectId;
-    const r = await fetch(`/api/projects/${pid}/tasks/${id}`);
-    // The dialog may have closed, or moved to another task, while
-    // this request was out: never reopen it or swap its contents.
-    if (this.selected?.task.id !== id || this.projectId !== pid) return;
-    if (r.ok) {
-      const j = await r.json();
-      if (this.selected?.task.id !== id || this.projectId !== pid) return;
-      this.selected = {
-        task: j.task,
-        description_html: j.description_html || '',
-        related: { ...NO_RELATED, ...(j.related || {}) },
-        steps: j.steps || [],
-        stepsAt: requestedAt,
-        questions: j.questions || [],
-        commits: j.commits || [],
-        comments: j.comments || [],
-      };
-    } else if (r.status === 404 && !this.selected.task.updated_at) {
-      // A link to a task that is gone (or lives in another project):
-      // say so instead of showing an empty dialog.
-      toast.error('That task does not exist in this project.');
+    // The dialog may have closed, or moved to another task, while the
+    // request was out: never reopen it or swap its contents.
+    const stale = () => this.selected?.task.id !== id || this.projectId !== pid;
+    let r;
+    let j;
+    try {
+      r = await fetch(`/api/projects/${pid}/tasks/${id}`);
+      if (stale()) return;
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      j = await r.json();
+      if (!j?.task) throw new Error('no task in the response');
+    } catch (_) {
+      if (stale()) return;
+      // Only a dialog still showing its placeholder gives up: a refresh
+      // that fails keeps the task already on screen.
+      if (this.selected.task.updated_at) return;
+      toast.error(
+        r?.status === 404
+          ? 'That task does not exist in this project.'
+          : "Couldn't load the task. Try again in a moment.",
+      );
       this.closeDetail();
+      return;
     }
+    if (stale()) return;
+    this.selected = {
+      task: j.task,
+      description_html: j.description_html || '',
+      related: { ...NO_RELATED, ...(j.related || {}) },
+      steps: j.steps || [],
+      stepsAt: requestedAt,
+      questions: j.questions || [],
+      commits: j.commits || [],
+      comments: j.comments || [],
+    };
   }
 
   // closeDetail asks the shell to close the dialog; the shell owns the
   // URL (and the history entry), so the dialog does not clear itself.
   closeDetail() {
-    if (!this.selected) return;
+    // Once per open: Esc, the backdrop and a failed load may all ask.
+    if (!this.selected || this._closing) return;
+    this._closing = true;
     this.dispatchEvent(new CustomEvent('task-dialog-close', { bubbles: true, composed: true }));
   }
 
-  _changed(extra = {}) {
+  // kind tells the page what changed: 'task' (fields, state, deletion:
+  // the board reloads), 'step' (carries the steps, so a card's progress
+  // can be patched), 'comment' or 'commit' (nothing on a card).
+  _changed(kind, extra = {}) {
     this.dispatchEvent(
       new CustomEvent('task-changed', {
-        detail: { task: this.selected?.task || null, projectId: this.projectId, ...extra },
+        detail: { kind, task: this.selected?.task || null, projectId: this.projectId, ...extra },
         bubbles: true,
         composed: true,
       }),
     );
   }
 
+  // The one Esc path (document keydown). Esc inside an editor (the
+  // title input, a description or comment md-editor) cancels that edit
+  // and marks the event handled, so the dialog stays. An overlay above
+  // the dialog (the delete confirm) handles Esc on document too, after
+  // this listener, so the close waits for the event to finish and backs
+  // off when someone else consumed it.
   _onEsc(e) {
-    if (!this.selected) return;
+    if (!this.selected || e.defaultPrevented) return;
     // An open unlink confirm is the innermost thing on screen: Esc
     // backs out of it, not out of the whole task.
     if (this._commitUnlinkKey && !this._commitUnlinkBusyKey) {
       this.cancelUnlinkCommit();
-      e.stopPropagation();
       return;
     }
-    this.closeDetail();
-    e.stopPropagation();
+    setTimeout(() => {
+      if (!e.defaultPrevented) this.closeDetail();
+    });
   }
 
   async setState(taskID, state) {
@@ -779,7 +831,7 @@ class NottarioTaskDialog extends LitElement {
     });
     if (r.ok) {
       if (this.selected) await this.loadDetail(taskID);
-      this._changed();
+      this._changed('task');
     } else {
       const j = await r.json().catch(() => ({}));
       toast.error(`Couldn't change the state: ${j.error || 'failed'}`);
@@ -849,7 +901,7 @@ class NottarioTaskDialog extends LitElement {
     if (r.ok) {
       this._edit = { field: null, titleDraft: '', descDraft: '' };
       await this.loadDetail(t.id);
-      this._changed();
+      this._changed('task');
       toast.success('Saved.');
       return true;
     }
@@ -941,7 +993,7 @@ class NottarioTaskDialog extends LitElement {
         // longer knows about.
         this._commitUnlinkKey = null;
         await this.loadDetail(t.id);
-        this._changed();
+        this._changed('commit');
         toast.success(r.status === 204 ? 'Commit unlinked.' : 'That commit was already unlinked.');
         return;
       }
@@ -969,7 +1021,7 @@ class NottarioTaskDialog extends LitElement {
       if (r.ok) {
         this._commentEditID = null;
         await this.loadDetail(t.id);
-        this._changed();
+        this._changed('comment');
         toast.success('Comment saved.');
         return;
       }
@@ -1008,7 +1060,7 @@ class NottarioTaskDialog extends LitElement {
     if (r.status === 204) {
       this._commentDeletingID = null;
       await this.loadDetail(t.id);
-      this._changed();
+      this._changed('comment');
       toast.success('Comment deleted.');
       return;
     }
@@ -1021,7 +1073,7 @@ class NottarioTaskDialog extends LitElement {
     const label = t?.title ? `"${t.title.slice(0, 32)}${t.title.length > 32 ? '…' : ''}"` : 'Task';
     const r = await fetch(`/api/projects/${this.projectId}/tasks/${id}`, { method: 'DELETE' });
     if (r.ok) {
-      this._changed({ deleted: true });
+      this._changed('task', { deleted: true });
       this.closeDetail();
       toast.success(`${label} deleted.`);
     } else {
@@ -1039,7 +1091,7 @@ class NottarioTaskDialog extends LitElement {
     });
     if (r.ok) {
       await this.loadDetail(taskID);
-      this._changed();
+      this._changed('comment');
       toast.success('Comment added.');
     } else {
       toast.error("Couldn't add comment.");
@@ -1059,7 +1111,7 @@ class NottarioTaskDialog extends LitElement {
     });
     if (r.ok) {
       if (this.selected) await this.loadDetail(taskID);
-      this._changed();
+      this._changed('task');
     }
   }
 
@@ -1071,7 +1123,7 @@ class NottarioTaskDialog extends LitElement {
     });
     if (r.ok) {
       if (this.selected) await this.loadDetail(taskID);
-      this._changed();
+      this._changed('task');
     } else {
       const error = (await r.json().catch(() => ({}))).error || 'failed';
       toast.error(`Couldn't change the assignee: ${error}`);
@@ -1085,7 +1137,7 @@ class NottarioTaskDialog extends LitElement {
     if (this.selected?.task.id === taskID) {
       this.selected = { ...this.selected, steps };
     }
-    this._changed({ steps });
+    this._changed('step', { steps });
   }
 
   // ---- Questions in the task dialog --------------------------------
@@ -1383,12 +1435,10 @@ class NottarioTaskDialog extends LitElement {
       <div class="dialog"
            role="dialog"
            aria-modal="true"
-           aria-labelledby="task-dialog-title"
-           @click=${(e) => e.target.classList.contains('dialog') && this.closeDetail()}
-           @keydown=${(e) => {
-             if (e.key === 'Escape') this.closeDetail();
-           }}>
+           aria-labelledby="task-dialog-label"
+           @click=${(e) => e.target.classList.contains('dialog') && this.closeDetail()}>
         <div class="panel detail" tabindex="-1">
+          <span id="task-dialog-label" class="visually-hidden">${task.title || 'Task'}</span>
           <header class="head">
             <div class="title-row">
               ${
