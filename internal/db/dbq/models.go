@@ -271,8 +271,12 @@ type Task struct {
 	CycleID          uuid.UUID
 	EditedAt         pgtype.Timestamptz
 	EditedByUserID   *uuid.UUID
-	LastActivityAt   pgtype.Timestamptz
 	ActiveSessionID  *uuid.UUID
+}
+
+type TaskActivity struct {
+	TaskID         uuid.UUID
+	LastActivityAt pgtype.Timestamptz
 }
 
 type TaskComment struct {

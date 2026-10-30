@@ -16,19 +16,30 @@ CREATE TABLE public.agent_sessions (
 );
 
 ALTER TABLE public.tasks
-    ADD COLUMN last_activity_at timestamptz,
     ADD COLUMN active_session_id uuid REFERENCES public.agent_sessions(id) ON DELETE SET NULL;
-UPDATE public.tasks SET last_activity_at = updated_at;
-ALTER TABLE public.tasks
-    ALTER COLUMN last_activity_at SET NOT NULL,
-    ALTER COLUMN last_activity_at SET DEFAULT now();
-CREATE INDEX tasks_live_idx ON public.tasks (project_id, state, last_activity_at DESC);
+CREATE INDEX tasks_active_session_idx ON public.tasks (active_session_id)
+    WHERE active_session_id IS NOT NULL;
+
+-- Last activity per task lives in its own table so that writes to steps,
+-- comments, commits and questions never touch the tasks row (which would
+-- bump tasks.updated_at, the conflict token of task edits, and fire its
+-- triggers).
+CREATE TABLE public.task_activity (
+    task_id          uuid PRIMARY KEY REFERENCES public.tasks(id) ON DELETE CASCADE,
+    last_activity_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO public.task_activity (task_id, last_activity_at)
+    SELECT id, updated_at FROM public.tasks;
 
 ALTER TABLE public.task_steps
     ADD COLUMN started_at timestamptz,
     ADD COLUMN started_session_id uuid REFERENCES public.agent_sessions(id) ON DELETE SET NULL,
     ADD COLUMN started_by_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL;
+CREATE INDEX task_steps_started_session_idx ON public.task_steps (started_session_id)
+    WHERE started_session_id IS NOT NULL;
 
+-- project_id and step_id must agree with task_id (same project, step of
+-- that task); the application enforces it, the schema does not.
 CREATE TABLE public.task_questions (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id          uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
@@ -56,12 +67,16 @@ CREATE TABLE public.task_questions (
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT task_questions_choice_has_options CHECK ((kind = 'choice') = (options IS NOT NULL)),
+    CONSTRAINT task_questions_options_array CHECK (options IS NULL OR jsonb_typeof(options) = 'array'),
+    CONSTRAINT task_questions_withdrawn CHECK ((state = 'withdrawn') = (withdrawn_at IS NOT NULL)),
+    CONSTRAINT task_questions_answer_keys_max CHECK (cardinality(answer_keys) <= 9),
     CONSTRAINT task_questions_answered CHECK ((state = 'answered') = (answered_at IS NOT NULL)),
     CONSTRAINT task_questions_delivered CHECK (delivered_at IS NULL OR state = 'answered')
 );
 CREATE INDEX task_questions_recipient_idx ON public.task_questions (recipient_user_id, state, created_at);
 CREATE INDEX task_questions_project_idx ON public.task_questions (project_id, state, created_at);
 CREATE INDEX task_questions_task_idx ON public.task_questions (task_id);
+CREATE INDEX task_questions_step_idx ON public.task_questions (step_id) WHERE step_id IS NOT NULL;
 CREATE INDEX task_questions_undelivered_idx ON public.task_questions (session_id)
     WHERE state = 'answered' AND delivered_at IS NULL;
 
@@ -72,51 +87,52 @@ ALTER TABLE public.projects DROP CONSTRAINT projects_default_view_check;
 ALTER TABLE public.projects ADD CONSTRAINT projects_default_view_check CHECK (default_view = ANY (ARRAY[
     'board/kanban', 'board/gantt', 'live', 'questions', 'docs', 'arch/diagram', 'arch/tree']));
 
--- Activity: any write on a task or on what hangs off it moves the
--- task to the top of Live. The tasks trigger is BEFORE UPDATE so it
--- costs no extra write; the child triggers touch the parent row.
---
--- Side effect: the UPDATE tasks in the child trigger also fires
--- tasks_notify_update, so each step tick emits one extra task.updated SSE
--- event. The board reloads on any task.* event, so this is harmless.
+-- Activity: any write on a task or on what hangs off it moves the task
+-- to the top of Live. The upsert is skipped when the row already carries
+-- now() (many writes in one transaction), and when the task is gone:
+-- deleting a task cascades into steps and questions whose triggers fire
+-- after the task row is deleted, and the FK would reject the insert.
 -- +goose StatementBegin
-CREATE OR REPLACE FUNCTION public.tasks_touch_activity() RETURNS trigger
-    LANGUAGE plpgsql AS $$
-BEGIN
-    NEW.last_activity_at := now();
-    RETURN NEW;
-END;
-$$;
--- +goose StatementEnd
-CREATE TRIGGER tasks_touch_activity BEFORE UPDATE ON public.tasks
-    FOR EACH ROW
-    WHEN (OLD.last_activity_at IS NOT DISTINCT FROM NEW.last_activity_at)
-    EXECUTE FUNCTION public.tasks_touch_activity();
-
--- +goose StatementBegin
-CREATE OR REPLACE FUNCTION public.task_child_touch_activity() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.task_touch_activity() RETURNS trigger
     LANGUAGE plpgsql AS $$
 DECLARE
     tid uuid;
 BEGIN
-    IF TG_OP = 'DELETE' THEN tid := OLD.task_id; ELSE tid := NEW.task_id; END IF;
-    UPDATE public.tasks SET last_activity_at = now() WHERE id = tid;
+    IF TG_TABLE_NAME = 'tasks' THEN
+        tid := NEW.id;
+    ELSIF TG_OP = 'DELETE' THEN
+        tid := OLD.task_id;
+    ELSE
+        tid := NEW.task_id;
+    END IF;
+    INSERT INTO public.task_activity (task_id, last_activity_at)
+        SELECT tid, now() WHERE EXISTS (SELECT 1 FROM public.tasks WHERE id = tid)
+    ON CONFLICT (task_id) DO UPDATE SET last_activity_at = now()
+        WHERE public.task_activity.last_activity_at IS DISTINCT FROM now();
     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
     RETURN NEW;
 END;
 $$;
 -- +goose StatementEnd
 CREATE TRIGGER task_steps_touch_activity AFTER INSERT OR UPDATE OR DELETE ON public.task_steps
-    FOR EACH ROW EXECUTE FUNCTION public.task_child_touch_activity();
+    FOR EACH ROW EXECUTE FUNCTION public.task_touch_activity();
 CREATE TRIGGER task_comments_touch_activity AFTER INSERT ON public.task_comments
-    FOR EACH ROW EXECUTE FUNCTION public.task_child_touch_activity();
+    FOR EACH ROW EXECUTE FUNCTION public.task_touch_activity();
 CREATE TRIGGER task_commits_touch_activity AFTER INSERT ON public.task_commits
-    FOR EACH ROW EXECUTE FUNCTION public.task_child_touch_activity();
+    FOR EACH ROW EXECUTE FUNCTION public.task_touch_activity();
 CREATE TRIGGER task_questions_touch_activity AFTER INSERT OR UPDATE ON public.task_questions
-    FOR EACH ROW EXECUTE FUNCTION public.task_child_touch_activity();
+    FOR EACH ROW EXECUTE FUNCTION public.task_touch_activity();
+CREATE TRIGGER tasks_touch_activity_insert AFTER INSERT ON public.tasks
+    FOR EACH ROW EXECUTE FUNCTION public.task_touch_activity();
+-- Column-scoped so cycle_id-only bulk moves and similar bookkeeping do not
+-- count as activity.
+CREATE TRIGGER tasks_touch_activity_update
+    AFTER UPDATE OF state, assignee_user_id, title, description_md, type, priority, target_role_id, parent_task_id
+    ON public.tasks
+    FOR EACH ROW EXECUTE FUNCTION public.task_touch_activity();
 
--- Question events reach SSE like step events. task_questions carries
--- project_id itself, so it joins the task-child branch only for the id.
+-- Question events reach SSE like step events (routed through the owning
+-- task, see notify_event below).
 CREATE TRIGGER task_questions_notify_insert AFTER INSERT ON public.task_questions
     FOR EACH ROW EXECUTE FUNCTION public.notify_event('question.created');
 CREATE TRIGGER task_questions_notify_update AFTER UPDATE ON public.task_questions
@@ -175,8 +191,8 @@ BEGIN
             );
         END IF;
     ELSIF TG_TABLE_NAME IN ('task_comments', 'task_steps', 'task_questions') THEN
-        -- None of these tables is read for project_id here; resolve it from the
-        -- owning task so the SSE hub can route the event correctly.
+        -- These tables have no project_id we can rely on here; resolve it
+        -- from the owning task so the SSE hub can route the event.
         IF TG_OP = 'DELETE' THEN
             tid := OLD.task_id;
         ELSE
@@ -202,22 +218,22 @@ $$;
 -- +goose Down
 DROP TRIGGER IF EXISTS task_questions_notify_update ON public.task_questions;
 DROP TRIGGER IF EXISTS task_questions_notify_insert ON public.task_questions;
+DROP TRIGGER IF EXISTS tasks_touch_activity_update ON public.tasks;
+DROP TRIGGER IF EXISTS tasks_touch_activity_insert ON public.tasks;
 DROP TRIGGER IF EXISTS task_questions_touch_activity ON public.task_questions;
 DROP TRIGGER IF EXISTS task_commits_touch_activity ON public.task_commits;
 DROP TRIGGER IF EXISTS task_comments_touch_activity ON public.task_comments;
 DROP TRIGGER IF EXISTS task_steps_touch_activity ON public.task_steps;
-DROP FUNCTION IF EXISTS public.task_child_touch_activity();
-DROP TRIGGER IF EXISTS tasks_touch_activity ON public.tasks;
-DROP FUNCTION IF EXISTS public.tasks_touch_activity();
+DROP FUNCTION IF EXISTS public.task_touch_activity();
 DROP TABLE IF EXISTS public.task_questions;
 ALTER TABLE public.task_steps
     DROP COLUMN started_by_user_id,
     DROP COLUMN started_session_id,
     DROP COLUMN started_at;
-DROP INDEX IF EXISTS public.tasks_live_idx;
+DROP TABLE IF EXISTS public.task_activity;
+DROP INDEX IF EXISTS public.tasks_active_session_idx;
 ALTER TABLE public.tasks
-    DROP COLUMN active_session_id,
-    DROP COLUMN last_activity_at;
+    DROP COLUMN active_session_id;
 DROP TABLE IF EXISTS public.agent_sessions;
 UPDATE public.projects SET default_view = 'board/kanban' WHERE default_view IN ('live', 'questions');
 ALTER TABLE public.projects DROP CONSTRAINT projects_default_view_check;
