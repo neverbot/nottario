@@ -99,6 +99,27 @@ func TestMigration0014_LiveAndQuestions(t *testing.T) {
 		VALUES ($1, $2, 'choice', 'which?')`, p.ID, tk.ID); err == nil {
 		t.Error("choice question without options was accepted")
 	}
+	// answer_channel is web, chat or other; an answer recorded from the
+	// chat may be answered and delivered in one write.
+	if _, err := pool.Exec(ctx, `INSERT INTO task_questions (project_id, task_id, kind, body_md, answer_channel)
+		VALUES ($1, $2, 'text', 'where?', 'email')`, p.ID, tk.ID); err == nil {
+		t.Error("answer_channel 'email' was accepted")
+	}
+	var channel string
+	if err := pool.QueryRow(ctx, `INSERT INTO task_questions (project_id, task_id, kind, body_md, state,
+		answer_text, answered_at, delivered_at, answer_channel)
+		VALUES ($1, $2, 'text', 'said in chat?', 'answered', 'yes', now(), now(), 'chat')
+		RETURNING answer_channel`, p.ID, tk.ID).Scan(&channel); err != nil || channel != "chat" {
+		t.Errorf("chat-recorded answer: %q err=%v", channel, err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO task_questions (project_id, task_id, kind, body_md)
+		VALUES ($1, $2, 'text', 'default?') RETURNING answer_channel`, p.ID, tk.ID).Scan(&channel); err != nil || channel != "web" {
+		t.Errorf("default answer_channel = %q err=%v", channel, err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM task_questions WHERE task_id = $1`, tk.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	// A text question works and moves activity.
 	bumps("question insert", true, `INSERT INTO task_questions (project_id, task_id, kind, body_md)
 		VALUES ($1, $2, 'text', 'why?')`, p.ID, tk.ID)

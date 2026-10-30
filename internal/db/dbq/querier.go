@@ -314,6 +314,10 @@ type Querier interface {
 	ProjectsLiveSettings(ctx context.Context, ids []uuid.UUID) ([]ProjectsLiveSettingsRow, error)
 	ReadDocument(ctx context.Context, arg ReadDocumentParams) (ReadDocumentRow, error)
 	RecordMcpUsage(ctx context.Context, arg RecordMcpUsageParams) error
+	// Records an answer the human gave the asking agent outside Nottario.
+	// The caller holds the row lock and has checked the question is open.
+	// The agent already has the answer, so it is delivered at once.
+	RecordTaskAnswer(ctx context.Context, arg RecordTaskAnswerParams) (TaskQuestion, error)
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
 	// Removes the user from the project entirely; their role assignments
 	// cascade away via membership_roles_membership_fkey.

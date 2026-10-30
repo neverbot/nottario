@@ -39,6 +39,17 @@ const (
 	StateWithdrawn State = "withdrawn"
 )
 
+// Channel is where the human gave an answer: in the web UI, or to the
+// asking agent somewhere else (the chat, or another medium) and recorded
+// by it with RecordAnswer.
+type Channel string
+
+const (
+	ChannelWeb   Channel = "web"
+	ChannelChat  Channel = "chat"
+	ChannelOther Channel = "other"
+)
+
 // ParseState reads a state filter: open, answered or withdrawn, or
 // "all" for no filter (nil).
 func ParseState(s string) (*State, error) {
@@ -72,22 +83,27 @@ type Reply struct {
 // AskedByTokenID is the API token it came through, set when an agent
 // asked over MCP.
 type Question struct {
-	ID                uuid.UUID  `json:"id"`
-	ProjectID         uuid.UUID  `json:"project_id"`
-	TaskID            uuid.UUID  `json:"task_id"`
-	StepID            *uuid.UUID `json:"step_id,omitempty"`
-	SessionID         *uuid.UUID `json:"session_id,omitempty"`
-	AskedByUserID     *uuid.UUID `json:"asked_by_user_id,omitempty"`
-	AskedByTokenID    *uuid.UUID `json:"asked_by_token_id,omitempty"`
-	RecipientUserID   *uuid.UUID `json:"recipient_user_id,omitempty"`
-	AnsweredByUserID  *uuid.UUID `json:"answered_by_user_id,omitempty"`
-	Kind              Kind       `json:"kind"`
-	Body              string     `json:"body"`
-	Options           []Option   `json:"options,omitempty"`
-	Multi             bool       `json:"multi,omitempty"`
-	RecommendedKey    string     `json:"recommended_key,omitempty"`
-	RecommendedReason string     `json:"recommended_reason,omitempty"`
-	State             State      `json:"state"`
+	ID               uuid.UUID  `json:"id"`
+	ProjectID        uuid.UUID  `json:"project_id"`
+	TaskID           uuid.UUID  `json:"task_id"`
+	StepID           *uuid.UUID `json:"step_id,omitempty"`
+	SessionID        *uuid.UUID `json:"session_id,omitempty"`
+	AskedByUserID    *uuid.UUID `json:"asked_by_user_id,omitempty"`
+	AskedByTokenID   *uuid.UUID `json:"asked_by_token_id,omitempty"`
+	RecipientUserID  *uuid.UUID `json:"recipient_user_id,omitempty"`
+	AnsweredByUserID *uuid.UUID `json:"answered_by_user_id,omitempty"`
+	// AnsweredByTokenID is set when the asking agent recorded an answer
+	// the human gave it outside Nottario (see RecordAnswer).
+	AnsweredByTokenID *uuid.UUID `json:"answered_by_token_id,omitempty"`
+	// AnswerChannel is where the answer was given: web, chat or other.
+	AnswerChannel     Channel  `json:"answer_channel,omitempty"`
+	Kind              Kind     `json:"kind"`
+	Body              string   `json:"body"`
+	Options           []Option `json:"options,omitempty"`
+	Multi             bool     `json:"multi,omitempty"`
+	RecommendedKey    string   `json:"recommended_key,omitempty"`
+	RecommendedReason string   `json:"recommended_reason,omitempty"`
+	State             State    `json:"state"`
 	// Answer is nil until the question is answered.
 	Answer          *Reply     `json:"answer,omitempty"`
 	AnsweredAt      *time.Time `json:"answered_at,omitempty"`
@@ -307,6 +323,8 @@ func fromRow(r dbq.TaskQuestion) (*Question, error) {
 		AskedByTokenID:    r.AskedByTokenID,
 		RecipientUserID:   r.RecipientUserID,
 		AnsweredByUserID:  r.AnsweredByUserID,
+		AnsweredByTokenID: r.AnsweredByTokenID,
+		AnswerChannel:     Channel(r.AnswerChannel),
 		Kind:              Kind(r.Kind),
 		Body:              r.BodyMd,
 		Multi:             r.Multi,

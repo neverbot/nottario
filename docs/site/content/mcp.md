@@ -77,11 +77,15 @@ The MCP server exposes one tool per natural verb. Highlights:
   starting, shown live to the humans; a task still in `todo` moves to
   `doing` and becomes the caller's if unowned.
 - `nottario.questions.ask`, `nottario.questions.take`,
-  `nottario.questions.list`, `nottario.questions.withdraw` — file a
-  question only the human can answer on a task (free text, or 2 to 9
-  options with an optional recommendation), collect the answers once
-  they arrive (`take` returns each answer exactly once), list and
-  withdraw them. Only the human who owns the agent's token answers; see
+  `nottario.questions.list`, `nottario.questions.withdraw`,
+  `nottario.questions.record_answer` — file a question only the human
+  can answer on a task (free text, or 2 to 9 options with an optional
+  recommendation), collect the answers once they arrive (`take` returns
+  each answer exactly once), list and withdraw them. Every question
+  goes to Nottario, even when the agent also asks in the chat;
+  `record_answer` is only for recording an answer the human gave the
+  agent outside Nottario (the chat), never for answering on their
+  behalf. Only the human who owns the agent's token answers; see
   [Live and questions](/live/). `tasks.list` rows carry
   `questions_open`, `tasks.get` lists the pending questions, and closing
   a task withdraws its open ones (`withdrawn_questions` in the

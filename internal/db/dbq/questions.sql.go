@@ -18,7 +18,7 @@ UPDATE task_questions SET state = 'answered',
   answer_note = $3::text, answered_by_user_id = $4::uuid,
   answered_at = now(), updated_at = now()
 WHERE id = $5::uuid
-RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
+RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
 `
 
 type AnswerTaskQuestionParams struct {
@@ -62,6 +62,8 @@ func (q *Queries) AnswerTaskQuestion(ctx context.Context, arg AnswerTaskQuestion
 		&i.AnswerText,
 		&i.AnswerNote,
 		&i.AnsweredByUserID,
+		&i.AnsweredByTokenID,
+		&i.AnswerChannel,
 		&i.AnsweredAt,
 		&i.DeliveredAt,
 		&i.WithdrawnAt,
@@ -184,7 +186,7 @@ func (q *Queries) GetStepsBrief(ctx context.Context, ids []uuid.UUID) ([]GetStep
 }
 
 const getTaskQuestion = `-- name: GetTaskQuestion :one
-SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
+SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
 WHERE id = $1::uuid AND project_id = $2::uuid
 `
 
@@ -216,6 +218,8 @@ func (q *Queries) GetTaskQuestion(ctx context.Context, arg GetTaskQuestionParams
 		&i.AnswerText,
 		&i.AnswerNote,
 		&i.AnsweredByUserID,
+		&i.AnsweredByTokenID,
+		&i.AnswerChannel,
 		&i.AnsweredAt,
 		&i.DeliveredAt,
 		&i.WithdrawnAt,
@@ -227,7 +231,7 @@ func (q *Queries) GetTaskQuestion(ctx context.Context, arg GetTaskQuestionParams
 }
 
 const getTaskQuestionForUpdate = `-- name: GetTaskQuestionForUpdate :one
-SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
+SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
 WHERE id = $1::uuid AND project_id = $2::uuid
 FOR UPDATE
 `
@@ -260,6 +264,8 @@ func (q *Queries) GetTaskQuestionForUpdate(ctx context.Context, arg GetTaskQuest
 		&i.AnswerText,
 		&i.AnswerNote,
 		&i.AnsweredByUserID,
+		&i.AnsweredByTokenID,
+		&i.AnswerChannel,
 		&i.AnsweredAt,
 		&i.DeliveredAt,
 		&i.WithdrawnAt,
@@ -348,7 +354,7 @@ VALUES ($1::uuid, $2::uuid, $3::uuid,
   $8::text, $9::text, $10::jsonb,
   $11::boolean, $12::text,
   $13::text)
-RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
+RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
 `
 
 type InsertTaskQuestionParams struct {
@@ -404,6 +410,8 @@ func (q *Queries) InsertTaskQuestion(ctx context.Context, arg InsertTaskQuestion
 		&i.AnswerText,
 		&i.AnswerNote,
 		&i.AnsweredByUserID,
+		&i.AnsweredByTokenID,
+		&i.AnswerChannel,
 		&i.AnsweredAt,
 		&i.DeliveredAt,
 		&i.WithdrawnAt,
@@ -415,7 +423,7 @@ func (q *Queries) InsertTaskQuestion(ctx context.Context, arg InsertTaskQuestion
 }
 
 const listPendingTaskQuestions = `-- name: ListPendingTaskQuestions :many
-SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
+SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
 WHERE task_id = $1::uuid AND project_id = $2::uuid
   AND (state = 'open' OR (state = 'answered' AND delivered_at IS NULL))
 ORDER BY created_at
@@ -457,6 +465,8 @@ func (q *Queries) ListPendingTaskQuestions(ctx context.Context, arg ListPendingT
 			&i.AnswerText,
 			&i.AnswerNote,
 			&i.AnsweredByUserID,
+			&i.AnsweredByTokenID,
+			&i.AnswerChannel,
 			&i.AnsweredAt,
 			&i.DeliveredAt,
 			&i.WithdrawnAt,
@@ -475,7 +485,7 @@ func (q *Queries) ListPendingTaskQuestions(ctx context.Context, arg ListPendingT
 }
 
 const listTaskQuestions = `-- name: ListTaskQuestions :many
-SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
+SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
 WHERE project_id = ANY($1::uuid[])
   AND ($2::text IS NULL OR state = $2::text)
   AND ($3::uuid IS NULL OR task_id = $3::uuid)
@@ -535,6 +545,8 @@ func (q *Queries) ListTaskQuestions(ctx context.Context, arg ListTaskQuestionsPa
 			&i.AnswerText,
 			&i.AnswerNote,
 			&i.AnsweredByUserID,
+			&i.AnsweredByTokenID,
+			&i.AnswerChannel,
 			&i.AnsweredAt,
 			&i.DeliveredAt,
 			&i.WithdrawnAt,
@@ -552,6 +564,72 @@ func (q *Queries) ListTaskQuestions(ctx context.Context, arg ListTaskQuestionsPa
 	return items, nil
 }
 
+const recordTaskAnswer = `-- name: RecordTaskAnswer :one
+UPDATE task_questions SET state = 'answered',
+  answer_keys = $1::text[], answer_text = $2::text,
+  answer_note = $3::text, answered_by_user_id = $4::uuid,
+  answered_by_token_id = $5::uuid, answer_channel = $6::text,
+  answered_at = now(), delivered_at = now(), updated_at = now()
+WHERE id = $7::uuid
+RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
+`
+
+type RecordTaskAnswerParams struct {
+	Keys    []string
+	Text    string
+	Note    string
+	UserID  *uuid.UUID
+	TokenID *uuid.UUID
+	Channel string
+	ID      uuid.UUID
+}
+
+// Records an answer the human gave the asking agent outside Nottario.
+// The caller holds the row lock and has checked the question is open.
+// The agent already has the answer, so it is delivered at once.
+func (q *Queries) RecordTaskAnswer(ctx context.Context, arg RecordTaskAnswerParams) (TaskQuestion, error) {
+	row := q.db.QueryRow(ctx, recordTaskAnswer,
+		arg.Keys,
+		arg.Text,
+		arg.Note,
+		arg.UserID,
+		arg.TokenID,
+		arg.Channel,
+		arg.ID,
+	)
+	var i TaskQuestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.TaskID,
+		&i.StepID,
+		&i.SessionID,
+		&i.AskedByUserID,
+		&i.AskedByTokenID,
+		&i.RecipientUserID,
+		&i.Kind,
+		&i.BodyMd,
+		&i.Options,
+		&i.Multi,
+		&i.RecommendedKey,
+		&i.RecommendedReason,
+		&i.State,
+		&i.AnswerKeys,
+		&i.AnswerText,
+		&i.AnswerNote,
+		&i.AnsweredByUserID,
+		&i.AnsweredByTokenID,
+		&i.AnswerChannel,
+		&i.AnsweredAt,
+		&i.DeliveredAt,
+		&i.WithdrawnAt,
+		&i.WithdrawnReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const takeTaskAnswers = `-- name: TakeTaskAnswers :many
 UPDATE task_questions SET delivered_at = now(), updated_at = now()
 WHERE id IN (
@@ -561,7 +639,7 @@ WHERE id IN (
     AND q.state = 'answered' AND q.delivered_at IS NULL
   ORDER BY q.answered_at
   FOR UPDATE SKIP LOCKED)
-RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
+RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
 `
 
 type TakeTaskAnswersParams struct {
@@ -601,6 +679,8 @@ func (q *Queries) TakeTaskAnswers(ctx context.Context, arg TakeTaskAnswersParams
 			&i.AnswerText,
 			&i.AnswerNote,
 			&i.AnsweredByUserID,
+			&i.AnsweredByTokenID,
+			&i.AnswerChannel,
 			&i.AnsweredAt,
 			&i.DeliveredAt,
 			&i.WithdrawnAt,
@@ -661,7 +741,7 @@ UPDATE task_questions SET state = 'withdrawn', withdrawn_at = now(),
   withdrawn_reason = $1::text, updated_at = now()
 WHERE id = $2::uuid AND project_id = $3::uuid AND state = 'open'
   AND asked_by_user_id = $4::uuid
-RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
+RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_by_token_id, answer_channel, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
 `
 
 type WithdrawTaskQuestionParams struct {
@@ -700,6 +780,8 @@ func (q *Queries) WithdrawTaskQuestion(ctx context.Context, arg WithdrawTaskQues
 		&i.AnswerText,
 		&i.AnswerNote,
 		&i.AnsweredByUserID,
+		&i.AnsweredByTokenID,
+		&i.AnswerChannel,
 		&i.AnsweredAt,
 		&i.DeliveredAt,
 		&i.WithdrawnAt,

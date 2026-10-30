@@ -31,6 +31,18 @@ UPDATE task_questions SET state = 'answered',
 WHERE id = sqlc.arg('id')::uuid
 RETURNING *;
 
+-- name: RecordTaskAnswer :one
+-- Records an answer the human gave the asking agent outside Nottario.
+-- The caller holds the row lock and has checked the question is open.
+-- The agent already has the answer, so it is delivered at once.
+UPDATE task_questions SET state = 'answered',
+  answer_keys = sqlc.arg('keys')::text[], answer_text = sqlc.arg('text')::text,
+  answer_note = sqlc.arg('note')::text, answered_by_user_id = sqlc.narg('user_id')::uuid,
+  answered_by_token_id = sqlc.narg('token_id')::uuid, answer_channel = sqlc.arg('channel')::text,
+  answered_at = now(), delivered_at = now(), updated_at = now()
+WHERE id = sqlc.arg('id')::uuid
+RETURNING *;
+
 -- name: TakeTaskAnswers :many
 -- Hands a session its new answers and marks them delivered, once:
 -- SKIP LOCKED keeps two concurrent takes from returning the same row,

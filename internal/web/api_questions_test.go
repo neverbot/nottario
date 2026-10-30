@@ -22,7 +22,10 @@ type questionsResp struct {
 		State    string `json:"state"`
 		BodyHTML string `json:"body_html"`
 		ForMe    bool   `json:"for_me"`
-		Task     *struct {
+		// Where the answer was given, and whether the agent recorded it.
+		AnswerChannel   string `json:"answer_channel"`
+		RecordedByAgent bool   `json:"recorded_by_agent"`
+		Task            *struct {
 			ID    string `json:"id"`
 			Title string `json:"title"`
 		} `json:"task"`
@@ -64,7 +67,7 @@ func TestApiQuestions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token, _, err := identity.IssueToken(ctx, pool, u.ID, p.ID, "t", nil)
+	token, tok, err := identity.IssueToken(ctx, pool, u.ID, p.ID, "t", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,6 +245,40 @@ func TestApiQuestions(t *testing.T) {
 	_ = json.Unmarshal(r.Body, &conflict)
 	if r.StatusCode != http.StatusConflict || conflict.Code != "already_delivered" {
 		t.Fatalf("edit after take: %d %s", r.StatusCode, r.Body)
+	}
+
+	// The view says where each answer was given: the web answer above,
+	// and one the agent recorded from the chat, on a task of its own.
+	tk2, err := tasks.Create(ctx, pool, tasks.CreateParams{ProjectID: p.ID, Type: tasks.TypeTask, Title: "chat"}, by)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rq, err := questions.Ask(ctx, pool, questions.AskParams{ProjectID: p.ID, TaskID: tk2.ID, SessionID: &sess.ID, AskedBy: by, Body: "said in chat?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := questions.RecordAnswer(ctx, pool, p.ID, rq.ID, u.ID, &tok.ID, questions.ChannelChat, questions.Reply{Text: "yes"}); err != nil {
+		t.Fatal(err)
+	}
+	var answered questionsResp
+	getJSON("/api/questions?project_id="+p.ID.String()+"&state=answered", me, &answered)
+	seen := 0
+	for _, a := range answered.Questions {
+		switch a.ID {
+		case q.ID.String():
+			seen++
+			if a.AnswerChannel != "web" || a.RecordedByAgent {
+				t.Errorf("web answer view = %+v", a)
+			}
+		case rq.ID.String():
+			seen++
+			if a.AnswerChannel != "chat" || !a.RecordedByAgent || a.AnsweredBy == nil || a.AnsweredBy.Login != "web-q" {
+				t.Errorf("recorded answer view = %+v", a)
+			}
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("answered list = %+v", answered.Questions)
 	}
 
 	// A withdrawn question answers 409 withdrawn.

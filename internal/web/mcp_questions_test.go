@@ -393,3 +393,142 @@ func TestMCPQuestionsEdges(t *testing.T) {
 		t.Fatalf("question after HTTP close = %q err=%v", state, err)
 	}
 }
+
+// record_answer stores an answer the human gave in the chat: answered
+// and delivered at once, attributed to the human through the token.
+func TestMCPQuestionsRecordAnswer(t *testing.T) {
+	f := newMCPFixture(t, 9815, "recorder")
+	pool := f.pgx(t)
+	pid := uuid.MustParse(f.projectID)
+	uid := uuid.MustParse(f.userID)
+
+	var task struct {
+		ID string `json:"id"`
+	}
+	f.callJSON(t, "nottario.tasks.create", map[string]any{
+		"project_id": f.projectID, "title": "record answers", "claim": true, "session": "conv-r",
+	}, &task)
+	ask := func(args map[string]any) string {
+		t.Helper()
+		args["project_id"] = f.projectID
+		args["task_id"] = task.ID
+		args["session"] = "conv-r"
+		var out struct {
+			ID string `json:"id"`
+		}
+		f.callJSON(t, "nottario.questions.ask", args, &out)
+		return out.ID
+	}
+	record := func(args map[string]any) (string, string) {
+		t.Helper()
+		args["project_id"] = f.projectID
+		var out struct {
+			ID    string `json:"id"`
+			State string `json:"state"`
+		}
+		f.callJSON(t, "nottario.questions.record_answer", args, &out)
+		return out.ID, out.State
+	}
+
+	choiceID := ask(map[string]any{
+		"question": "Postgres or SQLite?",
+		"options":  []map[string]any{{"label": "Postgres"}, {"label": "SQLite"}},
+	})
+	if id, state := record(map[string]any{"id": choiceID, "choices": []int{2}, "note": "said in chat"}); id != choiceID || state != "answered" {
+		t.Fatalf("record = %s %s", id, state)
+	}
+	var (
+		keys      []string
+		note, ch  string
+		byUser    *uuid.UUID
+		byToken   *uuid.UUID
+		delivered bool
+	)
+	if err := pool.QueryRow(f.ctx, `SELECT answer_keys, answer_note, answer_channel, answered_by_user_id,
+		answered_by_token_id, delivered_at IS NOT NULL FROM task_questions WHERE id = $1`, choiceID).
+		Scan(&keys, &note, &ch, &byUser, &byToken, &delivered); err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) != 1 || keys[0] != "2" || note != "said in chat" || ch != "chat" ||
+		byUser == nil || *byUser != uid || byToken == nil || !delivered {
+		t.Fatalf("row = keys %v note %q channel %q user %v token %v delivered %v", keys, note, ch, byUser, byToken, delivered)
+	}
+	// take does not hand it over again.
+	var got mcpTake
+	f.callJSON(t, "nottario.questions.take", map[string]any{"project_id": f.projectID, "session": "conv-r"}, &got)
+	if len(got.Answers) != 0 || got.Open != 0 {
+		t.Fatalf("take after record = %+v", got)
+	}
+
+	// Free text through another channel.
+	textID := ask(map[string]any{"question": "Which region?"})
+	if _, state := record(map[string]any{"id": textID, "text": "eu-west-1", "channel": "other"}); state != "answered" {
+		t.Fatalf("record text = %s", state)
+	}
+	if err := pool.QueryRow(f.ctx, `SELECT answer_channel FROM task_questions WHERE id = $1`, textID).Scan(&ch); err != nil || ch != "other" {
+		t.Fatalf("channel = %q err=%v", ch, err)
+	}
+
+	// Refusals.
+	expect := func(args map[string]any, want string) {
+		t.Helper()
+		args["project_id"] = f.projectID
+		if msg := f.callExpectErr(t, "nottario.questions.record_answer", args); !strings.Contains(msg, want) {
+			t.Errorf("record %v = %q, want %q", args, msg, want)
+		}
+	}
+	expect(map[string]any{"id": choiceID, "choices": []int{1}}, questions.ErrAlreadyAnswered.Error())
+	openID := ask(map[string]any{"question": "One or two?", "options": []map[string]any{{"label": "One"}, {"label": "Two"}}})
+	expect(map[string]any{"id": openID, "choices": []int{5}}, "is not one of the options")
+	expect(map[string]any{"id": openID}, "pick an option or write an answer")
+	expect(map[string]any{"id": openID, "choices": []int{1}, "channel": "web"}, "valid: chat, other")
+	expect(map[string]any{"id": "nope", "text": "x"}, "id must be a uuid")
+
+	// A web answer cannot be overwritten by a record.
+	webID := ask(map[string]any{"question": "Ship today?"})
+	if _, err := questions.Answer(f.ctx, pool, pid, uuid.MustParse(webID), uid, questions.Reply{Text: "yes"}); err != nil {
+		t.Fatal(err)
+	}
+	expect(map[string]any{"id": webID, "text": "no"}, questions.ErrAlreadyAnswered.Error())
+
+	// Withdrawn questions are closed.
+	f.callJSON(t, "nottario.questions.withdraw", map[string]any{"project_id": f.projectID, "id": openID}, nil)
+	expect(map[string]any{"id": openID, "choices": []int{1}}, questions.ErrClosed.Error())
+
+	// Another member cannot record the answer to someone else's question.
+	mineID := ask(map[string]any{"question": "Mine to record?"})
+	member, _, err := identity.UpsertFromGithub(f.ctx, pool, 9816, "recorder-member", "Member", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles, err := identity.ListRoles(f.ctx, pool, pid)
+	if err != nil || len(roles) == 0 {
+		t.Fatalf("roles: %v", err)
+	}
+	if err := identity.AddMembership(f.ctx, pool, member.ID, pid, roles[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	memberToken, _, err := identity.IssueToken(f.ctx, pool, member.ID, pid, "member", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := sdk.NewClient(&sdk.Implementation{Name: "rec-member", Version: "v0"}, nil)
+	ms, err := client.Connect(f.ctx, &sdk.StreamableClientTransport{
+		Endpoint:             f.baseURL + "/mcp",
+		HTTPClient:           &http.Client{Transport: bearerTransport{rt: http.DefaultTransport, token: memberToken}},
+		DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ms.Close() })
+	res, err := ms.CallTool(f.ctx, &sdk.CallToolParams{Name: "nottario.questions.record_answer", Arguments: map[string]any{
+		"project_id": f.projectID, "id": mineID, "text": "sure",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tc, _ := res.Content[0].(*sdk.TextContent); !res.IsError || tc == nil || tc.Text != questions.ErrNotAskerRecord.Error() {
+		t.Fatalf("record by another member = %+v", res.Content)
+	}
+}

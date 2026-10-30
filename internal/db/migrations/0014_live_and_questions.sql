@@ -60,6 +60,11 @@ CREATE TABLE public.task_questions (
     answer_text         text NOT NULL DEFAULT '' CHECK (char_length(answer_text) <= 8000),
     answer_note         text NOT NULL DEFAULT '' CHECK (char_length(answer_note) <= 8000),
     answered_by_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
+    -- Set when the asking agent recorded an answer the human gave it
+    -- outside Nottario (answer_channel says where); null for answers
+    -- given in the web UI.
+    answered_by_token_id uuid REFERENCES public.api_tokens(id) ON DELETE SET NULL,
+    answer_channel      text NOT NULL DEFAULT 'web' CHECK (answer_channel IN ('web', 'chat', 'other')),
     answered_at         timestamptz,
     delivered_at        timestamptz,
     withdrawn_at        timestamptz,

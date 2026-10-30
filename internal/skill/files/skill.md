@@ -126,12 +126,17 @@ Detail in `domains/questions.md`.
 - **Only the main agent asks and takes.** If your client runs helper
   agents (subagents), give them your session id for `start_step`; they
   end their report with any question for the human, and you file it.
-- **Ask in Nottario** when the decision outlives the current exchange:
-  background or helper work, several conversations in flight. When the
-  human is answering you right now, ask in the chat.
+- **Every question for the human goes to Nottario** (`questions.ask`),
+  always. If you think the human is there to answer, you may also ask
+  it in the chat.
+- **Answered outside Nottario** (in the chat or anywhere else)? Call
+  `questions.record_answer` with their answer at once, so the question
+  reads answered in Nottario too. It is only for answers the human
+  actually gave, never for answering on their behalf.
 - **Keep working** on what does not depend on the answer.
-- **`questions.take`** at the start of every turn, after each helper
-  agent returns, before picking the next task and before ending a turn.
+- **`questions.take`** collects the answers given in Nottario: at the
+  start of every turn, after each helper agent returns, before picking
+  the next task and before ending a turn.
 - **Ending a turn with open questions:** list them, one line each, and
   say they can be answered in Nottario (Questions view).
 - **Withdraw** a question that no longer matters

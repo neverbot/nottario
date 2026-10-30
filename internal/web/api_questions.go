@@ -54,32 +54,38 @@ type questionUserRef struct {
 // the raw body is replaced by its rendered HTML and a short excerpt,
 // and the API token behind an MCP question stays server side (ViaMCP).
 type questionView struct {
-	ID                uuid.UUID           `json:"id"`
-	Kind              questions.Kind      `json:"kind"`
-	State             questions.State     `json:"state"`
-	Excerpt           string              `json:"excerpt"`
-	BodyHTML          string              `json:"body_html,omitempty"`
-	Options           []questions.Option  `json:"options,omitempty"`
-	Multi             bool                `json:"multi,omitempty"`
-	RecommendedKey    string              `json:"recommended_key,omitempty"`
-	RecommendedReason string              `json:"recommended_reason,omitempty"`
-	Answer            *questions.Reply    `json:"answer,omitempty"`
-	AnswerTextHTML    string              `json:"answer_text_html,omitempty"`
-	AnswerNoteHTML    string              `json:"answer_note_html,omitempty"`
-	AnsweredAt        *time.Time          `json:"answered_at,omitempty"`
-	DeliveredAt       *time.Time          `json:"delivered_at,omitempty"`
-	WithdrawnAt       *time.Time          `json:"withdrawn_at,omitempty"`
-	WithdrawnReason   string              `json:"withdrawn_reason,omitempty"`
-	CreatedAt         time.Time           `json:"created_at"`
-	UpdatedAt         time.Time           `json:"updated_at"`
-	ViaMCP            bool                `json:"via_mcp"`
-	ForMe             bool                `json:"for_me"`
-	Task              *questionTaskRef    `json:"task,omitempty"`
-	Project           *questionProjectRef `json:"project,omitempty"`
-	Step              *questionStepRef    `json:"step,omitempty"`
-	Session           *questionSessionRef `json:"session,omitempty"`
-	AskedBy           *questionUserRef    `json:"asked_by,omitempty"`
-	AnsweredBy        *questionUserRef    `json:"answered_by,omitempty"`
+	ID                uuid.UUID          `json:"id"`
+	Kind              questions.Kind     `json:"kind"`
+	State             questions.State    `json:"state"`
+	Excerpt           string             `json:"excerpt"`
+	BodyHTML          string             `json:"body_html,omitempty"`
+	Options           []questions.Option `json:"options,omitempty"`
+	Multi             bool               `json:"multi,omitempty"`
+	RecommendedKey    string             `json:"recommended_key,omitempty"`
+	RecommendedReason string             `json:"recommended_reason,omitempty"`
+	Answer            *questions.Reply   `json:"answer,omitempty"`
+	AnswerTextHTML    string             `json:"answer_text_html,omitempty"`
+	AnswerNoteHTML    string             `json:"answer_note_html,omitempty"`
+	AnsweredAt        *time.Time         `json:"answered_at,omitempty"`
+	// AnswerChannel is where the answer was given (web, chat, other);
+	// set once the question is answered.
+	AnswerChannel questions.Channel `json:"answer_channel,omitempty"`
+	// RecordedByAgent is true when the asking agent recorded an answer
+	// the human gave it outside Nottario.
+	RecordedByAgent bool                `json:"recorded_by_agent"`
+	DeliveredAt     *time.Time          `json:"delivered_at,omitempty"`
+	WithdrawnAt     *time.Time          `json:"withdrawn_at,omitempty"`
+	WithdrawnReason string              `json:"withdrawn_reason,omitempty"`
+	CreatedAt       time.Time           `json:"created_at"`
+	UpdatedAt       time.Time           `json:"updated_at"`
+	ViaMCP          bool                `json:"via_mcp"`
+	ForMe           bool                `json:"for_me"`
+	Task            *questionTaskRef    `json:"task,omitempty"`
+	Project         *questionProjectRef `json:"project,omitempty"`
+	Step            *questionStepRef    `json:"step,omitempty"`
+	Session         *questionSessionRef `json:"session,omitempty"`
+	AskedBy         *questionUserRef    `json:"asked_by,omitempty"`
+	AnsweredBy      *questionUserRef    `json:"answered_by,omitempty"`
 }
 
 // excerptLen is how many characters of the question the one-line
@@ -217,8 +223,9 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, viewer uuid.UUI
 			Answer: q.Answer, AnsweredAt: q.AnsweredAt, DeliveredAt: q.DeliveredAt,
 			WithdrawnAt: q.WithdrawnAt, WithdrawnReason: q.WithdrawnReason,
 			CreatedAt: q.CreatedAt, UpdatedAt: q.UpdatedAt,
-			ViaMCP: q.AskedByTokenID != nil,
-			ForMe:  q.RecipientUserID != nil && *q.RecipientUserID == viewer,
+			ViaMCP:          q.AskedByTokenID != nil,
+			RecordedByAgent: q.AnsweredByTokenID != nil,
+			ForMe:           q.RecipientUserID != nil && *q.RecipientUserID == viewer,
 		}
 		pid := q.ProjectID
 		// A render failure ships the view without that HTML.
@@ -234,6 +241,7 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, viewer uuid.UUI
 		}
 		v.BodyHTML = render(q.Body)
 		if q.Answer != nil {
+			v.AnswerChannel = q.AnswerChannel
 			v.AnswerTextHTML = render(q.Answer.Text)
 			v.AnswerNoteHTML = render(q.Answer.Note)
 		}

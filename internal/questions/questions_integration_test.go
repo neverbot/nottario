@@ -443,4 +443,82 @@ func TestQuestions(t *testing.T) {
 			t.Errorf("no project ids: %v, %d rows", err, len(none))
 		}
 	})
+	t.Run("record answer given in chat", func(t *testing.T) {
+		_, tok, err := identity.IssueToken(ctx, pool, u.ID, p.ID, "recorder", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sid := session("s-record")
+		q := ask(sid, "Postgres or SQLite?", "Postgres", "SQLite")
+		got, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, &tok.ID, "", questions.Reply{Keys: []string{"2"}})
+		if err != nil {
+			t.Fatalf("RecordAnswer: %v", err)
+		}
+		if got.State != questions.StateAnswered || got.AnswerChannel != questions.ChannelChat ||
+			got.AnsweredByTokenID == nil || *got.AnsweredByTokenID != tok.ID ||
+			got.AnsweredByUserID == nil || *got.AnsweredByUserID != u.ID ||
+			got.AnsweredAt == nil || got.DeliveredAt == nil || got.Answer == nil || got.Answer.Keys[0] != "2" {
+			t.Errorf("recorded: %+v", got)
+		}
+		taken, open, err := questions.Take(ctx, pool, p.ID, sid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(taken) != 0 || open != 0 {
+			t.Errorf("take after record = %d answers, %d open", len(taken), open)
+		}
+		// Recording twice, or over a web answer, is refused.
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, &tok.ID, questions.ChannelChat, questions.Reply{Text: "again"}); !errors.Is(err, questions.ErrAlreadyAnswered) {
+			t.Errorf("record twice: %v", err)
+		}
+		web := ask(sid, "Which port?")
+		if _, err := questions.Answer(ctx, pool, p.ID, web.ID, u.ID, questions.Reply{Text: "8080"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, web.ID, u.ID, &tok.ID, questions.ChannelChat, questions.Reply{Text: "9090"}); !errors.Is(err, questions.ErrAlreadyAnswered) {
+			t.Errorf("record over a web answer: %v", err)
+		}
+
+		// A choice question also takes the human's own wording; channel other.
+		own := ask(sid, "Which cache?", "Redis", "None")
+		got, err = questions.RecordAnswer(ctx, pool, p.ID, own.ID, u.ID, nil, questions.ChannelOther, questions.Reply{Text: "memcached, we have it"})
+		if err != nil || got.AnswerChannel != questions.ChannelOther || got.Answer.Text != "memcached, we have it" {
+			t.Errorf("record own wording: %+v err=%v", got, err)
+		}
+
+		// Invalid replies and channels are refused and leave it open.
+		bad := ask(sid, "One or two?", "One", "Two")
+		for name, r := range map[string]questions.Reply{
+			"empty":       {},
+			"unknown key": {Keys: []string{"7"}},
+			"two keys":    {Keys: []string{"1", "2"}},
+		} {
+			if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, &tok.ID, questions.ChannelChat, r); !questions.IsInvalid(err) {
+				t.Errorf("%s: %v", name, err)
+			}
+		}
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, &tok.ID, questions.ChannelWeb, questions.Reply{Keys: []string{"1"}}); !questions.IsInvalid(err) {
+			t.Errorf("channel web: %v", err)
+		}
+
+		// Only the asker may record.
+		stranger, _, err := identity.UpsertFromGithub(ctx, pool, 9412, "questions-stranger", "Stranger", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, stranger.ID, nil, questions.ChannelChat, questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrNotAskerRecord) {
+			t.Errorf("non-asker: %v", err)
+		}
+
+		// A withdrawn question is closed.
+		if _, err := questions.Withdraw(ctx, pool, p.ID, bad.ID, u.ID, "moot"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, &tok.ID, questions.ChannelChat, questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrClosed) {
+			t.Errorf("withdrawn: %v", err)
+		}
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, uuid.New(), u.ID, nil, questions.ChannelChat, questions.Reply{Text: "x"}); !errors.Is(err, questions.ErrNotFound) {
+			t.Errorf("unknown id: %v", err)
+		}
+	})
 }

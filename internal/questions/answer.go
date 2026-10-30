@@ -29,6 +29,12 @@ var (
 	// ErrNotAsker is returned when someone other than the user who
 	// asked tries to withdraw a question.
 	ErrNotAsker = errors.New("only the user who asked this question can withdraw it")
+	// ErrNotAskerRecord is returned when someone other than the user who
+	// asked tries to record an answer given outside Nottario.
+	ErrNotAskerRecord = errors.New("only the user who asked this question can record its answer")
+	// ErrAlreadyAnswered is returned when recording an answer for a
+	// question that already has one.
+	ErrAlreadyAnswered = errors.New("already answered; nothing to record")
 )
 
 // normaliseAnswer trims an answer and checks it fits the question.
@@ -124,6 +130,81 @@ func Answer(ctx context.Context, pool *pgxpool.Pool, projectID, id, userID uuid.
 		Note:   clean.Note,
 		UserID: userID,
 		ID:     id,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return fromRow(row)
+}
+
+// ParseRecordChannel reads the channel of a recorded answer: "chat"
+// (the default when blank) or "other". "web" is not one: answers given
+// in the web UI go through Answer.
+func ParseRecordChannel(s string) (Channel, error) {
+	switch c := Channel(strings.ToLower(strings.TrimSpace(s))); c {
+	case "":
+		return ChannelChat, nil
+	case ChannelChat, ChannelOther:
+		return c, nil
+	}
+	return "", errInvalid(fmt.Sprintf("unknown channel %q; valid: chat, other", s))
+}
+
+// RecordAnswer records an answer the human gave the asking agent
+// outside Nottario (in the chat, say), so the question reads answered
+// here too. Only the user who asked may record it: the agent acts for
+// that same human. The answer is attributed to the recipient, who gave
+// it, through tokenID on channel, and is delivered at once: the agent
+// already has it, so Take does not hand it over again. The question
+// must be open. The row is locked like in Answer.
+func RecordAnswer(ctx context.Context, pool *pgxpool.Pool, projectID, id, callerUserID uuid.UUID, tokenID *uuid.UUID, channel Channel, a Reply) (*Question, error) {
+	if channel == "" {
+		channel = ChannelChat
+	}
+	if channel != ChannelChat && channel != ChannelOther {
+		return nil, errInvalid(fmt.Sprintf("unknown channel %q; valid: chat, other", channel))
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
+	row, err := q.GetTaskQuestionForUpdate(ctx, dbq.GetTaskQuestionForUpdateParams{ID: id, ProjectID: projectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	cur, err := fromRow(row)
+	if err != nil {
+		return nil, err
+	}
+	if cur.AskedByUserID == nil || *cur.AskedByUserID != callerUserID {
+		return nil, ErrNotAskerRecord
+	}
+	switch cur.State {
+	case StateWithdrawn:
+		return nil, ErrClosed
+	case StateAnswered:
+		return nil, ErrAlreadyAnswered
+	}
+	clean, err := normaliseAnswer(cur, a)
+	if err != nil {
+		return nil, err
+	}
+	row, err = q.RecordTaskAnswer(ctx, dbq.RecordTaskAnswerParams{
+		Keys:    clean.Keys,
+		Text:    clean.Text,
+		Note:    clean.Note,
+		UserID:  cur.RecipientUserID,
+		TokenID: tokenID,
+		Channel: string(channel),
+		ID:      id,
 	})
 	if err != nil {
 		return nil, err

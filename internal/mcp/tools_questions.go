@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -50,6 +51,15 @@ type questionsWithdrawInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project uuid"`
 	ID        string `json:"id" jsonschema:"question uuid"`
 	Reason    string `json:"reason,omitempty" jsonschema:"why it is no longer needed, one line"`
+}
+
+type questionsRecordAnswerInput struct {
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	ID        string `json:"id" jsonschema:"question uuid, one you filed with questions.ask"`
+	Choices   []int  `json:"choices,omitempty" jsonschema:"for a choice question: the 1-based option numbers the human picked, in the order you listed the options in questions.ask"`
+	Text      string `json:"text,omitempty" jsonschema:"the human's answer in their own words: the answer to a free-text question, or their own wording instead of the options"`
+	Note      string `json:"note,omitempty" jsonschema:"anything else the human added"`
+	Channel   string `json:"channel,omitempty" jsonschema:"where the human answered: 'chat' (default) or 'other'"`
 }
 
 // questions.list page bounds.
@@ -142,6 +152,7 @@ func questionError(tool string, err error) (*sdk.CallToolResult, any, error) {
 		return toolError("step not found")
 	case errors.Is(err, questions.ErrNotFound), errors.Is(err, questions.ErrClosed),
 		errors.Is(err, questions.ErrAlreadyDelivered), errors.Is(err, questions.ErrNotAsker),
+		errors.Is(err, questions.ErrNotAskerRecord), errors.Is(err, questions.ErrAlreadyAnswered),
 		questions.IsInvalid(err):
 		return toolError(err.Error())
 	}
@@ -394,5 +405,35 @@ func registerQuestions(server *sdk.Server, d Deps) {
 			return questionError("questions.withdraw", err)
 		}
 		return jsonResult(slimQuestionOf(q))
+	})
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.questions.record_answer",
+		Description: "ONLY for recording an answer the human already gave you outside Nottario (for example in the chat) to a question you filed with questions.ask, so it reads answered in Nottario too. Never use it to answer on the human's behalf, to guess, or to close a question nobody answered. Pass their picks as choices and/or their own words as text. Marks the question answered and delivered, so questions.take will not return it. Returns {id, state}.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in questionsRecordAnswerInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		pid, err := questionsProject(ctx, d, in.ProjectID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		id, err := uuid.Parse(in.ID)
+		if err != nil {
+			return toolError("id must be a uuid")
+		}
+		channel, err := questions.ParseRecordChannel(in.Channel)
+		if err != nil {
+			return questionError("questions.record_answer", err)
+		}
+		reply := questions.Reply{Text: in.Text, Note: in.Note}
+		for _, n := range in.Choices {
+			reply.Keys = append(reply.Keys, strconv.Itoa(n))
+		}
+		q, err := questions.RecordAnswer(ctx, d.Pool, pid, id, c.UserID, authorshipFor(c).TokenID, channel, reply)
+		if err != nil {
+			return questionError("questions.record_answer", err)
+		}
+		return jsonResult(map[string]any{"id": q.ID, "state": q.State})
 	})
 }
