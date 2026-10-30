@@ -25,7 +25,7 @@ const getProjectByIDOrSlug = `-- name: GetProjectByIDOrSlug :one
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size, default_view, cycle_label, owner_user_id,
+       mcp_page_size, default_view, cycle_label, live_idle_minutes, owner_user_id,
        created_by_user_id, created_at, updated_at
 FROM projects
 WHERE id::text = $1::text
@@ -42,6 +42,7 @@ type GetProjectByIDOrSlugRow struct {
 	McpPageSize     int32
 	DefaultView     string
 	CycleLabel      string
+	LiveIdleMinutes int32
 	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
@@ -61,6 +62,7 @@ func (q *Queries) GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (Ge
 		&i.McpPageSize,
 		&i.DefaultView,
 		&i.CycleLabel,
+		&i.LiveIdleMinutes,
 		&i.OwnerUserID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
@@ -77,7 +79,7 @@ VALUES ($1, $2, $3, NULLIF($6::text, ''),
 RETURNING id, slug, name, description,
           COALESCE(primary_language, '')::text AS primary_language,
           COALESCE(project_type, '')::text AS project_type,
-          mcp_page_size, default_view, cycle_label, owner_user_id,
+          mcp_page_size, default_view, cycle_label, live_idle_minutes, owner_user_id,
           created_by_user_id, created_at, updated_at
 `
 
@@ -101,6 +103,7 @@ type InsertProjectRow struct {
 	McpPageSize     int32
 	DefaultView     string
 	CycleLabel      string
+	LiveIdleMinutes int32
 	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
@@ -128,6 +131,7 @@ func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) (I
 		&i.McpPageSize,
 		&i.DefaultView,
 		&i.CycleLabel,
+		&i.LiveIdleMinutes,
 		&i.OwnerUserID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
@@ -248,7 +252,7 @@ const listProjectsAdmin = `-- name: ListProjectsAdmin :many
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size, default_view, cycle_label, owner_user_id,
+       mcp_page_size, default_view, cycle_label, live_idle_minutes, owner_user_id,
        created_by_user_id, created_at, updated_at
 FROM projects
 ORDER BY name
@@ -264,6 +268,7 @@ type ListProjectsAdminRow struct {
 	McpPageSize     int32
 	DefaultView     string
 	CycleLabel      string
+	LiveIdleMinutes int32
 	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
@@ -289,6 +294,7 @@ func (q *Queries) ListProjectsAdmin(ctx context.Context) ([]ListProjectsAdminRow
 			&i.McpPageSize,
 			&i.DefaultView,
 			&i.CycleLabel,
+			&i.LiveIdleMinutes,
 			&i.OwnerUserID,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
@@ -308,7 +314,7 @@ const listProjectsForUser = `-- name: ListProjectsForUser :many
 SELECT DISTINCT p.id, p.slug, p.name, p.description,
        COALESCE(p.primary_language, '')::text AS primary_language,
        COALESCE(p.project_type, '')::text AS project_type,
-       p.mcp_page_size, p.default_view, p.cycle_label, p.owner_user_id,
+       p.mcp_page_size, p.default_view, p.cycle_label, p.live_idle_minutes, p.owner_user_id,
        p.created_by_user_id, p.created_at, p.updated_at
 FROM projects p
 JOIN memberships m ON m.project_id = p.id
@@ -326,6 +332,7 @@ type ListProjectsForUserRow struct {
 	McpPageSize     int32
 	DefaultView     string
 	CycleLabel      string
+	LiveIdleMinutes int32
 	OwnerUserID     uuid.UUID
 	CreatedByUserID *uuid.UUID
 	CreatedAt       pgtype.Timestamptz
@@ -351,6 +358,7 @@ func (q *Queries) ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]
 			&i.McpPageSize,
 			&i.DefaultView,
 			&i.CycleLabel,
+			&i.LiveIdleMinutes,
 			&i.OwnerUserID,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
@@ -448,6 +456,21 @@ func (q *Queries) UpdateProjectFields(ctx context.Context, arg UpdateProjectFiel
 		arg.PrimaryLanguage,
 		arg.ProjectType,
 	)
+	return err
+}
+
+const updateProjectLiveIdleMinutes = `-- name: UpdateProjectLiveIdleMinutes :exec
+UPDATE projects SET live_idle_minutes = $1::int, updated_at = now()
+WHERE id = $2::uuid
+`
+
+type UpdateProjectLiveIdleMinutesParams struct {
+	Minutes int32
+	ID      uuid.UUID
+}
+
+func (q *Queries) UpdateProjectLiveIdleMinutes(ctx context.Context, arg UpdateProjectLiveIdleMinutesParams) error {
+	_, err := q.db.Exec(ctx, updateProjectLiveIdleMinutes, arg.Minutes, arg.ID)
 	return err
 }
 

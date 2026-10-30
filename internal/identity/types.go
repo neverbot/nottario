@@ -50,6 +50,7 @@ type Project struct {
 	MCPPageSize     int             `json:"mcp_page_size"`
 	DefaultView     string          `json:"default_view"`
 	CycleLabel      string          `json:"cycle_label"`
+	LiveIdleMinutes int             `json:"live_idle_minutes"`
 	OwnerUserID     uuid.UUID       `json:"owner_user_id"`
 	CreatedByUserID *uuid.UUID      `json:"created_by_user_id"`
 	CreatedAt       time.Time       `json:"created_at"`

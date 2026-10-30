@@ -114,6 +114,7 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 				MCPPageSize:     int(r.McpPageSize),
 				DefaultView:     r.DefaultView,
 				CycleLabel:      r.CycleLabel,
+				LiveIdleMinutes: int(r.LiveIdleMinutes),
 				OwnerUserID:     r.OwnerUserID,
 				CreatedByUserID: r.CreatedByUserID,
 				CreatedAt:       r.CreatedAt.Time,
@@ -137,6 +138,7 @@ func ListProjects(ctx context.Context, pool *pgxpool.Pool, callerUserID uuid.UUI
 				MCPPageSize:     int(r.McpPageSize),
 				DefaultView:     r.DefaultView,
 				CycleLabel:      r.CycleLabel,
+				LiveIdleMinutes: int(r.LiveIdleMinutes),
 				OwnerUserID:     r.OwnerUserID,
 				CreatedByUserID: r.CreatedByUserID,
 				CreatedAt:       r.CreatedAt.Time,
@@ -213,6 +215,7 @@ func GetProject(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*Proj
 		MCPPageSize:     int(row.McpPageSize),
 		DefaultView:     row.DefaultView,
 		CycleLabel:      row.CycleLabel,
+		LiveIdleMinutes: int(row.LiveIdleMinutes),
 		OwnerUserID:     row.OwnerUserID,
 		CreatedByUserID: row.CreatedByUserID,
 		CreatedAt:       row.CreatedAt.Time,
@@ -282,6 +285,35 @@ func UpdateProjectMCPPageSize(ctx context.Context, pool *pgxpool.Pool, id uuid.U
 	return GetProject(ctx, pool, id.String())
 }
 
+// Bounds of a project's live_idle_minutes, mirrored by a CHECK on the
+// column.
+const (
+	MinLiveIdleMinutes = 5
+	MaxLiveIdleMinutes = 1440
+)
+
+// ValidateLiveIdleMinutes checks the idle threshold of the Live view.
+func ValidateLiveIdleMinutes(minutes int) error {
+	if minutes < MinLiveIdleMinutes || minutes > MaxLiveIdleMinutes {
+		return fmt.Errorf("live_idle_minutes must be between %d and %d", MinLiveIdleMinutes, MaxLiveIdleMinutes)
+	}
+	return nil
+}
+
+// UpdateProjectLiveIdleMinutes sets how long a task in doing may go
+// without activity before the Live view marks it idle.
+func UpdateProjectLiveIdleMinutes(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, minutes int) (*Project, error) {
+	if err := ValidateLiveIdleMinutes(minutes); err != nil {
+		return nil, err
+	}
+	if err := dbq.New(pool).UpdateProjectLiveIdleMinutes(ctx, dbq.UpdateProjectLiveIdleMinutesParams{
+		ID: id, Minutes: int32(minutes), //nolint:gosec // validated range
+	}); err != nil {
+		return nil, err
+	}
+	return GetProject(ctx, pool, id.String())
+}
+
 // ValidDefaultViews is the allowlist of view keys mirrored from the
 // frontend's view registry (internal/web/static/views.js) and enforced
 // also by a CHECK constraint on the column. Keep the two in sync when
@@ -292,6 +324,8 @@ var ValidDefaultViews = map[string]bool{
 	"docs":         true,
 	"arch/diagram": true,
 	"arch/tree":    true,
+	"live":         true,
+	"questions":    true,
 }
 
 // UpdateProjectDefaultView sets the per-project landing view used by
@@ -325,6 +359,7 @@ func projectFromInsertRow(r dbq.InsertProjectRow) Project {
 		MCPPageSize:     int(r.McpPageSize),
 		DefaultView:     r.DefaultView,
 		CycleLabel:      r.CycleLabel,
+		LiveIdleMinutes: int(r.LiveIdleMinutes),
 		OwnerUserID:     r.OwnerUserID,
 		CreatedByUserID: r.CreatedByUserID,
 		CreatedAt:       r.CreatedAt.Time,

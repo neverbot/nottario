@@ -105,6 +105,8 @@ type updateProjectRequest struct {
 	ProjectType     string `json:"project_type"`
 	DefaultView     string `json:"default_view"`
 	CycleLabel      string `json:"cycle_label"`
+	// LiveIdleMinutes is optional: nil leaves the setting untouched.
+	LiveIdleMinutes *int `json:"live_idle_minutes"`
 }
 
 // UpdateProjectHandler edits a project. Admin-only.
@@ -133,10 +135,23 @@ func UpdateProjectHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if req.LiveIdleMinutes != nil {
+			if err := identity.ValidateLiveIdleMinutes(*req.LiveIdleMinutes); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
 		p, err := identity.UpdateProject(r.Context(), d.Pool, id, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, req.DefaultView, req.CycleLabel)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if req.LiveIdleMinutes != nil {
+			p, err = identity.UpdateProjectLiveIdleMinutes(r.Context(), d.Pool, id, *req.LiveIdleMinutes)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 		}
 		writeJSON(w, http.StatusOK, p)
 	})

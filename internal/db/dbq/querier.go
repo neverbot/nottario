@@ -127,6 +127,7 @@ type Querier interface {
 	GetProjectByIDOrSlug(ctx context.Context, idOrSlug string) (GetProjectByIDOrSlugRow, error)
 	GetProjectCycleLabel(ctx context.Context, id uuid.UUID) (string, error)
 	GetProjectsBrief(ctx context.Context, ids []uuid.UUID) ([]GetProjectsBriefRow, error)
+	GetRolesBrief(ctx context.Context, ids []uuid.UUID) ([]GetRolesBriefRow, error)
 	// Reads a single skill-override document, exactly as it was written
 	// (frontmatter included), keyed by its full path
 	// (e.g. 'global/skills/domains/tasks.md'). Returns ErrNoRows when
@@ -276,6 +277,11 @@ type Querier interface {
 	// are included so the audit view is honest.
 	ListUserTokens(ctx context.Context, userID uuid.UUID) ([]ListUserTokensRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	LiveFinishedTasks(ctx context.Context, arg LiveFinishedTasksParams) ([]LiveFinishedTasksRow, error)
+	LiveInProgressSteps(ctx context.Context, ids []uuid.UUID) ([]LiveInProgressStepsRow, error)
+	// Tasks in doing across the given projects, most recently active
+	// first. A task without a task_activity row falls back to updated_at.
+	LiveWorkingTasks(ctx context.Context, projectIds []uuid.UUID) ([]LiveWorkingTasksRow, error)
 	LockActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	LockTaskRow(ctx context.Context, id uuid.UUID) error
 	LockTaskTypeAndParent(ctx context.Context, id uuid.UUID) (LockTaskTypeAndParentRow, error)
@@ -304,6 +310,7 @@ type Querier interface {
 	NextEligibleTask(ctx context.Context, arg NextEligibleTaskParams) (NextEligibleTaskRow, error)
 	ProjectIDForTask(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	ProjectSlugExists(ctx context.Context, slug string) (bool, error)
+	ProjectsLiveSettings(ctx context.Context, ids []uuid.UUID) ([]ProjectsLiveSettingsRow, error)
 	ReadDocument(ctx context.Context, arg ReadDocumentParams) (ReadDocumentRow, error)
 	RecordMcpUsage(ctx context.Context, arg RecordMcpUsageParams) error
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) (int64, error)
@@ -326,6 +333,8 @@ type Querier interface {
 	SetTaskActiveSession(ctx context.Context, arg SetTaskActiveSessionParams) (int64, error)
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
+	// Test only: backdates a task's activity to exercise the idle marker.
+	SetTaskLastActivityForTest(ctx context.Context, arg SetTaskLastActivityForTestParams) error
 	SetTaskStepPosition(ctx context.Context, arg SetTaskStepPositionParams) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
 	// The wont_do transition records actual_end so we can answer "when was
@@ -387,6 +396,7 @@ type Querier interface {
 	UpdateProjectCycleLabel(ctx context.Context, arg UpdateProjectCycleLabelParams) error
 	UpdateProjectDefaultView(ctx context.Context, arg UpdateProjectDefaultViewParams) error
 	UpdateProjectFields(ctx context.Context, arg UpdateProjectFieldsParams) error
+	UpdateProjectLiveIdleMinutes(ctx context.Context, arg UpdateProjectLiveIdleMinutesParams) error
 	UpdateProjectMCPPageSize(ctx context.Context, arg UpdateProjectMCPPageSizeParams) error
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (UpdateProjectRoleRow, error)
 	// Edits a comment body with optimistic concurrency. Returns the updated

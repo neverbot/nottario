@@ -6,14 +6,14 @@ VALUES ($1, $2, $3, NULLIF(sqlc.arg('primary_language')::text, ''),
 RETURNING id, slug, name, description,
           COALESCE(primary_language, '')::text AS primary_language,
           COALESCE(project_type, '')::text AS project_type,
-          mcp_page_size, default_view, cycle_label, owner_user_id,
+          mcp_page_size, default_view, cycle_label, live_idle_minutes, owner_user_id,
           created_by_user_id, created_at, updated_at;
 
 -- name: ListProjectsAdmin :many
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size, default_view, cycle_label, owner_user_id,
+       mcp_page_size, default_view, cycle_label, live_idle_minutes, owner_user_id,
        created_by_user_id, created_at, updated_at
 FROM projects
 ORDER BY name;
@@ -22,7 +22,7 @@ ORDER BY name;
 SELECT DISTINCT p.id, p.slug, p.name, p.description,
        COALESCE(p.primary_language, '')::text AS primary_language,
        COALESCE(p.project_type, '')::text AS project_type,
-       p.mcp_page_size, p.default_view, p.cycle_label, p.owner_user_id,
+       p.mcp_page_size, p.default_view, p.cycle_label, p.live_idle_minutes, p.owner_user_id,
        p.created_by_user_id, p.created_at, p.updated_at
 FROM projects p
 JOIN memberships m ON m.project_id = p.id
@@ -33,7 +33,7 @@ ORDER BY p.name;
 SELECT id, slug, name, description,
        COALESCE(primary_language, '')::text AS primary_language,
        COALESCE(project_type, '')::text AS project_type,
-       mcp_page_size, default_view, cycle_label, owner_user_id,
+       mcp_page_size, default_view, cycle_label, live_idle_minutes, owner_user_id,
        created_by_user_id, created_at, updated_at
 FROM projects
 WHERE id::text = sqlc.arg('id_or_slug')::text
@@ -104,3 +104,7 @@ SELECT DISTINCT ON (m.project_id, u.id)
 FROM memberships m
 JOIN users u ON u.id = m.user_id
 ORDER BY m.project_id, u.id, u.display_name;
+
+-- name: UpdateProjectLiveIdleMinutes :exec
+UPDATE projects SET live_idle_minutes = sqlc.arg('minutes')::int, updated_at = now()
+WHERE id = sqlc.arg('id')::uuid;

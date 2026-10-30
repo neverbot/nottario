@@ -275,7 +275,7 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			ProjectIDs: []uuid.UUID{pid}, TaskID: &tid, Limit: questions.MaxListLimit,
 		})
 		if err == nil {
-			questionViews, err = buildQuestionViews(r.Context(), d.Pool, qs)
+			questionViews, err = buildQuestionViews(r.Context(), d.Pool, c.UserID, qs)
 		}
 		if err != nil {
 			// The rest of the dialog still opens; say why the questions are missing.

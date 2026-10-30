@@ -21,6 +21,7 @@ type questionsResp struct {
 		ID       string `json:"id"`
 		State    string `json:"state"`
 		BodyHTML string `json:"body_html"`
+		ForMe    bool   `json:"for_me"`
 		Task     *struct {
 			ID    string `json:"id"`
 			Title string `json:"title"`
@@ -160,7 +161,7 @@ func TestApiQuestions(t *testing.T) {
 	v := list.Questions[0]
 	if v.Task == nil || v.Task.Title != "ask me" || v.Project == nil || v.Project.Slug != p.Slug ||
 		v.Step == nil || v.Step.Text != "first step" || v.AskedBy == nil || v.AskedBy.Login != "web-q" || v.BodyHTML == "" ||
-		v.Session == nil || v.Session.Label != "Backend agent" || v.Session.Key != "conv-1" {
+		v.Session == nil || v.Session.Label != "Backend agent" || v.Session.Key != "conv-1" || !v.ForMe {
 		t.Fatalf("view = %+v", v)
 	}
 	var byProject questionsResp

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -72,6 +73,7 @@ type questionView struct {
 	CreatedAt         time.Time           `json:"created_at"`
 	UpdatedAt         time.Time           `json:"updated_at"`
 	ViaMCP            bool                `json:"via_mcp"`
+	ForMe             bool                `json:"for_me"`
 	Task              *questionTaskRef    `json:"task,omitempty"`
 	Project           *questionProjectRef `json:"project,omitempty"`
 	Step              *questionStepRef    `json:"step,omitempty"`
@@ -84,10 +86,38 @@ type questionView struct {
 // excerpt keeps.
 const excerptLen = 140
 
+var (
+	mdChip     = regexp.MustCompile(`\[\[([^\[\]]*)\]\]`)
+	mdLink     = regexp.MustCompile(`\[([^\[\]]*)\]\([^()\s]*\)`)
+	mdHeading  = regexp.MustCompile(`(?m)^\s{0,3}#{1,6}\s+`)
+	mdStrong   = regexp.MustCompile(`(\*\*|__)(\S|\S.*?\S)(\*\*|__)`)
+	mdEmphStar = regexp.MustCompile(`(^|[^\w*])\*(\S|\S[^*]*?\S)\*([^\w*]|$)`)
+	mdEmphUnd  = regexp.MustCompile(`(^|[^\w])_(\S|\S[^_]*?\S)_([^\w]|$)`)
+	mdCode     = regexp.MustCompile("`+([^`]*)`+")
+)
+
+// stripMarkdown drops the common inline markers so an excerpt reads as
+// plain text: chip tokens and links keep their text, headings lose
+// the hashes, emphasis and code lose their delimiters.
+func stripMarkdown(s string) string {
+	s = mdChip.ReplaceAllString(s, "$1")
+	s = mdLink.ReplaceAllString(s, "$1")
+	s = mdHeading.ReplaceAllString(s, "")
+	s = mdCode.ReplaceAllString(s, "$1")
+	s = mdStrong.ReplaceAllString(s, "$2")
+	// The edge characters are part of the match, so a second pass
+	// catches emphasis that shared one with its neighbour.
+	for range 2 {
+		s = mdEmphStar.ReplaceAllString(s, "$1$2$3")
+		s = mdEmphUnd.ReplaceAllString(s, "$1$2$3")
+	}
+	return s
+}
+
 // excerptOf collapses a question's whitespace into one line of at most
-// excerptLen characters.
+// excerptLen characters, without markdown markers.
 func excerptOf(body string) string {
-	line := strings.Join(strings.Fields(body), " ")
+	line := strings.Join(strings.Fields(stripMarkdown(body)), " ")
 	r := []rune(line)
 	if len(r) <= excerptLen {
 		return line
@@ -110,8 +140,9 @@ func uniqueIDs(ids []uuid.UUID) []uuid.UUID {
 }
 
 // buildQuestionViews decorates questions with their task, project,
-// step, session and users, one batched query for each kind.
-func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, qs []questions.Question) ([]questionView, error) {
+// step, session and users, one batched query for each kind. viewer is
+// the caller: it sets for_me on the questions addressed to them.
+func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, viewer uuid.UUID, qs []questions.Question) ([]questionView, error) {
 	var taskIDs, projectIDs, stepIDs, sessionIDs, userIDs []uuid.UUID
 	for _, q := range qs {
 		taskIDs = append(taskIDs, q.TaskID)
@@ -187,6 +218,7 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, qs []questions.
 			WithdrawnAt: q.WithdrawnAt, WithdrawnReason: q.WithdrawnReason,
 			CreatedAt: q.CreatedAt, UpdatedAt: q.UpdatedAt,
 			ViaMCP: q.AskedByTokenID != nil,
+			ForMe:  q.RecipientUserID != nil && *q.RecipientUserID == viewer,
 		}
 		pid := q.ProjectID
 		// A render failure ships the view without that HTML.
@@ -319,7 +351,7 @@ func ListQuestionsHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		views, err := buildQuestionViews(r.Context(), d.Pool, qs)
+		views, err := buildQuestionViews(r.Context(), d.Pool, c.UserID, qs)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -385,7 +417,7 @@ func AnswerQuestionHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		views, err := buildQuestionViews(r.Context(), d.Pool, []questions.Question{*q})
+		views, err := buildQuestionViews(r.Context(), d.Pool, c.UserID, []questions.Question{*q})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

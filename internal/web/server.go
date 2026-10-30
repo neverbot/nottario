@@ -219,6 +219,7 @@ func NewServer(d Deps) http.Handler {
 	mux.Handle("DELETE /api/projects/{id}/tasks/{task_id}/steps/{step_id}", guard(RemoveStepHandler(tasks)))
 	mux.Handle("PUT /api/projects/{id}/tasks/{task_id}/steps/{step_id}/position", guard(MoveStepHandler(tasks)))
 
+	mux.Handle("GET /api/live", guard(LiveHandler(tasks)))
 	mux.Handle("GET /api/questions", guard(ListQuestionsHandler(tasks)))
 	mux.Handle("POST /api/projects/{id}/questions/{question_id}/answer", guard(AnswerQuestionHandler(tasks)))
 	mux.Handle("PUT /api/projects/{id}/questions/{question_id}/answer", guard(AnswerQuestionHandler(tasks)))
