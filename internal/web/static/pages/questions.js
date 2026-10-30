@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from '/static/vendor/lit/lit.js';
 import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import { toast } from '/static/components/toast.js';
 import '/static/components/page-header.js';
 import '/static/components/segmented-control.js';
 import '/static/components/chip-filter.js';
@@ -21,6 +22,13 @@ import '/static/components/question-card.js';
 // question's card, which is what positional re-rendering would do.
 
 const TABS = ['open', 'answered', 'all'];
+
+// projectError is the message for a project that would not load.
+function projectError(status) {
+  if (status === 403) return 'You are not a member of this project.';
+  if (status === 404) return 'Project not found.';
+  return `Could not load the project (HTTP ${status}).`;
+}
 
 const EMPTY = {
   open: 'No questions waiting for you.',
@@ -50,6 +58,7 @@ class NottarioQuestionsPage extends LitElement {
     _project: { state: true },
     _projects: { state: true },
     _filter: { state: true },
+    _notFound: { state: true },
   };
 
   static styles = [
@@ -65,7 +74,8 @@ class NottarioQuestionsPage extends LitElement {
         margin-bottom: 12px;
       }
 
-      .paused {
+      .paused,
+      .notice {
         margin: 0 0 12px;
         padding: 8px 12px;
         border: 1px solid var(--border);
@@ -95,8 +105,8 @@ class NottarioQuestionsPage extends LitElement {
         padding: 0;
         background: transparent;
       }
-      .list nottario-question-card { outline: none; scroll-margin: 80px; }
-      .list nottario-question-card:focus-visible {
+      .list nottario-question-card { scroll-margin: 80px; }
+      .list nottario-question-card::part(card):focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 6px;
         border-radius: var(--radius-sm);
@@ -113,7 +123,8 @@ class NottarioQuestionsPage extends LitElement {
         font-size: 14px;
       }
       .error { color: var(--danger-text); }
-      .error p { margin: 0 0 12px; }
+      .error p,
+      .empty p { margin: 0 0 12px; }
 
       /* Loading placeholders: static grey bars, no shimmer. */
       .skeleton { list-style: none; margin: 0; padding: 0; }
@@ -166,8 +177,10 @@ class NottarioQuestionsPage extends LitElement {
     this._kept = new Map(); // id -> question answered here while on Open
     this._unsubs = [];
     this._seq = 0;
+    this._startGen = 0; // bumped by every _start and by disconnect
     this._reloadTimer = null;
     this._pendingHash = '';
+    this._notFound = false;
     this._lastCard = null; // last question that held focus, for j/k
     this._onKey = this._onKey.bind(this);
     this._onHash = () => this._applyHash();
@@ -183,6 +196,7 @@ class NottarioQuestionsPage extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this._startGen++;
     this._unsubscribe();
     clearTimeout(this._reloadTimer);
     document.removeEventListener('keydown', this._onKey);
@@ -207,31 +221,47 @@ class NottarioQuestionsPage extends LitElement {
 
   // ---- data ----
 
+  // _start resolves what the page shows, subscribes and loads. A
+  // disconnect or a new projectId while it awaits bumps _startGen, and
+  // the stale run stops before subscribing anything.
+  //
+  // The global page subscribes to the projects it found here, once: a
+  // project the viewer joins later shows up on the next visit.
   async _start() {
+    const gen = ++this._startGen;
+    const stale = () => gen !== this._startGen || !this.isConnected;
     this._loading = true;
     this._error = '';
+    this._paused = false;
     this._unsubscribe();
     if (this._global) {
       this._project = null;
+      let projects = [];
       try {
         const r = await fetch('/api/projects');
         const j = r.ok ? await r.json() : {};
-        this._projects = j.projects || [];
+        projects = j.projects || [];
       } catch (_) {
-        this._projects = [];
+        projects = [];
       }
-      for (const p of this._projects) this._unsubs.push(subscribe(p.id, (ev) => this._onEvent(ev)));
+      if (stale()) return;
+      this._projects = projects;
+      for (const p of projects) this._unsubs.push(subscribe(p.id, (ev) => this._onEvent(ev)));
     } else {
+      let project;
       try {
         const r = await fetch(`/api/projects/${encodeURIComponent(this.projectId)}`);
-        if (!r.ok) throw new Error(r.status === 404 ? 'Project not found.' : `HTTP ${r.status}`);
-        this._project = await r.json();
+        if (!r.ok) throw new Error(projectError(r.status));
+        project = await r.json();
       } catch (e) {
+        if (stale()) return;
         this._loading = false;
-        this._error = `Could not load the project: ${e.message}`;
+        this._error = e.message;
         return;
       }
-      this._unsubs.push(subscribe(this._project.id, (ev) => this._onEvent(ev)));
+      if (stale()) return;
+      this._project = project;
+      this._unsubs.push(subscribe(project.id, (ev) => this._onEvent(ev)));
     }
     await this._load();
   }
@@ -267,6 +297,7 @@ class NottarioQuestionsPage extends LitElement {
     if (this._project) qs.set('project_id', this._project.id);
     const r = await fetch(`/api/questions?${qs}`);
     const j = await r.json().catch(() => ({}));
+    if (r.status === 403) throw new Error('You are not a member of this project.');
     if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
     return j.questions || [];
   }
@@ -294,7 +325,13 @@ class NottarioQuestionsPage extends LitElement {
       this._error = '';
     } catch (e) {
       if (seq !== this._seq) return;
-      this._error = `Could not load questions: ${e.message}`;
+      // A background reload that fails keeps what is on screen; the
+      // full error state is for a page with nothing to show yet.
+      if (!this._loading && this._items.length > 0) {
+        toast.error(`Could not refresh questions: ${e.message}`);
+      } else {
+        this._error = `Could not load questions: ${e.message}`;
+      }
     }
     this._loading = false;
     await this.updateComplete;
@@ -326,7 +363,20 @@ class NottarioQuestionsPage extends LitElement {
   _onKey(e) {
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key !== 'j' && e.key !== 'k') return;
-    if (typingTarget(e.composedPath()[0])) return;
+    const path = e.composedPath();
+    if (typingTarget(path[0])) return;
+    // A menu, dialog or popover owns the keyboard while it is open,
+    // including while focus is still on the control that opened it.
+    const overlay = path.some(
+      (el) =>
+        el instanceof Element &&
+        (el.getAttribute('role') === 'menu' ||
+          el.getAttribute('role') === 'dialog' ||
+          el.getAttribute('aria-expanded') === 'true' ||
+          el.matches('dialog[open], .popover')),
+    );
+    if (overlay) return;
+    if (document.querySelector('dialog[open]')) return;
     const cards = [...this.renderRoot.querySelectorAll('.list nottario-question-card')];
     if (!cards.length) return;
     // Answering removes the focused control, which drops focus to the
@@ -348,15 +398,24 @@ class NottarioQuestionsPage extends LitElement {
     const hash = afterLoad ? this._pendingHash : window.location.hash;
     if (!afterLoad) this._pendingHash = hash;
     const m = /^#q-([0-9a-f-]{36})$/i.exec(hash || '');
-    if (!m || this._loading) return;
+    if (!m) {
+      this._notFound = false;
+      return;
+    }
+    if (this._loading) return;
     const li = this._cards.get(m[1]);
     const card = li?.isConnected ? li.querySelector('nottario-question-card') : null;
     if (!card) {
-      if (this._tab === 'open') this._setTab('all');
-      else this._pendingHash = '';
+      if (this._tab !== 'all') {
+        this._setTab('all');
+      } else {
+        this._pendingHash = '';
+        this._notFound = true;
+      }
       return;
     }
     this._pendingHash = '';
+    this._notFound = false;
     const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     card.focus({ preventScroll: true });
     card.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
@@ -381,7 +440,6 @@ class NottarioQuestionsPage extends LitElement {
       if (!li) {
         li = document.createElement('li');
         const card = document.createElement('nottario-question-card');
-        card.tabIndex = -1;
         card.showTask = true;
         card.dataset.id = q.id;
         li.appendChild(card);
@@ -437,6 +495,7 @@ class NottarioQuestionsPage extends LitElement {
           ? html`<p class="paused" role="status">Live updates paused, reconnecting…</p>`
           : nothing
       }
+      ${this._notFound ? html`<p class="notice" role="status">Question not found.</p>` : nothing}
       ${this._renderState(items)}
       <ol class="list" aria-label="Questions" ?hidden=${!showList}
           @focusin=${(e) => {
@@ -462,6 +521,14 @@ class NottarioQuestionsPage extends LitElement {
       return html`<div class="error" role="alert">
         <p>${this._error}</p>
         <button class="btn secondary" type="button" @click=${() => this._start()}>Try again</button>
+      </div>`;
+    }
+    if (items.length === 0 && this._global && this._filter.length > 0) {
+      return html`<div class="empty">
+        <p>No questions in the selected projects.</p>
+        <button class="btn secondary" type="button" @click=${() => {
+          this._filter = [];
+        }}>Clear filter</button>
       </div>`;
     }
     if (items.length === 0) return html`<div class="empty">${EMPTY[this._tab]}</div>`;

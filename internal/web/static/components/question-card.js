@@ -24,7 +24,8 @@ import { copyToClipboard } from '/static/utils/clipboard.js';
 //             surrounding row is the frame
 //   showTask  name the task (as a link to it) in the header
 //
-// Parts: card, the frame; a list that draws its own separators (the
+// Parts: card, the frame, focusable by script (focus() on the element
+// moves there); a list that draws its own separators (the
 // Questions page) drops the border and padding through ::part(card).
 //
 // Events (bubbling, composed):
@@ -99,7 +100,6 @@ export class NottarioQuestionCard extends LitElement {
     css`
       :host {
         display: block;
-        max-width: 75ch;
         color: var(--fg);
         font-size: 14px;
       }
@@ -190,6 +190,10 @@ export class NottarioQuestionCard extends LitElement {
         border-color: rgba(26, 127, 55, 0.3);
       }
 
+      /* The header spans the card, its age on the right; what follows
+         is capped to a readable measure. */
+      .content { max-width: 75ch; }
+      .card:focus { outline: none; }
       .body { margin-bottom: 12px; }
       :host([compact]) .body nottario-markdown { font-size: 13px; }
       .excerpt { margin: 0; overflow-wrap: anywhere; }
@@ -364,6 +368,15 @@ export class NottarioQuestionCard extends LitElement {
     this._formFor = null;
     this._resetForm(null);
     this.addEventListener('keydown', (e) => this._onKeydown(e));
+  }
+
+  // focus() lands on the card's frame (the article, which carries the
+  // question as its name), so lists can move focus between questions
+  // and keys 1-9 reach the card without the host being a tab stop.
+  focus(options) {
+    const article = this.renderRoot?.querySelector('article');
+    if (article) article.focus(options);
+    else super.focus(options);
   }
 
   connectedCallback() {
@@ -577,17 +590,19 @@ export class NottarioQuestionCard extends LitElement {
     const q = this.question;
     if (!q) return nothing;
     return html`
-      <article class="card ${q.state}" part="card" aria-label=${q.excerpt || 'Question'}
-               aria-describedby="${this._uid}-body">
+      <article class="card ${q.state}" part="card" tabindex="-1"
+               aria-label=${q.excerpt || 'Question'}>
         ${this._renderHeader(q)}
-        <div class="body" id="${this._uid}-body">
-          ${
-            q.body_html
-              ? html`<nottario-markdown .html=${q.body_html}></nottario-markdown>`
-              : html`<p class="excerpt">${q.excerpt}</p>`
-          }
+        <div class="content">
+          <div class="body">
+            ${
+              q.body_html
+                ? html`<nottario-markdown .html=${q.body_html}></nottario-markdown>`
+                : html`<p class="excerpt">${q.excerpt}</p>`
+            }
+          </div>
+          ${this._renderState(q)}
         </div>
-        ${this._renderState(q)}
       </article>
     `;
   }
