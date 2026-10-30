@@ -24,6 +24,9 @@ import { copyToClipboard } from '/static/utils/clipboard.js';
 //             surrounding row is the frame
 //   showTask  name the task (as a link to it) in the header
 //
+// Parts: card, the frame; a list that draws its own separators (the
+// Questions page) drops the border and padding through ::part(card).
+//
 // Events (bubbling, composed):
 //   question-answered  { question }        the answer was saved; detail
 //                                          carries the updated view. The
@@ -574,7 +577,7 @@ export class NottarioQuestionCard extends LitElement {
     const q = this.question;
     if (!q) return nothing;
     return html`
-      <article class="card ${q.state}" aria-label=${q.excerpt || 'Question'}
+      <article class="card ${q.state}" part="card" aria-label=${q.excerpt || 'Question'}
                aria-describedby="${this._uid}-body">
         ${this._renderHeader(q)}
         <div class="body" id="${this._uid}-body">

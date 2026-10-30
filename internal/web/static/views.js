@@ -29,6 +29,12 @@ export const PROJECT_VIEWS = [
     path: (pid) => `/projects/${pid}/board/gantt`,
   },
   {
+    key: 'questions',
+    label: 'Questions',
+    description: 'Questions agents filed for a person, with the form to answer them.',
+    path: (pid) => `/projects/${pid}/questions`,
+  },
+  {
     key: 'docs',
     label: 'Docs',
     description: 'Shared markdown context: skills, decisions, notes.',

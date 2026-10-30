@@ -11,6 +11,7 @@ import './pages/board.js';
 import './pages/docs.js';
 import './pages/arch.js';
 import './pages/search.js';
+import './pages/questions.js';
 
 class NottarioShell extends LitElement {
   static properties = {
@@ -159,6 +160,9 @@ class NottarioShell extends LitElement {
     if (path === '/users') {
       return html`<nottario-users-page .me=${this.me}></nottario-users-page>`;
     }
+    if (path === '/questions') {
+      return html`<nottario-questions-page .me=${this.me}></nottario-questions-page>`;
+    }
     if (path === '/me' || path === '/profile') {
       return html`<nottario-profile-page .me=${this.me}></nottario-profile-page>`;
     }
@@ -187,6 +191,11 @@ class NottarioShell extends LitElement {
     if (docsMatch) {
       return html`<nottario-docs-page
         .me=${this.me} .projectId=${docsMatch[1]}></nottario-docs-page>`;
+    }
+    const questionsMatch = path.match(/^\/projects\/([^/]+)\/questions$/);
+    if (questionsMatch) {
+      return html`<nottario-questions-page
+        .me=${this.me} .projectId=${questionsMatch[1]}></nottario-questions-page>`;
     }
     // Architecture: /arch (default diagram) | /arch/diagram | /arch/tree
     const archMatch = path.match(/^\/projects\/([^/]+)\/arch(?:\/(diagram|tree))?$/);
