@@ -960,7 +960,7 @@ func (q *Queries) RoleExistsInProject(ctx context.Context, arg RoleExistsInProje
 
 const setTaskActiveSession = `-- name: SetTaskActiveSession :exec
 UPDATE tasks SET active_session_id = $1::uuid
-WHERE id = $2::uuid
+WHERE id = $2::uuid AND state = 'doing'
 `
 
 type SetTaskActiveSessionParams struct {
@@ -1045,6 +1045,14 @@ UPDATE tasks SET
     WHEN $6::bool THEN NULL
     WHEN $7::uuid IS NOT NULL THEN $7::uuid
     ELSE assignee_user_id
+  END,
+  -- A conversation holds the task for its assignee: handing the task to
+  -- someone else, or to nobody, ends it. Re-assigning the same user keeps it.
+  active_session_id = CASE
+    WHEN $6::bool AND assignee_user_id IS NOT NULL THEN NULL
+    WHEN $7::uuid IS NOT NULL
+         AND assignee_user_id IS DISTINCT FROM $7::uuid THEN NULL
+    ELSE active_session_id
   END,
   target_role_id = CASE
     WHEN $8::bool THEN NULL

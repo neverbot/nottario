@@ -282,6 +282,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return nil, nil, err
 		}
+		if err := checkSession(in.sessionFields); err != nil {
+			return toolError(err.Error())
+		}
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
 			return toolError("project_id must be a uuid")
@@ -319,10 +322,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
-		if err := markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields); err != nil {
-			return toolError(err.Error())
+		out := map[string]any{"task": newTaskView(ctx, d).payload(t, in.Verbose)}
+		if msg := markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields); msg != "" {
+			out["session_error"] = msg
 		}
-		return jsonResult(map[string]any{"task": newTaskView(ctx, d).payload(t, in.Verbose)})
+		return jsonResult(out)
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -332,6 +336,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
 			return nil, nil, err
+		}
+		if err := checkSession(in.sessionFields); err != nil {
+			return toolError(err.Error())
 		}
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
@@ -359,10 +366,8 @@ func registerTasks(server *sdk.Server, d Deps) {
 			}
 			return toolError(err.Error())
 		}
-		if err := markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields); err != nil {
-			return toolError(err.Error())
-		}
-		return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
+		msg := markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields)
+		return jsonResult(withSessionError(newTaskView(ctx, d).payload(t, in.Verbose), msg))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -417,6 +422,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return nil, nil, err
 		}
+		if err := checkSession(in.sessionFields); err != nil {
+			return toolError(err.Error())
+		}
 		pid, err := uuid.Parse(in.ProjectID)
 		if err != nil {
 			return toolError("project_id must be a uuid")
@@ -459,12 +467,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
+		var sessionMsg string
 		if in.Claim {
-			if err := markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields); err != nil {
-				return toolError(err.Error())
-			}
+			sessionMsg = markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields)
 		}
-		return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
+		return jsonResult(withSessionError(newTaskView(ctx, d).payload(t, in.Verbose), sessionMsg))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{

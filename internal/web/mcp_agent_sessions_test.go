@@ -41,7 +41,7 @@ func TestMCPAgentSessionOnClaim(t *testing.T) {
 	}, &created)
 
 	// The server is stateless, so the client name comes from the
-	// User-Agent header of the test transport.
+	// User-Agent header of the test transport ("qa-test/0").
 	var label, client, key string
 	var tokenSet bool
 	if err := pool.QueryRow(f.ctx,
@@ -50,7 +50,7 @@ func TestMCPAgentSessionOnClaim(t *testing.T) {
 		 WHERE t.id = $1`, created.ID).Scan(&label, &client, &key, &tokenSet); err != nil {
 		t.Fatalf("read active session: %v", err)
 	}
-	if label != "move docs" || client != "Go-http-client" || key != "s-1" || !tokenSet {
+	if label != "move docs" || client != "qa-test" || key != "s-1" || !tokenSet {
 		t.Fatalf("session = %q %q %q token=%v", label, client, key, tokenSet)
 	}
 
@@ -83,17 +83,148 @@ func TestMCPAgentSessionOnClaim(t *testing.T) {
 	}
 
 	// Leaving doing clears the session.
-	for _, state := range []string{"todo", "done"} {
-		id := created.ID
-		if state == "done" {
-			id = other.ID
+	f.callJSON(t, "nottario.tasks.set_state", map[string]any{
+		"project_id": f.projectID, "task_id": created.ID, "state": "todo",
+	}, nil)
+	if err := pool.QueryRow(f.ctx, `SELECT active_session_id IS NULL FROM tasks WHERE id = $1`, created.ID).Scan(&isNull); err != nil || !isNull {
+		t.Fatalf("set_state todo: active_session_id null=%v err=%v", isNull, err)
+	}
+	f.callJSON(t, "nottario.tasks.set_state", map[string]any{
+		"project_id": f.projectID, "task_id": other.ID, "state": "done",
+	}, nil)
+	if err := pool.QueryRow(f.ctx, `SELECT active_session_id IS NULL FROM tasks WHERE id = $1`, other.ID).Scan(&isNull); err != nil || !isNull {
+		t.Fatalf("set_state done: active_session_id null=%v err=%v", isNull, err)
+	}
+}
+
+func TestMCPAgentSessionClaimNextWontDoAndLabel(t *testing.T) {
+	f := newMCPFixture(t, 9802, "sessnext")
+	pool := f.pgx(t)
+	sessionOf := func(id string) (key, label string, has bool) {
+		t.Helper()
+		var k, l *string
+		if err := pool.QueryRow(f.ctx,
+			`SELECT s.session_key, s.label FROM tasks t LEFT JOIN agent_sessions s ON s.id = t.active_session_id WHERE t.id = $1`,
+			id).Scan(&k, &l); err != nil {
+			t.Fatal(err)
 		}
-		f.callJSON(t, "nottario.tasks.set_state", map[string]any{
-			"project_id": f.projectID, "task_id": id, "state": state,
-		}, nil)
-		if err := pool.QueryRow(f.ctx, `SELECT active_session_id IS NULL FROM tasks WHERE id = $1`, id).Scan(&isNull); err != nil || !isNull {
-			t.Fatalf("set_state %s: active_session_id null=%v err=%v", state, isNull, err)
+		if k == nil {
+			return "", "", false
 		}
+		return *k, *l, true
+	}
+
+	var made struct {
+		ID string `json:"id"`
+	}
+	f.callJSON(t, "nottario.tasks.create", map[string]any{"project_id": f.projectID, "title": "next one"}, &made)
+
+	var next struct {
+		Task struct {
+			ID string `json:"id"`
+		} `json:"task"`
+		SessionError string `json:"session_error"`
+	}
+	f.callJSON(t, "nottario.tasks.claim_next", map[string]any{
+		"project_id": f.projectID, "session": "s-2", "session_label": "first label",
+	}, &next)
+	if next.Task.ID != made.ID || next.SessionError != "" {
+		t.Fatalf("claim_next = %+v", next)
+	}
+	if k, l, ok := sessionOf(made.ID); !ok || k != "s-2" || l != "first label" {
+		t.Fatalf("session after claim_next = %q %q %v", k, l, ok)
+	}
+
+	// A later call with the same key replaces the label.
+	f.callJSON(t, "nottario.tasks.claim", map[string]any{
+		"project_id": f.projectID, "task_id": made.ID, "session": "s-2", "session_label": "new label",
+	}, nil)
+	if _, l, _ := sessionOf(made.ID); l != "new label" {
+		t.Fatalf("label = %q, want replaced", l)
+	}
+
+	f.callJSON(t, "nottario.tasks.set_state", map[string]any{
+		"project_id": f.projectID, "task_id": made.ID, "state": "wont_do",
+	}, nil)
+	if _, _, ok := sessionOf(made.ID); ok {
+		t.Fatal("wont_do must clear the active session")
+	}
+}
+
+func TestMCPAgentSessionRejectedBeforeWrite(t *testing.T) {
+	f := newMCPFixture(t, 9803, "sessbad")
+	pool := f.pgx(t)
+	count := func(q string) int {
+		t.Helper()
+		var n int
+		if err := pool.QueryRow(f.ctx, q).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	var made struct {
+		ID string `json:"id"`
+	}
+	f.callJSON(t, "nottario.tasks.create", map[string]any{"project_id": f.projectID, "title": "todo one"}, &made)
+	tasksBefore := count(`SELECT count(*) FROM tasks`)
+
+	f.callExpectErr(t, "nottario.tasks.create", map[string]any{
+		"project_id": f.projectID, "title": "never", "claim": true, "session": "   ",
+	})
+	f.callExpectErr(t, "nottario.tasks.claim_next", map[string]any{"project_id": f.projectID, "session": "   "})
+	f.callExpectErr(t, "nottario.tasks.claim", map[string]any{
+		"project_id": f.projectID, "task_id": made.ID, "session": "   ",
+	})
+
+	if n := count(`SELECT count(*) FROM tasks`); n != tasksBefore {
+		t.Fatalf("tasks = %d, want %d: create wrote despite the bad session", n, tasksBefore)
+	}
+	if n := count(`SELECT count(*) FROM tasks WHERE state = 'doing'`); n != 0 {
+		t.Fatalf("%d tasks in doing, nothing must be claimed", n)
+	}
+	if n := count(`SELECT count(*) FROM agent_sessions`); n != 0 {
+		t.Fatalf("%d sessions written", n)
+	}
+}
+
+func TestMCPAgentSessionClearedOnReassign(t *testing.T) {
+	f := newMCPFixture(t, 9804, "sessassign")
+	pool := f.pgx(t)
+	var made struct {
+		ID string `json:"id"`
+	}
+	f.callJSON(t, "nottario.tasks.create", map[string]any{
+		"project_id": f.projectID, "title": "held", "claim": true, "session": "s-3",
+	}, &made)
+	hasSession := func() bool {
+		t.Helper()
+		var has bool
+		if err := pool.QueryRow(f.ctx, `SELECT active_session_id IS NOT NULL FROM tasks WHERE id = $1`, made.ID).Scan(&has); err != nil {
+			t.Fatal(err)
+		}
+		return has
+	}
+
+	// Re-assigning to the same user keeps the session.
+	f.callJSON(t, "nottario.tasks.update", map[string]any{
+		"project_id": f.projectID, "task_id": made.ID, "assignee_user_id": "me",
+	}, nil)
+	if !hasSession() {
+		t.Fatal("same assignee must keep the session")
+	}
+	// Editing something else keeps it too.
+	f.callJSON(t, "nottario.tasks.update", map[string]any{
+		"project_id": f.projectID, "task_id": made.ID, "title": "held again",
+	}, nil)
+	if !hasSession() {
+		t.Fatal("a title edit must keep the session")
+	}
+	f.callJSON(t, "nottario.tasks.update", map[string]any{
+		"project_id": f.projectID, "task_id": made.ID, "assignee_user_id": "none",
+	}, nil)
+	if hasSession() {
+		t.Fatal("unassigning must clear the session")
 	}
 }
 

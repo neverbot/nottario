@@ -5,9 +5,10 @@ package agents
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/neverbot/nottario/internal/db/dbq"
@@ -26,10 +27,23 @@ type Session struct {
 }
 
 const (
-	MaxKeyLen    = 128
-	MaxLabelLen  = 80
+	// MaxKeyLen is the longest session key, in characters.
+	MaxKeyLen = 128
+	// MaxLabelLen is the longest session label, in characters.
+	MaxLabelLen = 80
+	// MaxClientLen is the longest client name, in characters.
 	MaxClientLen = 80
 )
+
+// NormaliseKey trims a session key and checks its length. Callers use
+// it to reject a bad key before they write anything.
+func NormaliseKey(key string) (string, error) {
+	key = strings.TrimSpace(key)
+	if n := utf8.RuneCountInString(key); n < 1 || n > MaxKeyLen {
+		return "", fmt.Errorf("session must be 1 to %d characters", MaxKeyLen)
+	}
+	return key, nil
+}
 
 // Ref identifies a session to create or refresh.
 type Ref struct {
@@ -63,9 +77,9 @@ func truncRunes(s string, n int) string {
 
 // Touch creates or refreshes the session and returns it.
 func Touch(ctx context.Context, db dbq.DBTX, r Ref) (*Session, error) {
-	key := strings.TrimSpace(r.Key)
-	if key == "" || len(key) > MaxKeyLen {
-		return nil, errors.New("session must be 1 to 128 characters")
+	key, err := NormaliseKey(r.Key)
+	if err != nil {
+		return nil, err
 	}
 	row, err := dbq.New(db).UpsertAgentSession(ctx, dbq.UpsertAgentSessionParams{
 		ProjectID:  r.ProjectID,

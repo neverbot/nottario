@@ -166,5 +166,6 @@ type bearerTransport struct {
 func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	r = r.Clone(r.Context())
 	r.Header.Set("Authorization", "Bearer "+b.token)
+	r.Header.Set("User-Agent", "qa-test/0")
 	return b.rt.RoundTrip(r)
 }

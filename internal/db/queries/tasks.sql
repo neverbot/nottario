@@ -90,6 +90,14 @@ UPDATE tasks SET
     WHEN sqlc.narg('assignee_user_id')::uuid IS NOT NULL THEN sqlc.narg('assignee_user_id')::uuid
     ELSE assignee_user_id
   END,
+  -- A conversation holds the task for its assignee: handing the task to
+  -- someone else, or to nobody, ends it. Re-assigning the same user keeps it.
+  active_session_id = CASE
+    WHEN sqlc.arg('unset_assignee')::bool AND assignee_user_id IS NOT NULL THEN NULL
+    WHEN sqlc.narg('assignee_user_id')::uuid IS NOT NULL
+         AND assignee_user_id IS DISTINCT FROM sqlc.narg('assignee_user_id')::uuid THEN NULL
+    ELSE active_session_id
+  END,
   target_role_id = CASE
     WHEN sqlc.arg('unset_target_role')::bool THEN NULL
     WHEN sqlc.narg('target_role_id')::uuid IS NOT NULL THEN sqlc.narg('target_role_id')::uuid
@@ -280,7 +288,7 @@ WHERE id = $1;
 
 -- name: SetTaskActiveSession :exec
 UPDATE tasks SET active_session_id = sqlc.arg('session_id')::uuid
-WHERE id = sqlc.arg('id')::uuid;
+WHERE id = sqlc.arg('id')::uuid AND state = 'doing';
 
 -- name: SetTaskDoing :exec
 UPDATE tasks SET

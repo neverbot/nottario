@@ -1,6 +1,7 @@
 package agents_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -59,15 +60,24 @@ func TestTouch(t *testing.T) {
 
 	ref.Key = "  "
 	if _, err := agents.Touch(ctx, pool, ref); err == nil {
-		t.Fatal("empty key must error")
+		t.Fatal("blank key must error")
 	}
-	long := make([]byte, agents.MaxKeyLen+1)
-	for i := range long {
-		long[i] = 'x'
-	}
-	ref.Key = string(long)
+	ref.Key = strings.Repeat("x", agents.MaxKeyLen+1)
 	if _, err := agents.Touch(ctx, pool, ref); err == nil {
 		t.Fatal("key over 128 characters must error")
+	}
+	ref.Key = strings.Repeat("x", agents.MaxKeyLen)
+	if _, err := agents.Touch(ctx, pool, ref); err != nil {
+		t.Fatalf("key of exactly 128 characters: %v", err)
+	}
+	// The limit counts characters, not bytes.
+	ref.Key = strings.Repeat("ñ", agents.MaxKeyLen)
+	if _, err := agents.Touch(ctx, pool, ref); err != nil {
+		t.Fatalf("128 multibyte characters: %v", err)
+	}
+	ref.Key = strings.Repeat("ñ", agents.MaxKeyLen+1)
+	if _, err := agents.Touch(ctx, pool, ref); err == nil {
+		t.Fatal("129 multibyte characters must error")
 	}
 
 	// Same key under another user is a different session.

@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"strings"
 
 	"github.com/google/uuid"
@@ -38,23 +38,54 @@ func touchSession(ctx context.Context, req *sdk.CallToolRequest, d Deps, pid uui
 	return &s.ID, nil
 }
 
+// checkSession rejects a malformed session before anything is written.
+// An absent session is fine: nothing is recorded.
+func checkSession(f sessionFields) error {
+	if f.Session == "" {
+		return nil
+	}
+	_, err := agents.NormaliseKey(f.Session)
+	return err
+}
+
 // markActiveSession records the session on a task that was just
-// claimed. A failure is reported as an error that says the claim stood.
-func markActiveSession(ctx context.Context, req *sdk.CallToolRequest, d Deps, pid, taskID uuid.UUID, c identity.Caller, f sessionFields) error {
+// claimed. It returns the failure text, empty on success or when there
+// is no session: the claim already happened, so a failure here must not
+// turn the call into a tool error (agents retry errors, and a retry
+// would claim or create a second task).
+func markActiveSession(ctx context.Context, req *sdk.CallToolRequest, d Deps, pid, taskID uuid.UUID, c identity.Caller, f sessionFields) string {
 	sid, err := touchSession(ctx, req, d, pid, c, f)
 	if err == nil && sid != nil {
 		err = tasks.SetActiveSession(ctx, d.Pool, taskID, *sid)
 	}
 	if err != nil {
-		return fmt.Errorf("the task was claimed, but recording the session failed: %w", err)
+		return "the task was claimed, but recording the session failed: " + err.Error()
 	}
-	return nil
+	return ""
+}
+
+// withSessionError adds session_error to a JSON object payload; the
+// payload is returned untouched when msg is empty.
+func withSessionError(payload any, msg string) any {
+	if msg == "" {
+		return payload
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return payload
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return payload
+	}
+	m["session_error"] = msg
+	return m
 }
 
 // clientName names the MCP client. The server runs stateless, so the
 // initialize handshake is not seen by later calls and ClientInfo is
 // normally empty; the product token of the User-Agent header
-// ("claude-code/2.1" gives "claude-code") stands in for it.
+// ("claude-code/2.1" gives "claude-code", reduced to [A-Za-z0-9._-]) stands in for it.
 func clientName(req *sdk.CallToolRequest) string {
 	if req == nil {
 		return ""
@@ -66,10 +97,15 @@ func clientName(req *sdk.CallToolRequest) string {
 	}
 	if ex := req.GetExtra(); ex != nil && ex.Header != nil {
 		ua := strings.TrimSpace(ex.Header.Get("User-Agent"))
-		if i := strings.IndexAny(ua, "/ "); i > 0 {
+		if i := strings.IndexAny(ua, "/ "); i >= 0 {
 			ua = ua[:i]
 		}
-		return ua
+		return strings.Map(func(r rune) rune {
+			if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-' {
+				return r
+			}
+			return -1
+		}, ua)
 	}
 	return ""
 }
