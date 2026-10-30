@@ -350,9 +350,9 @@ class NottarioTopbar extends LitElement {
     const r = this.route || '';
     const match = (prefix) => r === prefix || r.startsWith(prefix + '/');
     const items = [
+      { label: 'Live', href: `${base}/live`, active: match(`${base}/live`) },
       { label: 'Board', href: `${base}/board/kanban`, active: match(`${base}/board/kanban`) },
       { label: 'Gantt', href: `${base}/board/gantt`, active: match(`${base}/board/gantt`) },
-      { label: 'Live', href: `${base}/live`, active: match(`${base}/live`) },
       { label: 'Questions', href: `${base}/questions`, active: match(`${base}/questions`) },
       { label: 'Docs', href: `${base}/docs`, active: match(`${base}/docs`) },
       { label: 'Architecture', href: `${base}/arch/diagram`, active: match(`${base}/arch`) },
