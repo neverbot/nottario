@@ -3,6 +3,7 @@ import { popoverStyles } from '/static/components/surfaces.js';
 import { formatRelativeTime } from '/static/time.js';
 import { OutsideClickController } from '/static/components/outside-click.js';
 import '/static/components/avatar.js';
+import { taskHref } from '/static/utils/task-link.js';
 
 // <nottario-notifications-bell .me=${me}>
 //
@@ -326,7 +327,7 @@ class NottarioNotificationsBell extends LitElement {
   _hrefFor(n) {
     if (!n.task?.project_id || !n.task?.id) return '#';
     if (n.kind === 'question_asked') return `/projects/${n.task.project_id}/questions`;
-    return `/projects/${n.task.project_id}/board/kanban#task=${n.task.id}`;
+    return taskHref(n.task.id, n.task.project_id);
   }
 
   render() {

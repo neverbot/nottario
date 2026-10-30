@@ -401,8 +401,9 @@ class NottarioGantt extends LitElement {
   }
 
   // Click on a task bar. If the task is already in the selected set,
-  // open the detail panel (the historical single-click behaviour).
+  // open the task dialog (the historical single-click behaviour).
   // Otherwise replace the selection with this task's connected set.
+  // A double click, or Enter on a focused bar, opens it straight away.
   _onTaskClick(t) {
     if (this._selectedSet.has(t.id)) {
       this._emitSelect(t);
@@ -1809,6 +1810,13 @@ class NottarioGantt extends LitElement {
                     }}
                     @dblclick=${(e) => {
                       e.stopPropagation();
+                      this._emitSelect(t);
+                    }}
+                    @keydown=${(e) => {
+                      // Enter on a focused bar opens the task dialog,
+                      // the keyboard twin of a double click.
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
                       this._emitSelect(t);
                     }}
                     @mouseenter=${(e) => this._onBarHover(e, t, p.from, y)}

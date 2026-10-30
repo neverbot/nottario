@@ -21,6 +21,10 @@ are cut on demand.
   the new Questions view, the Live view or the task dialog after a bell
   notification, with only you (the owner of the agent's token) able to
   answer.
+- Opening a task from Live, Questions, search, a notification, a task
+  chip or the Gantt now shows the task dialog over the page you are on
+  instead of jumping to the Kanban board; the browser's Back button
+  closes it, and the link (`#task=…`) still opens it on reload.
 
 ## 2026-10-15
 

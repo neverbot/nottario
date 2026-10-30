@@ -1,5 +1,6 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 import { popoverStyles } from '/static/components/surfaces.js';
+import { openTask } from '/static/utils/task-link.js';
 
 // <nottario-search-box> is a topbar input + dropdown of results.
 // It needs a projectId to scope the search; when null it shows a
@@ -339,7 +340,8 @@ class NottarioSearchBox extends LitElement {
     let path = null;
     switch (hit.kind) {
       case 'task':
-        path = `/projects/${this.projectId}/board#task=${hit.task_id}`;
+        // The task dialog opens over the current page.
+        openTask(hit.task_id, this.projectId);
         break;
       case 'document':
         path = `/projects/${this.projectId}/docs#path=${encodeURIComponent(hit.doc_path)}`;

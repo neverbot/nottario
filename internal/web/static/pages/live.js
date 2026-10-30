@@ -23,6 +23,7 @@ import {
 import { formatDateTime, formatDuration, formatRelativeTime } from '/static/time.js';
 import { copyToClipboard } from '/static/utils/clipboard.js';
 import { loadScope, subscribeScope } from '/static/utils/project-scope.js';
+import { taskHref as linkToTask } from '/static/utils/task-link.js';
 
 // <nottario-live-page> shows work in progress for one project
 // (projectId set) or for every project the viewer belongs to
@@ -64,7 +65,9 @@ function copyIcon(size = 14) {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-const taskHref = (task) => `/projects/${task.project_id}/board/kanban#task=${task.id}`;
+// Opens the task dialog over this page (the app shell intercepts the
+// click); a new tab gets the same page with the dialog open.
+const taskHref = (task) => linkToTask(task.id, task.project_id);
 
 class NottarioLivePage extends LitElement {
   static properties = {

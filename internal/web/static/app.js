@@ -13,12 +13,31 @@ import './pages/arch.js';
 import './pages/search.js';
 import './pages/questions.js';
 import './pages/live.js';
+import './components/task-dialog.js';
+import {
+  hashWithoutTask,
+  openTask,
+  parseTaskHash,
+  parseTaskURL,
+  taskHash,
+} from './utils/task-link.js';
+
+// deepActiveElement follows focus into shadow roots, so the dialog can
+// hand focus back to the exact control that opened it.
+function deepActiveElement() {
+  let el = document.activeElement;
+  while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+  return el;
+}
 
 class NottarioShell extends LitElement {
   static properties = {
     me: { state: true },
     route: { state: true },
     loading: { state: true },
+    // The task shown in the task dialog, read from the URL hash:
+    // { taskId, projectId } or null.
+    _task: { state: true },
   };
 
   static styles = css`
@@ -63,12 +82,100 @@ class NottarioShell extends LitElement {
     this.me = null;
     this.route = window.location.pathname;
     this.loading = true;
+    this._task = null;
     window.addEventListener('popstate', () => {
       this.route = window.location.pathname;
+      this._syncTask();
     });
+    window.addEventListener('hashchange', () => this._syncTask());
     window.addEventListener('nottario-navigate', (e) => {
       this.navigate(e.detail);
     });
+    window.addEventListener('nottario-open-task', (e) => {
+      this.openTask(e.detail.taskId, e.detail.projectId);
+    });
+    // Any link to a task (the task-link helper's, a markdown chip's,
+    // the older /board/kanban#task= form) opens the dialog in place.
+    // Capture phase, so it runs before a component's own handler (which
+    // then sees defaultPrevented and leaves the click alone). Modified
+    // clicks keep the browser's new-tab behaviour.
+    document.addEventListener('click', (e) => this._onTaskLinkClick(e), true);
+    this._syncTask();
+  }
+
+  // ---- Task dialog ---------------------------------------------------
+  //
+  // The URL hash is the source of truth: #task=<id> on a project route,
+  // #task=<id>&project=<pid> elsewhere (utils/task-link.js). Opening
+  // pushes a history entry marked { taskDialog: true }, so the browser's
+  // Back closes the dialog and leaves the page where it was. Opening
+  // another task while one is showing replaces that entry instead, so
+  // Back still closes rather than walking through every task visited.
+
+  _syncTask() {
+    const t = parseTaskHash(window.location.pathname, window.location.hash);
+    const cur = this._task;
+    if (!t) {
+      if (cur) {
+        this._task = null;
+        this._restoreFocus();
+      }
+      return;
+    }
+    if (cur && cur.taskId === t.taskId && cur.projectId === t.projectId) return;
+    if (!cur) this._returnFocus = deepActiveElement();
+    this._task = t;
+  }
+
+  openTask(taskId, projectId) {
+    if (!taskId || !projectId) return;
+    // Built from the live location so the page's own hash state (board
+    // cycle and filters, docs path, ...) is kept.
+    const { pathname, search } = window.location;
+    const target = pathname + search + taskHash(taskId, projectId, window.location);
+    if (this._task) {
+      window.history.replaceState(window.history.state, '', target);
+    } else {
+      window.history.pushState({ taskDialog: true }, '', target);
+    }
+    this._syncTask();
+  }
+
+  _closeTask() {
+    if (!this._task) return;
+    this._task = null;
+    if (window.history.state?.taskDialog) {
+      // The entry is ours: going back lands on the page as it was.
+      window.history.back();
+    } else {
+      // A deep link (reload, pasted URL): drop the task from the hash
+      // without leaving the page.
+      const { pathname, search, hash } = window.location;
+      window.history.replaceState(
+        window.history.state,
+        '',
+        pathname + search + hashWithoutTask(hash),
+      );
+    }
+    this._restoreFocus();
+  }
+
+  _restoreFocus() {
+    const el = this._returnFocus;
+    this._returnFocus = null;
+    if (el?.isConnected) el.focus?.({ preventScroll: true });
+  }
+
+  _onTaskLinkClick(e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+      return;
+    }
+    const a = e.composedPath().find((n) => n.tagName === 'A' && n.hasAttribute?.('href'));
+    if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+    const t = parseTaskURL(a.getAttribute('href'), window.location.href);
+    if (!t) return;
+    e.preventDefault();
+    openTask(t.taskId, t.projectId);
   }
 
   async connectedCallback() {
@@ -233,6 +340,15 @@ class NottarioShell extends LitElement {
       ${this.renderTopbar()}
       ${this.me ? html`<nottario-update-banner .me=${this.me}></nottario-update-banner>` : null}
       <main id="main-content" tabindex="-1">${this.renderBody()}</main>
+      ${
+        this.me
+          ? html`<nottario-task-dialog
+              .me=${this.me}
+              .projectId=${this._task?.projectId || ''}
+              .taskId=${this._task?.taskId || ''}
+              @task-dialog-close=${() => this._closeTask()}></nottario-task-dialog>`
+          : null
+      }
     `;
   }
 }

@@ -8,6 +8,7 @@ import '/static/components/md-editor.js';
 import { resumeCommand, sessionName } from '/static/live-model.js';
 import { formatDateTime, formatRelativeTime } from '/static/time.js';
 import { copyToClipboard } from '/static/utils/clipboard.js';
+import { taskHref } from '/static/utils/task-link.js';
 
 // <nottario-question-card> shows one question an agent filed for a
 // human, with the form to answer it in place. Shared by the Questions
@@ -642,7 +643,7 @@ export class NottarioQuestionCard extends LitElement {
       parts.push(html`<span class="project">${q.project.name}</span>`);
     }
     if (this.showTask && q.task) {
-      const href = `/projects/${this._pid}/board/kanban#task=${q.task.id}`;
+      const href = taskHref(q.task.id, this._pid);
       parts.push(html`<a class="task" href=${href}>${q.task.title}</a>`);
     }
     if (q.step) parts.push(html`<span class="step">${q.step.text}</span>`);
@@ -669,7 +670,7 @@ export class NottarioQuestionCard extends LitElement {
   // state, the task (when shown) and the age; the row around the card
   // already says the rest.
   _renderFoldedHeader(q) {
-    const href = q.task ? `/projects/${this._pid}/board/kanban#task=${q.task.id}` : '';
+    const href = q.task ? taskHref(q.task.id, this._pid) : '';
     return html`
       <header class="folded">
         ${this._renderStatePill(q)}

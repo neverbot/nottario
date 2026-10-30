@@ -1,4 +1,5 @@
 import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { taskHref } from '/static/utils/task-link.js';
 
 // <nottario-task-chip .task=${task} project-id=${pid}>
 //
@@ -11,9 +12,9 @@ import { LitElement, html, css } from '/static/vendor/lit/lit.js';
 // (the server already emits compatible markup; this is the matching
 // component for client-side renders).
 //
-// The chip links to the same project's kanban with the task id in the
-// URL hash, which the board page picks up via the existing
-// `_applyHash` handler.
+// The chip links to the task dialog over the current page (see
+// utils/task-link.js); the app shell intercepts the click, so the
+// dialog opens without leaving the page.
 class NottarioTaskChip extends LitElement {
   static properties = {
     task: { type: Object },
@@ -90,7 +91,7 @@ class NottarioTaskChip extends LitElement {
     }
     const t = this.task;
     const short = (t.id || '').slice(0, 7);
-    const href = `/projects/${this.projectId}/board/kanban#task=${t.id}`;
+    const href = taskHref(t.id, this.projectId);
     const a11yLabel = `Task ${short}: ${t.title || t.id}` + (t.state ? `, state ${t.state}` : '');
     return html`
       <a href=${href}
