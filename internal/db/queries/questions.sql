@@ -75,6 +75,7 @@ WHERE project_id = ANY(sqlc.arg('project_ids')::uuid[])
   AND (sqlc.narg('state')::text IS NULL OR state = sqlc.narg('state')::text)
   AND (sqlc.narg('task_id')::uuid IS NULL OR task_id = sqlc.narg('task_id')::uuid)
   AND (sqlc.narg('session_id')::uuid IS NULL OR session_id = sqlc.narg('session_id')::uuid)
+  AND (sqlc.narg('recipient_user_id')::uuid IS NULL OR recipient_user_id = sqlc.narg('recipient_user_id')::uuid)
 ORDER BY (state = 'open') DESC,
          CASE WHEN state = 'open' THEN created_at END ASC,
          updated_at DESC

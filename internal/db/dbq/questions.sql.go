@@ -480,18 +480,20 @@ WHERE project_id = ANY($1::uuid[])
   AND ($2::text IS NULL OR state = $2::text)
   AND ($3::uuid IS NULL OR task_id = $3::uuid)
   AND ($4::uuid IS NULL OR session_id = $4::uuid)
+  AND ($5::uuid IS NULL OR recipient_user_id = $5::uuid)
 ORDER BY (state = 'open') DESC,
          CASE WHEN state = 'open' THEN created_at END ASC,
          updated_at DESC
-LIMIT $5::int
+LIMIT $6::int
 `
 
 type ListTaskQuestionsParams struct {
-	ProjectIds []uuid.UUID
-	State      pgtype.Text
-	TaskID     *uuid.UUID
-	SessionID  *uuid.UUID
-	Lim        int32
+	ProjectIds      []uuid.UUID
+	State           pgtype.Text
+	TaskID          *uuid.UUID
+	SessionID       *uuid.UUID
+	RecipientUserID *uuid.UUID
+	Lim             int32
 }
 
 // Filters are optional. project_ids scopes the global views to the
@@ -503,6 +505,7 @@ func (q *Queries) ListTaskQuestions(ctx context.Context, arg ListTaskQuestionsPa
 		arg.State,
 		arg.TaskID,
 		arg.SessionID,
+		arg.RecipientUserID,
 		arg.Lim,
 	)
 	if err != nil {

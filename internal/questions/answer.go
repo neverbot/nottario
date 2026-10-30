@@ -213,6 +213,8 @@ type ListFilter struct {
 	State      *State
 	TaskID     *uuid.UUID
 	SessionID  *uuid.UUID
+	// RecipientUserID keeps the questions addressed to this user.
+	RecipientUserID *uuid.UUID
 	// Limit defaults to DefaultListLimit and is capped at MaxListLimit.
 	Limit int
 }
@@ -241,11 +243,12 @@ func List(ctx context.Context, db dbq.DBTX, f ListFilter) ([]Question, error) {
 		state = pgtype.Text{String: string(*f.State), Valid: true}
 	}
 	rows, err := dbq.New(db).ListTaskQuestions(ctx, dbq.ListTaskQuestionsParams{
-		ProjectIds: f.ProjectIDs,
-		State:      state,
-		TaskID:     f.TaskID,
-		SessionID:  f.SessionID,
-		Lim:        int32(lim), //nolint:gosec // clamped to MaxListLimit
+		ProjectIds:      f.ProjectIDs,
+		State:           state,
+		TaskID:          f.TaskID,
+		SessionID:       f.SessionID,
+		RecipientUserID: f.RecipientUserID,
+		Lim:             int32(lim), //nolint:gosec // clamped to MaxListLimit
 	})
 	if err != nil {
 		return nil, err

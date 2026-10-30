@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -269,13 +270,16 @@ func GetTaskHandler(d TaskDeps) http.Handler {
 			}
 			rendered = append(rendered, view)
 		}
-		var questionViews []questionView
-		if qs, err := questions.List(r.Context(), d.Pool, questions.ListFilter{
+		questionViews := []questionView{}
+		qs, err := questions.List(r.Context(), d.Pool, questions.ListFilter{
 			ProjectIDs: []uuid.UUID{pid}, TaskID: &tid, Limit: questions.MaxListLimit,
-		}); err == nil {
-			questionViews, _ = buildQuestionViews(r.Context(), d.Pool, qs)
+		})
+		if err == nil {
+			questionViews, err = buildQuestionViews(r.Context(), d.Pool, qs)
 		}
-		if questionViews == nil {
+		if err != nil {
+			// The rest of the dialog still opens; say why the questions are missing.
+			slog.Error("task detail: building questions", "task", tid, "err", err)
 			questionViews = []questionView{}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{

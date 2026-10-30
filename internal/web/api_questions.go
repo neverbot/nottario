@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,9 +19,8 @@ import (
 )
 
 type questionTaskRef struct {
-	ID        uuid.UUID `json:"id"`
-	Title     string    `json:"title"`
-	ProjectID uuid.UUID `json:"project_id"`
+	ID    uuid.UUID `json:"id"`
+	Title string    `json:"title"`
 }
 
 type questionProjectRef struct {
@@ -47,17 +48,65 @@ type questionUserRef struct {
 	AvatarURL   string    `json:"avatar_url"`
 }
 
-// questionView is a question as the web pages show it: the stored
-// question plus what the page needs without further calls.
+// questionView is a question as the web pages show it. Ids of the
+// task, project, step, session and users live in the nested refs only;
+// the raw body is replaced by its rendered HTML and a short excerpt,
+// and the API token behind an MCP question stays server side (ViaMCP).
 type questionView struct {
-	questions.Question
-	BodyHTML   string              `json:"body_html,omitempty"`
-	Task       *questionTaskRef    `json:"task,omitempty"`
-	Project    *questionProjectRef `json:"project,omitempty"`
-	Step       *questionStepRef    `json:"step,omitempty"`
-	Session    *questionSessionRef `json:"session,omitempty"`
-	AskedBy    *questionUserRef    `json:"asked_by,omitempty"`
-	AnsweredBy *questionUserRef    `json:"answered_by,omitempty"`
+	ID                uuid.UUID           `json:"id"`
+	Kind              questions.Kind      `json:"kind"`
+	State             questions.State     `json:"state"`
+	Excerpt           string              `json:"excerpt"`
+	BodyHTML          string              `json:"body_html,omitempty"`
+	Options           []questions.Option  `json:"options,omitempty"`
+	Multi             bool                `json:"multi,omitempty"`
+	RecommendedKey    string              `json:"recommended_key,omitempty"`
+	RecommendedReason string              `json:"recommended_reason,omitempty"`
+	Answer            *questions.Reply    `json:"answer,omitempty"`
+	AnswerTextHTML    string              `json:"answer_text_html,omitempty"`
+	AnswerNoteHTML    string              `json:"answer_note_html,omitempty"`
+	AnsweredAt        *time.Time          `json:"answered_at,omitempty"`
+	DeliveredAt       *time.Time          `json:"delivered_at,omitempty"`
+	WithdrawnAt       *time.Time          `json:"withdrawn_at,omitempty"`
+	WithdrawnReason   string              `json:"withdrawn_reason,omitempty"`
+	CreatedAt         time.Time           `json:"created_at"`
+	UpdatedAt         time.Time           `json:"updated_at"`
+	ViaMCP            bool                `json:"via_mcp"`
+	Task              *questionTaskRef    `json:"task,omitempty"`
+	Project           *questionProjectRef `json:"project,omitempty"`
+	Step              *questionStepRef    `json:"step,omitempty"`
+	Session           *questionSessionRef `json:"session,omitempty"`
+	AskedBy           *questionUserRef    `json:"asked_by,omitempty"`
+	AnsweredBy        *questionUserRef    `json:"answered_by,omitempty"`
+}
+
+// excerptLen is how many characters of the question the one-line
+// excerpt keeps.
+const excerptLen = 140
+
+// excerptOf collapses a question's whitespace into one line of at most
+// excerptLen characters.
+func excerptOf(body string) string {
+	line := strings.Join(strings.Fields(body), " ")
+	r := []rune(line)
+	if len(r) <= excerptLen {
+		return line
+	}
+	return strings.TrimSpace(string(r[:excerptLen-1])) + "\u2026"
+}
+
+// uniqueIDs drops repeated ids, keeping the first occurrence's order.
+func uniqueIDs(ids []uuid.UUID) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	out := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // buildQuestionViews decorates questions with their task, project,
@@ -80,6 +129,8 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, qs []questions.
 			userIDs = append(userIDs, *q.AnsweredByUserID)
 		}
 	}
+	taskIDs, projectIDs, stepIDs = uniqueIDs(taskIDs), uniqueIDs(projectIDs), uniqueIDs(stepIDs)
+	sessionIDs, userIDs = uniqueIDs(sessionIDs), uniqueIDs(userIDs)
 	out := make([]questionView, 0, len(qs))
 	if len(qs) == 0 {
 		return out, nil
@@ -92,7 +143,7 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, qs []questions.
 	}
 	taskByID := make(map[uuid.UUID]questionTaskRef, len(taskRows))
 	for _, r := range taskRows {
-		taskByID[r.ID] = questionTaskRef{ID: r.ID, Title: r.Title, ProjectID: r.ProjectID}
+		taskByID[r.ID] = questionTaskRef{ID: r.ID, Title: r.Title}
 	}
 	projectRows, err := db.GetProjectsBrief(ctx, projectIDs)
 	if err != nil {
@@ -128,13 +179,31 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, qs []questions.
 	}
 
 	for _, q := range qs {
-		v := questionView{Question: q}
-		if q.Body != "" {
-			pid := q.ProjectID
-			// A render failure ships the markdown without HTML.
-			if html, err := markdown.Render(ctx, pool, q.Body, &pid); err == nil {
-				v.BodyHTML = html
+		v := questionView{
+			ID: q.ID, Kind: q.Kind, State: q.State, Excerpt: excerptOf(q.Body),
+			Options: q.Options, Multi: q.Multi,
+			RecommendedKey: q.RecommendedKey, RecommendedReason: q.RecommendedReason,
+			Answer: q.Answer, AnsweredAt: q.AnsweredAt, DeliveredAt: q.DeliveredAt,
+			WithdrawnAt: q.WithdrawnAt, WithdrawnReason: q.WithdrawnReason,
+			CreatedAt: q.CreatedAt, UpdatedAt: q.UpdatedAt,
+			ViaMCP: q.AskedByTokenID != nil,
+		}
+		pid := q.ProjectID
+		// A render failure ships the view without that HTML.
+		render := func(md string) string {
+			if md == "" {
+				return ""
 			}
+			html, err := markdown.Render(ctx, pool, md, &pid)
+			if err != nil {
+				return ""
+			}
+			return html
+		}
+		v.BodyHTML = render(q.Body)
+		if q.Answer != nil {
+			v.AnswerTextHTML = render(q.Answer.Text)
+			v.AnswerNoteHTML = render(q.Answer.Note)
 		}
 		if t, ok := taskByID[q.TaskID]; ok {
 			v.Task = &t
@@ -167,17 +236,11 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, qs []questions.
 	return out, nil
 }
 
-// visibleProjectIDs lists the projects whose questions the caller may
-// see: every one they belong to (all of them for an admin), narrowed
-// to the token's own project for an API token.
-func (d TaskDeps) visibleProjectIDs(ctx context.Context, c identity.Caller) ([]uuid.UUID, error) {
-	if c.Source == identity.SourceToken {
-		if err := d.ensureProjectAccess(ctx, c, c.ProjectID); err != nil {
-			return nil, err
-		}
-		return []uuid.UUID{c.ProjectID}, nil
-	}
-	projects, err := identity.ListProjects(ctx, d.Pool, c.UserID, c.IsAdmin)
+// memberProjectIDs lists the projects the user belongs to. Admins get
+// no extra projects here: the cross-project list is about the work a
+// person takes part in, and an admin can still ask for one project.
+func (d TaskDeps) memberProjectIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	projects, err := identity.ListProjects(ctx, d.Pool, userID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -226,12 +289,30 @@ func ListQuestionsHandler(d TaskDeps) http.Handler {
 			}
 			f.ProjectIDs = []uuid.UUID{pid}
 		} else {
-			ids, err := d.visibleProjectIDs(r.Context(), c)
-			if err != nil {
-				writeProjectAccessError(w, err)
-				return
+			if c.Source == identity.SourceToken {
+				// A token covers its own project only.
+				if err := d.ensureProjectAccess(r.Context(), c, c.ProjectID); err != nil {
+					writeProjectAccessError(w, err)
+					return
+				}
+				f.ProjectIDs = []uuid.UUID{c.ProjectID}
+			} else {
+				ids, err := d.memberProjectIDs(r.Context(), c.UserID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				f.ProjectIDs = ids
 			}
-			f.ProjectIDs = ids
+		}
+		switch r.URL.Query().Get("recipient") {
+		case "":
+		case "me":
+			uid := c.UserID
+			f.RecipientUserID = &uid
+		default:
+			writeError(w, http.StatusBadRequest, "invalid recipient; valid: me")
+			return
 		}
 		qs, err := questions.List(r.Context(), d.Pool, f)
 		if err != nil {
@@ -260,6 +341,10 @@ func AnswerQuestionHandler(d TaskDeps) http.Handler {
 		c, ok := d.caller(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		if c.Source == identity.SourceToken {
+			writeError(w, http.StatusForbidden, "questions are answered by a person in the web UI")
 			return
 		}
 		pid, err := projectIDFromPath(r)
