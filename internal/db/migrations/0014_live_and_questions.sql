@@ -88,16 +88,32 @@ ALTER TABLE public.projects ADD CONSTRAINT projects_default_view_check CHECK (de
     'board/kanban', 'board/gantt', 'live', 'questions', 'docs', 'arch/diagram', 'arch/tree']));
 
 -- Activity: any write on a task or on what hangs off it moves the task
--- to the top of Live. The upsert is skipped when the row already carries
--- now() (many writes in one transaction), and when the task is gone:
--- deleting a task cascades into steps and questions whose triggers fire
--- after the task row is deleted, and the FK would reject the insert.
+-- to the top of Live.
+--
+-- The trigger never waits on a task_activity row. Writers take their
+-- locks in different orders (closing a task locks the task, then its
+-- questions; answering locks the question; a close with a comment
+-- inserts the comment before locking the task), so a trigger that
+-- waited on the activity row would close a cycle and deadlock. Every
+-- task has its row (backfilled above, inserted by the tasks INSERT
+-- path with DO NOTHING, which takes no lock on a conflict), and a bump
+-- skips a row another transaction holds: that transaction is bumping
+-- it anyway, to the same moment or near enough. The bump is also
+-- skipped when the row already carries now() (many writes in one
+-- transaction). A bump for a task being deleted finds no row and does
+-- nothing.
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION public.task_touch_activity() RETURNS trigger
     LANGUAGE plpgsql AS $$
 DECLARE
     tid uuid;
 BEGIN
+    IF TG_TABLE_NAME = 'tasks' AND TG_OP = 'INSERT' THEN
+        INSERT INTO public.task_activity (task_id, last_activity_at)
+            VALUES (NEW.id, now())
+        ON CONFLICT (task_id) DO NOTHING;
+        RETURN NEW;
+    END IF;
     IF TG_TABLE_NAME = 'tasks' THEN
         tid := NEW.id;
     ELSIF TG_OP = 'DELETE' THEN
@@ -105,10 +121,11 @@ BEGIN
     ELSE
         tid := NEW.task_id;
     END IF;
-    INSERT INTO public.task_activity (task_id, last_activity_at)
-        SELECT tid, now() WHERE EXISTS (SELECT 1 FROM public.tasks WHERE id = tid)
-    ON CONFLICT (task_id) DO UPDATE SET last_activity_at = now()
-        WHERE public.task_activity.last_activity_at IS DISTINCT FROM now();
+    UPDATE public.task_activity SET last_activity_at = now()
+    WHERE task_id = (
+        SELECT a.task_id FROM public.task_activity a
+        WHERE a.task_id = tid AND a.last_activity_at IS DISTINCT FROM now()
+        FOR UPDATE SKIP LOCKED);
     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
     RETURN NEW;
 END;

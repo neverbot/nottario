@@ -379,7 +379,7 @@ func TestMCPQuestionsEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tc, _ := res.Content[0].(*sdk.TextContent); !res.IsError || tc == nil || tc.Text != "only the agent's owner who asked can withdraw this question" {
+	if tc, _ := res.Content[0].(*sdk.TextContent); !res.IsError || tc == nil || tc.Text != "only the user who asked this question can withdraw it" {
 		t.Fatalf("withdraw by another member = %+v", res.Content)
 	}
 

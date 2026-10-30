@@ -161,6 +161,16 @@ func questionsProject(ctx context.Context, d Deps, projectID string) (uuid.UUID,
 	return pid, nil
 }
 
+// questionSession checks the session key a questions tool was given.
+// required, when not empty, says why the tool needs one; a blank key is
+// then an error. Otherwise only an absent key is fine.
+func questionSession(key, required string) error {
+	if required != "" && strings.TrimSpace(key) == "" {
+		return errors.New("session is required: " + required)
+	}
+	return checkSession(sessionFields{Session: key})
+}
+
 // findSession looks the caller's session up by key without creating
 // it; nil when the conversation never registered here.
 func findSession(ctx context.Context, d Deps, pid uuid.UUID, c identity.Caller, key string) (*uuid.UUID, error) {
@@ -213,10 +223,7 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		if err != nil {
 			return nil, nil, err
 		}
-		if strings.TrimSpace(in.Session) == "" {
-			return toolError("session is required: pass your conversation id so the answer can come back to you")
-		}
-		if err := checkSession(in.sessionFields); err != nil {
+		if err := questionSession(in.Session, "pass your conversation id so the answer can come back to you"); err != nil {
 			return toolError(err.Error())
 		}
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
@@ -276,10 +283,7 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		if err != nil {
 			return nil, nil, err
 		}
-		if strings.TrimSpace(in.Session) == "" {
-			return toolError("session is required: pass the conversation id you asked with")
-		}
-		if err := checkSession(sessionFields{Session: in.Session}); err != nil {
+		if err := questionSession(in.Session, "pass the conversation id you asked with"); err != nil {
 			return toolError(err.Error())
 		}
 		pid, err := questionsProject(ctx, d, in.ProjectID)
@@ -334,10 +338,10 @@ func registerQuestions(server *sdk.Server, d Deps) {
 			f.TaskID = &tid
 		}
 		rows := []slimQuestion{}
+		if err := questionSession(in.Session, ""); err != nil {
+			return toolError(err.Error())
+		}
 		if in.Session != "" {
-			if err := checkSession(sessionFields{Session: in.Session}); err != nil {
-				return toolError(err.Error())
-			}
 			sid, err := findSession(ctx, d, pid, c, in.Session)
 			if err != nil {
 				return questionError("questions.list", err)

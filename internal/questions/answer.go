@@ -25,7 +25,7 @@ var (
 	ErrAlreadyDelivered = errors.New("the agent already picked up this answer; it can no longer change")
 	// ErrNotAsker is returned when someone other than the user who
 	// asked tries to withdraw a question.
-	ErrNotAsker = errors.New("only the agent's owner who asked can withdraw this question")
+	ErrNotAsker = errors.New("only the user who asked this question can withdraw it")
 )
 
 // normaliseAnswer trims an answer and checks it fits the question.
