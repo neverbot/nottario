@@ -215,3 +215,8 @@ func rowToTaskFromForUpdate(r dbq.GetTaskForUpdateRow) *Task {
 		UpdatedAt:        r.UpdatedAt.Time,
 	}
 }
+
+// SetActiveSession records the agent session that holds a task in doing.
+func SetActiveSession(ctx context.Context, db dbq.DBTX, taskID, sessionID uuid.UUID) error {
+	return dbq.New(db).SetTaskActiveSession(ctx, dbq.SetTaskActiveSessionParams{ID: taskID, SessionID: sessionID})
+}

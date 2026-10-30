@@ -272,10 +272,15 @@ ORDER BY t.actual_end NULLS LAST, t.created_at;
 -- name: SetTaskTodo :exec
 UPDATE tasks SET
   state = 'todo',
+  active_session_id = NULL,
   actual_start = NULL,
   actual_end = NULL,
   updated_at = now()
 WHERE id = $1;
+
+-- name: SetTaskActiveSession :exec
+UPDATE tasks SET active_session_id = sqlc.arg('session_id')::uuid
+WHERE id = sqlc.arg('id')::uuid;
 
 -- name: SetTaskDoing :exec
 UPDATE tasks SET
@@ -288,6 +293,7 @@ WHERE id = $1;
 -- name: SetTaskDone :exec
 UPDATE tasks SET
   state = 'done',
+  active_session_id = NULL,
   actual_start = COALESCE(actual_start, now()),
   actual_end = now(),
   updated_at = now()
@@ -300,6 +306,7 @@ WHERE id = $1;
 -- cancel decision is preserved.
 UPDATE tasks SET
   state = 'wont_do',
+  active_session_id = NULL,
   actual_end = now(),
   updated_at = now()
 WHERE id = $1;

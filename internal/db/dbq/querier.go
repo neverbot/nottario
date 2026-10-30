@@ -68,6 +68,7 @@ type Querier interface {
 	GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow, error)
 	GetActiveCycle(ctx context.Context, projectID uuid.UUID) (Cycle, error)
 	GetActiveSession(ctx context.Context, id uuid.UUID) (GetActiveSessionRow, error)
+	GetAgentSessionsByIDs(ctx context.Context, ids []uuid.UUID) ([]AgentSession, error)
 	// Resolves an architecture node chip by slug.
 	GetArchChipBySlug(ctx context.Context, arg GetArchChipBySlugParams) (GetArchChipBySlugRow, error)
 	// Arch versioning: per-project editing sessions (locks) and their
@@ -293,6 +294,7 @@ type Querier interface {
 	SeedDefaultPriority(ctx context.Context, arg SeedDefaultPriorityParams) error
 	SetProjectOwner(ctx context.Context, arg SetProjectOwnerParams) error
 	SetRolePosition(ctx context.Context, arg SetRolePositionParams) error
+	SetTaskActiveSession(ctx context.Context, arg SetTaskActiveSessionParams) error
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	SetTaskStepPosition(ctx context.Context, arg SetTaskStepPositionParams) error
@@ -377,6 +379,10 @@ type Querier interface {
 	// as a "text edit" so they don't bump the edited marker.
 	UpdateTaskText(ctx context.Context, arg UpdateTaskTextParams) (UpdateTaskTextRow, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
+	// Creates the session on first use and refreshes it after: the label
+	// and client are replaced only when a new one is given, last_seen_at
+	// always moves.
+	UpsertAgentSession(ctx context.Context, arg UpsertAgentSessionParams) (AgentSession, error)
 	UpsertArchEdge(ctx context.Context, arg UpsertArchEdgeParams) (UpsertArchEdgeRow, error)
 	UpsertArchKind(ctx context.Context, arg UpsertArchKindParams) (ArchNodeKind, error)
 	UpsertProjectPriority(ctx context.Context, arg UpsertProjectPriorityParams) (UpsertProjectPriorityRow, error)

@@ -958,6 +958,21 @@ func (q *Queries) RoleExistsInProject(ctx context.Context, arg RoleExistsInProje
 	return column_1, err
 }
 
+const setTaskActiveSession = `-- name: SetTaskActiveSession :exec
+UPDATE tasks SET active_session_id = $1::uuid
+WHERE id = $2::uuid
+`
+
+type SetTaskActiveSessionParams struct {
+	SessionID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) SetTaskActiveSession(ctx context.Context, arg SetTaskActiveSessionParams) error {
+	_, err := q.db.Exec(ctx, setTaskActiveSession, arg.SessionID, arg.ID)
+	return err
+}
+
 const setTaskDoing = `-- name: SetTaskDoing :exec
 UPDATE tasks SET
   state = 'doing',
@@ -975,6 +990,7 @@ func (q *Queries) SetTaskDoing(ctx context.Context, id uuid.UUID) error {
 const setTaskDone = `-- name: SetTaskDone :exec
 UPDATE tasks SET
   state = 'done',
+  active_session_id = NULL,
   actual_start = COALESCE(actual_start, now()),
   actual_end = now(),
   updated_at = now()
@@ -989,6 +1005,7 @@ func (q *Queries) SetTaskDone(ctx context.Context, id uuid.UUID) error {
 const setTaskTodo = `-- name: SetTaskTodo :exec
 UPDATE tasks SET
   state = 'todo',
+  active_session_id = NULL,
   actual_start = NULL,
   actual_end = NULL,
   updated_at = now()
@@ -1003,6 +1020,7 @@ func (q *Queries) SetTaskTodo(ctx context.Context, id uuid.UUID) error {
 const setTaskWontDo = `-- name: SetTaskWontDo :exec
 UPDATE tasks SET
   state = 'wont_do',
+  active_session_id = NULL,
   actual_end = now(),
   updated_at = now()
 WHERE id = $1

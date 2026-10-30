@@ -78,6 +78,18 @@ type taskRefInput struct {
 	Verbose          bool   `json:"verbose,omitempty" jsonschema:"tasks.get / tasks.claim: full Task instead of the agent shape"`
 }
 
+// tasksClaimNextInput and tasksClaimInput add the session to the
+// read-shaped inputs of the claim tools.
+type tasksClaimNextInput struct {
+	tasksNextInput
+	sessionFields
+}
+
+type tasksClaimInput struct {
+	taskRefInput
+	sessionFields
+}
+
 type tasksNextInput struct {
 	ProjectID      string `json:"project_id" jsonschema:"project uuid"`
 	CycleID        string `json:"cycle_id,omitempty" jsonschema:"cycle uuid, or 'all'. Omit = active cycle."`
@@ -87,6 +99,7 @@ type tasksNextInput struct {
 }
 
 type tasksCreateInput struct {
+	sessionFields
 	ProjectID      string `json:"project_id" jsonschema:"project uuid"`
 	Title          string `json:"title" jsonschema:"short title"`
 	Description    string `json:"description,omitempty" jsonschema:"markdown body"`
@@ -264,7 +277,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.claim_next",
 		Description: "Atomic claim of the next eligible task (assignee=caller, state=doing). Multi-agent safe. {task: null} when nothing eligible. Slim shape.",
-	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksNextInput) (*sdk.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksClaimNextInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -306,13 +319,16 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError(err.Error())
 		}
+		if err := markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields); err != nil {
+			return toolError(err.Error())
+		}
 		return jsonResult(map[string]any{"task": newTaskView(ctx, d).payload(t, in.Verbose)})
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.claim",
 		Description: "Atomic claim by id (assignee=caller, state=doing). Returns task on success or {error, reason, current_state, ...} on conflict. Idempotent. Slim shape by default.",
-	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in tasksClaimInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -341,6 +357,9 @@ func registerTasks(server *sdk.Server, d Deps) {
 					"pending_children_count": cerr.PendingChildrenCount,
 				})
 			}
+			return toolError(err.Error())
+		}
+		if err := markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields); err != nil {
 			return toolError(err.Error())
 		}
 		return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
@@ -439,6 +458,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 		t, err := tasks.Create(ctx, d.Pool, params, authorshipFor(c))
 		if err != nil {
 			return toolError(err.Error())
+		}
+		if in.Claim {
+			if err := markActiveSession(ctx, req, d, pid, t.ID, c, in.sessionFields); err != nil {
+				return toolError(err.Error())
+			}
 		}
 		return jsonResult(newTaskView(ctx, d).payload(t, in.Verbose))
 	})
