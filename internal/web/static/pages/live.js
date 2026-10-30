@@ -1,4 +1,5 @@
 import { LitElement, html, css, nothing, svg } from '/static/vendor/lit/lit.js';
+import { repeat } from '/static/vendor/lit/directives/repeat.js';
 import { buttonStyles } from '/static/components/buttons.js';
 import {
   errorPanel,
@@ -41,6 +42,7 @@ import { loadScope, subscribeScope } from '/static/utils/project-scope.js';
 // times re-render every 15 s.
 
 const RELOAD_MS = 300;
+const RELOAD_MAX_WAIT_MS = 2_000;
 const TICK_MS = 15_000;
 const TINT_MS = 1_500;
 const DEFAULT_IDLE_MINUTES = 30;
@@ -297,6 +299,7 @@ class NottarioLivePage extends LitElement {
       .wait-meta a:hover { color: var(--accent); text-decoration: underline; }
       .wait-meta .sname { font-family: var(--mono); font-size: 11px; }
       .wait .right { margin-left: 0; }
+      .wait.expanded .wait-meta { flex: 1 1 auto; }
       .btn.small { height: 26px; padding: 0 10px; font-size: 12px; flex: 0 0 auto; }
       .answer {
         margin: 8px 0 4px;
@@ -369,6 +372,7 @@ class NottarioLivePage extends LitElement {
     this._seq = 0;
     this._startGen = 0;
     this._reloadTimer = null;
+    this._pendingSince = 0; // when the oldest unhandled event arrived
     this._ticker = null;
   }
 
@@ -381,12 +385,19 @@ class NottarioLivePage extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._startGen++;
+    this._seq++; // a load in flight lands on a page that is gone
     this._unsubscribe();
     clearTimeout(this._reloadTimer);
+    this._pendingSince = 0;
     clearInterval(this._ticker);
     this._ticker = null;
+    this._clearTints();
+  }
+
+  _clearTints() {
     for (const t of this._tintTimers.values()) clearTimeout(t);
     this._tintTimers.clear();
+    this._changed = new Set();
   }
 
   updated(changed) {
@@ -395,6 +406,7 @@ class NottarioLivePage extends LitElement {
     if (changed.has('projectId') && changed.get('projectId') !== undefined) {
       this._data = null;
       this._seen = null;
+      this._clearTints();
       this._kept.clear();
       this._expanded = new Set();
       this._filter = [];
@@ -454,10 +466,18 @@ class NottarioLivePage extends LitElement {
   }
 
   // An agent's step, comment and state change arrive as a burst of
-  // events: reload once.
+  // events: reload once. A steady stream of events would push the
+  // reload back forever, so one is forced once the oldest pending
+  // event is RELOAD_MAX_WAIT_MS old.
   _scheduleReload() {
+    const now = Date.now();
+    if (!this._pendingSince) this._pendingSince = now;
     clearTimeout(this._reloadTimer);
-    this._reloadTimer = setTimeout(() => this._load(), RELOAD_MS);
+    const wait = Math.min(RELOAD_MS, Math.max(0, this._pendingSince + RELOAD_MAX_WAIT_MS - now));
+    this._reloadTimer = setTimeout(() => {
+      this._pendingSince = 0;
+      this._load();
+    }, wait);
   }
 
   async _load() {
@@ -566,6 +586,20 @@ class NottarioLivePage extends LitElement {
         waiting: this._data.waiting.map((x) => (x.id === q.id ? q : x)),
       };
     }
+    this._refocus(q.id);
+  }
+
+  // _refocus puts focus back on a question after its card folded to
+  // the answer, which removes the control that had it.
+  async _refocus(qid) {
+    await this.updateComplete;
+    const card = this.renderRoot.querySelector(`#qc-${qid} nottario-question-card`);
+    if (card) {
+      await card.updateComplete;
+      if (!card.matches(':focus-within')) card.focus();
+      return;
+    }
+    this.renderRoot.querySelector(`#w-${qid} .toggle`)?.focus();
   }
 
   // _jumpToQuestion moves to the first waiting row of a task, when the
@@ -657,26 +691,36 @@ class NottarioLivePage extends LitElement {
         ${
           working.length
             ? html`<ul class="rows">
-                ${working.map((w) => this._renderWorking(w, projects, firstWaiting, now))}
+                ${repeat(
+                  working,
+                  (w) => w.task.id,
+                  (w) => this._renderWorking(w, projects, firstWaiting, now),
+                )}
               </ul>`
             : html`<div class="rows"><p class="inline-empty">${EMPTY_TEXT}</p></div>`
         }
-        ${truncated.working ? this._renderMore(working.length) : nothing}
+        ${truncated.working ? this._renderMore() : nothing}
       </section>
       ${
         finished.length
           ? html`<section class="finished" aria-labelledby="h-finished">
-              <h2 id="h-finished">Finished recently</h2>
-              <ul class="rows">${finished.map((f) => this._renderFinished(f, projects))}</ul>
-              ${truncated.finished ? this._renderMore(finished.length) : nothing}
+              <h2 id="h-finished">Finished recently <span class="count">${finished.length}</span></h2>
+              <ul class="rows">
+                ${repeat(
+                  finished,
+                  (f) => f.task.id,
+                  (f) => this._renderFinished(f, projects),
+                )}
+              </ul>
+              ${truncated.finished ? this._renderMore() : nothing}
             </section>`
           : nothing
       }
     `;
   }
 
-  _renderMore(n) {
-    return html`<p class="more">Showing the most recent ${n}</p>`;
+  _renderMore() {
+    return html`<p class="more">Only the most recent are shown.</p>`;
   }
 
   _projectChip(projectId, projects, fallback) {
@@ -695,40 +739,57 @@ class NottarioLivePage extends LitElement {
       <ul class="rows"
           @question-answered=${this._onAnswered}
           @question-stale=${() => this._load()}>
-        ${list.map((q) => this._renderWaitingRow(q, projects))}
+        ${repeat(
+          list,
+          (q) => q.id,
+          (q) => this._renderWaitingRow(q, projects),
+        )}
       </ul>
-      ${truncated ? this._renderMore(list.length) : nothing}
+      ${truncated ? this._renderMore() : nothing}
     </section>`;
   }
 
   _renderWaitingRow(q, projects) {
     const expanded = this._expanded.has(q.id);
     const label = q.state === 'open' ? 'Answer' : 'Show answer';
-    return html`<li class="wait" id=${`w-${q.id}`} tabindex="-1">
+    // The question view names its project; a project page knows its
+    // own. Without either the task is named but not linked.
+    const pid = q.project?.id || this._project?.id || '';
+    let task = nothing;
+    if (q.task) {
+      task = pid
+        ? html`<a href=${taskHref({ id: q.task.id, project_id: pid })} @click=${this._go}>${q.task.title}</a>`
+        : html`<span>${q.task.title}</span>`;
+    }
+    return html`<li class="wait ${expanded ? 'expanded' : ''}" id=${`w-${q.id}`} tabindex="-1">
       <div class="line">
         ${this._projectChip(q.project?.id, projects, q.project?.name)}
-        <span class="excerpt" title=${q.excerpt}>${q.excerpt}</span>
-        <span class="wait-meta">
-          ${
-            q.task
-              ? html`<a href=${taskHref({ id: q.task.id, project_id: q.project?.id || this._project?.id })}
-                   @click=${this._go}>${q.task.title}</a>`
-              : nothing
-          }
+        ${
+          expanded
+            ? nothing
+            : html`<span class="excerpt" id=${`wx-${q.id}`} title=${q.excerpt}>${q.excerpt}</span>`
+        }
+        <span class="wait-meta" id=${`w-${q.id}-meta`}>
+          ${task}
           ${
             q.session
-              ? html`<span class="sep" aria-hidden="true">·</span>
+              ? html`${q.task ? html`<span class="sep" aria-hidden="true">·</span>` : nothing}
                   <span class="sname" title=${q.session.key || ''}>${sessionName(q.session)}</span>`
               : nothing
           }
         </span>
-        <time class="right" datetime=${q.created_at} title=${formatDateTime(q.created_at)}>
-          ${formatRelativeTime(q.created_at)}
-        </time>
+        ${
+          expanded
+            ? nothing
+            : html`<time class="right" datetime=${q.created_at} title=${formatDateTime(q.created_at)}>
+                ${formatRelativeTime(q.created_at)}
+              </time>`
+        }
         <button class="btn small toggle ${q.state === 'open' && !expanded ? 'primary' : ''}"
                 type="button"
                 aria-expanded=${expanded ? 'true' : 'false'}
                 aria-controls=${`qc-${q.id}`}
+                aria-describedby=${expanded ? `w-${q.id}-meta` : `wx-${q.id}`}
                 @click=${() => this._toggle(q)}>${expanded ? 'Close' : label}</button>
       </div>
       ${
@@ -762,7 +823,7 @@ class NottarioLivePage extends LitElement {
       parts.push(html`<span class="session" title=${w.session.key || ''}>
         ${sessionName(w.session)}
         <button class="copy" type="button"
-                aria-label=${`Copy ${what}`}
+                aria-label=${`Copy ${what} of ${sessionName(w.session)}`}
                 title=${`Copy ${what}: ${copyText}`}
                 @click=${() => this._copySession(w.session)}>${copyIcon(12)}</button>
       </span>`);
