@@ -282,6 +282,26 @@ class NottarioLivePage extends LitElement {
         text-overflow: ellipsis;
         white-space: nowrap;
         color: var(--fg);
+        padding: 0;
+        border: 0;
+        border-radius: var(--radius);
+        background: transparent;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .excerpt:hover { color: var(--accent); }
+      .excerpt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .answered-pill {
+        flex: 0 0 auto;
+        padding: 0 7px;
+        border: 1px solid var(--border);
+        border-radius: 2em;
+        background: var(--bg-subtle);
+        color: var(--fg-muted);
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 18px;
       }
       .wait-meta {
         flex: 0 1 auto;
@@ -302,7 +322,6 @@ class NottarioLivePage extends LitElement {
       .wait-meta a:hover { color: var(--accent); text-decoration: underline; }
       .wait-meta .sname { font-family: var(--mono); font-size: 11px; }
       .wait .right { margin-left: 0; }
-      .wait.expanded .wait-meta { flex: 1 1 auto; }
       .btn.small { height: 26px; padding: 0 10px; font-size: 12px; flex: 0 0 auto; }
       .answer {
         margin: 8px 0 4px;
@@ -583,6 +602,10 @@ class NottarioLivePage extends LitElement {
     const q = e.detail?.question;
     if (!q) return;
     this._kept.set(q.id, q);
+    // Fold the row back to one line; the toggle reopens the answer.
+    const next = new Set(this._expanded);
+    next.delete(q.id);
+    this._expanded = next;
     if (this._data) {
       this._data = {
         ...this._data,
@@ -592,16 +615,10 @@ class NottarioLivePage extends LitElement {
     this._refocus(q.id);
   }
 
-  // _refocus puts focus back on a question after its card folded to
-  // the answer, which removes the control that had it.
+  // _refocus puts focus back on the row's toggle after the card folded,
+  // which removed the control that had it.
   async _refocus(qid) {
     await this.updateComplete;
-    const card = this.renderRoot.querySelector(`#qc-${qid} nottario-question-card`);
-    if (card) {
-      await card.updateComplete;
-      if (!card.matches(':focus-within')) card.focus();
-      return;
-    }
     this.renderRoot.querySelector(`#w-${qid} .toggle`)?.focus();
   }
 
@@ -768,10 +785,14 @@ class NottarioLivePage extends LitElement {
       <div class="line">
         ${this._projectChip(q.project?.id, projects, q.project?.name)}
         ${
-          expanded
+          expanded || q.state === 'open'
             ? nothing
-            : html`<span class="excerpt" id=${`wx-${q.id}`} title=${q.excerpt}>${q.excerpt}</span>`
+            : html`<span class="answered-pill">Answered</span>`
         }
+        <button class="excerpt" type="button" id=${`wx-${q.id}`} title=${q.excerpt}
+                aria-expanded=${expanded ? 'true' : 'false'}
+                aria-controls=${`qc-${q.id}`}
+                @click=${() => this._toggle(q)}>${q.excerpt}</button>
         <span class="wait-meta" id=${`w-${q.id}-meta`}>
           ${task}
           ${
@@ -784,9 +805,17 @@ class NottarioLivePage extends LitElement {
         ${
           expanded
             ? nothing
-            : html`<time class="right" datetime=${q.created_at} title=${formatDateTime(q.created_at)}>
-                ${formatRelativeTime(q.created_at)}
-              </time>`
+            : q.state === 'open'
+              ? html`<time class="right" datetime=${q.created_at} title=${formatDateTime(q.created_at)}>
+                  ${formatRelativeTime(q.created_at)}
+                </time>`
+              : html`<span class="right" title=${formatDateTime(q.delivered_at || q.answered_at)}>
+                  ${
+                    q.delivered_at
+                      ? `Delivered ${formatRelativeTime(q.delivered_at)}`
+                      : 'Waiting for the agent to pick it up'
+                  }
+                </span>`
         }
         <button class="btn small toggle ${q.state === 'open' && !expanded ? 'primary' : ''}"
                 type="button"
