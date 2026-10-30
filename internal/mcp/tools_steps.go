@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -200,11 +201,14 @@ func registerSteps(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.start_step",
-		Description: "Marks the step you are starting now, so the human sees it live. Pass your session. A task in todo moves to doing and becomes yours if unowned. Starting another step of the same task stops this one. Returns {step, progress}.",
+		Description: "Marks the step you are starting now, so the human sees it live. Your session is required. A task in todo moves to doing and becomes yours if unowned. Starting another step of the same task stops this one. Returns {step, progress}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in stepsStartInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
 			return nil, nil, err
+		}
+		if strings.TrimSpace(in.Session) == "" {
+			return toolError("session is required: pass your conversation id")
 		}
 		if err := checkSession(in.sessionFields); err != nil {
 			return toolError(err.Error())
@@ -225,9 +229,12 @@ func registerSteps(server *sdk.Server, d Deps) {
 			msg = "recording the session failed, so the step was started without it: " + err.Error()
 			session = nil
 		}
-		all, err := tasks.StartStep(ctx, d.Pool, tid, sid, session, authorshipFor(c))
+		all, stamped, err := tasks.StartStep(ctx, d.Pool, tid, sid, session, authorshipFor(c))
 		if err != nil {
 			return toolError(err.Error())
+		}
+		if !stamped && msg == "" {
+			msg = "the task is assigned to someone else; the step started but your session is not the task's active one"
 		}
 		var started mcpStep
 		for _, s := range all {

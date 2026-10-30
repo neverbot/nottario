@@ -18,7 +18,7 @@ func TestMCPAgentSessionOnClaim(t *testing.T) {
 	}
 	for _, tool := range tools.Tools {
 		switch tool.Name {
-		case "nottario.tasks.create", "nottario.tasks.claim", "nottario.tasks.claim_next":
+		case "nottario.tasks.create", "nottario.tasks.claim", "nottario.tasks.claim_next", "nottario.tasks.start_step":
 			props := inputProps(t, tool)
 			for _, k := range []string{"session", "session_label", "project_id"} {
 				if _, ok := props[k]; !ok {

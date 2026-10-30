@@ -21,7 +21,7 @@ WHERE id = $1 AND task_id = $2;
 -- name: UpdateTaskStep :one
 -- Changes the text, the done flag, or both. Ticking stamps done_at and
 -- done_by_user_id; unticking clears them; re-ticking a done step keeps
--- the original stamp.
+-- the original stamp. Ticking also ends the step's in-progress mark.
 UPDATE task_steps SET
   text = COALESCE(sqlc.narg('text')::text, text),
   done = COALESCE(sqlc.narg('done')::boolean, done),
@@ -35,6 +35,9 @@ UPDATE task_steps SET
     WHEN sqlc.narg('done')::boolean AND done THEN done_by_user_id
     WHEN sqlc.narg('done')::boolean THEN sqlc.narg('actor_user_id')::uuid
     ELSE NULL END,
+  started_at = CASE WHEN sqlc.narg('done')::boolean THEN NULL ELSE started_at END,
+  started_session_id = CASE WHEN sqlc.narg('done')::boolean THEN NULL ELSE started_session_id END,
+  started_by_user_id = CASE WHEN sqlc.narg('done')::boolean THEN NULL ELSE started_by_user_id END,
   updated_at = now()
 WHERE id = sqlc.arg('id')::uuid AND task_id = sqlc.arg('task_id')::uuid
 RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id;

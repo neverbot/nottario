@@ -13,7 +13,8 @@ import (
 )
 
 // sessionFields are embedded in the inputs of the tools that mark
-// work as a conversation's: claim, claim_next and create {claim}.
+// work as a conversation's: claim, claim_next, create {claim} and
+// start_step.
 type sessionFields struct {
 	Session      string `json:"session,omitempty" jsonschema:"your conversation id: $CLAUDE_CODE_SESSION_ID in Claude Code; the same value for the whole conversation"`
 	SessionLabel string `json:"session_label,omitempty" jsonschema:"short name for what this conversation is doing, shown to the human"`

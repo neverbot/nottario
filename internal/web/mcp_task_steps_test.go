@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/neverbot/nottario/internal/identity"
 )
 
 // Agents keep a task's checklist through four tools, read it back with
@@ -220,4 +222,41 @@ func TestMCP_StartStep(t *testing.T) {
 	f.callExpectErr(t, "nottario.tasks.start_step", map[string]any{
 		"project_id": f.projectID, "task_id": task.ID, "step_id": added.Steps[1].ID, "session": strings.Repeat("k", 300),
 	})
+	f.callExpectErr(t, "nottario.tasks.start_step", map[string]any{
+		"project_id": f.projectID, "task_id": task.ID, "step_id": added.Steps[1].ID, "session": "  ",
+	})
+	f.callJSON(t, "nottario.tasks.get", map[string]any{"project_id": f.projectID, "task_id": task.ID}, &got)
+	if got.Steps[1].InProgress {
+		t.Errorf("a rejected start_step changed the step: %+v", got.Steps)
+	}
+
+	// A task assigned to someone else: the step starts, the session is
+	// reported as not the task's active one.
+	other, _, err := identity.UpsertFromGithub(f.ctx, f.pgx(t), 14404, "mcp-startstep-other", "Other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var theirs struct {
+		ID string `json:"id"`
+	}
+	f.callJSON(t, "nottario.tasks.create", map[string]any{"project_id": f.projectID, "title": "theirs"}, &theirs)
+	var theirSteps struct {
+		Steps []stepView `json:"steps"`
+	}
+	f.callJSON(t, "nottario.tasks.add_steps", map[string]any{"project_id": f.projectID, "task_id": theirs.ID, "texts": []string{"x"}}, &theirSteps)
+	if _, err := f.pgx(t).Exec(f.ctx, `UPDATE tasks SET state = 'doing', assignee_user_id = $2 WHERE id = $1`, theirs.ID, other.ID); err != nil {
+		t.Fatal(err)
+	}
+	var foreign struct {
+		Step struct {
+			InProgress bool `json:"in_progress"`
+		} `json:"step"`
+		SessionError string `json:"session_error"`
+	}
+	f.callJSON(t, "nottario.tasks.start_step", map[string]any{
+		"project_id": f.projectID, "task_id": theirs.ID, "step_id": theirSteps.Steps[0].ID, "session": "s-foreign",
+	}, &foreign)
+	if !foreign.Step.InProgress || !strings.Contains(foreign.SessionError, "assigned to someone else") {
+		t.Errorf("foreign start_step: %+v", foreign)
+	}
 }

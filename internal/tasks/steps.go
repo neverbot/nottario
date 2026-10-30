@@ -304,21 +304,35 @@ func enrichTaskStepProgress(ctx context.Context, db dbq.DBTX, tasks []*Task) err
 // StartStep marks a step as the one a session is working on. A task
 // still in todo moves to doing and, when unowned, to the caller, the
 // same net set_state applies. A done step cannot be started.
-func StartStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID, sessionID *uuid.UUID, by Authorship) ([]Step, error) {
+//
+// The returned bool is false when a session was given but could not be
+// made the task's active one because the task belongs to someone else;
+// the step is started anyway.
+func StartStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID, sessionID *uuid.UUID, by Authorship) ([]Step, bool, error) {
+	stamped := true
 	t, err := Get(ctx, pool, taskID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	switch {
 	case t.State == StateTodo:
 		if _, err := SetState(ctx, pool, taskID, StateDoing, by.UserID); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	case IsClosed(t.State):
-		return nil, errInvalid("the task is closed; reopen it before starting a step")
+		return nil, false, errInvalid("the task is closed; reopen it before starting a step")
 	}
 	var out []Step
 	err = withTaskLocked(ctx, pool, taskID, func(tx pgx.Tx, q *dbq.Queries) error {
+		// The state may have changed since the read above; the lock is
+		// held now, so this one holds.
+		locked, err := q.GetTaskForUpdate(ctx, taskID)
+		if err != nil {
+			return err
+		}
+		if State(locked.State) != StateDoing {
+			return errInvalid("the task is no longer in doing; move it to doing before starting a step")
+		}
 		cur, err := q.GetTaskStep(ctx, dbq.GetTaskStepParams{ID: stepID, TaskID: taskID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrStepNotFound
@@ -327,7 +341,7 @@ func StartStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID
 			return err
 		}
 		if cur.Done {
-			return errInvalid("step is already done")
+			return errInvalid("step is already done; untick it first")
 		}
 		if sessionID != nil {
 			if err := q.StopSessionSteps(ctx, dbq.StopSessionStepsParams{TaskID: taskID, SessionID: *sessionID}); err != nil {
@@ -338,15 +352,17 @@ func StartStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID
 			return err
 		}
 		if sessionID != nil && by.UserID != nil {
-			if _, err := SetActiveSession(ctx, tx, taskID, *sessionID, *by.UserID); err != nil {
+			ok, err := SetActiveSession(ctx, tx, taskID, *sessionID, *by.UserID)
+			if err != nil {
 				return err
 			}
+			stamped = ok
 		}
 		out, err = ListSteps(ctx, tx, taskID)
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return out, nil
+	return out, stamped, nil
 }

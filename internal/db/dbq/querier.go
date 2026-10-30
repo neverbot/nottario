@@ -372,7 +372,7 @@ type Querier interface {
 	UpdateTaskFields(ctx context.Context, arg UpdateTaskFieldsParams) (UpdateTaskFieldsRow, error)
 	// Changes the text, the done flag, or both. Ticking stamps done_at and
 	// done_by_user_id; unticking clears them; re-ticking a done step keeps
-	// the original stamp.
+	// the original stamp. Ticking also ends the step's in-progress mark.
 	UpdateTaskStep(ctx context.Context, arg UpdateTaskStepParams) (UpdateTaskStepRow, error)
 	// Human-edit path for title / description / target_role with
 	// optimistic concurrency. The caller echoes the `updated_at` it saw;

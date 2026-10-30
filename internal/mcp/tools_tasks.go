@@ -235,7 +235,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.tasks.get",
-		Description: "A task with its description, its open steps [{id, text, done}] (include_done_steps for all; task.steps counts them) and related {parent, children, depends_on, blocks}, each {id, title, state, type}. include_commits / include_comments opt in to those.",
+		Description: "A task with its description, its open steps [{id, text, done, in_progress when a session started it}] (include_done_steps for all; task.steps counts them) and related {parent, children, depends_on, blocks}, each {id, title, state, type}. include_commits / include_comments opt in to those.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in taskRefInput) (*sdk.CallToolResult, any, error) {
 		pid, tid, err := parseProjectAndTask(in.ProjectID, in.TaskID)
 		if err != nil {
