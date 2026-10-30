@@ -113,20 +113,22 @@ func PendingSteps(ctx context.Context, db dbq.DBTX, taskID uuid.UUID) ([]Step, e
 
 // withTaskLocked runs fn in a transaction holding the task row lock, so
 // concurrent step edits on one task serialise and positions stay dense.
-func withTaskLocked(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, fn func(tx pgx.Tx, q *dbq.Queries) error) error {
+// fn receives the task row as read under the lock.
+func withTaskLocked(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, fn func(tx pgx.Tx, q *dbq.Queries, task dbq.GetTaskForUpdateRow) error) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := dbq.New(tx)
-	if _, err := q.GetTaskForUpdate(ctx, taskID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
+	task, err := q.GetTaskForUpdate(ctx, taskID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
 		return err
 	}
-	if err := fn(tx, q); err != nil {
+	if err := fn(tx, q, task); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -151,7 +153,7 @@ func AddSteps(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, texts [
 		clean = append(clean, s)
 	}
 	var out []Step
-	err := withTaskLocked(ctx, pool, taskID, func(tx pgx.Tx, q *dbq.Queries) error {
+	err := withTaskLocked(ctx, pool, taskID, func(tx pgx.Tx, q *dbq.Queries, _ dbq.GetTaskForUpdateRow) error {
 		n, err := q.CountTaskSteps(ctx, taskID)
 		if err != nil {
 			return err
@@ -222,7 +224,7 @@ func UpdateStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUI
 // RemoveStep deletes a step and closes the gap it leaves. Discarding a
 // step is deleting it; steps have no other way out.
 func RemoveStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID) error {
-	return withTaskLocked(ctx, pool, taskID, func(_ pgx.Tx, q *dbq.Queries) error {
+	return withTaskLocked(ctx, pool, taskID, func(_ pgx.Tx, q *dbq.Queries, _ dbq.GetTaskForUpdateRow) error {
 		pos, err := q.DeleteTaskStep(ctx, dbq.DeleteTaskStepParams{ID: stepID, TaskID: taskID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrStepNotFound
@@ -240,7 +242,7 @@ func RemoveStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUI
 // returns the whole list in its new order.
 func MoveStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID, position int) ([]Step, error) {
 	var out []Step
-	err := withTaskLocked(ctx, pool, taskID, func(tx pgx.Tx, q *dbq.Queries) error {
+	err := withTaskLocked(ctx, pool, taskID, func(tx pgx.Tx, q *dbq.Queries, _ dbq.GetTaskForUpdateRow) error {
 		cur, err := q.GetTaskStep(ctx, dbq.GetTaskStepParams{ID: stepID, TaskID: taskID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrStepNotFound
@@ -323,15 +325,11 @@ func StartStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID
 		return nil, false, errInvalid("the task is closed; reopen it before starting a step")
 	}
 	var out []Step
-	err = withTaskLocked(ctx, pool, taskID, func(tx pgx.Tx, q *dbq.Queries) error {
+	err = withTaskLocked(ctx, pool, taskID, func(tx pgx.Tx, q *dbq.Queries, locked dbq.GetTaskForUpdateRow) error {
 		// The state may have changed since the read above; the lock is
 		// held now, so this one holds.
-		locked, err := q.GetTaskForUpdate(ctx, taskID)
-		if err != nil {
-			return err
-		}
 		if State(locked.State) != StateDoing {
-			return errInvalid("the task is no longer in doing; move it to doing before starting a step")
+			return errInvalid(fmt.Sprintf("the task left doing (now %s); start_step needs it in doing", locked.State))
 		}
 		cur, err := q.GetTaskStep(ctx, dbq.GetTaskStepParams{ID: stepID, TaskID: taskID})
 		if errors.Is(err, pgx.ErrNoRows) {

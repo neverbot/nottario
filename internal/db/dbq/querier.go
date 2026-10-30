@@ -14,6 +14,9 @@ import (
 type Querier interface {
 	AcquireCycleLock(ctx context.Context, projectID string) error
 	AcquireDepLock(ctx context.Context, arg AcquireDepLockParams) error
+	// Records or replaces an answer. The caller holds the row lock and has
+	// checked the question is open, or answered and not yet delivered.
+	AnswerTaskQuestion(ctx context.Context, arg AnswerTaskQuestionParams) (TaskQuestion, error)
 	ArchKindExists(ctx context.Context, arg ArchKindExistsParams) (bool, error)
 	ArchNodeCycleCheck(ctx context.Context, arg ArchNodeCycleCheckParams) (bool, error)
 	// Grants a specific role to a member. Idempotent.
@@ -40,6 +43,10 @@ type Querier interface {
 	// as "closed enough" — a feature whose remaining children were all
 	// cancelled deliberately should roll up to done.
 	CountNonDoneChildren(ctx context.Context, parentTaskID *uuid.UUID) (int32, error)
+	CountOpenQuestionsForSession(ctx context.Context, arg CountOpenQuestionsForSessionParams) (int32, error)
+	// Open question counts for a page of tasks. Tasks without open
+	// questions produce no row.
+	CountOpenTaskQuestions(ctx context.Context, ids []uuid.UUID) ([]CountOpenTaskQuestionsRow, error)
 	CountTaskSteps(ctx context.Context, taskID uuid.UUID) (int32, error)
 	CountUnread(ctx context.Context, userID uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)
@@ -130,6 +137,8 @@ type Querier interface {
 	GetTaskChipByShortID(ctx context.Context, arg GetTaskChipByShortIDParams) (GetTaskChipByShortIDRow, error)
 	GetTaskComment(ctx context.Context, id uuid.UUID) (GetTaskCommentRow, error)
 	GetTaskForUpdate(ctx context.Context, id uuid.UUID) (GetTaskForUpdateRow, error)
+	GetTaskQuestion(ctx context.Context, arg GetTaskQuestionParams) (TaskQuestion, error)
+	GetTaskQuestionForUpdate(ctx context.Context, arg GetTaskQuestionForUpdateParams) (TaskQuestion, error)
 	GetTaskStep(ctx context.Context, arg GetTaskStepParams) (GetTaskStepRow, error)
 	// Related-task summaries for the task detail (web dialog and MCP
 	// tasks.get): just enough to label a chip, so the detail never needs a
@@ -154,6 +163,7 @@ type Querier interface {
 	InsertSession(ctx context.Context, arg InsertSessionParams) (InsertSessionRow, error)
 	InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error)
 	InsertTaskComment(ctx context.Context, arg InsertTaskCommentParams) (InsertTaskCommentRow, error)
+	InsertTaskQuestion(ctx context.Context, arg InsertTaskQuestionParams) (TaskQuestion, error)
 	InsertTaskStep(ctx context.Context, arg InsertTaskStepParams) (InsertTaskStepRow, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (InsertUserRow, error)
 	// Lightweight roster across every project, deduped (a user with
@@ -223,6 +233,10 @@ type Querier interface {
 	ListSkillOverridePaths(ctx context.Context, pathPrefix string) ([]string, error)
 	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommentsRow, error)
 	ListTaskCommits(ctx context.Context, taskID uuid.UUID) ([]ListTaskCommitsRow, error)
+	// Filters are optional. project_ids scopes the global views to the
+	// caller's projects. Open questions come first, oldest first; the rest
+	// follow, most recently changed first.
+	ListTaskQuestions(ctx context.Context, arg ListTaskQuestionsParams) ([]TaskQuestion, error)
 	ListTaskSteps(ctx context.Context, taskID uuid.UUID) ([]ListTaskStepsRow, error)
 	// Optional filters: state, type, assignee, target_role, parent_task.
 	// include_children=false (default) restricts to parent IS NULL UNLESS
@@ -332,6 +346,10 @@ type Querier interface {
 	// One active step per session per task: starting a step stops the
 	// session's other step on the same task.
 	StopSessionSteps(ctx context.Context, arg StopSessionStepsParams) error
+	// Hands a session its new answers and marks them delivered, once:
+	// SKIP LOCKED keeps two concurrent takes from returning the same row,
+	// and skips a row an answer edit is holding.
+	TakeTaskAnswers(ctx context.Context, arg TakeTaskAnswersParams) ([]TaskQuestion, error)
 	// Done / total step counts for a page of tasks. Tasks without steps
 	// produce no row.
 	TaskStepProgress(ctx context.Context, ids []uuid.UUID) ([]TaskStepProgressRow, error)
@@ -394,6 +412,8 @@ type Querier interface {
 	UpsertProjectPriority(ctx context.Context, arg UpsertProjectPriorityParams) (UpsertProjectPriorityRow, error)
 	UpsertTaskCommit(ctx context.Context, arg UpsertTaskCommitParams) error
 	UserBelongsToProjectOrIsAdmin(ctx context.Context, arg UserBelongsToProjectOrIsAdminParams) (bool, error)
+	WithdrawOpenTaskQuestions(ctx context.Context, arg WithdrawOpenTaskQuestionsParams) ([]WithdrawOpenTaskQuestionsRow, error)
+	WithdrawTaskQuestion(ctx context.Context, arg WithdrawTaskQuestionParams) (TaskQuestion, error)
 	WouldCreateCycle(ctx context.Context, arg WouldCreateCycleParams) (pgtype.Bool, error)
 }
 

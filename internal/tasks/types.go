@@ -57,6 +57,9 @@ type Task struct {
 	EditedByUserID   *uuid.UUID       `json:"edited_by_user_id,omitempty"`
 	// Steps counts the task's checklist; nil when it has no steps.
 	Steps *StepProgress `json:"steps,omitempty"`
+	// QuestionsOpen counts the task's questions still waiting for an
+	// answer.
+	QuestionsOpen int `json:"questions_open,omitempty"`
 }
 
 // Dependency is the directed relation "task depends on another task".
