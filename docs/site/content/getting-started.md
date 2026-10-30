@@ -85,8 +85,10 @@ once; copy it now. The Settings tab also gives you a one-line
 specific project — see [MCP integration](/mcp/) for the details.
 
 Once an agent starts picking up work you'll see it on the
-[Kanban](/kanban/) or [Gantt](/gantt/) views; see those pages for
-how each view is driven by humans and agents.
+[Kanban](/kanban/) or [Gantt](/gantt/) views, and what it is doing
+right now, with any questions it has for you, in
+[Live and questions](/live/); see those pages for how each view is
+driven by humans and agents.
 
 ## 6. Restrict to a GitHub org (optional)
 

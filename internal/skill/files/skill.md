@@ -13,6 +13,8 @@ the work needs it:
 
 - `domains/tasks.md`: task API, pickup and close patterns, steps,
   claim conflicts, pagination.
+- `domains/questions.md`: asking the human through Nottario and
+  collecting the answers.
 - `domains/docs.md`: documents, versions, download and upload URLs,
   keeping a repo file and its Nottario copy in sync.
 - `domains/architecture.md`: the architecture graph, and when to touch
@@ -36,6 +38,12 @@ the work needs it:
    human to restart their client.
 3. **Pick your git mode** (solo, parallel agents, many humans) before
    touching code: `methodology/git.md`.
+4. **Know your session.** Your conversation id: your client's own if it
+   exposes one (Claude Code: `$CLAUDE_CODE_SESSION_ID`), otherwise a
+   UUID you generate once and keep for the whole conversation; plus a
+   short label for this conversation's work. Pass them as `session` and
+   `session_label` on `claim`, `claim_next`, `create { claim }`,
+   `start_step` and `questions.ask`. The human follows them in Live.
 
 **The token belongs to your MCP client, not to you.** Never read it,
 search for it, print it or call Nottario's HTTP API with it. Everything
@@ -71,8 +79,8 @@ When the human says "what's next", "carry on" or similar:
    `tasks.next` is a read-only preview, never the way to take work. No
    "starting this" comments: `doing` is the record.
 3. **Do the work.** When it has several distinct actions, list them as
-   steps (`tasks.add_steps`) and tick each as you finish it
-   (`tasks.update_step { done: true }`). New work found on the way is a
+   steps (`tasks.add_steps`), call `tasks.start_step` as you start each
+   one and tick it as you finish it (`tasks.update_step { done: true }`). New work found on the way is a
    new step, not a long comment. Past about 15 steps, look for subtasks.
 4. **Close** with `tasks.close`: one sentence and the commit sha for
    ordinary work; Repro / Fix / Test for bugs. If the answer lists
@@ -111,7 +119,25 @@ order. In the description: the human's words verbatim, where in the
 code it showed up, a tentative direction. The bar: could someone else
 pick it up if you left now?
 
-## 6. Rules of thumb
+## 6. Questions for the human
+
+Detail in `domains/questions.md`.
+
+- **Only the main agent asks and takes.** If your client runs helper
+  agents (subagents), give them your session id for `start_step`; they
+  end their report with any question for the human, and you file it.
+- **Ask in Nottario** when the decision outlives the current exchange:
+  background or helper work, several conversations in flight. When the
+  human is answering you right now, ask in the chat.
+- **Keep working** on what does not depend on the answer.
+- **`questions.take`** at the start of every turn, after each helper
+  agent returns, before picking the next task and before ending a turn.
+- **Ending a turn with open questions:** list them, one line each, and
+  say they can be answered in Nottario (Questions view).
+- **Withdraw** a question that no longer matters
+  (`questions.withdraw`); closing the task withdraws the rest.
+
+## 7. Rules of thumb
 
 - Never invent ids; look them up. Pass `project_id` on every call.
 - Don't touch other people's tasks unless asked; if you must, comment

@@ -28,10 +28,11 @@ type skillMapping struct {
 var skillPages = []skillMapping{
 	{source: "skill.md", slug: "overview", title: "Skill: overview", order: 1},
 	{source: "domains/tasks.md", slug: "tasks", title: "Skill: tasks domain", order: 2},
-	{source: "domains/cycles.md", slug: "cycles", title: "Skill: cycles domain", order: 3},
-	{source: "domains/docs.md", slug: "docs", title: "Skill: documents domain", order: 4},
-	{source: "domains/architecture.md", slug: "architecture", title: "Skill: architecture domain", order: 5},
-	{source: "references/identity.md", slug: "identity", title: "Skill: identity reference", order: 6},
+	{source: "domains/questions.md", slug: "questions", title: "Skill: questions domain", order: 3},
+	{source: "domains/cycles.md", slug: "cycles", title: "Skill: cycles domain", order: 4},
+	{source: "domains/docs.md", slug: "docs", title: "Skill: documents domain", order: 5},
+	{source: "domains/architecture.md", slug: "architecture", title: "Skill: architecture domain", order: 6},
+	{source: "references/identity.md", slug: "identity", title: "Skill: identity reference", order: 7},
 }
 
 // loadSkillPages reads every entry in skillPages from disk and turns

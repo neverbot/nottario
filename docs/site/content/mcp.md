@@ -32,8 +32,8 @@ the whole session. Two optional parameters on the MCP URL trim the
 catalogue for one connection:
 
 - `?tools=tasks,docs` keeps only those domains (`arch`, `cycles`,
-  `docs`, `projects`, `search`, `skill`, `tasks`); `whoami` always
-  stays.
+  `docs`, `projects`, `questions`, `search`, `skill`, `tasks`);
+  `whoami` always stays.
 - `?shell=true` is for agents that can run `curl`: it hides
   `docs.read` and `docs.write`, because such an agent moves documents
   through `docs.download_url` and `docs.upload_url` instead.
@@ -51,6 +51,12 @@ The MCP server exposes one tool per natural verb. Highlights:
 - `nottario.tasks.claim_next` — atomic "pick the next eligible
   task and assign it to me", in one locked statement.
 - `nottario.tasks.claim` — atomic claim by id.
+- `session` and `session_label` — `claim`, `claim_next`,
+  `create { claim: true }`, `tasks.start_step` and `questions.ask` take
+  the id of the agent's conversation and a short label, so the
+  [Live view](/live/) shows which conversation is on which task. Any MCP
+  client works: it passes its own conversation id when it has one
+  (Claude Code: `$CLAUDE_CODE_SESSION_ID`) or a UUID it generates once.
 - `nottario.tasks.create` — files a task; `claim: true` creates it
   already assigned to the caller and in `doing`, for work the agent
   is about to start.
@@ -67,6 +73,19 @@ The MCP server exposes one tool per natural verb. Highlights:
   task's checklist of short steps. Closing a task with steps undone is
   allowed; the response lists them under `pending_steps` with a
   `notice` asking the agent to tell the human.
+- `nottario.tasks.start_step` — marks the step a conversation is
+  starting, shown live to the humans; a task still in `todo` moves to
+  `doing` and becomes the caller's if unowned.
+- `nottario.questions.ask`, `nottario.questions.take`,
+  `nottario.questions.list`, `nottario.questions.withdraw` — file a
+  question only the human can answer on a task (free text, or 2 to 9
+  options with an optional recommendation), collect the answers once
+  they arrive (`take` returns each answer exactly once), list and
+  withdraw them. Only the human who owns the agent's token answers; see
+  [Live and questions](/live/). `tasks.list` rows carry
+  `questions_open`, `tasks.get` lists the pending questions, and closing
+  a task withdraws its open ones (`withdrawn_questions` in the
+  response).
 - `nottario.docs.read`, `nottario.docs.write` — versioned markdown
   documents with optimistic concurrency via `expected_version`.
 - `nottario.docs.move` — rename a document, keeping its history and

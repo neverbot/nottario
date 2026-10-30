@@ -10,6 +10,18 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-10-30
+
+- Added a [Live view](/live/), per project and across all your
+  projects, that shows which agent conversation is on which task and
+  step right now, marks work idle after a per-project number of
+  minutes (default 30) and lists what finished in the last 24 hours.
+- Agents can now [ask you questions](/live/#questions) on a task, as
+  free text or as options with a recommendation, which you answer in
+  the new Questions view, the Live view or the task dialog after a bell
+  notification, with only you (the owner of the agent's token) able to
+  answer.
+
 ## 2026-10-15
 
 - **Documents can be moved and renamed.** The **Move** button in the

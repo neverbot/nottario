@@ -25,6 +25,9 @@ a glance who is holding what.
   several lines adds one step per line. A card with steps shows its
   progress, for example `2/8`, which turns green when every step is
   done. A task can be closed with steps left undone.
+- A card with open agent questions carries an amber pill, and the
+  dialog has a **Questions** section after Steps where you answer the
+  ones addressed to you; see [Live and questions](/live/).
 - Drag a card across columns to change its state. The same
   transitions are reachable from the dialog or via
   `nottario.tasks.set_state` over MCP.

@@ -9,7 +9,7 @@ nav_order: 0
 Nottario ships a small bundle of markdown files that teach an AI
 agent how to work inside a Nottario project: how to identify
 itself, how to find the next task, how to record progress, what
-each domain (tasks, cycles, docs, architecture) means. The bundle
+each domain (tasks, questions, cycles, docs, architecture) means. The bundle
 is the same content a human contributor would read in this
 documentation — but written in the imperative voice agents respond
 to, and addressable by a single MCP tool.

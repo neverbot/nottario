@@ -50,7 +50,19 @@ checklist on a task: short actions worth remembering that need no
 owner, role, dependency, commits or discussion of its own. If an item
 needs any of those, it is a subtask, not a step. A step is one line of
 up to 200 characters; a task holds at most 50. Steps are either done
-or deleted: there is no "skipped" state.
+or deleted: there is no "skipped" state. A step is **in progress**
+(`in_progress: true`) while a session has started it and it is not
+done; ticking it done clears the mark.
+
+### Session
+
+The agent conversation working on a task: `session` is your
+conversation id and `session_label` a short name for its work, both
+from `skill.md` §1 (id 1 to 128 characters, label up to 80). The
+server records the session on `claim`, `claim_next`,
+`create { claim: true }` and `start_step`, and shows it, with the
+step in progress, in the Live view. A task leaving `doing` drops its
+session.
 
 ## Tool surface
 
@@ -288,6 +300,15 @@ token. Comments are append-only; there is no edit or delete from
 the agent surface (a human can purge data directly in Postgres if
 needed).
 
+### Session fields on claim and create
+
+`tasks.claim`, `tasks.claim_next` and `tasks.create { claim: true }`
+take optional `session` and `session_label`; pass them. A malformed
+session is rejected before anything is written. If recording a valid
+session fails after the task was claimed or created, the call still
+succeeds and the response carries `session_error`: the task is yours,
+so do not retry the call (that would claim or create a second one).
+
 ### Steps: `add_steps`, `update_step`, `remove_step`, `move_step`
 
 ```
@@ -315,6 +336,7 @@ How to use them:
 - **When new work appears mid-task, add a step** instead of writing a
   long comment about it. If the new work needs its own owner, role or
   commits, file a subtask instead.
+- **Start each step with `tasks.start_step`** as you begin it (below).
 - **Tick each step as you finish it,** not all at the end: the progress
   on the board is only useful while it is current.
 - **Past about 15 steps, look for subtasks.** A list that long usually
@@ -330,6 +352,34 @@ How to use them:
   and their response adds `pending_steps` and a `notice`. When you see
   them, **tell the human which steps were left undone**, in your reply,
   not only in the closing comment.
+
+### `nottario.tasks.start_step`
+
+```
+nottario.tasks.start_step { project_id, task_id, step_id, session, session_label? }  # → {step, progress}
+```
+
+Marks the step you are starting so the human sees it live. `session`
+is required. A task still in `todo` moves to `doing` and becomes yours
+if unowned. One step in progress per session per task: starting
+another step of the same task clears the mark on the previous one;
+other sessions can work other steps of the same task at once. A done
+step cannot be started. On a task assigned to someone else the step
+still starts, but the response carries `session_error`: your session
+does not become the task's active one.
+
+If your client runs helper agents (subagents), they call `start_step`
+with the main conversation's session id (`domains/questions.md`).
+
+### Questions on tasks
+
+Questions for the human hang off a task (`domains/questions.md`).
+`tasks.list` rows carry `questions_open` when the task has open ones;
+`tasks.get` lists, under `questions`, the open ones and the answered
+ones not yet taken. Open questions block nothing. **Closing a task**
+(`tasks.close`, `set_state done` or `wont_do`) **withdraws its open
+questions**: the response adds `withdrawn_questions` (a count) and a
+`notice`. Tell the human, and take any answers first.
 
 ## When to file a task before doing the work
 
