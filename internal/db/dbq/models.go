@@ -11,6 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AgentSession struct {
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+	TokenID    *uuid.UUID
+	UserID     uuid.UUID
+	SessionKey string
+	Label      string
+	Client     string
+	CreatedAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
+}
+
 type ApiToken struct {
 	ID            uuid.UUID
 	UserID        uuid.UUID
@@ -206,6 +218,7 @@ type Project struct {
 	CycleLabel          string
 	OwnerUserID         uuid.UUID
 	ArchLockIdleSeconds pgtype.Int4
+	LiveIdleMinutes     int32
 }
 
 type ProjectPriority struct {
@@ -258,6 +271,8 @@ type Task struct {
 	CycleID          uuid.UUID
 	EditedAt         pgtype.Timestamptz
 	EditedByUserID   *uuid.UUID
+	LastActivityAt   pgtype.Timestamptz
+	ActiveSessionID  *uuid.UUID
 }
 
 type TaskComment struct {
@@ -287,6 +302,34 @@ type TaskDependency struct {
 	DependsOnID uuid.UUID
 }
 
+type TaskQuestion struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	TaskID            uuid.UUID
+	StepID            *uuid.UUID
+	SessionID         *uuid.UUID
+	AskedByUserID     *uuid.UUID
+	AskedByTokenID    *uuid.UUID
+	RecipientUserID   *uuid.UUID
+	Kind              string
+	BodyMd            string
+	Options           []byte
+	Multi             bool
+	RecommendedKey    pgtype.Text
+	RecommendedReason string
+	State             string
+	AnswerKeys        []string
+	AnswerText        string
+	AnswerNote        string
+	AnsweredByUserID  *uuid.UUID
+	AnsweredAt        pgtype.Timestamptz
+	DeliveredAt       pgtype.Timestamptz
+	WithdrawnAt       pgtype.Timestamptz
+	WithdrawnReason   string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
 type TaskStep struct {
 	ID               uuid.UUID
 	TaskID           uuid.UUID
@@ -299,6 +342,9 @@ type TaskStep struct {
 	CreatedByTokenID *uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	StartedAt        pgtype.Timestamptz
+	StartedSessionID *uuid.UUID
+	StartedByUserID  *uuid.UUID
 }
 
 type User struct {
