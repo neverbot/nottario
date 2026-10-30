@@ -42,8 +42,10 @@ type EndCycleResult struct {
 }
 
 // EndCycle atomically closes the project's active cycle and opens
-// the next one, moving in-flight work forward per the cascade rules
-// described in the spec (docs/superpowers/specs/2026-05-26-cycles-design.md).
+// the next one, moving open work forward: a feature that is not closed
+// carries its whole subtree (closed children included), and every
+// other open task moves on its own. Closed work (done or wont_do)
+// stays in the closed cycle.
 func EndCycle(ctx context.Context, pool *pgxpool.Pool, p EndCycleParams, by Authorship) (*EndCycleResult, error) {
 	if p.ProjectID == uuid.Nil {
 		return nil, errors.New("project_id is required")
