@@ -61,3 +61,17 @@ export function isIdle(item, idleMinutes, now) {
   if (!Number.isFinite(at)) return false;
   return now - at > idleMinutes * 60_000;
 }
+
+// RECENT_MS is how fresh activity must be for the green dot.
+export const RECENT_MS = 2 * 60_000;
+
+// activityState classifies a Working row for its dot: 'recent' (green)
+// when the last activity is under two minutes old, 'idle' (grey) past
+// the project's idle threshold or when the server flagged it, 'quiet'
+// (neutral) in between.
+export function activityState(item, idleMinutes, now) {
+  if (item?.idle || isIdle(item, idleMinutes, now)) return 'idle';
+  const at = Date.parse(item?.last_activity_at);
+  if (Number.isFinite(at) && now - at < RECENT_MS) return 'recent';
+  return 'quiet';
+}

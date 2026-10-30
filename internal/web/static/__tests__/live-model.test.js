@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
 import {
+  activityState,
   isClaudeCode,
   isIdle,
   resumeCommand,
@@ -123,5 +124,23 @@ describe('isIdle', () => {
   it('is not idle without recorded activity', () => {
     assert.ok(!isIdle({}, 30, now));
     assert.ok(!isIdle({ last_activity_at: null }, 30, now));
+  });
+});
+
+describe('activityState', () => {
+  const now = Date.parse('2026-10-30T12:00:00Z');
+  const at = (min) => ({ last_activity_at: new Date(now - min * 60_000).toISOString() });
+
+  it('is recent under two minutes', () => {
+    assert.equal(activityState(at(1), 30, now), 'recent');
+  });
+
+  it('is quiet between recent and idle', () => {
+    assert.equal(activityState(at(5), 30, now), 'quiet');
+  });
+
+  it('is idle past the threshold or when the server says so', () => {
+    assert.equal(activityState(at(31), 30, now), 'idle');
+    assert.equal(activityState({ ...at(1), idle: true }, 30, now), 'idle');
   });
 });

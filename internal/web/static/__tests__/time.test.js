@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { formatDate, formatDateTime, formatRelativeTime } from '../time.js';
+import { formatDate, formatDateTime, formatDuration, formatRelativeTime } from '../time.js';
 
 // These helpers exist because six copy-pasted versions disagreed with
 // each other. The steps below are the contract that replaced them.
@@ -67,5 +67,19 @@ describe('formatDate and formatDateTime', () => {
       assert.equal(formatDate(bad), '');
       assert.equal(formatDateTime(bad), '');
     }
+  });
+});
+
+describe('formatDuration', () => {
+  it('keeps the largest unit only', () => {
+    assert.equal(formatDuration(5_000), '5s');
+    assert.equal(formatDuration(42 * 60_000 + 30_000), '42m');
+    assert.equal(formatDuration(2 * 3_600_000 + 5 * 60_000), '2h');
+    assert.equal(formatDuration(3 * 86_400_000), '3d');
+  });
+
+  it('renders nonsense as zero', () => {
+    assert.equal(formatDuration(-1), '0s');
+    assert.equal(formatDuration(Number.NaN), '0s');
   });
 });

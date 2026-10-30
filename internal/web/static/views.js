@@ -29,6 +29,12 @@ export const PROJECT_VIEWS = [
     path: (pid) => `/projects/${pid}/board/gantt`,
   },
   {
+    key: 'live',
+    label: 'Live',
+    description: 'What agents and people are working on right now, and what waits for you.',
+    path: (pid) => `/projects/${pid}/live`,
+  },
+  {
     key: 'questions',
     label: 'Questions',
     description: 'Questions agents filed for a person, with the form to answer them.',

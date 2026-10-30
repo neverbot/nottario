@@ -67,3 +67,18 @@ export function formatDateTime(iso) {
   if (!Number.isFinite(date.getTime())) return '';
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
+
+// formatDuration renders a span in milliseconds as a compact length,
+// the largest unit only: "30s", "42m", "2h", "3d". Used where a time
+// reads as "for 42m" or "No activity for 2h" rather than "ago".
+// Negative or unparseable spans render as "0s".
+export function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return '0s';
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}

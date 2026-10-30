@@ -1,11 +1,17 @@
 import { LitElement, html, css, nothing } from '/static/vendor/lit/lit.js';
-import { subscribe } from '/static/realtime.js';
 import { buttonStyles } from '/static/components/buttons.js';
+import {
+  errorPanel,
+  pageStateStyles,
+  pausedBanner,
+  skeleton,
+} from '/static/components/page-states.js';
 import { toast } from '/static/components/toast.js';
 import '/static/components/page-header.js';
 import '/static/components/segmented-control.js';
 import '/static/components/chip-filter.js';
 import '/static/components/question-card.js';
+import { loadScope, subscribeScope } from '/static/utils/project-scope.js';
 
 // <nottario-questions-page> lists the questions agents filed for the
 // humans of a project (projectId set) or of every project the viewer
@@ -22,13 +28,6 @@ import '/static/components/question-card.js';
 // question's card, which is what positional re-rendering would do.
 
 const TABS = ['open', 'answered', 'all'];
-
-// projectError is the message for a project that would not load.
-function projectError(status) {
-  if (status === 403) return 'You are not a member of this project.';
-  if (status === 404) return 'Project not found.';
-  return `Could not load the project (HTTP ${status}).`;
-}
 
 const EMPTY = {
   open: 'No questions waiting for you.',
@@ -63,6 +62,7 @@ class NottarioQuestionsPage extends LitElement {
 
   static styles = [
     buttonStyles,
+    pageStateStyles,
     css`
       :host { display: block; box-sizing: border-box; }
       *, *::before, *::after { box-sizing: border-box; }
@@ -72,17 +72,6 @@ class NottarioQuestionsPage extends LitElement {
         align-items: center;
         gap: 8px;
         margin-bottom: 12px;
-      }
-
-      .paused,
-      .notice {
-        margin: 0 0 12px;
-        padding: 8px 12px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: var(--bg-subtle);
-        color: var(--fg-muted);
-        font-size: 13px;
       }
 
       .list {
@@ -112,51 +101,6 @@ class NottarioQuestionsPage extends LitElement {
         border-radius: var(--radius-sm);
       }
 
-      .empty,
-      .error {
-        padding: 32px 16px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: var(--bg);
-        text-align: center;
-        color: var(--fg-muted);
-        font-size: 14px;
-      }
-      .error { color: var(--danger-text); }
-      .error p,
-      .empty p { margin: 0 0 12px; }
-
-      /* Loading placeholders: static grey bars, no shimmer. */
-      .skeleton { list-style: none; margin: 0; padding: 0; }
-      .skeleton li {
-        padding: 16px;
-        border: 1px solid var(--border);
-        border-top-width: 0;
-        background: var(--bg);
-      }
-      .skeleton li:first-child {
-        border-top-width: 1px;
-        border-radius: var(--radius) var(--radius) 0 0;
-      }
-      .skeleton li:last-child { border-radius: 0 0 var(--radius) var(--radius); }
-      .bar {
-        height: 10px;
-        border-radius: 3px;
-        background: var(--gray-2);
-        margin-bottom: 10px;
-      }
-      .bar.short { width: 30%; }
-      .bar.long { width: 70%; }
-      .bar.mid { width: 50%; margin-bottom: 0; }
-
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        white-space: nowrap;
-      }
     `,
   ];
 
@@ -234,35 +178,19 @@ class NottarioQuestionsPage extends LitElement {
     this._error = '';
     this._paused = false;
     this._unsubscribe();
-    if (this._global) {
-      this._project = null;
-      let projects = [];
-      try {
-        const r = await fetch('/api/projects');
-        const j = r.ok ? await r.json() : {};
-        projects = j.projects || [];
-      } catch (_) {
-        projects = [];
-      }
+    let scope;
+    try {
+      scope = await loadScope(this.projectId);
+    } catch (e) {
       if (stale()) return;
-      this._projects = projects;
-      for (const p of projects) this._unsubs.push(subscribe(p.id, (ev) => this._onEvent(ev)));
-    } else {
-      let project;
-      try {
-        const r = await fetch(`/api/projects/${encodeURIComponent(this.projectId)}`);
-        if (!r.ok) throw new Error(projectError(r.status));
-        project = await r.json();
-      } catch (e) {
-        if (stale()) return;
-        this._loading = false;
-        this._error = e.message;
-        return;
-      }
-      if (stale()) return;
-      this._project = project;
-      this._unsubs.push(subscribe(project.id, (ev) => this._onEvent(ev)));
+      this._loading = false;
+      this._error = e.message;
+      return;
     }
+    if (stale()) return;
+    this._project = scope.project;
+    this._projects = scope.projects;
+    this._unsubs = subscribeScope(scope, (ev) => this._onEvent(ev));
     await this._load();
   }
 
@@ -490,11 +418,7 @@ class NottarioQuestionsPage extends LitElement {
             </div>`
           : nothing
       }
-      ${
-        this._paused
-          ? html`<p class="paused" role="status">Live updates paused, reconnecting…</p>`
-          : nothing
-      }
+      ${this._paused ? pausedBanner() : nothing}
       ${this._notFound ? html`<p class="notice" role="status">Question not found.</p>` : nothing}
       ${this._renderState(items)}
       <ol class="list" aria-label="Questions" ?hidden=${!showList}
@@ -508,21 +432,8 @@ class NottarioQuestionsPage extends LitElement {
   }
 
   _renderState(items) {
-    if (this._loading) {
-      return html`<ul class="skeleton" aria-hidden="true">
-          ${[0, 1, 2].map(
-            () =>
-              html`<li><div class="bar short"></div><div class="bar long"></div><div class="bar mid"></div></li>`,
-          )}
-        </ul>
-        <span class="sr-only" role="status">Loading questions…</span>`;
-    }
-    if (this._error) {
-      return html`<div class="error" role="alert">
-        <p>${this._error}</p>
-        <button class="btn secondary" type="button" @click=${() => this._start()}>Try again</button>
-      </div>`;
-    }
+    if (this._loading) return skeleton('Loading questions…');
+    if (this._error) return errorPanel(this._error, () => this._start());
     if (items.length === 0 && this._global && this._filter.length > 0) {
       return html`<div class="empty">
         <p>No questions in the selected projects.</p>

@@ -352,6 +352,7 @@ class NottarioTopbar extends LitElement {
     const items = [
       { label: 'Board', href: `${base}/board/kanban`, active: match(`${base}/board/kanban`) },
       { label: 'Gantt', href: `${base}/board/gantt`, active: match(`${base}/board/gantt`) },
+      { label: 'Live', href: `${base}/live`, active: match(`${base}/live`) },
       { label: 'Questions', href: `${base}/questions`, active: match(`${base}/questions`) },
       { label: 'Docs', href: `${base}/docs`, active: match(`${base}/docs`) },
       { label: 'Architecture', href: `${base}/arch/diagram`, active: match(`${base}/arch`) },
@@ -383,6 +384,10 @@ class NottarioTopbar extends LitElement {
              class=${this._isActive('/') ? 'active' : ''}
              aria-current=${this._isActive('/') ? 'page' : 'false'}
              @click=${this._go('/')}>Projects</a>
+          <a href="/live"
+             class=${this._isActive('/live') ? 'active' : ''}
+             aria-current=${this._isActive('/live') ? 'page' : 'false'}
+             @click=${this._go('/live')}>Live</a>
           <a href="/questions"
              class=${this._isActive('/questions') ? 'active' : ''}
              aria-current=${this._isActive('/questions') ? 'page' : 'false'}

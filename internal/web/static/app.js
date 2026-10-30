@@ -12,6 +12,7 @@ import './pages/docs.js';
 import './pages/arch.js';
 import './pages/search.js';
 import './pages/questions.js';
+import './pages/live.js';
 
 class NottarioShell extends LitElement {
   static properties = {
@@ -160,6 +161,9 @@ class NottarioShell extends LitElement {
     if (path === '/users') {
       return html`<nottario-users-page .me=${this.me}></nottario-users-page>`;
     }
+    if (path === '/live') {
+      return html`<nottario-live-page .me=${this.me}></nottario-live-page>`;
+    }
     if (path === '/questions') {
       return html`<nottario-questions-page .me=${this.me}></nottario-questions-page>`;
     }
@@ -191,6 +195,11 @@ class NottarioShell extends LitElement {
     if (docsMatch) {
       return html`<nottario-docs-page
         .me=${this.me} .projectId=${docsMatch[1]}></nottario-docs-page>`;
+    }
+    const liveMatch = path.match(/^\/projects\/([^/]+)\/live$/);
+    if (liveMatch) {
+      return html`<nottario-live-page
+        .me=${this.me} .projectId=${liveMatch[1]}></nottario-live-page>`;
     }
     const questionsMatch = path.match(/^\/projects\/([^/]+)\/questions$/);
     if (questionsMatch) {
