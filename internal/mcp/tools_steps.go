@@ -32,6 +32,13 @@ type stepsUpdateInput struct {
 	Done      *bool   `json:"done,omitempty" jsonschema:"true ticks the step, false unticks it"`
 }
 
+type stepsStartInput struct {
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	TaskID    string `json:"task_id" jsonschema:"task uuid"`
+	StepID    string `json:"step_id" jsonschema:"step uuid"`
+	sessionFields
+}
+
 type stepsMoveInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project uuid"`
 	TaskID    string `json:"task_id" jsonschema:"task uuid"`
@@ -46,12 +53,14 @@ type mcpStep struct {
 	ID   uuid.UUID `json:"id"`
 	Text string    `json:"text"`
 	Done bool      `json:"done"`
+	// InProgress marks the step a session is working on.
+	InProgress bool `json:"in_progress,omitempty"`
 }
 
 func slimSteps(ss []tasks.Step) []mcpStep {
 	out := make([]mcpStep, 0, len(ss))
 	for _, s := range ss {
-		out = append(out, mcpStep{ID: s.ID, Text: s.Text, Done: s.Done})
+		out = append(out, mcpStep{ID: s.ID, Text: s.Text, Done: s.Done, InProgress: s.InProgress()})
 	}
 	return out
 }
@@ -186,7 +195,47 @@ func registerSteps(server *sdk.Server, d Deps) {
 		return jsonResult(struct {
 			mcpStep
 			Progress tasks.StepProgress `json:"progress"`
-		}{mcpStep{ID: s.ID, Text: s.Text, Done: s.Done}, stepProgress(all)})
+		}{mcpStep{ID: s.ID, Text: s.Text, Done: s.Done, InProgress: s.InProgress()}, stepProgress(all)})
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.tasks.start_step",
+		Description: "Marks the step you are starting now, so the human sees it live. Pass your session. A task in todo moves to doing and becomes yours if unowned. Starting another step of the same task stops this one. Returns {step, progress}.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in stepsStartInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := checkSession(in.sessionFields); err != nil {
+			return toolError(err.Error())
+		}
+		tid, err := resolveStepTask(ctx, d, in.ProjectID, in.TaskID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		sid, err := parseStepID(in.StepID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		pid, _ := uuid.Parse(in.ProjectID) // resolveStepTask validated it
+		var msg string
+		session, err := touchSession(ctx, req, d, pid, c, in.sessionFields)
+		if err != nil {
+			// The step still starts, unattributed; say so.
+			msg = "recording the session failed, so the step was started without it: " + err.Error()
+			session = nil
+		}
+		all, err := tasks.StartStep(ctx, d.Pool, tid, sid, session, authorshipFor(c))
+		if err != nil {
+			return toolError(err.Error())
+		}
+		var started mcpStep
+		for _, s := range all {
+			if s.ID == sid {
+				started = mcpStep{ID: s.ID, Text: s.Text, Done: s.Done, InProgress: s.InProgress()}
+			}
+		}
+		return jsonResult(withSessionError(map[string]any{"step": started, "progress": stepProgress(all)}, msg))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{

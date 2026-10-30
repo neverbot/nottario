@@ -286,9 +286,12 @@ UPDATE tasks SET
   updated_at = now()
 WHERE id = $1;
 
--- name: SetTaskActiveSession :exec
+-- name: SetTaskActiveSession :execrows
+-- Only the task's current assignee can stamp its session on it, so a
+-- reassignment between the claim and this write leaves it alone.
 UPDATE tasks SET active_session_id = sqlc.arg('session_id')::uuid
-WHERE id = sqlc.arg('id')::uuid AND state = 'doing';
+WHERE id = sqlc.arg('id')::uuid AND state = 'doing'
+  AND assignee_user_id = sqlc.arg('user_id')::uuid;
 
 -- name: SetTaskDoing :exec
 UPDATE tasks SET

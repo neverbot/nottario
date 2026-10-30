@@ -56,7 +56,11 @@ func checkSession(f sessionFields) error {
 func markActiveSession(ctx context.Context, req *sdk.CallToolRequest, d Deps, pid, taskID uuid.UUID, c identity.Caller, f sessionFields) string {
 	sid, err := touchSession(ctx, req, d, pid, c, f)
 	if err == nil && sid != nil {
-		err = tasks.SetActiveSession(ctx, d.Pool, taskID, *sid)
+		var ok bool
+		ok, err = tasks.SetActiveSession(ctx, d.Pool, taskID, *sid, c.UserID)
+		if err == nil && !ok {
+			return "the task left doing or changed hands before the session was recorded"
+		}
 	}
 	if err != nil {
 		return "the task was claimed, but recording the session failed: " + err.Error()
@@ -92,7 +96,7 @@ func clientName(req *sdk.CallToolRequest) string {
 	}
 	if req.Session != nil {
 		if p := req.Session.InitializeParams(); p != nil && p.ClientInfo != nil && p.ClientInfo.Name != "" {
-			return p.ClientInfo.Name
+			return safeToken(p.ClientInfo.Name)
 		}
 	}
 	if ex := req.GetExtra(); ex != nil && ex.Header != nil {
@@ -100,12 +104,17 @@ func clientName(req *sdk.CallToolRequest) string {
 		if i := strings.IndexAny(ua, "/ "); i >= 0 {
 			ua = ua[:i]
 		}
-		return strings.Map(func(r rune) rune {
-			if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-' {
-				return r
-			}
-			return -1
-		}, ua)
+		return safeToken(ua)
 	}
 	return ""
+}
+
+// safeToken reduces s to [A-Za-z0-9._-].
+func safeToken(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-' {
+			return r
+		}
+		return -1
+	}, s)
 }

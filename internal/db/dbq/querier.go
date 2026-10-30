@@ -294,7 +294,9 @@ type Querier interface {
 	SeedDefaultPriority(ctx context.Context, arg SeedDefaultPriorityParams) error
 	SetProjectOwner(ctx context.Context, arg SetProjectOwnerParams) error
 	SetRolePosition(ctx context.Context, arg SetRolePositionParams) error
-	SetTaskActiveSession(ctx context.Context, arg SetTaskActiveSessionParams) error
+	// Only the task's current assignee can stamp its session on it, so a
+	// reassignment between the claim and this write leaves it alone.
+	SetTaskActiveSession(ctx context.Context, arg SetTaskActiveSessionParams) (int64, error)
 	SetTaskDoing(ctx context.Context, id uuid.UUID) error
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	SetTaskStepPosition(ctx context.Context, arg SetTaskStepPositionParams) error
@@ -309,6 +311,7 @@ type Querier interface {
 	// make room for a moved one. Callers hold the task row lock.
 	ShiftTaskSteps(ctx context.Context, arg ShiftTaskStepsParams) error
 	SoftDeleteDocument(ctx context.Context, arg SoftDeleteDocumentParams) error
+	StartTaskStep(ctx context.Context, arg StartTaskStepParams) (StartTaskStepRow, error)
 	// Fingerprint of a document without its body. Lets a caller decide
 	// whether a write is needed at all: hash the local copy and compare,
 	// instead of reading the whole document back just to diff it.
@@ -326,6 +329,9 @@ type Querier interface {
 	// whole call fails. convert_to encodes, which is what a digest of the
 	// stored bytes actually means.
 	StatDocument(ctx context.Context, arg StatDocumentParams) (StatDocumentRow, error)
+	// One active step per session per task: starting a step stops the
+	// session's other step on the same task.
+	StopSessionSteps(ctx context.Context, arg StopSessionStepsParams) error
 	// Done / total step counts for a page of tasks. Tasks without steps
 	// produce no row.
 	TaskStepProgress(ctx context.Context, ids []uuid.UUID) ([]TaskStepProgressRow, error)

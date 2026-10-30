@@ -216,7 +216,11 @@ func rowToTaskFromForUpdate(r dbq.GetTaskForUpdateRow) *Task {
 	}
 }
 
-// SetActiveSession records the agent session that holds a task in doing.
-func SetActiveSession(ctx context.Context, db dbq.DBTX, taskID, sessionID uuid.UUID) error {
-	return dbq.New(db).SetTaskActiveSession(ctx, dbq.SetTaskActiveSessionParams{ID: taskID, SessionID: sessionID})
+// SetActiveSession records the agent session that holds a task in
+// doing on behalf of userID, who must be the task's assignee. It
+// reports whether the task was updated: false when the task left doing
+// or changed hands.
+func SetActiveSession(ctx context.Context, db dbq.DBTX, taskID, sessionID, userID uuid.UUID) (bool, error) {
+	n, err := dbq.New(db).SetTaskActiveSession(ctx, dbq.SetTaskActiveSessionParams{ID: taskID, SessionID: sessionID, UserID: userID})
+	return n > 0, err
 }

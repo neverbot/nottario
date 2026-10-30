@@ -177,3 +177,47 @@ func TestMCP_TaskSteps(t *testing.T) {
 		t.Errorf("close without steps carries a notice: %+v", clean)
 	}
 }
+
+// start_step marks the step a session is working on; tasks.get lists
+// it as in progress.
+func TestMCP_StartStep(t *testing.T) {
+	f := newMCPFixture(t, 14403, "mcp-startstep")
+	var task struct {
+		ID string `json:"id"`
+	}
+	f.callJSON(t, "nottario.tasks.create", map[string]any{"project_id": f.projectID, "title": "live"}, &task)
+	var added struct {
+		Steps []stepView `json:"steps"`
+	}
+	f.callJSON(t, "nottario.tasks.add_steps", map[string]any{"project_id": f.projectID, "task_id": task.ID, "texts": []string{"a", "b"}}, &added)
+
+	var started struct {
+		Step struct {
+			ID         string `json:"id"`
+			InProgress bool   `json:"in_progress"`
+		} `json:"step"`
+		SessionError string `json:"session_error"`
+	}
+	f.callJSON(t, "nottario.tasks.start_step", map[string]any{
+		"project_id": f.projectID, "task_id": task.ID, "step_id": added.Steps[0].ID, "session": "s-start",
+	}, &started)
+	if !started.Step.InProgress || started.Step.ID != added.Steps[0].ID || started.SessionError != "" {
+		t.Fatalf("start_step: %+v", started)
+	}
+	var got struct {
+		Task struct {
+			State string `json:"state"`
+		} `json:"task"`
+		Steps []struct {
+			Text       string `json:"text"`
+			InProgress bool   `json:"in_progress"`
+		} `json:"steps"`
+	}
+	f.callJSON(t, "nottario.tasks.get", map[string]any{"project_id": f.projectID, "task_id": task.ID}, &got)
+	if got.Task.State != "doing" || len(got.Steps) != 2 || !got.Steps[0].InProgress || got.Steps[1].InProgress {
+		t.Errorf("tasks.get after start: %+v", got)
+	}
+	f.callExpectErr(t, "nottario.tasks.start_step", map[string]any{
+		"project_id": f.projectID, "task_id": task.ID, "step_id": added.Steps[1].ID, "session": strings.Repeat("k", 300),
+	})
+}

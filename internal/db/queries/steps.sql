@@ -1,5 +1,5 @@
 -- name: ListTaskSteps :many
-SELECT id, task_id, position, text, done, done_at, done_by_user_id, created_at
+SELECT id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id
 FROM task_steps
 WHERE task_id = $1
 ORDER BY position;
@@ -11,10 +11,10 @@ SELECT count(*)::int AS total FROM task_steps WHERE task_id = $1;
 INSERT INTO task_steps (task_id, position, text, created_by_user_id, created_by_token_id)
 VALUES (sqlc.arg('task_id')::uuid, sqlc.arg('position')::int, sqlc.arg('text')::text,
         sqlc.narg('created_by_user_id')::uuid, sqlc.narg('created_by_token_id')::uuid)
-RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at;
+RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id;
 
 -- name: GetTaskStep :one
-SELECT id, task_id, position, text, done, done_at, done_by_user_id, created_at
+SELECT id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id
 FROM task_steps
 WHERE id = $1 AND task_id = $2;
 
@@ -37,7 +37,7 @@ UPDATE task_steps SET
     ELSE NULL END,
   updated_at = now()
 WHERE id = sqlc.arg('id')::uuid AND task_id = sqlc.arg('task_id')::uuid
-RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at;
+RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id;
 
 -- name: DeleteTaskStep :one
 DELETE FROM task_steps WHERE id = $1 AND task_id = $2
@@ -64,3 +64,20 @@ SELECT task_id,
 FROM task_steps
 WHERE task_id = ANY(sqlc.arg('ids')::uuid[])
 GROUP BY task_id;
+
+-- name: StopSessionSteps :exec
+-- One active step per session per task: starting a step stops the
+-- session's other step on the same task.
+UPDATE task_steps SET started_at = NULL, started_session_id = NULL, started_by_user_id = NULL,
+       updated_at = now()
+WHERE task_id = sqlc.arg('task_id')::uuid
+  AND started_session_id = sqlc.arg('session_id')::uuid
+  AND NOT done;
+
+-- name: StartTaskStep :one
+UPDATE task_steps SET started_at = now(),
+       started_session_id = sqlc.narg('session_id')::uuid,
+       started_by_user_id = sqlc.narg('user_id')::uuid,
+       updated_at = now()
+WHERE id = sqlc.arg('id')::uuid AND task_id = sqlc.arg('task_id')::uuid
+RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id;

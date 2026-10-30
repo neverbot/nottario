@@ -37,7 +37,14 @@ type Step struct {
 	DoneAt       *time.Time `json:"done_at,omitempty"`
 	DoneByUserID *uuid.UUID `json:"done_by_user_id,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
+	// StartedAt and StartedSessionID mark the step an agent session is
+	// working on; see InProgress.
+	StartedAt        *time.Time `json:"started_at,omitempty"`
+	StartedSessionID *uuid.UUID `json:"started_session_id,omitempty"`
 }
+
+// InProgress reports whether a session is working on the step.
+func (s Step) InProgress() bool { return s.StartedAt != nil && !s.Done }
 
 // StepProgress is how many of a task's steps are done.
 type StepProgress struct {
@@ -54,6 +61,9 @@ func stepFromRow(r dbq.ListTaskStepsRow) Step {
 		DoneAt:       timestampPtr(r.DoneAt),
 		DoneByUserID: r.DoneByUserID,
 		CreatedAt:    r.CreatedAt.Time,
+
+		StartedAt:        timestampPtr(r.StartedAt),
+		StartedSessionID: r.StartedSessionID,
 	}
 }
 
@@ -289,4 +299,54 @@ func enrichTaskStepProgress(ctx context.Context, db dbq.DBTX, tasks []*Task) err
 		t.Steps = byID[t.ID]
 	}
 	return nil
+}
+
+// StartStep marks a step as the one a session is working on. A task
+// still in todo moves to doing and, when unowned, to the caller, the
+// same net set_state applies. A done step cannot be started.
+func StartStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID, sessionID *uuid.UUID, by Authorship) ([]Step, error) {
+	t, err := Get(ctx, pool, taskID)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case t.State == StateTodo:
+		if _, err := SetState(ctx, pool, taskID, StateDoing, by.UserID); err != nil {
+			return nil, err
+		}
+	case IsClosed(t.State):
+		return nil, errInvalid("the task is closed; reopen it before starting a step")
+	}
+	var out []Step
+	err = withTaskLocked(ctx, pool, taskID, func(tx pgx.Tx, q *dbq.Queries) error {
+		cur, err := q.GetTaskStep(ctx, dbq.GetTaskStepParams{ID: stepID, TaskID: taskID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrStepNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if cur.Done {
+			return errInvalid("step is already done")
+		}
+		if sessionID != nil {
+			if err := q.StopSessionSteps(ctx, dbq.StopSessionStepsParams{TaskID: taskID, SessionID: *sessionID}); err != nil {
+				return err
+			}
+		}
+		if _, err := q.StartTaskStep(ctx, dbq.StartTaskStepParams{ID: stepID, TaskID: taskID, SessionID: sessionID, UserID: by.UserID}); err != nil {
+			return err
+		}
+		if sessionID != nil && by.UserID != nil {
+			if _, err := SetActiveSession(ctx, tx, taskID, *sessionID, *by.UserID); err != nil {
+				return err
+			}
+		}
+		out, err = ListSteps(ctx, tx, taskID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }

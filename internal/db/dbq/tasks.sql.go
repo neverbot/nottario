@@ -958,19 +958,26 @@ func (q *Queries) RoleExistsInProject(ctx context.Context, arg RoleExistsInProje
 	return column_1, err
 }
 
-const setTaskActiveSession = `-- name: SetTaskActiveSession :exec
+const setTaskActiveSession = `-- name: SetTaskActiveSession :execrows
 UPDATE tasks SET active_session_id = $1::uuid
 WHERE id = $2::uuid AND state = 'doing'
+  AND assignee_user_id = $3::uuid
 `
 
 type SetTaskActiveSessionParams struct {
 	SessionID uuid.UUID
 	ID        uuid.UUID
+	UserID    uuid.UUID
 }
 
-func (q *Queries) SetTaskActiveSession(ctx context.Context, arg SetTaskActiveSessionParams) error {
-	_, err := q.db.Exec(ctx, setTaskActiveSession, arg.SessionID, arg.ID)
-	return err
+// Only the task's current assignee can stamp its session on it, so a
+// reassignment between the claim and this write leaves it alone.
+func (q *Queries) SetTaskActiveSession(ctx context.Context, arg SetTaskActiveSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setTaskActiveSession, arg.SessionID, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setTaskDoing = `-- name: SetTaskDoing :exec

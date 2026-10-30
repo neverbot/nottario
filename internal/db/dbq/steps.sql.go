@@ -41,7 +41,7 @@ func (q *Queries) DeleteTaskStep(ctx context.Context, arg DeleteTaskStepParams) 
 }
 
 const getTaskStep = `-- name: GetTaskStep :one
-SELECT id, task_id, position, text, done, done_at, done_by_user_id, created_at
+SELECT id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id
 FROM task_steps
 WHERE id = $1 AND task_id = $2
 `
@@ -52,14 +52,16 @@ type GetTaskStepParams struct {
 }
 
 type GetTaskStepRow struct {
-	ID           uuid.UUID
-	TaskID       uuid.UUID
-	Position     int32
-	Text         string
-	Done         bool
-	DoneAt       pgtype.Timestamptz
-	DoneByUserID *uuid.UUID
-	CreatedAt    pgtype.Timestamptz
+	ID               uuid.UUID
+	TaskID           uuid.UUID
+	Position         int32
+	Text             string
+	Done             bool
+	DoneAt           pgtype.Timestamptz
+	DoneByUserID     *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	StartedAt        pgtype.Timestamptz
+	StartedSessionID *uuid.UUID
 }
 
 func (q *Queries) GetTaskStep(ctx context.Context, arg GetTaskStepParams) (GetTaskStepRow, error) {
@@ -74,6 +76,8 @@ func (q *Queries) GetTaskStep(ctx context.Context, arg GetTaskStepParams) (GetTa
 		&i.DoneAt,
 		&i.DoneByUserID,
 		&i.CreatedAt,
+		&i.StartedAt,
+		&i.StartedSessionID,
 	)
 	return i, err
 }
@@ -82,7 +86,7 @@ const insertTaskStep = `-- name: InsertTaskStep :one
 INSERT INTO task_steps (task_id, position, text, created_by_user_id, created_by_token_id)
 VALUES ($1::uuid, $2::int, $3::text,
         $4::uuid, $5::uuid)
-RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at
+RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id
 `
 
 type InsertTaskStepParams struct {
@@ -94,14 +98,16 @@ type InsertTaskStepParams struct {
 }
 
 type InsertTaskStepRow struct {
-	ID           uuid.UUID
-	TaskID       uuid.UUID
-	Position     int32
-	Text         string
-	Done         bool
-	DoneAt       pgtype.Timestamptz
-	DoneByUserID *uuid.UUID
-	CreatedAt    pgtype.Timestamptz
+	ID               uuid.UUID
+	TaskID           uuid.UUID
+	Position         int32
+	Text             string
+	Done             bool
+	DoneAt           pgtype.Timestamptz
+	DoneByUserID     *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	StartedAt        pgtype.Timestamptz
+	StartedSessionID *uuid.UUID
 }
 
 func (q *Queries) InsertTaskStep(ctx context.Context, arg InsertTaskStepParams) (InsertTaskStepRow, error) {
@@ -122,26 +128,30 @@ func (q *Queries) InsertTaskStep(ctx context.Context, arg InsertTaskStepParams) 
 		&i.DoneAt,
 		&i.DoneByUserID,
 		&i.CreatedAt,
+		&i.StartedAt,
+		&i.StartedSessionID,
 	)
 	return i, err
 }
 
 const listTaskSteps = `-- name: ListTaskSteps :many
-SELECT id, task_id, position, text, done, done_at, done_by_user_id, created_at
+SELECT id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id
 FROM task_steps
 WHERE task_id = $1
 ORDER BY position
 `
 
 type ListTaskStepsRow struct {
-	ID           uuid.UUID
-	TaskID       uuid.UUID
-	Position     int32
-	Text         string
-	Done         bool
-	DoneAt       pgtype.Timestamptz
-	DoneByUserID *uuid.UUID
-	CreatedAt    pgtype.Timestamptz
+	ID               uuid.UUID
+	TaskID           uuid.UUID
+	Position         int32
+	Text             string
+	Done             bool
+	DoneAt           pgtype.Timestamptz
+	DoneByUserID     *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	StartedAt        pgtype.Timestamptz
+	StartedSessionID *uuid.UUID
 }
 
 func (q *Queries) ListTaskSteps(ctx context.Context, taskID uuid.UUID) ([]ListTaskStepsRow, error) {
@@ -162,6 +172,8 @@ func (q *Queries) ListTaskSteps(ctx context.Context, taskID uuid.UUID) ([]ListTa
 			&i.DoneAt,
 			&i.DoneByUserID,
 			&i.CreatedAt,
+			&i.StartedAt,
+			&i.StartedSessionID,
 		); err != nil {
 			return nil, err
 		}
@@ -211,6 +223,78 @@ func (q *Queries) ShiftTaskSteps(ctx context.Context, arg ShiftTaskStepsParams) 
 		arg.Lo,
 		arg.Hi,
 	)
+	return err
+}
+
+const startTaskStep = `-- name: StartTaskStep :one
+UPDATE task_steps SET started_at = now(),
+       started_session_id = $1::uuid,
+       started_by_user_id = $2::uuid,
+       updated_at = now()
+WHERE id = $3::uuid AND task_id = $4::uuid
+RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id
+`
+
+type StartTaskStepParams struct {
+	SessionID *uuid.UUID
+	UserID    *uuid.UUID
+	ID        uuid.UUID
+	TaskID    uuid.UUID
+}
+
+type StartTaskStepRow struct {
+	ID               uuid.UUID
+	TaskID           uuid.UUID
+	Position         int32
+	Text             string
+	Done             bool
+	DoneAt           pgtype.Timestamptz
+	DoneByUserID     *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	StartedAt        pgtype.Timestamptz
+	StartedSessionID *uuid.UUID
+}
+
+func (q *Queries) StartTaskStep(ctx context.Context, arg StartTaskStepParams) (StartTaskStepRow, error) {
+	row := q.db.QueryRow(ctx, startTaskStep,
+		arg.SessionID,
+		arg.UserID,
+		arg.ID,
+		arg.TaskID,
+	)
+	var i StartTaskStepRow
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.Position,
+		&i.Text,
+		&i.Done,
+		&i.DoneAt,
+		&i.DoneByUserID,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.StartedSessionID,
+	)
+	return i, err
+}
+
+const stopSessionSteps = `-- name: StopSessionSteps :exec
+UPDATE task_steps SET started_at = NULL, started_session_id = NULL, started_by_user_id = NULL,
+       updated_at = now()
+WHERE task_id = $1::uuid
+  AND started_session_id = $2::uuid
+  AND NOT done
+`
+
+type StopSessionStepsParams struct {
+	TaskID    uuid.UUID
+	SessionID uuid.UUID
+}
+
+// One active step per session per task: starting a step stops the
+// session's other step on the same task.
+func (q *Queries) StopSessionSteps(ctx context.Context, arg StopSessionStepsParams) error {
+	_, err := q.db.Exec(ctx, stopSessionSteps, arg.TaskID, arg.SessionID)
 	return err
 }
 
@@ -267,7 +351,7 @@ UPDATE task_steps SET
     ELSE NULL END,
   updated_at = now()
 WHERE id = $4::uuid AND task_id = $5::uuid
-RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at
+RETURNING id, task_id, position, text, done, done_at, done_by_user_id, created_at, started_at, started_session_id
 `
 
 type UpdateTaskStepParams struct {
@@ -279,14 +363,16 @@ type UpdateTaskStepParams struct {
 }
 
 type UpdateTaskStepRow struct {
-	ID           uuid.UUID
-	TaskID       uuid.UUID
-	Position     int32
-	Text         string
-	Done         bool
-	DoneAt       pgtype.Timestamptz
-	DoneByUserID *uuid.UUID
-	CreatedAt    pgtype.Timestamptz
+	ID               uuid.UUID
+	TaskID           uuid.UUID
+	Position         int32
+	Text             string
+	Done             bool
+	DoneAt           pgtype.Timestamptz
+	DoneByUserID     *uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	StartedAt        pgtype.Timestamptz
+	StartedSessionID *uuid.UUID
 }
 
 // Changes the text, the done flag, or both. Ticking stamps done_at and
@@ -310,6 +396,8 @@ func (q *Queries) UpdateTaskStep(ctx context.Context, arg UpdateTaskStepParams) 
 		&i.DoneAt,
 		&i.DoneByUserID,
 		&i.CreatedAt,
+		&i.StartedAt,
+		&i.StartedSessionID,
 	)
 	return i, err
 }
