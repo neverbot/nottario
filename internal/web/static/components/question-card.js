@@ -13,6 +13,11 @@ import { copyToClipboard } from '/static/utils/clipboard.js';
 // human, with the form to answer it in place. Shared by the Questions
 // page, the Live view's "Waiting for you" block and the task dialog.
 //
+// Only the recipient answers (the server refuses anyone else with 403
+// not_recipient). The view's for_me says whether the viewer is that
+// person; every other member sees the card read-only: no form, no
+// keyboard picking, no Edit, and who it is waiting for.
+//
 // Properties:
 //   question  the question view from the API (GET /api/questions, the
 //             task detail's questions, or an answer response)
@@ -39,9 +44,11 @@ import { copyToClipboard } from '/static/utils/clipboard.js';
 //   question-stale     { question, code }  the server refused the answer
 //                                          because the question moved on
 //                                          (409: already_delivered or
-//                                          withdrawn); the parent should
-//                                          reload it, as there is no
-//                                          single-question endpoint
+//                                          withdrawn) or is not the
+//                                          viewer's to answer (403:
+//                                          not_recipient); the parent
+//                                          should reload it, as there is
+//                                          no single-question endpoint
 //
 // Keyboard: Cmd/Ctrl+Enter submits from anywhere in the card; with
 // focus inside a choice question, keys 1-9 pick the matching option
@@ -349,6 +356,16 @@ export class NottarioQuestionCard extends LitElement {
         color: var(--fg-muted);
       }
       .status .btn { height: 26px; padding: 0 10px; font-size: 12px; }
+      .waiting-for {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        font-size: 12px;
+        line-height: 20px;
+        color: var(--fg-muted);
+      }
+      .waiting-for nottario-avatar { flex: none; }
       .withdrawn-reason {
         margin: 0;
         font-size: 13px;
@@ -419,9 +436,15 @@ export class NottarioQuestionCard extends LitElement {
     return this.projectId || this.question?.project?.id || '';
   }
 
+  // _forMe reports whether the viewer is the question's recipient, the
+  // only person who may answer it.
+  get _forMe() {
+    return !!this.question?.for_me;
+  }
+
   get _formOpen() {
     const q = this.question;
-    if (!q) return false;
+    if (!q || !this._forMe) return false;
     return q.state === 'open' || (this._editing && q.state === 'answered' && !q.delivered_at);
   }
 
@@ -569,8 +592,13 @@ export class NottarioQuestionCard extends LitElement {
       );
       return;
     }
-    if (res.status === 409) {
-      toast.error(data.error || 'This question changed in the meantime.');
+    if (res.status === 409 || (res.status === 403 && data.code === 'not_recipient')) {
+      toast.error(
+        data.error ||
+          (res.status === 403
+            ? 'Only the person this question is for can answer it.'
+            : 'This question changed in the meantime.'),
+      );
       this._editing = false;
       this.dispatchEvent(
         new CustomEvent('question-stale', {
@@ -653,8 +681,13 @@ export class NottarioQuestionCard extends LitElement {
     `;
   }
 
+  // _renderStatePill keeps amber for questions waiting on the viewer;
+  // an open question addressed to someone else gets a neutral pill.
   _renderStatePill(q) {
-    if (q.state === 'open') return html`<span class="state open">Waiting for answer</span>`;
+    if (q.state === 'open' && this._forMe) {
+      return html`<span class="state open">Waiting for answer</span>`;
+    }
+    if (q.state === 'open') return html`<span class="state waiting">Open</span>`;
     if (q.state === 'withdrawn') return html`<span class="state">Withdrawn</span>`;
     if (q.delivered_at) return html`<span class="state delivered">Delivered</span>`;
     return html`<span class="state">Answered</span>`;
@@ -668,7 +701,23 @@ export class NottarioQuestionCard extends LitElement {
     }
     if (this._formOpen) return this._renderForm(q);
     if (q.state === 'answered') return this._renderAnswer(q);
+    if (q.state === 'open') return this._renderWaitingFor(q);
     return nothing;
+  }
+
+  // _renderWaitingFor names the recipient of an open question the
+  // viewer cannot answer. The recipient is the person whose token the
+  // agent asked with, asked_by on the view.
+  _renderWaitingFor(q) {
+    const who = q.asked_by;
+    if (!who) return html`<p class="waiting-for">Waiting for its recipient</p>`;
+    return html`
+      <p class="waiting-for">
+        <nottario-avatar size="16" .src=${who.avatar_url || ''}
+                         .name=${who.display_name || who.login}></nottario-avatar>
+        <span>Waiting for @${who.login}</span>
+      </p>
+    `;
   }
 
   _renderForm(q) {
@@ -792,7 +841,8 @@ export class NottarioQuestionCard extends LitElement {
   _renderAnswer(q) {
     const a = q.answer || { keys: [], text: '', note: '' };
     const by = q.answered_by;
-    const cmd = resumeCommand(q.session);
+    const mine = this._forMe;
+    const cmd = mine ? resumeCommand(q.session) : null;
     return html`
       <div class="answer">
         <div class="answer-meta">
@@ -831,7 +881,11 @@ export class NottarioQuestionCard extends LitElement {
                              @click=${this._copyResume}>Copy resume command</button>`
                     : nothing
                 }
-                <button class="btn ghost" type="button" @click=${this._startEdit}>Edit</button>
+                ${
+                  mine
+                    ? html`<button class="btn ghost" type="button" @click=${this._startEdit}>Edit</button>`
+                    : nothing
+                }
               </div>`
         }
       </div>

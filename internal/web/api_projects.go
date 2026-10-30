@@ -135,6 +135,13 @@ func UpdateProjectHandler(d ProjectDeps) http.Handler {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		// A bad idle threshold names its field, so the form can point at it.
+		if req.LiveIdleMinutes != nil {
+			if err := identity.ValidateLiveIdleMinutes(*req.LiveIdleMinutes); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error(), "code": "live_idle_minutes"})
+				return
+			}
+		}
 		p, err := identity.UpdateProject(r.Context(), d.Pool, id, req.Name, req.Description, req.PrimaryLanguage, req.ProjectType, req.DefaultView, req.CycleLabel, req.LiveIdleMinutes)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())

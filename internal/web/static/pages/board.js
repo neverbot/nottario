@@ -1028,7 +1028,29 @@ class NottarioBoardPage extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsub?.();
+    clearTimeout(this._refreshTimer);
+    this._refreshTimer = null;
     window.removeEventListener('hashchange', this._hashHandler);
+  }
+
+  // _queueRefresh coalesces event-driven reloads: a burst of events (an
+  // answer, a task closing with several questions, a reconnect) costs
+  // one load() and one loadDetail() instead of one per event. list asks
+  // for the board, detailId for the open task's detail; the detail is
+  // skipped when that task is no longer the open one.
+  _queueRefresh(list, detailId = null) {
+    if (list) this._refreshList = true;
+    if (detailId) this._refreshDetail = detailId;
+    if (this._refreshTimer) return;
+    this._refreshTimer = setTimeout(() => {
+      const doList = this._refreshList;
+      const detail = this._refreshDetail;
+      this._refreshTimer = null;
+      this._refreshList = false;
+      this._refreshDetail = null;
+      if (doList) this.load();
+      if (detail && this.selected?.task.id === detail) this.loadDetail(detail);
+    }, 150);
   }
 
   updated(c) {
@@ -1133,18 +1155,17 @@ class NottarioBoardPage extends LitElement {
       // the whole kanban for every comment edit would be wasteful.
       if (ev.type.startsWith('task.comment.')) {
         if (this.selected && ev.task_id === this.selected.task.id) {
-          this.loadDetail(this.selected.task.id);
+          this._queueRefresh(false, this.selected.task.id);
         }
       } else if (ev.type === 'realtime.reconnected' || ev.type.startsWith('task.')) {
-        this.load();
-        if (this.selected) this.loadDetail(this.selected.task.id);
+        this._queueRefresh(true, this.selected?.task.id);
       } else if (ev.type.startsWith('question.')) {
         // A question changes a card's open count and, for the open
-        // task, its Questions section and step markers.
-        this.load();
-        if (this.selected && (!ev.task_id || ev.task_id === this.selected.task.id)) {
-          this.loadDetail(this.selected.task.id);
-        }
+        // task, its Questions section and step markers. Answering from
+        // the dialog relies on this too: the answer's own event
+        // refreshes the board and the detail.
+        const mine = this.selected && (!ev.task_id || ev.task_id === this.selected.task.id);
+        this._queueRefresh(true, mine ? this.selected.task.id : null);
       }
       // Cycle lifecycle: a new cycle opened or the active one closed.
       // If we were explicitly viewing the cycle that just closed, snap
@@ -1161,9 +1182,9 @@ class NottarioBoardPage extends LitElement {
           const url = s ? `#${s}` : window.location.pathname + window.location.search;
           history.replaceState(null, '', url);
         }
-        this.load();
+        this._queueRefresh(true);
       } else if (ev.type === 'cycle.created') {
-        this.load();
+        this._queueRefresh(true);
       }
     });
   }
@@ -1365,6 +1386,9 @@ class NottarioBoardPage extends LitElement {
     const r = await fetch(`/api/projects/${this.projectId}/tasks/${id}`);
     if (r.ok) {
       const j = await r.json();
+      // The dialog may have closed, or moved to another task, while
+      // this request was out: never reopen it or swap its contents.
+      if (this.selected?.task.id !== id) return;
       this.selected = {
         task: j.task,
         description_html: j.description_html || '',
@@ -1723,6 +1747,8 @@ class NottarioBoardPage extends LitElement {
       .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
     const rest = all.filter((q) => q.state !== 'open' && !here.has(q.id));
     const openCount = all.filter((q) => q.state === 'open').length;
+    // Amber only when one of them waits on the viewer.
+    const waitsOnMe = all.some((q) => q.state === 'open' && q.for_me);
     const card = (q) => html`<li><nottario-question-card
         compact
         data-id=${q.id}
@@ -1735,7 +1761,7 @@ class NottarioBoardPage extends LitElement {
           Questions
           ${
             openCount
-              ? html`<span class="eyebrow-count attention">${openCount} open</span>`
+              ? html`<span class=${`eyebrow-count${waitsOnMe ? ' attention' : ''}`}>${openCount} open</span>`
               : html`<span class="eyebrow-count">none open</span>`
           }
         </h4>
@@ -1773,8 +1799,8 @@ class NottarioBoardPage extends LitElement {
       ...this.selected,
       questions: (this.selected.questions || []).map((x) => (x.id === q.id ? q : x)),
     };
-    this.loadDetail(this.selected.task.id);
-    this.load();
+    // No explicit reload: the answer's question event refreshes the
+    // board and this detail through _queueRefresh.
   }
 
   renderCard(t) {
@@ -1787,7 +1813,9 @@ class NottarioBoardPage extends LitElement {
       `, priority ${priorityLabel(t.priority, this.priorities)}` +
       (assigneeName ? `, assigned to ${assigneeName}` : '') +
       (t.steps ? `, ${t.steps.done} of ${t.steps.total} steps done` : '') +
-      (t.questions_open > 0 ? `, ${questionsLabel(t.questions_open)} waiting for you` : '');
+      (t.questions_open > 0
+        ? `, ${t.questions_open} open question${t.questions_open === 1 ? '' : 's'}`
+        : '');
     const dragging = this._draggingID === t.id;
     const isWontDo = t.state === 'wont_do';
     // Cancelled cards aren't draggable: every drop-target column

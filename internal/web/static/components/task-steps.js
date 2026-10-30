@@ -90,7 +90,7 @@ export class NottarioTaskSteps extends LitElement {
          a long list reads as a list, not a toolbar. */
       .step {
         display: grid;
-        grid-template-columns: 14px 16px 1fr auto 28px;
+        grid-template-columns: 14px 16px 1fr 18px 28px;
         align-items: start;
         column-gap: 6px;
         padding: 3px 0;
@@ -173,8 +173,9 @@ export class NottarioTaskSteps extends LitElement {
         background: var(--success);
         vertical-align: 1px;
       }
-      /* An open question on the step: amber, the colour for work
-         waiting on a person. */
+      /* An open question on the step, in a fixed column so the text
+         of every row lines up. Amber when it waits on the viewer,
+         neutral when it is for someone else. */
       .ask {
         display: inline-flex;
         align-items: center;
@@ -183,17 +184,23 @@ export class NottarioTaskSteps extends LitElement {
         height: 18px;
         margin-top: 2px;
         padding: 0;
-        border: 1px solid var(--attention-muted);
+        border: 1px solid var(--border);
         border-radius: 50%;
-        background: var(--attention-subtle);
-        color: var(--attention-fg);
+        background: var(--bg-subtle);
+        color: var(--fg-muted);
         font: inherit;
         font-size: 11px;
         font-weight: 600;
         line-height: 1;
         cursor: pointer;
       }
-      .ask:hover { border-color: var(--attention-emphasis); }
+      .ask:hover { border-color: var(--gray-5); }
+      .ask.mine {
+        border-color: var(--attention-muted);
+        background: var(--attention-subtle);
+        color: var(--attention-fg);
+      }
+      .ask.mine:hover { border-color: var(--attention-emphasis); }
       .ask:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 1px;
@@ -240,7 +247,7 @@ export class NottarioTaskSteps extends LitElement {
       .add {
         margin-left: -20px;
         display: grid;
-        grid-template-columns: 14px 16px 1fr 28px;
+        grid-template-columns: 14px 16px 1fr 18px 28px;
         column-gap: 6px;
         padding: 3px 0;
       }
@@ -319,7 +326,9 @@ export class NottarioTaskSteps extends LitElement {
     if (changed.has('steps')) {
       this._sessions ??= new Map();
       for (const st of this.steps || []) {
-        if (st.session) this._sessions.set(st.id, st.session);
+        // A step that is no longer started forgets who was on it.
+        if (!st.started_at) this._sessions.delete(st.id);
+        else if (st.session) this._sessions.set(st.id, st.session);
       }
     }
     if (changed.has('taskId') || (changed.has('steps') && fresh)) {
@@ -672,10 +681,10 @@ export class NottarioTaskSteps extends LitElement {
         </div>
         ${
           ask
-            ? html`<button class="ask" title="Open question on this step"
+            ? html`<button class=${`ask${ask.for_me ? ' mine' : ''}`} title="Open question on this step"
                      aria-label=${`Open question on step: ${step.text}`}
                      @click=${() => this._focusQuestion(ask)}>?</button>`
-            : html`<span></span>`
+            : html`<span aria-hidden="true"></span>`
         }
         <button class="icon-btn danger" title="Delete step" aria-label=${`Delete step: ${step.text}`}
                 @click=${() => this._remove(step)}>${trashIcon(13)}</button>

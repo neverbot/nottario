@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '/static/vendor/lit/lit.js';
+import { LitElement, html, css, nothing } from '/static/vendor/lit/lit.js';
 import { formatDate, formatRelativeTime } from '/static/time.js';
 import { PROJECT_VIEWS, viewByKey } from '/static/views.js';
 import { approxTokens, formatBytes, formatCount, perCall, shortToolName } from '/static/usage.js';
@@ -701,7 +701,7 @@ class NottarioProjectSettings extends LitElement {
                  aria-label="Live: mark work idle after, in minutes" type="number" min="5" max="1440" step="1" required
                  .value=${String(p.live_idle_minutes || 30)}
                  aria-invalid=${this._idleError ? 'true' : 'false'}
-                 aria-describedby="idle-error"
+                 aria-describedby=${this._idleError ? 'idle-error' : nothing}
                  @invalid=${(e) => {
                    e.preventDefault();
                    this._idleError = IDLE_RANGE_MSG;
@@ -920,11 +920,16 @@ class NottarioProjectSettings extends LitElement {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error((await res.json()).error || 'failed');
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          const err = new Error(j.error || 'failed');
+          err.code = j.code || '';
+          throw err;
+        }
         await this.load();
       });
     } catch (err) {
-      if (/idle/i.test(err.message)) this._idleError = IDLE_RANGE_MSG;
+      if (err.code === 'live_idle_minutes') this._idleError = IDLE_RANGE_MSG;
       this.error = err.message;
       toast.error(`Couldn't save: ${err.message}`);
     }

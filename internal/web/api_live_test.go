@@ -261,7 +261,11 @@ func TestApiLive(t *testing.T) {
 	}
 	patch := `{"name":"Live api","description":"","live_idle_minutes":%d}`
 	for _, bad := range []string{"4", "1441"} {
-		if r := call("PATCH", "/api/projects/"+p.ID.String(), admin.ID, strings.Replace(patch, "%d", bad, 1)); r.StatusCode != http.StatusBadRequest {
+		r := call("PATCH", "/api/projects/"+p.ID.String(), admin.ID, strings.Replace(patch, "%d", bad, 1))
+		var e struct {
+			Code string `json:"code"`
+		}
+		if r.StatusCode != http.StatusBadRequest || json.Unmarshal(r.Body, &e) != nil || e.Code != "live_idle_minutes" {
 			t.Fatalf("live_idle_minutes %s: %d %s", bad, r.StatusCode, r.Body)
 		}
 	}

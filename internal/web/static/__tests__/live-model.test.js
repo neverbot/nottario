@@ -3,8 +3,8 @@ import { describe, it } from 'node:test';
 
 import {
   activityState,
-  isClaudeCode,
   isIdle,
+  RESUME_COMMANDS,
   resumeCommand,
   sessionCopyText,
   sessionName,
@@ -14,44 +14,43 @@ import {
 
 const KEY = '3f2a9c10-7b44-4e1d-9a8e-0c5d6e7f8a9b';
 
-describe('isClaudeCode', () => {
-  it('accepts every client name Claude Code may send', () => {
-    assert.ok(isClaudeCode('claude-code'));
-    assert.ok(isClaudeCode('claude-cli'));
-    assert.ok(isClaudeCode('Claude-Code'));
-  });
-
-  it('rejects other clients and missing values', () => {
-    assert.ok(!isClaudeCode('cursor'));
-    assert.ok(!isClaudeCode('claude-ai'));
-    assert.ok(!isClaudeCode('claude'));
-    assert.ok(!isClaudeCode('codex-mcp-client'));
-    assert.ok(!isClaudeCode(''));
-    assert.ok(!isClaudeCode(null));
-    assert.ok(!isClaudeCode(undefined));
+describe('RESUME_COMMANDS', () => {
+  it('maps lowercase client names to a command builder', () => {
+    for (const [name, build] of Object.entries(RESUME_COMMANDS)) {
+      assert.equal(name, name.toLowerCase());
+      assert.equal(typeof build, 'function');
+      assert.ok(build(KEY).includes(KEY));
+    }
   });
 });
 
 describe('resumeCommand', () => {
-  it('reopens a Claude Code conversation by its key', () => {
+  it('builds the command of a known client, whatever the case', () => {
     assert.equal(resumeCommand({ key: KEY, client: 'claude-code' }), `claude --resume ${KEY}`);
+    assert.equal(resumeCommand({ key: KEY, client: 'claude-cli' }), `claude --resume ${KEY}`);
+    assert.equal(resumeCommand({ key: KEY, client: 'Claude-Code' }), `claude --resume ${KEY}`);
   });
 
-  it('gives no command for another client', () => {
-    assert.equal(resumeCommand({ key: KEY, client: 'cursor' }), null);
+  it('gives no command for a client without an entry', () => {
+    for (const client of ['cursor', 'claude-ai', 'claude', 'codex-mcp-client', '', 'toString']) {
+      assert.equal(resumeCommand({ key: KEY, client }), null, client);
+    }
   });
 
-  it('gives no command without a session or a key', () => {
+  it('gives no command without a session, a key or a client', () => {
     assert.equal(resumeCommand(null), null);
     assert.equal(resumeCommand(undefined), null);
     assert.equal(resumeCommand({ client: 'claude-code' }), null);
+    assert.equal(resumeCommand({ key: KEY }), null);
+    assert.equal(resumeCommand({ key: KEY, client: null }), null);
   });
 });
 
 describe('sessionCopyText', () => {
-  it('copies the resume command for Claude Code and the bare id otherwise', () => {
+  it('copies the resume command when the client has one and the bare key otherwise', () => {
     assert.equal(sessionCopyText({ key: KEY, client: 'claude-cli' }), `claude --resume ${KEY}`);
     assert.equal(sessionCopyText({ key: KEY, client: 'cursor' }), KEY);
+    assert.equal(sessionCopyText({ key: KEY }), KEY);
     assert.equal(sessionCopyText(null), '');
   });
 });
