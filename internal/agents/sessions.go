@@ -1,6 +1,7 @@
 // Package agents records the agent conversations working in a
 // project. A session is keyed by an id the client supplies, so the
-// human can find the conversation again (claude --resume <id>).
+// human can find the conversation again; some clients can reopen
+// it from its id.
 package agents
 
 import (

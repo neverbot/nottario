@@ -16,7 +16,7 @@ import (
 // work as a conversation's: claim, claim_next, create {claim} and
 // start_step.
 type sessionFields struct {
-	Session      string `json:"session,omitempty" jsonschema:"your conversation id: $CLAUDE_CODE_SESSION_ID in Claude Code; the same value for the whole conversation"`
+	Session      string `json:"session,omitempty" jsonschema:"an id for this conversation, the same for its whole length: your client's own conversation id if it exposes one (Claude Code: $CLAUDE_CODE_SESSION_ID), otherwise a UUID you generate once"`
 	SessionLabel string `json:"session_label,omitempty" jsonschema:"short name for what this conversation is doing, shown to the human"`
 }
 
@@ -90,7 +90,7 @@ func withSessionError(payload any, msg string) any {
 // clientName names the MCP client. The server runs stateless, so the
 // initialize handshake is not seen by later calls and ClientInfo is
 // normally empty; the product token of the User-Agent header
-// ("claude-code/2.1" gives "claude-code", reduced to [A-Za-z0-9._-]) stands in for it.
+// ("name/1.2" gives "name", reduced to [A-Za-z0-9._-]) stands in for it.
 func clientName(req *sdk.CallToolRequest) string {
 	if req == nil {
 		return ""

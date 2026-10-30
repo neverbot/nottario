@@ -184,6 +184,31 @@ func TestApiQuestions(t *testing.T) {
 		t.Fatalf("token edit: %d %s", r.StatusCode, r.Body)
 	}
 
+	// Only the recipient answers: another member gets 403, on the first
+	// answer and on an edit.
+	other, _, err := identity.UpsertFromGithub(ctx, pool, 15503, "web-q-other", "Other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles, err := identity.ListRoles(ctx, pool, p.ID)
+	if err != nil || len(roles) == 0 {
+		t.Fatalf("roles: %v %v", roles, err)
+	}
+	if err := identity.AddMembership(ctx, pool, other.ID, p.ID, roles[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	otherC := cookieFor(other.ID)
+	for _, m := range []string{"POST", "PUT"} {
+		r := call(m, answerURL, otherC, `{"keys":["1"]}`)
+		var body struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(r.Body, &body)
+		if r.StatusCode != http.StatusForbidden || body.Code != "not_recipient" {
+			t.Fatalf("%s by a non-recipient member: %d %s", m, r.StatusCode, r.Body)
+		}
+	}
+
 	// Answer, then edit.
 	if r := call("POST", answerURL, me, string([]byte(`{"keys":["9"]}`))); r.StatusCode != http.StatusBadRequest {
 		t.Fatalf("invalid answer: %d %s", r.StatusCode, r.Body)

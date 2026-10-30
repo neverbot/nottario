@@ -404,6 +404,9 @@ func AnswerQuestionHandler(d TaskDeps) http.Handler {
 		case errors.Is(err, questions.ErrNotFound):
 			writeError(w, http.StatusNotFound, "question not found")
 			return
+		case errors.Is(err, questions.ErrNotRecipient):
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": err.Error(), "code": "not_recipient"})
+			return
 		case errors.Is(err, questions.ErrAlreadyDelivered):
 			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": "already_delivered"})
 			return

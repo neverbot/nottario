@@ -172,6 +172,30 @@ func TestQuestions(t *testing.T) {
 		}
 	})
 
+	t.Run("only the recipient answers", func(t *testing.T) {
+		q := ask(session("s-recipient"), "Whose call?")
+		intruder, _, err := identity.UpsertFromGithub(ctx, pool, 15990, "q-intruder", "Intruder", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		roles, err := identity.ListRoles(ctx, pool, p.ID)
+		if err != nil || len(roles) == 0 {
+			t.Fatalf("roles: %v %v", roles, err)
+		}
+		if err := identity.AddMembership(ctx, pool, intruder.ID, p.ID, roles[0].ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.Answer(ctx, pool, p.ID, q.ID, intruder.ID, questions.Reply{Text: "mine"}); !errors.Is(err, questions.ErrNotRecipient) {
+			t.Errorf("answer by a member who is not the recipient: err = %v", err)
+		}
+		if _, err := questions.Answer(ctx, pool, p.ID, q.ID, u.ID, questions.Reply{Text: "ours"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.Answer(ctx, pool, p.ID, q.ID, intruder.ID, questions.Reply{Text: "edit"}); !errors.Is(err, questions.ErrNotRecipient) {
+			t.Errorf("edit by a member who is not the recipient: err = %v", err)
+		}
+	})
+
 	t.Run("answer choice", func(t *testing.T) {
 		q := ask(session("s-ans-choice"), "Pick", "A", "B", "C")
 		bad := []questions.Reply{

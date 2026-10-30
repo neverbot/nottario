@@ -23,6 +23,9 @@ var (
 	// ErrAlreadyDelivered is returned when editing an answer the asking
 	// session has already taken.
 	ErrAlreadyDelivered = errors.New("the agent already picked up this answer; it can no longer change")
+	// ErrNotRecipient is returned when someone other than the person the
+	// question is addressed to tries to answer or edit the answer.
+	ErrNotRecipient = errors.New("only the person this question is addressed to can answer it")
 	// ErrNotAsker is returned when someone other than the user who
 	// asked tries to withdraw a question.
 	ErrNotAsker = errors.New("only the user who asked this question can withdraw it")
@@ -78,7 +81,8 @@ func normaliseAnswer(q *Question, a Reply) (Reply, error) {
 	return out, nil
 }
 
-// Answer records the human's answer, or replaces it while the asking
+// Answer records the answer of userID, who must be the question's
+// recipient, or replaces it while the asking
 // agent has not taken it yet. The question row is locked for the whole
 // check-and-write, so an edit and a Take cannot interleave.
 func Answer(ctx context.Context, pool *pgxpool.Pool, projectID, id, userID uuid.UUID, a Reply) (*Question, error) {
@@ -98,6 +102,11 @@ func Answer(ctx context.Context, pool *pgxpool.Pool, projectID, id, userID uuid.
 	cur, err := fromRow(row)
 	if err != nil {
 		return nil, err
+	}
+	// Checked before the state, so a non-recipient learns nothing about
+	// the question beyond what the project already shows them.
+	if cur.RecipientUserID == nil || *cur.RecipientUserID != userID {
+		return nil, ErrNotRecipient
 	}
 	switch {
 	case cur.State == StateWithdrawn:
