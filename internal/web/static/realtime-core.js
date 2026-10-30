@@ -53,6 +53,7 @@ export class Multiplexer {
     this._pending = null; // { es, url }
     this._retryMs = RETRY_MIN_MS;
     this._missed = false; // a stream died: tell everyone once one is back
+    this._down = false; // realtime.disconnected sent, reconnected not yet
   }
 
   subscribe(id, projectId, deliver) {
@@ -144,13 +145,13 @@ export class Multiplexer {
         }
         if (this._missed && this._active === conn) {
           this._missed = false;
-          this._broadcast({ type: 'realtime.reconnected' });
+          this._reconnected();
         }
         return;
       }
       // A second open is EventSource recovering from a drop. Events
       // sent during the gap are gone, so tell everyone to reload.
-      if (this._active === conn) this._broadcast({ type: 'realtime.reconnected' });
+      if (this._active === conn) this._reconnected();
     };
     es.onmessage = (e) => {
       if (this._active !== conn || !e.data) return;
@@ -163,6 +164,9 @@ export class Multiplexer {
       this._broadcast(event);
     };
     es.onerror = () => {
+      // The live stream dropped, for a blip or for good: say so once
+      // per outage, so pages can show that updates are paused.
+      if (this._active === conn) this._disconnected();
       // A transient drop: EventSource reconnects by itself and onopen
       // reports it. Only a stream the browser gave up on needs us.
       if (es.readyState !== CLOSED) return;
@@ -184,6 +188,20 @@ export class Multiplexer {
     const wait = this._retryMs;
     this._retryMs = Math.min(this._retryMs * 2, RETRY_MAX_MS);
     this._schedule(() => this._reconcile(), wait);
+  }
+
+  // _disconnected and _reconnected bracket an outage: one
+  // realtime.disconnected when the live stream drops, however many
+  // retries follow, then one realtime.reconnected once a stream is back.
+  _disconnected() {
+    if (this._down) return;
+    this._down = true;
+    this._broadcast({ type: 'realtime.disconnected' });
+  }
+
+  _reconnected() {
+    this._down = false;
+    this._broadcast({ type: 'realtime.reconnected' });
   }
 
   _broadcast(event) {

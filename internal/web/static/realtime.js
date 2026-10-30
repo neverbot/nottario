@@ -23,15 +23,16 @@
 // stream per subscriber ran the pool dry with three tabs and froze
 // every other request. A SharedWorker keeps one stream for all tabs;
 // where SharedWorker is missing (Chrome on Android) each tab keeps one
-// of its own. Either way callers see the same API, and a synthetic
-// { type: 'realtime.reconnected' } after the stream recovers from a
-// drop, so they can reload what they missed.
+// of its own. Either way callers see the same API, a synthetic
+// { type: 'realtime.disconnected' } once when the stream drops, and a
+// synthetic { type: 'realtime.reconnected' } after it recovers, so they
+// can show that updates are paused and reload what they missed.
 import { Multiplexer } from '/static/realtime-core.js';
 
 // Bumped whenever the worker protocol changes: a SharedWorker outlives
 // deploys while any tab keeps it alive, and a new URL starts a new one
 // rather than talking to an old worker.
-const WORKER_URL = '/static/realtime-worker.js?v=4';
+const WORKER_URL = '/static/realtime-worker.js?v=5';
 
 let nextId = 0;
 let transport = null;

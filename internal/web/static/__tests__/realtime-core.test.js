@@ -211,7 +211,7 @@ describe('Multiplexer', () => {
     live()[0].fail();
     runTimers();
     live()[0].open();
-    assert.deepEqual(got, ['realtime.reconnected']);
+    assert.deepEqual(got, ['realtime.disconnected', 'realtime.reconnected']);
   });
 
   it('backs off between attempts and resets once connected', () => {
@@ -234,6 +234,48 @@ describe('Multiplexer', () => {
     live()[0].blip();
     assert.equal(timers.length, 0, 'retried a stream the browser is still retrying');
     assert.equal(live().length, 1);
+  });
+
+  it('says once that the stream dropped, then that it is back', () => {
+    const got = [];
+    mux.subscribe('a', 'p1', (e) => got.push(e.type));
+    live()[0].open();
+    live()[0].blip(); // EventSource retrying on its own…
+    live()[0].blip(); // …and failing again: still the same outage
+    assert.deepEqual(got, ['realtime.disconnected']);
+    live()[0].open();
+    assert.deepEqual(got, ['realtime.disconnected', 'realtime.reconnected']);
+  });
+
+  it('reports one disconnect across the retries of a dead stream', () => {
+    const got = [];
+    mux.subscribe('a', 'p1', (e) => got.push(e.type));
+    live()[0].open();
+    live()[0].fail();
+    runTimers();
+    live()[0].fail(); // the first retry fails too
+    runTimers();
+    assert.deepEqual(got, ['realtime.disconnected']);
+    live()[0].open();
+    assert.deepEqual(got, ['realtime.disconnected', 'realtime.reconnected']);
+    // A later outage is a new one.
+    live()[0].blip();
+    assert.deepEqual(got, [
+      'realtime.disconnected',
+      'realtime.reconnected',
+      'realtime.disconnected',
+    ]);
+  });
+
+  it('does not report a stream that never connected, nor a failed replacement', () => {
+    const got = [];
+    mux.subscribe('a', 'p1', (e) => got.push(e.type));
+    live()[0].fail(); // a 401 before sign-in: nothing was live
+    runTimers();
+    live()[0].open();
+    mux.subscribe('b', 'p2', () => {});
+    FakeStream.all.at(-1).fail(); // the wider replacement fails; the old one still serves
+    assert.deepEqual(got, []);
   });
 
   it('does not resurrect a stream nobody wants any more', () => {

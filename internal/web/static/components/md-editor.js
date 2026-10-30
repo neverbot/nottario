@@ -13,6 +13,10 @@ import '/static/components/markdown.js';
 //   .disabled      blocks interaction without dimming everything
 //   .saving        same as disabled but also flips the submit label
 //   .projectId     forwarded to <nottario-markdown> so [[chips]] resolve
+//   .submitLabel   label of the submit button (default "Save")
+//   .bare          no action bar: the parent renders its own buttons;
+//                  Ctrl/Cmd+Enter and Esc still fire the events
+//   .noAutofocus   do not take focus on first render (lists of editors)
 //
 // Events:
 //   submit  CustomEvent<{ value: string }>  — Save or Ctrl/Cmd+Enter
@@ -27,6 +31,9 @@ class NottarioMdEditor extends LitElement {
     disabled: { type: Boolean },
     saving: { type: Boolean },
     projectId: { type: String, attribute: 'project-id' },
+    submitLabel: { type: String, attribute: 'submit-label' },
+    bare: { type: Boolean },
+    noAutofocus: { type: Boolean, attribute: 'no-autofocus' },
     _tab: { state: true },
   };
 
@@ -133,12 +140,26 @@ class NottarioMdEditor extends LitElement {
     this.disabled = false;
     this.saving = false;
     this.projectId = '';
+    this.submitLabel = 'Save';
+    this.bare = false;
+    this.noAutofocus = false;
     this._tab = 'write';
   }
 
   // Focus the textarea after first render so the editor is keyboard-
   // ready as soon as it swaps in. Re-focus on tab change back to Write.
   firstUpdated() {
+    if (this.noAutofocus) {
+      const ta = this.renderRoot?.querySelector('textarea');
+      if (ta) this._autoresize(ta);
+      return;
+    }
+    this._focusTextarea();
+  }
+
+  // focus puts the caret at the end of the buffer, for parents that
+  // open the editor with noAutofocus and focus it on demand.
+  focus() {
     this._focusTextarea();
   }
 
@@ -236,6 +257,13 @@ class NottarioMdEditor extends LitElement {
                 : html`<div class="preview-empty">Nothing to preview yet.</div>`
           }
         </div>
+        ${this.bare ? null : this._renderActions()}
+      </div>
+    `;
+  }
+
+  _renderActions() {
+    return html`
         <div class="actions">
           <div class="hint">
             <kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</kbd>+<kbd>Enter</kbd> save
@@ -250,10 +278,9 @@ class NottarioMdEditor extends LitElement {
                   type="button"
                   ?disabled=${this.disabled || this.saving}
                   @click=${this._emitSubmit}>
-            ${this.saving ? 'Saving…' : 'Save'}
+            ${this.saving ? 'Saving…' : this.submitLabel}
           </button>
         </div>
-      </div>
     `;
   }
 }

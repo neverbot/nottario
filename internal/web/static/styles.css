@@ -57,6 +57,15 @@
   --tint-purple:  #fbefff;
   --tint-purple-fg:#6639ba;
 
+  /* ---- Attention ----
+     GitHub's attention palette. Reserved for one meaning: something
+     waits on a person (an open agent question). Do not reuse it for
+     generic warnings; those have --warning and --tint-yellow. */
+  --attention-fg:       #9a6700;
+  --attention-emphasis: #bf8700;
+  --attention-muted:    rgba(212, 167, 44, 0.4);
+  --attention-subtle:   #fff8c5;
+
   /* ---- Role default colours ----
      The DB stores per-project role colour. These are the seed values
      and the fallback for any role row that ships without a colour. */
