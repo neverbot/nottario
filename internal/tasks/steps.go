@@ -318,7 +318,7 @@ func StartStep(ctx context.Context, pool *pgxpool.Pool, taskID, stepID uuid.UUID
 	}
 	switch {
 	case t.State == StateTodo:
-		if _, err := SetState(ctx, pool, taskID, StateDoing, by.UserID); err != nil {
+		if _, _, err := SetState(ctx, pool, taskID, StateDoing, by.UserID); err != nil {
 			return nil, false, err
 		}
 	case IsClosed(t.State):

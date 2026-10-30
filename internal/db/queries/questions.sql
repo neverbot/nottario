@@ -52,12 +52,15 @@ WHERE project_id = sqlc.arg('project_id')::uuid
   AND state = 'open';
 
 -- name: WithdrawTaskQuestion :one
+-- Only the user who asked may withdraw a question.
 UPDATE task_questions SET state = 'withdrawn', withdrawn_at = now(),
   withdrawn_reason = sqlc.arg('reason')::text, updated_at = now()
 WHERE id = sqlc.arg('id')::uuid AND project_id = sqlc.arg('project_id')::uuid AND state = 'open'
+  AND asked_by_user_id = sqlc.arg('user_id')::uuid
 RETURNING *;
 
 -- name: WithdrawOpenTaskQuestions :many
+-- Run by the tasks package inside the transaction that closes the task.
 UPDATE task_questions SET state = 'withdrawn', withdrawn_at = now(),
   withdrawn_reason = sqlc.arg('reason')::text, updated_at = now()
 WHERE task_id = sqlc.arg('task_id')::uuid AND state = 'open'
@@ -83,3 +86,11 @@ LIMIT sqlc.arg('lim')::int;
 SELECT task_id, count(*)::int AS open FROM task_questions
 WHERE task_id = ANY(sqlc.arg('ids')::uuid[]) AND state = 'open'
 GROUP BY task_id;
+
+-- name: ListPendingTaskQuestions :many
+-- A task's questions an agent still has to act on: open ones, and
+-- answers the asking session has not taken yet. Oldest first.
+SELECT * FROM task_questions
+WHERE task_id = sqlc.arg('task_id')::uuid AND project_id = sqlc.arg('project_id')::uuid
+  AND (state = 'open' OR (state = 'answered' AND delivered_at IS NULL))
+ORDER BY created_at;

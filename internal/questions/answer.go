@@ -23,6 +23,9 @@ var (
 	// ErrAlreadyDelivered is returned when editing an answer the asking
 	// session has already taken.
 	ErrAlreadyDelivered = errors.New("the agent already picked up this answer; it can no longer change")
+	// ErrNotAsker is returned when someone other than the user who
+	// asked tries to withdraw a question.
+	ErrNotAsker = errors.New("only the agent's owner who asked can withdraw this question")
 )
 
 // normaliseAnswer trims an answer and checks it fits the question.
@@ -159,12 +162,15 @@ func clampReason(s string) string {
 	return s
 }
 
-// Withdraw takes back an open question. A question already answered or
-// withdrawn is not open any more and cannot be withdrawn.
-func Withdraw(ctx context.Context, db dbq.DBTX, projectID, id uuid.UUID, reason string) (*Question, error) {
+// Withdraw takes back an open question on behalf of userID, who must
+// be the user who asked it. A question already answered or withdrawn
+// is not open any more and cannot be withdrawn. Closing a task
+// withdraws its open questions in the tasks package, in the closing
+// transaction.
+func Withdraw(ctx context.Context, db dbq.DBTX, projectID, id, userID uuid.UUID, reason string) (*Question, error) {
 	q := dbq.New(db)
 	row, err := q.WithdrawTaskQuestion(ctx, dbq.WithdrawTaskQuestionParams{
-		Reason: clampReason(reason), ID: id, ProjectID: projectID,
+		Reason: clampReason(reason), ID: id, ProjectID: projectID, UserID: userID,
 	})
 	if err == nil {
 		return fromRow(row)
@@ -179,22 +185,25 @@ func Withdraw(ctx context.Context, db dbq.DBTX, projectID, id uuid.UUID, reason 
 	if err != nil {
 		return nil, err
 	}
-	if State(cur.State) == StateWithdrawn {
+	switch {
+	case cur.AskedByUserID == nil || *cur.AskedByUserID != userID:
+		return nil, ErrNotAsker
+	case State(cur.State) == StateWithdrawn:
 		return nil, ErrClosed
 	}
 	return nil, errInvalid("the question is already answered; only open questions can be withdrawn")
 }
 
-// WithdrawOpenForTask withdraws every open question of a task, for when
-// the task closes, and returns how many it withdrew.
-func WithdrawOpenForTask(ctx context.Context, db dbq.DBTX, taskID uuid.UUID, reason string) (int, error) {
-	rows, err := dbq.New(db).WithdrawOpenTaskQuestions(ctx, dbq.WithdrawOpenTaskQuestionsParams{
-		Reason: clampReason(reason), TaskID: taskID,
+// PendingForTask returns the task's questions an agent still has to act
+// on: open ones and answers not taken yet, oldest first. Never nil.
+func PendingForTask(ctx context.Context, db dbq.DBTX, projectID, taskID uuid.UUID) ([]Question, error) {
+	rows, err := dbq.New(db).ListPendingTaskQuestions(ctx, dbq.ListPendingTaskQuestionsParams{
+		TaskID: taskID, ProjectID: projectID,
 	})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return len(rows), nil
+	return fromRows(rows)
 }
 
 // ListFilter restricts a List call. ProjectIDs is required: it scopes

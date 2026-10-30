@@ -287,6 +287,66 @@ func (q *Queries) InsertTaskQuestion(ctx context.Context, arg InsertTaskQuestion
 	return i, err
 }
 
+const listPendingTaskQuestions = `-- name: ListPendingTaskQuestions :many
+SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
+WHERE task_id = $1::uuid AND project_id = $2::uuid
+  AND (state = 'open' OR (state = 'answered' AND delivered_at IS NULL))
+ORDER BY created_at
+`
+
+type ListPendingTaskQuestionsParams struct {
+	TaskID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// A task's questions an agent still has to act on: open ones, and
+// answers the asking session has not taken yet. Oldest first.
+func (q *Queries) ListPendingTaskQuestions(ctx context.Context, arg ListPendingTaskQuestionsParams) ([]TaskQuestion, error) {
+	rows, err := q.db.Query(ctx, listPendingTaskQuestions, arg.TaskID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskQuestion{}
+	for rows.Next() {
+		var i TaskQuestion
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.TaskID,
+			&i.StepID,
+			&i.SessionID,
+			&i.AskedByUserID,
+			&i.AskedByTokenID,
+			&i.RecipientUserID,
+			&i.Kind,
+			&i.BodyMd,
+			&i.Options,
+			&i.Multi,
+			&i.RecommendedKey,
+			&i.RecommendedReason,
+			&i.State,
+			&i.AnswerKeys,
+			&i.AnswerText,
+			&i.AnswerNote,
+			&i.AnsweredByUserID,
+			&i.AnsweredAt,
+			&i.DeliveredAt,
+			&i.WithdrawnAt,
+			&i.WithdrawnReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTaskQuestions = `-- name: ListTaskQuestions :many
 SELECT id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at FROM task_questions
 WHERE project_id = ANY($1::uuid[])
@@ -445,6 +505,7 @@ type WithdrawOpenTaskQuestionsRow struct {
 	BodyMd string
 }
 
+// Run by the tasks package inside the transaction that closes the task.
 func (q *Queries) WithdrawOpenTaskQuestions(ctx context.Context, arg WithdrawOpenTaskQuestionsParams) ([]WithdrawOpenTaskQuestionsRow, error) {
 	rows, err := q.db.Query(ctx, withdrawOpenTaskQuestions, arg.Reason, arg.TaskID)
 	if err != nil {
@@ -469,6 +530,7 @@ const withdrawTaskQuestion = `-- name: WithdrawTaskQuestion :one
 UPDATE task_questions SET state = 'withdrawn', withdrawn_at = now(),
   withdrawn_reason = $1::text, updated_at = now()
 WHERE id = $2::uuid AND project_id = $3::uuid AND state = 'open'
+  AND asked_by_user_id = $4::uuid
 RETURNING id, project_id, task_id, step_id, session_id, asked_by_user_id, asked_by_token_id, recipient_user_id, kind, body_md, options, multi, recommended_key, recommended_reason, state, answer_keys, answer_text, answer_note, answered_by_user_id, answered_at, delivered_at, withdrawn_at, withdrawn_reason, created_at, updated_at
 `
 
@@ -476,10 +538,17 @@ type WithdrawTaskQuestionParams struct {
 	Reason    string
 	ID        uuid.UUID
 	ProjectID uuid.UUID
+	UserID    uuid.UUID
 }
 
+// Only the user who asked may withdraw a question.
 func (q *Queries) WithdrawTaskQuestion(ctx context.Context, arg WithdrawTaskQuestionParams) (TaskQuestion, error) {
-	row := q.db.QueryRow(ctx, withdrawTaskQuestion, arg.Reason, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, withdrawTaskQuestion,
+		arg.Reason,
+		arg.ID,
+		arg.ProjectID,
+		arg.UserID,
+	)
 	var i TaskQuestion
 	err := row.Scan(
 		&i.ID,

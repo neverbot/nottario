@@ -171,45 +171,70 @@ func normaliseOptions(in []Option) ([]Option, error) {
 	return out, nil
 }
 
-// Ask files a question on a task. The task must belong to the project
-// and be open; the step, when given, must be one of the task's.
-func Ask(ctx context.Context, pool *pgxpool.Pool, p AskParams) (*Question, error) {
-	body := strings.TrimSpace(p.Body)
-	if body == "" {
-		return nil, errInvalid("question is empty")
+// askInput is a checked and normalised AskParams.
+type askInput struct {
+	body, reason string
+	kind         Kind
+	optsJSON     []byte
+	recKey       pgtype.Text
+}
+
+// prepareAsk checks a question's own fields, everything that needs no
+// database, and normalises them.
+func prepareAsk(p AskParams) (askInput, error) {
+	var in askInput
+	in.body = strings.TrimSpace(p.Body)
+	if in.body == "" {
+		return in, errInvalid("question is empty")
 	}
-	if runeLen(body) > MaxBodyLen {
-		return nil, errInvalid(fmt.Sprintf("question is longer than %d characters", MaxBodyLen))
+	if runeLen(in.body) > MaxBodyLen {
+		return in, errInvalid(fmt.Sprintf("question is longer than %d characters", MaxBodyLen))
 	}
 	opts, err := normaliseOptions(p.Options)
 	if err != nil {
-		return nil, err
+		return in, err
 	}
-	reason := strings.TrimSpace(p.RecommendedReason)
+	in.reason = strings.TrimSpace(p.RecommendedReason)
 	switch {
 	case p.Recommended != 0 && len(opts) == 0:
-		return nil, errInvalid("recommended needs options")
+		return in, errInvalid("recommended needs options")
 	case p.Recommended < 0 || p.Recommended > len(opts):
-		return nil, errInvalid(fmt.Sprintf("recommended must be an option number between 1 and %d", len(opts)))
-	case reason != "" && p.Recommended == 0:
-		return nil, errInvalid("recommended_reason needs recommended")
-	case runeLen(reason) > MaxReasonLen:
-		return nil, errInvalid(fmt.Sprintf("recommended_reason is longer than %d characters", MaxReasonLen))
+		return in, errInvalid(fmt.Sprintf("recommended must be an option number between 1 and %d", len(opts)))
+	case in.reason != "" && p.Recommended == 0:
+		return in, errInvalid("recommended_reason needs recommended")
+	case runeLen(in.reason) > MaxReasonLen:
+		return in, errInvalid(fmt.Sprintf("recommended_reason is longer than %d characters", MaxReasonLen))
 	case p.Multi && len(opts) == 0:
-		return nil, errInvalid("multi needs options")
+		return in, errInvalid("multi needs options")
 	}
-
-	kind := KindText
-	var optsJSON []byte
-	var recKey pgtype.Text
+	in.kind = KindText
 	if len(opts) > 0 {
-		kind = KindChoice
-		if optsJSON, err = json.Marshal(opts); err != nil {
-			return nil, err
+		in.kind = KindChoice
+		if in.optsJSON, err = json.Marshal(opts); err != nil {
+			return in, err
 		}
 		if p.Recommended > 0 {
-			recKey = pgtype.Text{String: strconv.Itoa(p.Recommended), Valid: true}
+			in.recKey = pgtype.Text{String: strconv.Itoa(p.Recommended), Valid: true}
 		}
+	}
+	return in, nil
+}
+
+// ValidateAsk checks a question's own fields (text, options,
+// recommendation) without touching the database, so a caller can
+// reject a bad question before writing anything else. Ask runs the
+// same checks.
+func ValidateAsk(p AskParams) error {
+	_, err := prepareAsk(p)
+	return err
+}
+
+// Ask files a question on a task. The task must belong to the project
+// and be open; the step, when given, must be one of the task's.
+func Ask(ctx context.Context, pool *pgxpool.Pool, p AskParams) (*Question, error) {
+	in, err := prepareAsk(p)
+	if err != nil {
+		return nil, err
 	}
 
 	tx, err := pool.Begin(ctx)
@@ -247,12 +272,12 @@ func Ask(ctx context.Context, pool *pgxpool.Pool, p AskParams) (*Question, error
 		AskedByUserID:     p.AskedBy.UserID,
 		AskedByTokenID:    p.AskedBy.TokenID,
 		RecipientUserID:   p.AskedBy.UserID,
-		Kind:              string(kind),
-		BodyMd:            body,
-		Options:           optsJSON,
+		Kind:              string(in.kind),
+		BodyMd:            in.body,
+		Options:           in.optsJSON,
 		Multi:             p.Multi,
-		RecommendedKey:    recKey,
-		RecommendedReason: reason,
+		RecommendedKey:    in.recKey,
+		RecommendedReason: in.reason,
 	})
 	if err != nil {
 		return nil, err

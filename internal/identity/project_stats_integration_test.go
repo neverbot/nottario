@@ -37,7 +37,7 @@ func TestListProjects_StatsMatchTheBoard(t *testing.T) {
 			t.Fatalf("Create %s: %v", title, err)
 		}
 		if state != tasks.StateTodo {
-			if _, err := tasks.SetState(ctx, pool, task.ID, state, &u.ID); err != nil {
+			if _, _, err := tasks.SetState(ctx, pool, task.ID, state, &u.ID); err != nil {
 				t.Fatalf("SetState %s: %v", title, err)
 			}
 		}

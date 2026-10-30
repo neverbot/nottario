@@ -63,7 +63,7 @@ func TestSetState_LeavingTodoGivesAnUnownedTaskAnOwner(t *testing.T) {
 
 	t.Run("doing", func(t *testing.T) {
 		task := newTask(t, nil)
-		got, err := tasks.SetState(ctx, pool, task.ID, tasks.StateDoing, &actor.ID)
+		got, _, err := tasks.SetState(ctx, pool, task.ID, tasks.StateDoing, &actor.ID)
 		if err != nil {
 			t.Fatalf("SetState: %v", err)
 		}
@@ -74,7 +74,7 @@ func TestSetState_LeavingTodoGivesAnUnownedTaskAnOwner(t *testing.T) {
 
 	t.Run("straight to done", func(t *testing.T) {
 		task := newTask(t, nil)
-		got, err := tasks.SetState(ctx, pool, task.ID, tasks.StateDone, &actor.ID)
+		got, _, err := tasks.SetState(ctx, pool, task.ID, tasks.StateDone, &actor.ID)
 		if err != nil {
 			t.Fatalf("SetState: %v", err)
 		}
@@ -85,7 +85,7 @@ func TestSetState_LeavingTodoGivesAnUnownedTaskAnOwner(t *testing.T) {
 
 	t.Run("wont_do", func(t *testing.T) {
 		task := newTask(t, nil)
-		got, err := tasks.SetState(ctx, pool, task.ID, tasks.StateWontDo, &actor.ID)
+		got, _, err := tasks.SetState(ctx, pool, task.ID, tasks.StateWontDo, &actor.ID)
 		if err != nil {
 			t.Fatalf("SetState: %v", err)
 		}
@@ -96,7 +96,7 @@ func TestSetState_LeavingTodoGivesAnUnownedTaskAnOwner(t *testing.T) {
 
 	t.Run("never steals an existing assignee", func(t *testing.T) {
 		task := newTask(t, &other.ID)
-		got, err := tasks.SetState(ctx, pool, task.ID, tasks.StateDone, &actor.ID)
+		got, _, err := tasks.SetState(ctx, pool, task.ID, tasks.StateDone, &actor.ID)
 		if err != nil {
 			t.Fatalf("SetState: %v", err)
 		}
@@ -107,7 +107,7 @@ func TestSetState_LeavingTodoGivesAnUnownedTaskAnOwner(t *testing.T) {
 
 	t.Run("back to todo assigns nobody", func(t *testing.T) {
 		task := newTask(t, nil)
-		got, err := tasks.SetState(ctx, pool, task.ID, tasks.StateTodo, &actor.ID)
+		got, _, err := tasks.SetState(ctx, pool, task.ID, tasks.StateTodo, &actor.ID)
 		if err != nil {
 			t.Fatalf("SetState: %v", err)
 		}
@@ -118,7 +118,7 @@ func TestSetState_LeavingTodoGivesAnUnownedTaskAnOwner(t *testing.T) {
 
 	t.Run("no actor, no assignment", func(t *testing.T) {
 		task := newTask(t, nil)
-		got, err := tasks.SetState(ctx, pool, task.ID, tasks.StateDoing, nil)
+		got, _, err := tasks.SetState(ctx, pool, task.ID, tasks.StateDoing, nil)
 		if err != nil {
 			t.Fatalf("SetState: %v", err)
 		}

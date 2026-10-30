@@ -103,7 +103,7 @@ func TestStartStep(t *testing.T) {
 		if _, _, err := tasks.StartStep(ctx, pool, tk.ID, uuid.New(), nil, by); err == nil {
 			t.Error("starting an unknown step succeeded")
 		}
-		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDone, &u.ID); err != nil {
+		if _, _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDone, &u.ID); err != nil {
 			t.Fatal(err)
 		}
 		if _, _, err := tasks.StartStep(ctx, pool, tk.ID, st[0].ID, nil, by); err == nil {
@@ -137,7 +137,7 @@ func TestStartStep(t *testing.T) {
 
 	t.Run("active session needs the assignee", func(t *testing.T) {
 		tk, _ := mk("owner")
-		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDoing, &u.ID); err != nil {
+		if _, _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDoing, &u.ID); err != nil {
 			t.Fatal(err)
 		}
 		ok, err := tasks.SetActiveSession(ctx, pool, tk.ID, *session("s-own"), uuid.New())
@@ -156,7 +156,7 @@ func TestStartStep(t *testing.T) {
 			t.Fatal(err)
 		}
 		tk, st := mk("theirs", "a")
-		if _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDoing, &other.ID); err != nil {
+		if _, _, err := tasks.SetState(ctx, pool, tk.ID, tasks.StateDoing, &other.ID); err != nil {
 			t.Fatal(err)
 		}
 		got, stamped, err := tasks.StartStep(ctx, pool, tk.ID, st[0].ID, session("s-foreign"), by)

@@ -683,25 +683,47 @@ func (e *ErrInvalidStateTransition) Error() string {
 	return fmt.Sprintf("invalid state transition: %s → %s", e.From, e.To)
 }
 
+// WithdrawReasonTaskClosed is the reason recorded on the open
+// questions a task's closing withdraws.
+const WithdrawReasonTaskClosed = "task closed"
+
 // SetState moves a task to s. actor is the user making the move, used
 // to give an unassigned task an owner (nil for automated transitions
-// like the background reconciler).
-func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State, actor *uuid.UUID) (*Task, error) {
+// like the background reconciler). It also returns how many open
+// questions of the task the move withdrew: closing a task withdraws
+// them.
+func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State, actor *uuid.UUID) (*Task, int, error) {
 	if !ValidState(s) {
-		return nil, fmt.Errorf("invalid state: %q", s)
+		return nil, 0, fmt.Errorf("invalid state: %q", s)
 	}
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err := setStateTx(ctx, tx, id, s, actor); err != nil {
-		return nil, err
+	withdrawn, err := setStateTx(ctx, tx, id, s, actor)
+	if err != nil {
+		return nil, 0, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return Get(ctx, pool, id)
+	t, err := Get(ctx, pool, id)
+	if err != nil {
+		return nil, 0, err
+	}
+	return t, withdrawn, nil
+}
+
+// withdrawOpenQuestionsTx withdraws the open questions of a task that
+// just closed and returns how many. It runs in the closing
+// transaction, under the task's row lock, which questions.Ask takes
+// too: no question can slip in after the sweep.
+func withdrawOpenQuestionsTx(ctx context.Context, q *dbq.Queries, taskID uuid.UUID) (int, error) {
+	rows, err := q.WithdrawOpenTaskQuestions(ctx, dbq.WithdrawOpenTaskQuestionsParams{
+		Reason: WithdrawReasonTaskClosed, TaskID: taskID,
+	})
+	return len(rows), err
 }
 
 // setStateTx is the in-transaction state transition logic shared by
@@ -716,7 +738,10 @@ func SetState(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, s State, ac
 // when it has none: a task in doing, or one that reaches done, always
 // has someone answering for it, whether the mover went through
 // tasks.claim, set_state or close.
-func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uuid.UUID) error {
+//
+// Closing withdraws the task's open questions (and those of any parent
+// the rollup closes); the count returned is the task's own.
+func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uuid.UUID) (int, error) {
 	q := dbq.New(tx)
 
 	// Lock the task row for the rest of this transaction. AddDependency
@@ -726,10 +751,10 @@ func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uu
 	// waits or finds the task already in 'done'.
 	header, err := q.LockTaskTypeAndParent(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
+		return 0, ErrNotFound
 	}
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Enforce the two cross-terminal transitions we never allow. Every
@@ -737,10 +762,10 @@ func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uu
 	// task to doing, reopen a doing to todo, etc.) keep working.
 	currentState := State(header.State)
 	if currentState == StateDone && s == StateWontDo {
-		return &ErrInvalidStateTransition{From: currentState, To: s}
+		return 0, &ErrInvalidStateTransition{From: currentState, To: s}
 	}
 	if currentState == StateWontDo && s == StateDone {
-		return &ErrInvalidStateTransition{From: currentState, To: s}
+		return 0, &ErrInvalidStateTransition{From: currentState, To: s}
 	}
 
 	// When closing a non-feature task as done, require every direct
@@ -752,7 +777,7 @@ func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uu
 	if s == StateDone && header.Type != "feature" {
 		rows, err := q.ListUnresolvedPreconditions(ctx, id)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if len(rows) > 0 {
 			unresolved := make([]PreconditionRef, 0, len(rows))
@@ -763,7 +788,7 @@ func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uu
 					State: State(r.State),
 				})
 			}
-			return &UnresolvedPreconditionsError{TaskID: id, Preconditions: unresolved}
+			return 0, &UnresolvedPreconditionsError{TaskID: id, Preconditions: unresolved}
 		}
 	}
 
@@ -778,7 +803,13 @@ func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uu
 		err = q.SetTaskWontDo(ctx, id)
 	}
 	if err != nil {
-		return err
+		return 0, err
+	}
+	withdrawn := 0
+	if IsClosed(s) {
+		if withdrawn, err = withdrawOpenQuestionsTx(ctx, q, id); err != nil {
+			return 0, err
+		}
 	}
 
 	if actor != nil && s != StateTodo {
@@ -786,7 +817,7 @@ func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uu
 			ID:             id,
 			AssigneeUserID: *actor,
 		}); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
@@ -796,16 +827,17 @@ func setStateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, s State, actor *uu
 	// (see CountNonDoneChildren).
 	if IsClosed(s) {
 		if err := rollUpParentDoneTx(ctx, tx, header.ParentTaskID); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	return withdrawn, nil
 }
 
 // rollUpParentDoneTx walks the parent chain inside the given
 // transaction, locking each parent row with FOR UPDATE so concurrent
 // child closures serialize on the parent. No-op when parent is nil,
-// already done, or has at least one non-done child.
+// already done, or has at least one non-done child. A parent it closes
+// has its open questions withdrawn, like any closed task.
 func rollUpParentDoneTx(ctx context.Context, tx pgx.Tx, parentID *uuid.UUID) error {
 	q := dbq.New(tx)
 	for parentID != nil {
@@ -824,6 +856,9 @@ func rollUpParentDoneTx(ctx context.Context, tx pgx.Tx, parentID *uuid.UUID) err
 			return nil
 		}
 		if err := q.SetTaskDone(ctx, *parentID); err != nil {
+			return err
+		}
+		if _, err := withdrawOpenQuestionsTx(ctx, q, *parentID); err != nil {
 			return err
 		}
 		parentID = header.ParentTaskID

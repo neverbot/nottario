@@ -37,6 +37,9 @@ type CloseResult struct {
 	// as done. Closing does not require them; the caller tells the
 	// human which were left. Never nil.
 	PendingSteps []Step
+	// WithdrawnQuestions counts the task's open questions the close
+	// withdrew.
+	WithdrawnQuestions int
 }
 
 // Close atomically attaches commit links + an optional comment and
@@ -101,7 +104,8 @@ func Close(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, p ClosePar
 		}
 	}
 
-	if err := setStateTx(ctx, tx, taskID, p.State, by.UserID); err != nil {
+	withdrawn, err := setStateTx(ctx, tx, taskID, p.State, by.UserID)
+	if err != nil {
 		return nil, err
 	}
 	pending := []Step{}
@@ -120,9 +124,10 @@ func Close(ctx context.Context, pool *pgxpool.Pool, taskID uuid.UUID, p ClosePar
 		return nil, err
 	}
 	return &CloseResult{
-		Task:         t,
-		CommentID:    commentID,
-		LinkedCommit: len(normalised),
-		PendingSteps: pending,
+		Task:               t,
+		CommentID:          commentID,
+		LinkedCommit:       len(normalised),
+		PendingSteps:       pending,
+		WithdrawnQuestions: withdrawn,
 	}, nil
 }

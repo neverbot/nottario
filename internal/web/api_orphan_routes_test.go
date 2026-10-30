@@ -76,13 +76,13 @@ func TestApiTasks_Inconsistencies(t *testing.T) {
 
 	// Finish both, then reopen the precondition: the dependent is now
 	// done on top of work that is open again.
-	if _, err := tasks.SetState(ctx, pool, first.ID, tasks.StateDone, &u.ID); err != nil {
+	if _, _, err := tasks.SetState(ctx, pool, first.ID, tasks.StateDone, &u.ID); err != nil {
 		t.Fatalf("SetState first done: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, second.ID, tasks.StateDone, &u.ID); err != nil {
+	if _, _, err := tasks.SetState(ctx, pool, second.ID, tasks.StateDone, &u.ID); err != nil {
 		t.Fatalf("SetState second done: %v", err)
 	}
-	if _, err := tasks.SetState(ctx, pool, first.ID, tasks.StateTodo, &u.ID); err != nil {
+	if _, _, err := tasks.SetState(ctx, pool, first.ID, tasks.StateTodo, &u.ID); err != nil {
 		t.Fatalf("reopen first: %v", err)
 	}
 

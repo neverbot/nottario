@@ -561,7 +561,7 @@ func registerTasks(server *sdk.Server, d Deps) {
 		if in.Release && tasks.State(in.State) != tasks.StateTodo {
 			return toolError("release only applies when moving a task back to todo")
 		}
-		t, err := tasks.SetState(ctx, d.Pool, tid, tasks.State(in.State), callerActor(c))
+		t, withdrawn, err := tasks.SetState(ctx, d.Pool, tid, tasks.State(in.State), callerActor(c))
 		if err != nil {
 			var uerr *tasks.UnresolvedPreconditionsError
 			if errors.As(err, &uerr) {
@@ -594,12 +594,11 @@ func registerTasks(server *sdk.Server, d Deps) {
 				return toolError(err.Error())
 			}
 		}
-		w := withdrawTaskQuestions(ctx, d, t)
 		out, err := payloadMap(newTaskView(ctx, d).payload(t, in.Verbose))
 		if err != nil {
 			return nil, nil, err
 		}
-		return jsonResult(withdrawalNotice(pendingNotice(out, pending), w))
+		return jsonResult(withdrawalNotice(pendingNotice(out, pending), withdrawn))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -651,13 +650,12 @@ func registerTasks(server *sdk.Server, d Deps) {
 			}
 			return toolError(err.Error())
 		}
-		w := withdrawTaskQuestions(ctx, d, res.Task)
 		out := map[string]any{
 			"task":                newTaskView(ctx, d).payload(res.Task, in.Verbose),
 			"comment_id":          res.CommentID,
 			"linked_commit_count": res.LinkedCommit,
 		}
-		return jsonResult(withdrawalNotice(pendingNotice(out, res.PendingSteps), w))
+		return jsonResult(withdrawalNotice(pendingNotice(out, res.PendingSteps), res.WithdrawnQuestions))
 	})
 
 	sdk.AddTool(server, &sdk.Tool{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -69,8 +70,7 @@ type slimQuestion struct {
 	State    questions.State `json:"state"`
 	Kind     questions.Kind  `json:"kind"`
 	Question string          `json:"question"`
-	Age      string          `json:"age"`
-	Answered bool            `json:"answered,omitempty"`
+	AskedAt  string          `json:"asked_at"`
 }
 
 // takenAnswer is one answer as questions.take hands it over.
@@ -101,8 +101,7 @@ func slimQuestionOf(q *questions.Question) slimQuestion {
 		State:    q.State,
 		Kind:     q.Kind,
 		Question: excerpt(q.Body, questionExcerptLen),
-		Age:      agentTime(q.CreatedAt),
-		Answered: q.State == questions.StateAnswered,
+		AskedAt:  agentTime(q.CreatedAt),
 	}
 }
 
@@ -131,16 +130,23 @@ func (v *taskView) answer(q *questions.Question) takenAnswer {
 	return out
 }
 
-// questionError turns a questions or tasks error into the tool error
-// an agent can act on.
-func questionError(err error) (*sdk.CallToolResult, any, error) {
+// questionError turns an error from the questions tools into a tool
+// error. Expected failures get a message the agent can act on; anything
+// else is logged and reads as an internal error, so database details
+// never reach the agent's context.
+func questionError(tool string, err error) (*sdk.CallToolResult, any, error) {
 	switch {
 	case errors.Is(err, tasks.ErrNotFound):
 		return toolError("task not found")
 	case errors.Is(err, tasks.ErrStepNotFound):
-		return toolError("step not found on this task")
+		return toolError("step not found")
+	case errors.Is(err, questions.ErrNotFound), errors.Is(err, questions.ErrClosed),
+		errors.Is(err, questions.ErrAlreadyDelivered), errors.Is(err, questions.ErrNotAsker),
+		questions.IsInvalid(err):
+		return toolError(err.Error())
 	}
-	return toolError(err.Error())
+	log.Printf("mcp %s: %v", tool, err)
+	return toolError("internal error")
 }
 
 // questionsProject parses and checks the project of a questions tool.
@@ -168,54 +174,27 @@ func findSession(ctx context.Context, d Deps, pid uuid.UUID, c identity.Caller, 
 // taskQuestions is what tasks.get carries: the task's open questions
 // and the answers its agent has not taken yet. Nil when there are none.
 func taskQuestions(ctx context.Context, d Deps, pid, tid uuid.UUID) ([]slimQuestion, error) {
-	qs, err := questions.List(ctx, d.Pool, questions.ListFilter{
-		ProjectIDs: []uuid.UUID{pid}, TaskID: &tid, Limit: questions.MaxListLimit,
-	})
+	qs, err := questions.PendingForTask(ctx, d.Pool, pid, tid)
 	if err != nil {
 		return nil, err
 	}
 	var out []slimQuestion
 	for i := range qs {
-		q := &qs[i]
-		if q.State == questions.StateOpen || (q.State == questions.StateAnswered && q.DeliveredAt == nil) {
-			out = append(out, slimQuestionOf(q))
-		}
+		out = append(out, slimQuestionOf(&qs[i]))
 	}
 	return out, nil
 }
 
-// withdrawal is what closing a task did to its open questions.
-type withdrawal struct {
-	n   int
-	err error
-}
-
-// withdrawTaskQuestions withdraws a closed task's open questions and
-// clears the count on t, so the task in the response reads right.
-func withdrawTaskQuestions(ctx context.Context, d Deps, t *tasks.Task) withdrawal {
-	n, err := questions.WithdrawOpenForTask(ctx, d.Pool, t.ID, "task closed")
-	if err == nil {
-		t.QuestionsOpen = max(t.QuestionsOpen-n, 0)
-	}
-	return withdrawal{n: n, err: err}
-}
-
-// withdrawalNotice reports a withdrawal on a close response:
-// withdrawn_questions and a sentence added to the notice. The state
-// change already happened, so a failure is reported as
-// questions_error, never as a tool error (a retry would fail on the
-// closed task).
-func withdrawalNotice(out map[string]any, w withdrawal) map[string]any {
-	if w.err != nil {
-		out["questions_error"] = "the task closed, but withdrawing its open questions failed: " + w.err.Error()
+// withdrawalNotice reports on a close response the open questions the
+// close withdrew: withdrawn_questions and a sentence added to the
+// notice.
+func withdrawalNotice(out map[string]any, n int) map[string]any {
+	if n == 0 {
 		return out
 	}
-	if w.n == 0 {
-		return out
-	}
-	out["withdrawn_questions"] = w.n
-	msg := fmt.Sprintf("%d open questions were withdrawn with the task.", w.n)
-	if w.n == 1 {
+	out["withdrawn_questions"] = n
+	msg := fmt.Sprintf("%d open questions were withdrawn with the task.", n)
+	if n == 1 {
 		msg = "1 open question was withdrawn with the task."
 	}
 	if prev, ok := out["notice"].(string); ok && prev != "" {
@@ -252,35 +231,38 @@ func registerQuestions(server *sdk.Server, d Deps) {
 			}
 			stepID = &id
 		}
-		if err := requireProjectAccess(ctx, d, pid); err != nil {
-			return toolError(err.Error())
-		}
-		session, err := touchSession(ctx, req, d, pid, c, in.sessionFields)
-		if err != nil {
-			return toolError("recording the session failed, so the question was not filed: " + err.Error())
-		}
 		opts := make([]questions.Option, 0, len(in.Options))
 		for _, o := range in.Options {
 			opts = append(opts, questions.Option{Label: o.Label, Description: o.Description})
 		}
-		q, err := questions.Ask(ctx, d.Pool, questions.AskParams{
+		p := questions.AskParams{
 			ProjectID:         pid,
 			TaskID:            tid,
 			StepID:            stepID,
-			SessionID:         session,
 			AskedBy:           authorshipFor(c),
 			Body:              in.Question,
 			Options:           opts,
 			Recommended:       in.Recommended,
 			RecommendedReason: in.RecommendedReason,
 			Multi:             in.Multi,
-		})
-		if err != nil {
-			return questionError(err)
 		}
-		if d.Notifier.Enabled() {
+		// A bad question writes nothing, not even the session.
+		if err := questions.ValidateAsk(p); err != nil {
+			return questionError("questions.ask", err)
+		}
+		if err := requireProjectAccess(ctx, d, pid); err != nil {
+			return toolError(err.Error())
+		}
+		if p.SessionID, err = touchSession(ctx, req, d, pid, c, in.sessionFields); err != nil {
+			return questionError("questions.ask", err)
+		}
+		q, err := questions.Ask(ctx, d.Pool, p)
+		if err != nil {
+			return questionError("questions.ask", err)
+		}
+		if d.Notifier.Enabled() && q.RecipientUserID != nil {
 			if t, err := tasks.Get(ctx, d.Pool, tid); err == nil {
-				d.Notifier.OnQuestionAsked(ctx, t, c.UserID, q.Body)
+				d.Notifier.OnQuestionAsked(ctx, t, *q.RecipientUserID, q.Body)
 			}
 		}
 		return jsonResult(map[string]any{"id": q.ID, "state": q.State})
@@ -297,13 +279,16 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		if strings.TrimSpace(in.Session) == "" {
 			return toolError("session is required: pass the conversation id you asked with")
 		}
+		if err := checkSession(sessionFields{Session: in.Session}); err != nil {
+			return toolError(err.Error())
+		}
 		pid, err := questionsProject(ctx, d, in.ProjectID)
 		if err != nil {
 			return toolError(err.Error())
 		}
 		sid, err := findSession(ctx, d, pid, c, in.Session)
 		if err != nil {
-			return toolError(err.Error())
+			return questionError("questions.take", err)
 		}
 		answers := []takenAnswer{}
 		if sid == nil {
@@ -311,7 +296,7 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		}
 		qs, open, err := questions.Take(ctx, d.Pool, pid, *sid)
 		if err != nil {
-			return toolError(err.Error())
+			return questionError("questions.take", err)
 		}
 		v := newTaskView(ctx, d)
 		for i := range qs {
@@ -338,7 +323,7 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		}
 		state, err := questions.ParseState(raw)
 		if err != nil {
-			return toolError(err.Error())
+			return questionError("questions.list", err)
 		}
 		f := questions.ListFilter{ProjectIDs: []uuid.UUID{pid}, State: state}
 		if in.TaskID != "" {
@@ -350,9 +335,12 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		}
 		rows := []slimQuestion{}
 		if in.Session != "" {
+			if err := checkSession(sessionFields{Session: in.Session}); err != nil {
+				return toolError(err.Error())
+			}
 			sid, err := findSession(ctx, d, pid, c, in.Session)
 			if err != nil {
-				return toolError(err.Error())
+				return questionError("questions.list", err)
 			}
 			if sid == nil {
 				return jsonResult(map[string]any{"questions": rows, "has_more": false})
@@ -369,7 +357,7 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		f.Limit = limit + 1
 		qs, err := questions.List(ctx, d.Pool, f)
 		if err != nil {
-			return toolError(err.Error())
+			return questionError("questions.list", err)
 		}
 		more := len(qs) > limit
 		if more {
@@ -383,8 +371,12 @@ func registerQuestions(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.questions.withdraw",
-		Description: "Withdraws an open question you no longer need answered. Closing a task withdraws its open questions.",
+		Description: "Withdraws an open question you asked and no longer need answered; only its asker can. Closing a task withdraws its open questions.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in questionsWithdrawInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
 		pid, err := questionsProject(ctx, d, in.ProjectID)
 		if err != nil {
 			return toolError(err.Error())
@@ -393,9 +385,9 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError("id must be a uuid")
 		}
-		q, err := questions.Withdraw(ctx, d.Pool, pid, id, in.Reason)
+		q, err := questions.Withdraw(ctx, d.Pool, pid, id, c.UserID, in.Reason)
 		if err != nil {
-			return questionError(err)
+			return questionError("questions.withdraw", err)
 		}
 		return jsonResult(slimQuestionOf(q))
 	})

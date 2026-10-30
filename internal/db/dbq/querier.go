@@ -221,6 +221,9 @@ type Querier interface {
 	// and after_id from a previous page's tail row; NULL on the first page.
 	// Requests limit+1 so the caller can detect has_more (last row dropped).
 	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
+	// A task's questions an agent still has to act on: open ones, and
+	// answers the asking session has not taken yet. Oldest first.
+	ListPendingTaskQuestions(ctx context.Context, arg ListPendingTaskQuestionsParams) ([]TaskQuestion, error)
 	ListProjectDependencies(ctx context.Context, projectID uuid.UUID) ([]TaskDependency, error)
 	// One row per (member, role). A member with no role assignments
 	// still appears once, with role columns NULL, via LEFT JOIN.
@@ -417,7 +420,9 @@ type Querier interface {
 	UpsertProjectPriority(ctx context.Context, arg UpsertProjectPriorityParams) (UpsertProjectPriorityRow, error)
 	UpsertTaskCommit(ctx context.Context, arg UpsertTaskCommitParams) error
 	UserBelongsToProjectOrIsAdmin(ctx context.Context, arg UserBelongsToProjectOrIsAdminParams) (bool, error)
+	// Run by the tasks package inside the transaction that closes the task.
 	WithdrawOpenTaskQuestions(ctx context.Context, arg WithdrawOpenTaskQuestionsParams) ([]WithdrawOpenTaskQuestionsRow, error)
+	// Only the user who asked may withdraw a question.
 	WithdrawTaskQuestion(ctx context.Context, arg WithdrawTaskQuestionParams) (TaskQuestion, error)
 	WouldCreateCycle(ctx context.Context, arg WouldCreateCycleParams) (pgtype.Bool, error)
 }

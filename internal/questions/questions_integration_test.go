@@ -108,7 +108,7 @@ func TestQuestions(t *testing.T) {
 
 	t.Run("invalid asks", func(t *testing.T) {
 		closed := mkTask(p.ID, "closed host")
-		if _, err := tasks.SetState(ctx, pool, closed.ID, tasks.StateWontDo, &u.ID); err != nil {
+		if _, _, err := tasks.SetState(ctx, pool, closed.ID, tasks.StateWontDo, &u.ID); err != nil {
 			t.Fatal(err)
 		}
 		otherTask := mkTask(p.ID, "step owner")
@@ -282,7 +282,7 @@ func TestQuestions(t *testing.T) {
 
 	t.Run("withdraw then answer", func(t *testing.T) {
 		q := ask(session("s-withdraw"), "Withdraw me?")
-		w, err := questions.Withdraw(ctx, pool, p.ID, q.ID, "  not needed  ")
+		w, err := questions.Withdraw(ctx, pool, p.ID, q.ID, u.ID, "  not needed  ")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -292,15 +292,61 @@ func TestQuestions(t *testing.T) {
 		if _, err := questions.Answer(ctx, pool, p.ID, q.ID, u.ID, questions.Reply{Text: "late"}); !errors.Is(err, questions.ErrClosed) {
 			t.Errorf("answer after withdraw: err = %v", err)
 		}
-		if _, err := questions.Withdraw(ctx, pool, p.ID, q.ID, ""); !errors.Is(err, questions.ErrClosed) {
+		if _, err := questions.Withdraw(ctx, pool, p.ID, q.ID, u.ID, ""); !errors.Is(err, questions.ErrClosed) {
 			t.Errorf("withdraw twice: err = %v", err)
 		}
-		if _, err := questions.Withdraw(ctx, pool, p.ID, uuid.New(), ""); !errors.Is(err, questions.ErrNotFound) {
+		if _, err := questions.Withdraw(ctx, pool, p.ID, uuid.New(), u.ID, ""); !errors.Is(err, questions.ErrNotFound) {
 			t.Errorf("withdraw unknown: err = %v", err)
 		}
 	})
 
-	t.Run("withdraw open for task", func(t *testing.T) {
+	t.Run("only the asker withdraws", func(t *testing.T) {
+		q := ask(session("s-asker"), "Mine to withdraw?")
+		other, _, err := identity.UpsertFromGithub(ctx, pool, 9412, "not-asker", "Not asker", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.Withdraw(ctx, pool, p.ID, q.ID, other.ID, ""); !errors.Is(err, questions.ErrNotAsker) {
+			t.Fatalf("withdraw by another user: %v", err)
+		}
+		if _, err := questions.Withdraw(ctx, pool, p.ID, q.ID, u.ID, ""); err != nil {
+			t.Fatalf("withdraw by the asker: %v", err)
+		}
+	})
+
+	t.Run("a parent closed by rollup withdraws its open questions", func(t *testing.T) {
+		parent, err := tasks.Create(ctx, pool, tasks.CreateParams{ProjectID: p.ID, Type: tasks.TypeFeature, Title: "rollup parent"}, by)
+		if err != nil {
+			t.Fatal(err)
+		}
+		child, err := tasks.Create(ctx, pool, tasks.CreateParams{ProjectID: p.ID, Type: tasks.TypeTask, Title: "rollup child", ParentTaskID: &parent.ID}, by)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pq, err := questions.Ask(ctx, pool, questions.AskParams{ProjectID: p.ID, TaskID: parent.ID, AskedBy: by, Body: "parent question"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, n, err := tasks.SetState(ctx, pool, child.ID, tasks.StateDone, &u.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("child withdrew %d, want 0 (the count is the task's own)", n)
+		}
+		if got, err := tasks.Get(ctx, pool, parent.ID); err != nil || got.State != tasks.StateDone {
+			t.Fatalf("parent after rollup: %+v, %v", got, err)
+		}
+		var state, reason string
+		if err := pool.QueryRow(ctx, `SELECT state, withdrawn_reason FROM task_questions WHERE id = $1`, pq.ID).Scan(&state, &reason); err != nil {
+			t.Fatal(err)
+		}
+		if state != "withdrawn" || reason != tasks.WithdrawReasonTaskClosed {
+			t.Errorf("parent question = %s (%q), want withdrawn (task closed)", state, reason)
+		}
+	})
+
+	t.Run("closing the task withdraws its open questions", func(t *testing.T) {
 		host := mkTask(p.ID, "withdraw host")
 		sid := session("s-wofor")
 		for _, body := range []string{"one", "two", "three"} {
@@ -315,7 +361,7 @@ func TestQuestions(t *testing.T) {
 		if _, err := questions.Answer(ctx, pool, p.ID, qs[0].ID, u.ID, questions.Reply{Text: "done"}); err != nil {
 			t.Fatal(err)
 		}
-		n, err := questions.WithdrawOpenForTask(ctx, pool, host.ID, "task closed")
+		_, n, err := tasks.SetState(ctx, pool, host.ID, tasks.StateWontDo, &u.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
