@@ -64,6 +64,11 @@ func TestMigration0015_QuestionAnswerChannel(t *testing.T) {
 	if err := db.MigrateTo(ctx, pool, 14); err != nil {
 		t.Fatalf("down to 14: %v", err)
 	}
+	var cols int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns
+		WHERE table_name = 'task_questions' AND column_name IN ('answer_channel', 'answered_by_token_id')`).Scan(&cols); err != nil || cols != 0 {
+		t.Errorf("after down to 14: %d channel columns left, err=%v", cols, err)
+	}
 	if err := db.Migrate(ctx, pool); err != nil {
 		t.Fatalf("up again: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/neverbot/nottario/internal/agents"
 	"github.com/neverbot/nottario/internal/identity"
 	"github.com/neverbot/nottario/internal/questions"
 	"github.com/neverbot/nottario/internal/tasks"
@@ -422,6 +423,7 @@ func TestMCPQuestionsRecordAnswer(t *testing.T) {
 	record := func(args map[string]any) (string, string) {
 		t.Helper()
 		args["project_id"] = f.projectID
+		args["session"] = "conv-r"
 		var out struct {
 			ID    string `json:"id"`
 			State string `json:"state"`
@@ -473,6 +475,9 @@ func TestMCPQuestionsRecordAnswer(t *testing.T) {
 	expect := func(args map[string]any, want string) {
 		t.Helper()
 		args["project_id"] = f.projectID
+		if _, ok := args["session"]; !ok {
+			args["session"] = "conv-r"
+		}
 		if msg := f.callExpectErr(t, "nottario.questions.record_answer", args); !strings.Contains(msg, want) {
 			t.Errorf("record %v = %q, want %q", args, msg, want)
 		}
@@ -483,6 +488,29 @@ func TestMCPQuestionsRecordAnswer(t *testing.T) {
 	expect(map[string]any{"id": openID}, "pick an option or write an answer")
 	expect(map[string]any{"id": openID, "choices": []int{1}, "channel": "web"}, "valid: chat, other")
 	expect(map[string]any{"id": "nope", "text": "x"}, "id must be a uuid")
+
+	// Only the asking conversation records, and only agent questions.
+	expect(map[string]any{"id": openID, "choices": []int{1}, "session": "conv-other"}, questions.ErrNotAskingSession.Error())
+	expect(map[string]any{"id": openID, "choices": []int{1}, "session": " "}, "session is required")
+	var other struct {
+		ID string `json:"id"`
+	}
+	f.callJSON(t, "nottario.tasks.create", map[string]any{
+		"project_id": f.projectID, "title": "other conv", "claim": true, "session": "conv-s2",
+	}, &other)
+	expect(map[string]any{"id": openID, "choices": []int{1}, "session": "conv-s2"}, questions.ErrNotAskingSession.Error())
+	sess, err := agents.Find(f.ctx, pool, pid, uid, "conv-r")
+	if err != nil || sess == nil {
+		t.Fatalf("session: %v %v", sess, err)
+	}
+	webOnly, err := questions.Ask(f.ctx, pool, questions.AskParams{
+		ProjectID: pid, TaskID: uuid.MustParse(task.ID), SessionID: &sess.ID,
+		AskedBy: tasks.Authorship{UserID: &uid}, Body: "asked from the web?",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(map[string]any{"id": webOnly.ID.String(), "text": "x"}, questions.ErrNotAgentQuestion.Error())
 
 	// A web answer cannot be overwritten by a record.
 	webID := ask(map[string]any{"question": "Ship today?"})
@@ -523,7 +551,7 @@ func TestMCPQuestionsRecordAnswer(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = ms.Close() })
 	res, err := ms.CallTool(f.ctx, &sdk.CallToolParams{Name: "nottario.questions.record_answer", Arguments: map[string]any{
-		"project_id": f.projectID, "id": mineID, "text": "sure",
+		"project_id": f.projectID, "id": mineID, "text": "sure", "session": "conv-m",
 	}})
 	if err != nil {
 		t.Fatal(err)

@@ -160,6 +160,36 @@ func (q *Queries) MarkAllRead(ctx context.Context, userID uuid.UUID) (int64, err
 	return result.RowsAffected(), nil
 }
 
+const markQuestionNotificationsRead = `-- name: MarkQuestionNotificationsRead :execrows
+UPDATE notifications
+SET read_at = now()
+WHERE user_id = $1::uuid
+  AND task_id = $2::uuid
+  AND kind = 'question_asked'
+  AND read_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM task_questions
+    WHERE task_id = $2::uuid
+      AND recipient_user_id = $1::uuid
+      AND state = 'open'
+  )
+`
+
+type MarkQuestionNotificationsReadParams struct {
+	UserID uuid.UUID
+	TaskID uuid.UUID
+}
+
+// Clears a user's question_asked bell entries for a task once none of
+// the task's questions addressed to them is still open.
+func (q *Queries) MarkQuestionNotificationsRead(ctx context.Context, arg MarkQuestionNotificationsReadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markQuestionNotificationsRead, arg.UserID, arg.TaskID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const markRead = `-- name: MarkRead :execrows
 UPDATE notifications
 SET read_at = now()

@@ -73,8 +73,8 @@ agent passes its conversation id and a short label as `session` and
 Every question goes to Nottario, even when the agent also asks it in
 the chat; if you answer in the chat, the agent records your answer with
 `nottario.questions.record_answer`, and the question shows as answered
-in the chat and recorded by the agent. It collects answers given in
-Nottario with `nottario.questions.take` at fixed points of its loop
-(start of every turn, before picking the next task, before ending a
-turn): answers are pulled, never pushed into a running conversation. See [MCP integration](/mcp/) and the
-[questions skill](/skills/questions/).
+in chat, recorded by the agent. It collects answers given in Nottario
+with `nottario.questions.take` at fixed points of its loop (start of
+every turn, before picking the next task, before ending a turn):
+answers are pulled, never pushed into a running conversation. See
+[MCP integration](/mcp/) and the [questions skill](/skills/questions/).

@@ -35,6 +35,12 @@ var (
 	// ErrAlreadyAnswered is returned when recording an answer for a
 	// question that already has one.
 	ErrAlreadyAnswered = errors.New("already answered; nothing to record")
+	// ErrNotAskingSession is returned when a conversation other than
+	// the one that asked tries to record the answer.
+	ErrNotAskingSession = errors.New("this question was asked by another conversation; only that one can record its answer")
+	// ErrNotAgentQuestion is returned when recording an answer to a
+	// question that was not asked through an agent token.
+	ErrNotAgentQuestion = errors.New("only a question asked through an agent token can have its answer recorded")
 )
 
 // normaliseAnswer trims an answer and checks it fits the question.
@@ -134,10 +140,26 @@ func Answer(ctx context.Context, pool *pgxpool.Pool, projectID, id, userID uuid.
 	if err != nil {
 		return nil, err
 	}
+	if err := clearAskedNotifications(ctx, q, cur); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return fromRow(row)
+}
+
+// clearAskedNotifications marks the recipient's question_asked bell
+// entries for the task as read when no open question of theirs is left
+// on it. It runs on the transaction that closed the question.
+func clearAskedNotifications(ctx context.Context, q *dbq.Queries, q0 *Question) error {
+	if q0.RecipientUserID == nil {
+		return nil
+	}
+	_, err := q.MarkQuestionNotificationsRead(ctx, dbq.MarkQuestionNotificationsReadParams{
+		UserID: *q0.RecipientUserID, TaskID: q0.TaskID,
+	})
+	return err
 }
 
 // ParseRecordChannel reads the channel of a recorded answer: "chat"
@@ -157,15 +179,15 @@ func ParseRecordChannel(s string) (Channel, error) {
 // outside Nottario (in the chat, say), so the question reads answered
 // here too. Only the user who asked may record it: the agent acts for
 // that same human. The answer is attributed to the recipient, who gave
-// it, through tokenID on channel, and is delivered at once: the agent
-// already has it, so Take does not hand it over again. The question
-// must be open. The row is locked like in Answer.
-func RecordAnswer(ctx context.Context, pool *pgxpool.Pool, projectID, id, callerUserID uuid.UUID, tokenID *uuid.UUID, channel Channel, a Reply) (*Question, error) {
-	if channel == "" {
-		channel = ChannelChat
-	}
-	if channel != ChannelChat && channel != ChannelOther {
-		return nil, errInvalid(fmt.Sprintf("unknown channel %q; valid: chat, other", channel))
+// it, through tokenID on channel ("chat" when blank, or "other"), and
+// is delivered at once: the agent already has it, so Take does not
+// hand it over again. The question must be open, asked through an
+// agent token, and asked by sessionID: only that conversation can
+// record its answer. The row is locked like in Answer.
+func RecordAnswer(ctx context.Context, pool *pgxpool.Pool, projectID, id, callerUserID, sessionID uuid.UUID, tokenID *uuid.UUID, channelName string, a Reply) (*Question, error) {
+	channel, err := ParseRecordChannel(channelName)
+	if err != nil {
+		return nil, err
 	}
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -187,6 +209,12 @@ func RecordAnswer(ctx context.Context, pool *pgxpool.Pool, projectID, id, caller
 	if cur.AskedByUserID == nil || *cur.AskedByUserID != callerUserID {
 		return nil, ErrNotAskerRecord
 	}
+	if cur.AskedByTokenID == nil {
+		return nil, ErrNotAgentQuestion
+	}
+	if cur.SessionID == nil || *cur.SessionID != sessionID {
+		return nil, ErrNotAskingSession
+	}
 	switch cur.State {
 	case StateWithdrawn:
 		return nil, ErrClosed
@@ -207,6 +235,9 @@ func RecordAnswer(ctx context.Context, pool *pgxpool.Pool, projectID, id, caller
 		ID:      id,
 	})
 	if err != nil {
+		return nil, err
+	}
+	if err := clearAskedNotifications(ctx, q, cur); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -263,7 +294,14 @@ func Withdraw(ctx context.Context, db dbq.DBTX, projectID, id, userID uuid.UUID,
 		Reason: clampReason(reason), ID: id, ProjectID: projectID, UserID: userID,
 	})
 	if err == nil {
-		return fromRow(row)
+		w, err := fromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		if err := clearAskedNotifications(ctx, q, w); err != nil {
+			return nil, err
+		}
+		return w, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err

@@ -449,12 +449,25 @@ func TestQuestions(t *testing.T) {
 			t.Fatal(err)
 		}
 		sid := session("s-record")
+		byTok := tasks.Authorship{UserID: &u.ID, TokenID: &tok.ID}
+		ask := func(sid uuid.UUID, body string, opts ...string) *questions.Question {
+			t.Helper()
+			ap := questions.AskParams{ProjectID: p.ID, TaskID: task.ID, SessionID: &sid, AskedBy: byTok, Body: body}
+			for _, o := range opts {
+				ap.Options = append(ap.Options, questions.Option{Label: o})
+			}
+			q, err := questions.Ask(ctx, pool, ap)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return q
+		}
 		q := ask(sid, "Postgres or SQLite?", "Postgres", "SQLite")
-		got, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, &tok.ID, "", questions.Reply{Keys: []string{"2"}})
+		got, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, sid, &tok.ID, "", questions.Reply{Keys: []string{"2"}})
 		if err != nil {
 			t.Fatalf("RecordAnswer: %v", err)
 		}
-		if got.State != questions.StateAnswered || got.AnswerChannel != questions.ChannelChat ||
+		if got.State != questions.StateAnswered || got.AnswerChannel != "chat" ||
 			got.AnsweredByTokenID == nil || *got.AnsweredByTokenID != tok.ID ||
 			got.AnsweredByUserID == nil || *got.AnsweredByUserID != u.ID ||
 			got.AnsweredAt == nil || got.DeliveredAt == nil || got.Answer == nil || got.Answer.Keys[0] != "2" {
@@ -468,21 +481,21 @@ func TestQuestions(t *testing.T) {
 			t.Errorf("take after record = %d answers, %d open", len(taken), open)
 		}
 		// Recording twice, or over a web answer, is refused.
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, &tok.ID, questions.ChannelChat, questions.Reply{Text: "again"}); !errors.Is(err, questions.ErrAlreadyAnswered) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "again"}); !errors.Is(err, questions.ErrAlreadyAnswered) {
 			t.Errorf("record twice: %v", err)
 		}
 		web := ask(sid, "Which port?")
 		if _, err := questions.Answer(ctx, pool, p.ID, web.ID, u.ID, questions.Reply{Text: "8080"}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, web.ID, u.ID, &tok.ID, questions.ChannelChat, questions.Reply{Text: "9090"}); !errors.Is(err, questions.ErrAlreadyAnswered) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, web.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "9090"}); !errors.Is(err, questions.ErrAlreadyAnswered) {
 			t.Errorf("record over a web answer: %v", err)
 		}
 
 		// A choice question also takes the human's own wording; channel other.
 		own := ask(sid, "Which cache?", "Redis", "None")
-		got, err = questions.RecordAnswer(ctx, pool, p.ID, own.ID, u.ID, nil, questions.ChannelOther, questions.Reply{Text: "memcached, we have it"})
-		if err != nil || got.AnswerChannel != questions.ChannelOther || got.Answer.Text != "memcached, we have it" {
+		got, err = questions.RecordAnswer(ctx, pool, p.ID, own.ID, u.ID, sid, &tok.ID, "other", questions.Reply{Text: "memcached, we have it"})
+		if err != nil || got.AnswerChannel != "other" || got.Answer.Text != "memcached, we have it" {
 			t.Errorf("record own wording: %+v err=%v", got, err)
 		}
 
@@ -493,12 +506,25 @@ func TestQuestions(t *testing.T) {
 			"unknown key": {Keys: []string{"7"}},
 			"two keys":    {Keys: []string{"1", "2"}},
 		} {
-			if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, &tok.ID, questions.ChannelChat, r); !questions.IsInvalid(err) {
+			if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "chat", r); !questions.IsInvalid(err) {
 				t.Errorf("%s: %v", name, err)
 			}
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, &tok.ID, questions.ChannelWeb, questions.Reply{Keys: []string{"1"}}); !questions.IsInvalid(err) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "web", questions.Reply{Keys: []string{"1"}}); !questions.IsInvalid(err) {
 			t.Errorf("channel web: %v", err)
+		}
+
+		// Another conversation, or a question not asked through a token, is refused.
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, session("s-other"), &tok.ID, "chat", questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrNotAskingSession) {
+			t.Errorf("other session: %v", err)
+		}
+		noTok := mkTask(p.ID, "no token")
+		plain, err := questions.Ask(ctx, pool, questions.AskParams{ProjectID: p.ID, TaskID: noTok.ID, SessionID: &sid, AskedBy: by, Body: "web only?"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, plain.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "x"}); !errors.Is(err, questions.ErrNotAgentQuestion) {
+			t.Errorf("question without token: %v", err)
 		}
 
 		// Only the asker may record.
@@ -506,7 +532,7 @@ func TestQuestions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, stranger.ID, nil, questions.ChannelChat, questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrNotAskerRecord) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, stranger.ID, sid, nil, "chat", questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrNotAskerRecord) {
 			t.Errorf("non-asker: %v", err)
 		}
 
@@ -514,11 +540,52 @@ func TestQuestions(t *testing.T) {
 		if _, err := questions.Withdraw(ctx, pool, p.ID, bad.ID, u.ID, "moot"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, &tok.ID, questions.ChannelChat, questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrClosed) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrClosed) {
 			t.Errorf("withdrawn: %v", err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, uuid.New(), u.ID, nil, questions.ChannelChat, questions.Reply{Text: "x"}); !errors.Is(err, questions.ErrNotFound) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, uuid.New(), u.ID, sid, nil, "chat", questions.Reply{Text: "x"}); !errors.Is(err, questions.ErrNotFound) {
 			t.Errorf("unknown id: %v", err)
+		}
+	})
+
+	t.Run("leaving open clears the question_asked bell entries", func(t *testing.T) {
+		nt := mkTask(p.ID, "bell host")
+		sid := session("s-bell")
+		unread := func() int {
+			t.Helper()
+			var n int
+			if err := pool.QueryRow(ctx, `SELECT count(*) FROM notifications WHERE user_id = $1 AND task_id = $2 AND kind = 'question_asked' AND read_at IS NULL`, u.ID, nt.ID).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
+		bell := func() {
+			t.Helper()
+			if _, err := pool.Exec(ctx, `INSERT INTO notifications (user_id, project_id, kind, task_id, body) VALUES ($1, $2, 'question_asked', $3, 'asked')`, u.ID, p.ID, nt.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+		mk := func(body string) *questions.Question {
+			t.Helper()
+			q, err := questions.Ask(ctx, pool, questions.AskParams{ProjectID: p.ID, TaskID: nt.ID, SessionID: &sid, AskedBy: by, Body: body})
+			if err != nil {
+				t.Fatal(err)
+			}
+			bell()
+			return q
+		}
+		first, second := mk("one?"), mk("two?")
+		if _, err := questions.Answer(ctx, pool, p.ID, first.ID, u.ID, questions.Reply{Text: "a"}); err != nil {
+			t.Fatal(err)
+		}
+		if got := unread(); got != 2 {
+			t.Fatalf("one question still open: %d unread, want 2", got)
+		}
+		if _, err := questions.Withdraw(ctx, pool, p.ID, second.ID, u.ID, "moot"); err != nil {
+			t.Fatal(err)
+		}
+		if got := unread(); got != 0 {
+			t.Fatalf("no open question left: %d unread, want 0", got)
 		}
 	})
 }

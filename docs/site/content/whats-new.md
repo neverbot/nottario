@@ -20,7 +20,8 @@ are cut on demand.
   free text or as options with a recommendation, which you answer in
   the new Questions view, the Live view or the task dialog after a bell
   notification, with only you (the owner of the agent's token) able to
-  answer.
+  answer, and the agent can also ask in the chat and then records your
+  chat answer in Nottario.
 - Opening a task from search, a notification, a task chip, the Gantt,
   Live or Questions now shows the task dialog over the page you are on;
   Back closes it and a shared link reopens it.

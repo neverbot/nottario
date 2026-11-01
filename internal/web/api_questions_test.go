@@ -257,11 +257,11 @@ func TestApiQuestions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rq, err := questions.Ask(ctx, pool, questions.AskParams{ProjectID: p.ID, TaskID: tk2.ID, SessionID: &sess.ID, AskedBy: by, Body: "said in chat?"})
+	rq, err := questions.Ask(ctx, pool, questions.AskParams{ProjectID: p.ID, TaskID: tk2.ID, SessionID: &sess.ID, AskedBy: tasks.Authorship{UserID: &u.ID, TokenID: &tok.ID}, Body: "said in chat?"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := questions.RecordAnswer(ctx, pool, p.ID, rq.ID, u.ID, &tok.ID, questions.ChannelChat, questions.Reply{Text: "yes"}); err != nil {
+	if _, err := questions.RecordAnswer(ctx, pool, p.ID, rq.ID, u.ID, sess.ID, &tok.ID, "chat", questions.Reply{Text: "yes"}); err != nil {
 		t.Fatal(err)
 	}
 	var answered questionsResp

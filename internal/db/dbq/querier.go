@@ -292,6 +292,9 @@ type Querier interface {
 	LockTwoTaskRows(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error)
 	LookupAPIToken(ctx context.Context, tokenHash []byte) (LookupAPITokenRow, error)
 	MarkAllRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Clears a user's question_asked bell entries for a task once none of
+	// the task's questions addressed to them is still open.
+	MarkQuestionNotificationsRead(ctx context.Context, arg MarkQuestionNotificationsReadParams) (int64, error)
 	MarkRead(ctx context.Context, arg MarkReadParams) (int64, error)
 	// Returns the highest existing version for the project, or 0 when the
 	// project has no revisions yet. Used to compute the next version on

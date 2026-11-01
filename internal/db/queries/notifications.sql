@@ -40,6 +40,22 @@ WHERE user_id = sqlc.arg('user_id')::uuid
   AND id = ANY(sqlc.arg('ids')::uuid[])
   AND read_at IS NULL;
 
+-- name: MarkQuestionNotificationsRead :execrows
+-- Clears a user's question_asked bell entries for a task once none of
+-- the task's questions addressed to them is still open.
+UPDATE notifications
+SET read_at = now()
+WHERE user_id = sqlc.arg('user_id')::uuid
+  AND task_id = sqlc.arg('task_id')::uuid
+  AND kind = 'question_asked'
+  AND read_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM task_questions
+    WHERE task_id = sqlc.arg('task_id')::uuid
+      AND recipient_user_id = sqlc.arg('user_id')::uuid
+      AND state = 'open'
+  );
+
 -- name: MarkAllRead :execrows
 UPDATE notifications
 SET read_at = now()

@@ -85,7 +85,8 @@ The MCP server exposes one tool per natural verb. Highlights:
   goes to Nottario, even when the agent also asks in the chat;
   `record_answer` is only for recording an answer the human gave the
   agent outside Nottario (the chat), never for answering on their
-  behalf. Only the human who owns the agent's token answers; see
+  behalf; it takes the `session` the question was asked with, and only
+  that conversation can record it. Only the human who owns the agent's token answers; see
   [Live and questions](/live/). `tasks.list` rows carry
   `questions_open`, `tasks.get` lists the pending questions, and closing
   a task withdraws its open ones (`withdrawn_questions` in the

@@ -72,20 +72,25 @@ answer is final; the human can no longer edit it.
 ### `nottario.questions.record_answer`
 
 ```text
-nottario.questions.record_answer { project_id, id, choices?, text?, note?, channel? }
+nottario.questions.record_answer { project_id, session, id, choices?, text?, note?, channel? }
 # → {id, state: "answered"}
 ```
 
 **Only** for an answer the human already gave you outside Nottario (in
 the chat, or `channel: "other"` for any other medium) to an open
-question you asked. Never use it to answer on the human's behalf, to
+question you asked. Pass the same `session` you asked with: only the
+conversation that asked can record the answer, and only for a question
+asked through an agent token. Never use it to answer on the human's behalf, to
 guess, or to close a question nobody answered. `choices` are the
 1-based option numbers they picked, as you listed them in `ask`;
 `text` is their own words (a free-text answer, or their wording
 instead of the options); `note` anything else they added. The answer
-is attributed to the human, marked as given in the chat and recorded
-by you, and is delivered at once: `take` will not return it. A question
-already answered (in the web UI, say) or withdrawn is refused.
+is attributed to the human, marked with the channel you passed (chat
+by default) and recorded by you, and is delivered at once: `take` will
+not return it. A question already answered (in the web UI, say) or
+withdrawn is refused. If it is refused as already answered, call
+`questions.take`; if the two answers disagree, ask the human which one
+stands.
 
 ### `nottario.questions.list`
 
@@ -119,7 +124,9 @@ in the chat to answer, you may also ask it there.
 When the human answers outside Nottario (in the chat, or anywhere
 else), call `questions.record_answer` with their answer straight away,
 so the question is answered in Nottario too and nobody answers it
-twice. Answers given in Nottario reach you through `questions.take`.
+twice (pass your `session`; if it is refused as already answered, call
+`questions.take`, and if the two answers disagree, ask the human which
+one stands). Answers given in Nottario reach you through `questions.take`.
 
 After asking, keep working on whatever does not depend on the answer:
 other steps, other tasks. Mention each question you filed in one line

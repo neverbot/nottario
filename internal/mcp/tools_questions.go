@@ -55,6 +55,7 @@ type questionsWithdrawInput struct {
 
 type questionsRecordAnswerInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	Session   string `json:"session" jsonschema:"your conversation id, the one you asked with; only the conversation that asked can record the answer"`
 	ID        string `json:"id" jsonschema:"question uuid, one you filed with questions.ask"`
 	Choices   []int  `json:"choices,omitempty" jsonschema:"for a choice question: the 1-based option numbers the human picked, in the order you listed the options in questions.ask"`
 	Text      string `json:"text,omitempty" jsonschema:"the human's answer in their own words: the answer to a free-text question, or their own wording instead of the options"`
@@ -153,6 +154,7 @@ func questionError(tool string, err error) (*sdk.CallToolResult, any, error) {
 	case errors.Is(err, questions.ErrNotFound), errors.Is(err, questions.ErrClosed),
 		errors.Is(err, questions.ErrAlreadyDelivered), errors.Is(err, questions.ErrNotAsker),
 		errors.Is(err, questions.ErrNotAskerRecord), errors.Is(err, questions.ErrAlreadyAnswered),
+		errors.Is(err, questions.ErrNotAskingSession), errors.Is(err, questions.ErrNotAgentQuestion),
 		questions.IsInvalid(err):
 		return toolError(err.Error())
 	}
@@ -408,11 +410,14 @@ func registerQuestions(server *sdk.Server, d Deps) {
 	})
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.questions.record_answer",
-		Description: "ONLY for recording an answer the human already gave you outside Nottario (for example in the chat) to a question you filed with questions.ask, so it reads answered in Nottario too. Never use it to answer on the human's behalf, to guess, or to close a question nobody answered. Pass their picks as choices and/or their own words as text. Marks the question answered and delivered, so questions.take will not return it. Returns {id, state}.",
+		Description: "ONLY for recording an answer the human already gave you outside Nottario (for example in the chat) to a question you filed with questions.ask in this same conversation (pass your session), so it reads answered in Nottario too. Never use it to answer on the human's behalf, to guess, or to close a question nobody answered. Pass their picks as choices and/or their own words as text. Marks the question answered and delivered, so questions.take will not return it. Returns {id, state}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in questionsRecordAnswerInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
 			return nil, nil, err
+		}
+		if err := questionSession(in.Session, "pass the conversation id you asked with"); err != nil {
+			return toolError(err.Error())
 		}
 		pid, err := questionsProject(ctx, d, in.ProjectID)
 		if err != nil {
@@ -422,15 +427,21 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		if err != nil {
 			return toolError("id must be a uuid")
 		}
-		channel, err := questions.ParseRecordChannel(in.Channel)
+		sid, err := findSession(ctx, d, pid, c, in.Session)
 		if err != nil {
 			return questionError("questions.record_answer", err)
+		}
+		// An unknown conversation matches no question: the domain
+		// refuses it after the asker check.
+		session := uuid.Nil
+		if sid != nil {
+			session = *sid
 		}
 		reply := questions.Reply{Text: in.Text, Note: in.Note}
 		for _, n := range in.Choices {
 			reply.Keys = append(reply.Keys, strconv.Itoa(n))
 		}
-		q, err := questions.RecordAnswer(ctx, d.Pool, pid, id, c.UserID, authorshipFor(c).TokenID, channel, reply)
+		q, err := questions.RecordAnswer(ctx, d.Pool, pid, id, c.UserID, session, authorshipFor(c).TokenID, in.Channel, reply)
 		if err != nil {
 			return questionError("questions.record_answer", err)
 		}
