@@ -260,20 +260,26 @@ class NottarioLivePage extends LitElement {
         gap: 4px;
       }
 
-      /* Amber is kept for what waits on a person. */
+      /* Amber is kept for what waits on the viewer. */
       a.pill {
         display: inline-block;
         padding: 0 7px;
-        border: 1px solid var(--attention-muted);
+        border: 1px solid var(--border);
         border-radius: 2em;
-        background: var(--attention-subtle);
-        color: var(--attention-fg);
+        background: var(--bg-subtle);
+        color: var(--fg-muted);
         font-size: 11px;
         font-weight: 500;
         line-height: 18px;
         text-decoration: none;
       }
-      a.pill:hover { border-color: var(--attention-emphasis); }
+      a.pill:hover { border-color: var(--fg-muted); }
+      a.pill.for-me {
+        border-color: var(--attention-muted);
+        background: var(--attention-subtle);
+        color: var(--attention-fg);
+      }
+      a.pill.for-me:hover { border-color: var(--attention-emphasis); }
 
       .excerpt {
         min-width: 0;
@@ -875,7 +881,7 @@ class NottarioLivePage extends LitElement {
     if (w.questions_open > 0) {
       const qid = firstWaiting.get(w.task.id);
       const href = qid ? `#w-${qid}` : `/projects/${w.task.project_id}/questions`;
-      parts.push(html`<a class="pill" href=${href}
+      parts.push(html`<a class=${w.questions_for_me > 0 ? 'pill for-me' : 'pill'} href=${href}
           @click=${(e) => this._jumpToQuestion(e, qid)}>${plural(w.questions_open, 'question')}</a>`);
     }
     const sub = parts.flatMap((p, i) =>

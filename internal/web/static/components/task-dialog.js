@@ -744,10 +744,14 @@ class NottarioTaskDialog extends LitElement {
     // When the request left, so the steps list can tell a reply that
     // predates its own latest change.
     const requestedAt = performance.now();
+    // A newer call supersedes this one: an older reply never overwrites it.
+    this._detailSeq = (this._detailSeq || 0) + 1;
+    const seq = this._detailSeq;
     const pid = this.projectId;
     // The dialog may have closed, or moved to another task, while the
     // request was out: never reopen it or swap its contents.
-    const stale = () => this.selected?.task.id !== id || this.projectId !== pid;
+    const stale = () =>
+      this.selected?.task.id !== id || this.projectId !== pid || seq !== this._detailSeq;
     let r;
     let j;
     try {

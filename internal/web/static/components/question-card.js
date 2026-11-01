@@ -192,6 +192,11 @@ export class NottarioQuestionCard extends LitElement {
         background: var(--attention-subtle);
         border-color: var(--attention-muted);
       }
+      .state.waiting {
+        color: var(--fg-muted);
+        background: var(--bg-subtle);
+        border-color: var(--border);
+      }
       .state.delivered {
         color: var(--tint-green-fg);
         background: var(--tint-green);
@@ -446,7 +451,10 @@ export class NottarioQuestionCard extends LitElement {
   get _formOpen() {
     const q = this.question;
     if (!q || !this._forMe) return false;
-    return q.state === 'open' || (this._editing && q.state === 'answered' && !q.delivered_at);
+    return (
+      q.state === 'open' ||
+      (this._editing && q.state === 'answered' && !q.delivered_at && !q.recorded_by_agent)
+    );
   }
 
   // ---- input ----
@@ -708,9 +716,9 @@ export class NottarioQuestionCard extends LitElement {
 
   // _renderWaitingFor names the recipient of an open question the
   // viewer cannot answer. The recipient is the person whose token the
-  // agent asked with, asked_by on the view.
+  // agent asked with: recipient on the view, asked_by for older rows.
   _renderWaitingFor(q) {
-    const who = q.asked_by;
+    const who = q.recipient || q.asked_by;
     if (!who) return html`<p class="waiting-for">Waiting for its recipient</p>`;
     return html`
       <p class="waiting-for">
@@ -839,11 +847,21 @@ export class NottarioQuestionCard extends LitElement {
     `;
   }
 
+  // _recordedLabel says where an answer the agent recorded was given,
+  // so it is not read as typed in Nottario. Empty for web answers.
+  _recordedLabel(q) {
+    if (!q.recorded_by_agent) return '';
+    return q.answer_channel === 'other'
+      ? 'Answered elsewhere · recorded by the agent'
+      : 'Answered in chat · recorded by the agent';
+  }
+
   _renderAnswer(q) {
     const a = q.answer || { keys: [], text: '', note: '' };
     const by = q.answered_by;
     const mine = this._forMe;
-    const cmd = mine ? resumeCommand(q.session) : null;
+    const cmd = mine && !q.recorded_by_agent ? resumeCommand(q.session) : null;
+    const channel = this._recordedLabel(q);
     return html`
       <div class="answer">
         <div class="answer-meta">
@@ -854,7 +872,11 @@ export class NottarioQuestionCard extends LitElement {
                      <span class="who">${by.display_name || by.login}</span>`
               : nothing
           }
-          <span title=${formatDateTime(q.answered_at)}>answered ${formatRelativeTime(q.answered_at)}</span>
+          <span title=${formatDateTime(q.answered_at)}>${
+            channel
+              ? `${channel} · ${formatRelativeTime(q.answered_at)}`
+              : `answered ${formatRelativeTime(q.answered_at)}`
+          }</span>
         </div>
         ${q.kind === 'choice' ? this._renderPicked(q, a) : this._renderAnswerText(q, a)}
         ${
@@ -883,7 +905,7 @@ export class NottarioQuestionCard extends LitElement {
                     : nothing
                 }
                 ${
-                  mine
+                  mine && !q.recorded_by_agent
                     ? html`<button class="btn ghost" type="button" @click=${this._startEdit}>Edit</button>`
                     : nothing
                 }

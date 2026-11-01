@@ -323,7 +323,7 @@ export class NottarioTaskSteps extends LitElement {
     const fresh =
       this._inflight === 0 && (this.stepsAt ?? Number.POSITIVE_INFINITY) >= this._savedAt;
     if (changed.has('taskId')) this._sessions = new Map();
-    if (changed.has('steps')) {
+    if (changed.has('steps') && fresh) {
       this._sessions ??= new Map();
       for (const st of this.steps || []) {
         // A step that is no longer started forgets who was on it.

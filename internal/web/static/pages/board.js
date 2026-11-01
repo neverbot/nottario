@@ -380,18 +380,23 @@ class NottarioBoardPage extends LitElement {
     }
     .card .steps-progress svg { display: block; }
     .card .steps-progress.complete { color: var(--success-hover); }
-    /* Open questions on a card: amber, the one colour kept for work
-       waiting on a person. */
+    /* Open questions on a card: neutral, amber (the one colour kept
+       for work waiting on a person) only when some are for the viewer. */
     .card .questions-pill {
       display: inline-block;
       padding: 0 7px;
-      border: 1px solid var(--attention-muted);
+      border: 1px solid var(--border);
       border-radius: 2em;
-      background: var(--attention-subtle);
-      color: var(--attention-fg);
+      background: var(--bg-subtle);
+      color: var(--fg-muted);
       font-size: 11px;
       font-weight: 500;
       line-height: 18px;
+    }
+    .card .questions-pill.for-me {
+      border-color: var(--attention-muted);
+      background: var(--attention-subtle);
+      color: var(--attention-fg);
     }
 
 
@@ -864,7 +869,8 @@ class NottarioBoardPage extends LitElement {
       (assigneeName ? `, assigned to ${assigneeName}` : '') +
       (t.steps ? `, ${t.steps.done} of ${t.steps.total} steps done` : '') +
       (t.questions_open > 0
-        ? `, ${t.questions_open} open question${t.questions_open === 1 ? '' : 's'}`
+        ? `, ${t.questions_open} open question${t.questions_open === 1 ? '' : 's'}` +
+          (t.questions_for_me > 0 ? `, ${t.questions_for_me} for you` : '')
         : '');
     const dragging = this._draggingID === t.id;
     const isWontDo = t.state === 'wont_do';
@@ -908,7 +914,7 @@ class NottarioBoardPage extends LitElement {
           }
           ${
             t.questions_open > 0
-              ? html`<span class="questions-pill" aria-hidden="true">${questionsLabel(t.questions_open)}</span>`
+              ? html`<span class=${`questions-pill${t.questions_for_me > 0 ? ' for-me' : ''}`} aria-hidden="true">${questionsLabel(t.questions_open)}</span>`
               : null
           }
         </div>
