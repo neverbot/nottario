@@ -126,6 +126,45 @@ func (q *Queries) CountOpenTaskQuestions(ctx context.Context, ids []uuid.UUID) (
 	return items, nil
 }
 
+const countOpenTaskQuestionsFor = `-- name: CountOpenTaskQuestionsFor :many
+SELECT task_id, count(*)::int AS open FROM task_questions
+WHERE task_id = ANY($1::uuid[]) AND state = 'open'
+  AND recipient_user_id = $2::uuid
+GROUP BY task_id
+`
+
+type CountOpenTaskQuestionsForParams struct {
+	Ids       []uuid.UUID
+	Recipient uuid.UUID
+}
+
+type CountOpenTaskQuestionsForRow struct {
+	TaskID uuid.UUID
+	Open   int32
+}
+
+// Open question counts for a page of tasks, only the questions
+// addressed to one user. Tasks without such questions produce no row.
+func (q *Queries) CountOpenTaskQuestionsFor(ctx context.Context, arg CountOpenTaskQuestionsForParams) ([]CountOpenTaskQuestionsForRow, error) {
+	rows, err := q.db.Query(ctx, countOpenTaskQuestionsFor, arg.Ids, arg.Recipient)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountOpenTaskQuestionsForRow{}
+	for rows.Next() {
+		var i CountOpenTaskQuestionsForRow
+		if err := rows.Scan(&i.TaskID, &i.Open); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getProjectsBrief = `-- name: GetProjectsBrief :many
 SELECT id, name, slug FROM projects WHERE id = ANY($1::uuid[])
 `

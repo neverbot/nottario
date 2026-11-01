@@ -42,6 +42,8 @@ type liveWorkingView struct {
 	Steps          []liveStepView      `json:"steps"`
 	Progress       *live.Progress      `json:"progress"`
 	QuestionsOpen  int                 `json:"questions_open"`
+	// QuestionsForMe counts the open questions addressed to the viewer.
+	QuestionsForMe int `json:"questions_for_me,omitempty"`
 }
 
 type liveFinishedView struct {
@@ -146,13 +148,23 @@ func LiveHandler(d TaskDeps) http.Handler {
 			return nil
 		}
 
+		workingIDs := make([]uuid.UUID, 0, len(board.Working))
+		for _, it := range board.Working {
+			workingIDs = append(workingIDs, it.TaskID)
+		}
+		forMe, err := openQuestionsFor(r.Context(), d.Pool, workingIDs, c.UserID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
 		working := make([]liveWorkingView, 0, len(board.Working))
 		for _, it := range board.Working {
 			v := liveWorkingView{
 				Task:      liveTaskRef{ID: it.TaskID, Title: it.Title, Type: it.Type, ProjectID: it.ProjectID},
 				Assignee:  assignee(it.AssigneeUserID),
 				StartedAt: it.StartedAt, LastActivityAt: it.LastActivityAt, Idle: it.Idle,
-				Progress: it.Progress, QuestionsOpen: it.QuestionsOpen,
+				Progress: it.Progress, QuestionsOpen: it.QuestionsOpen, QuestionsForMe: forMe[it.TaskID],
 				Steps: make([]liveStepView, 0, len(it.Steps)),
 			}
 			if it.RoleID != nil {

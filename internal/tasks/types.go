@@ -60,6 +60,10 @@ type Task struct {
 	// QuestionsOpen counts the task's questions still waiting for an
 	// answer.
 	QuestionsOpen int `json:"questions_open,omitempty"`
+	// QuestionsForMe counts the open questions addressed to the
+	// viewer. Only the web layer fills it: the tasks package has no
+	// viewer.
+	QuestionsForMe int `json:"questions_for_me,omitempty"`
 }
 
 // Dependency is the directed relation "task depends on another task".

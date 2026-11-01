@@ -49,6 +49,9 @@ type Querier interface {
 	// Open question counts for a page of tasks. Tasks without open
 	// questions produce no row.
 	CountOpenTaskQuestions(ctx context.Context, ids []uuid.UUID) ([]CountOpenTaskQuestionsRow, error)
+	// Open question counts for a page of tasks, only the questions
+	// addressed to one user. Tasks without such questions produce no row.
+	CountOpenTaskQuestionsFor(ctx context.Context, arg CountOpenTaskQuestionsForParams) ([]CountOpenTaskQuestionsForRow, error)
 	CountTaskSteps(ctx context.Context, taskID uuid.UUID) (int32, error)
 	CountUnread(ctx context.Context, userID uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int32, error)

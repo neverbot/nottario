@@ -199,6 +199,18 @@ func ListTasksHandler(d TaskDeps) http.Handler {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		ids := make([]uuid.UUID, 0, len(list))
+		for _, t := range list {
+			ids = append(ids, t.ID)
+		}
+		mine, err := openQuestionsFor(r.Context(), d.Pool, ids, c.UserID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		for i := range list {
+			list[i].QuestionsForMe = mine[list[i].ID]
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"tasks": list})
 	})
 }

@@ -100,6 +100,14 @@ SELECT task_id, count(*)::int AS open FROM task_questions
 WHERE task_id = ANY(sqlc.arg('ids')::uuid[]) AND state = 'open'
 GROUP BY task_id;
 
+-- name: CountOpenTaskQuestionsFor :many
+-- Open question counts for a page of tasks, only the questions
+-- addressed to one user. Tasks without such questions produce no row.
+SELECT task_id, count(*)::int AS open FROM task_questions
+WHERE task_id = ANY(sqlc.arg('ids')::uuid[]) AND state = 'open'
+  AND recipient_user_id = sqlc.arg('recipient')::uuid
+GROUP BY task_id;
+
 -- name: ListPendingTaskQuestions :many
 -- A task's questions an agent still has to act on: open ones, and
 -- answers the asking session has not taken yet. Oldest first.

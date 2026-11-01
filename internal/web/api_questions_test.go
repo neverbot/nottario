@@ -45,6 +45,9 @@ type questionsResp struct {
 		AnsweredBy *struct {
 			Login string `json:"login"`
 		} `json:"answered_by"`
+		Recipient *struct {
+			Login string `json:"login"`
+		} `json:"recipient"`
 	} `json:"questions"`
 }
 
@@ -164,7 +167,8 @@ func TestApiQuestions(t *testing.T) {
 	v := list.Questions[0]
 	if v.Task == nil || v.Task.Title != "ask me" || v.Project == nil || v.Project.Slug != p.Slug ||
 		v.Step == nil || v.Step.Text != "first step" || v.AskedBy == nil || v.AskedBy.Login != "web-q" || v.BodyHTML == "" ||
-		v.Session == nil || v.Session.Label != "Backend agent" || v.Session.Key != "conv-1" || !v.ForMe {
+		v.Session == nil || v.Session.Label != "Backend agent" || v.Session.Key != "conv-1" || !v.ForMe ||
+		v.Recipient == nil || v.Recipient.Login != "web-q" {
 		t.Fatalf("view = %+v", v)
 	}
 	var byProject questionsResp
@@ -448,4 +452,126 @@ func TestApiQuestions_ListScope(t *testing.T) {
 	check("admin, no membership, no project_id", excerpts(admin, ""))
 	check("admin with project_id", excerpts(admin, "&project_id="+pc.ID.String()), "in C")
 	check("recipient=me", excerpts(onlyA, "&recipient=me"), "in A for onlyA", "in C")
+}
+
+// TestApiQuestions_ForMeCounts checks that task lists and the Live
+// board count only the open questions addressed to the viewer.
+func TestApiQuestions_ForMeCounts(t *testing.T) {
+	pool := testutil.NewPool(t)
+	ctx := t.Context()
+	owner, _, err := identity.UpsertFromGithub(ctx, pool, 15801, "forme-owner", "Owner", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer, _, err := identity.UpsertFromGithub(ctx, pool, 15802, "forme-peer", "Peer", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := identity.CreateProject(ctx, pool, "For me", "", "", "", owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles, err := identity.ListRoles(ctx, pool, p.ID)
+	if err != nil || len(roles) == 0 {
+		t.Fatalf("roles: %v %v", roles, err)
+	}
+	if err := identity.AddMembership(ctx, pool, peer.ID, p.ID, roles[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	by := tasks.Authorship{UserID: &owner.ID}
+	tk, err := tasks.Create(ctx, pool, tasks.CreateParams{ProjectID: p.ID, Type: tasks.TypeTask, Title: "asked of owner"}, by)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quiet, err := tasks.Create(ctx, pool, tasks.CreateParams{ProjectID: p.ID, Type: tasks.TypeTask, Title: "no questions"}, by)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []uuid.UUID{tk.ID, quiet.ID} {
+		if _, _, err := tasks.SetState(ctx, pool, id, tasks.StateDoing, &owner.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, body := range []string{"first?", "second?"} {
+		if _, err := questions.Ask(ctx, pool, questions.AskParams{ProjectID: p.ID, TaskID: tk.ID, AskedBy: by, Body: body}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := questions.Ask(ctx, pool, questions.AskParams{ProjectID: p.ID, TaskID: tk.ID, AskedBy: tasks.Authorship{UserID: &peer.ID}, Body: "for the peer?"}); err != nil {
+		t.Fatal(err)
+	}
+
+	key := []byte("k")
+	ts := httptest.NewServer(NewServer(Deps{Pool: pool, Resolver: identity.NewResolver(pool, key, false)}))
+	t.Cleanup(ts.Close)
+	get := func(u *identity.User, path string, out any) {
+		t.Helper()
+		sess, err := identity.NewSession(ctx, pool, u.ID, "test-agent", "127.0.0.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, _ := http.NewRequest("GET", ts.URL+path, nil)
+		req.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: identity.EncodeCookie(sess.ID, key)})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		raw, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s: %d %s", path, resp.StatusCode, raw)
+		}
+		if err := json.Unmarshal(raw, out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	listFor := func(u *identity.User) map[string][2]int {
+		t.Helper()
+		var out struct {
+			Tasks []struct {
+				ID             string `json:"id"`
+				QuestionsOpen  int    `json:"questions_open"`
+				QuestionsForMe int    `json:"questions_for_me"`
+			} `json:"tasks"`
+		}
+		get(u, "/api/projects/"+p.ID.String()+"/tasks", &out)
+		m := map[string][2]int{}
+		for _, x := range out.Tasks {
+			m[x.ID] = [2]int{x.QuestionsOpen, x.QuestionsForMe}
+		}
+		return m
+	}
+	if got := listFor(owner)[tk.ID.String()]; got != [2]int{3, 2} {
+		t.Fatalf("owner list = %v, want [3 2]", got)
+	}
+	if got := listFor(peer)[tk.ID.String()]; got != [2]int{3, 1} {
+		t.Fatalf("peer list = %v, want [3 1]", got)
+	}
+	if got := listFor(owner)[quiet.ID.String()]; got != [2]int{0, 0} {
+		t.Fatalf("quiet task = %v", got)
+	}
+
+	liveFor := func(u *identity.User) map[string]int {
+		t.Helper()
+		var out struct {
+			Working []struct {
+				Task struct {
+					ID string `json:"id"`
+				} `json:"task"`
+				QuestionsForMe int `json:"questions_for_me"`
+			} `json:"working"`
+		}
+		get(u, "/api/live?project_id="+p.ID.String(), &out)
+		m := map[string]int{}
+		for _, w := range out.Working {
+			m[w.Task.ID] = w.QuestionsForMe
+		}
+		return m
+	}
+	if got := liveFor(owner)[tk.ID.String()]; got != 2 {
+		t.Fatalf("owner live = %d, want 2", got)
+	}
+	if got := liveFor(peer)[tk.ID.String()]; got != 1 {
+		t.Fatalf("peer live = %d, want 1", got)
+	}
 }

@@ -86,6 +86,8 @@ type questionView struct {
 	Session         *questionSessionRef `json:"session,omitempty"`
 	AskedBy         *questionUserRef    `json:"asked_by,omitempty"`
 	AnsweredBy      *questionUserRef    `json:"answered_by,omitempty"`
+	// Recipient is the person the question is addressed to.
+	Recipient *questionUserRef `json:"recipient,omitempty"`
 }
 
 // excerptLen is how many characters of the question the one-line
@@ -164,6 +166,9 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, viewer uuid.UUI
 		}
 		if q.AnsweredByUserID != nil {
 			userIDs = append(userIDs, *q.AnsweredByUserID)
+		}
+		if q.RecipientUserID != nil {
+			userIDs = append(userIDs, *q.RecipientUserID)
 		}
 	}
 	taskIDs, projectIDs, stepIDs = uniqueIDs(taskIDs), uniqueIDs(projectIDs), uniqueIDs(stepIDs)
@@ -271,7 +276,29 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, viewer uuid.UUI
 				v.AnsweredBy = &u
 			}
 		}
+		if q.RecipientUserID != nil {
+			if u, ok := userByID[*q.RecipientUserID]; ok {
+				v.Recipient = &u
+			}
+		}
 		out = append(out, v)
+	}
+	return out, nil
+}
+
+// openQuestionsFor counts, per task, the open questions addressed to
+// the user, in one query. Tasks without any are absent from the map.
+func openQuestionsFor(ctx context.Context, pool *pgxpool.Pool, taskIDs []uuid.UUID, user uuid.UUID) (map[uuid.UUID]int, error) {
+	out := map[uuid.UUID]int{}
+	if len(taskIDs) == 0 {
+		return out, nil
+	}
+	rows, err := dbq.New(pool).CountOpenTaskQuestionsFor(ctx, dbq.CountOpenTaskQuestionsForParams{Ids: taskIDs, Recipient: user})
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.TaskID] = int(r.Open)
 	}
 	return out, nil
 }
