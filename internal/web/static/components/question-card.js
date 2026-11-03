@@ -32,7 +32,9 @@ import { taskHref } from '/static/utils/task-link.js';
 //   collapsible  start folded to the header and a one-line excerpt;
 //             the excerpt expands the card, and saving an answer folds
 //             it again. A draft survives folding. expand() opens it
-//             from script (deep links).
+//             from script (deep links). A folded card also shows the
+//             outcome the agent recorded, or a short summary of the
+//             answer when there is none.
 //
 // Parts: card, the frame, focusable by script (focus() on the element
 // moves there); a list that draws its own separators (the
@@ -60,6 +62,19 @@ import { taskHref } from '/static/utils/task-link.js';
 // (ignored while typing in a text field).
 
 let nextId = 0;
+
+// answerSummary is a one-line version of a question's answer, for
+// folded cards: the picked labels and any text of the human's own,
+// or the withdraw reason.
+export function answerSummary(q) {
+  if (q.state === 'withdrawn') return q.withdrawn_reason ? `Withdrawn: ${q.withdrawn_reason}` : '';
+  const a = q.answer;
+  if (q.state !== 'answered' || !a) return '';
+  const labels = new Map((q.options || []).map((o) => [o.key, o.label]));
+  const parts = (a.keys || []).map((k) => labels.get(k) || k);
+  if (a.text) parts.push(a.text);
+  return parts.join(', ').replace(/\s+/g, ' ').trim();
+}
 
 // One shared 15-second tick refreshes every card's relative times.
 const cards = new Set();
@@ -236,6 +251,19 @@ export class NottarioQuestionCard extends LitElement {
         cursor: pointer;
       }
       .unfold:hover { color: var(--accent); }
+      .summary {
+        margin: 2px 0 0;
+        max-width: 75ch;
+        font-size: 13px;
+        color: var(--fg-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .summary .label,
+      .outcome .label { color: var(--fg); font-weight: 600; }
+      .outcome { margin: 0 0 10px; overflow-wrap: anywhere; }
+      header.folded .unfold { flex: 1 1 auto; min-width: 0; width: auto; }
       .unfold:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
       .fold {
         padding: 0 4px;
@@ -693,13 +721,28 @@ export class NottarioQuestionCard extends LitElement {
         ${this._renderHeader(q)}
         ${
           this._folded
-            ? html`<button class="unfold" type="button" aria-expanded="false"
-                       title=${q.excerpt || ''}
-                       @click=${() => this._setExpanded(true)}>${q.excerpt}</button>`
+            ? html`${this.compact ? nothing : this._renderUnfold(q)}${this._renderSummary(q)}`
             : this._renderContent(q)
         }
       </article>
     `;
+  }
+
+  _renderUnfold(q) {
+    return html`<button class="unfold" type="button" aria-expanded="false"
+                        title=${q.excerpt || ''}
+                        @click=${() => this._setExpanded(true)}>${q.excerpt}</button>`;
+  }
+
+  // _renderSummary is the line under a folded question: the decision
+  // the agent recorded, else what was answered, else nothing.
+  _renderSummary(q) {
+    if (q.outcome) {
+      return html`<p class="summary" title=${q.outcome}><span class="label">Decision:</span> ${q.outcome}</p>`;
+    }
+    const text = answerSummary(q);
+    if (!text) return nothing;
+    return html`<p class="summary" title=${text}>${text}</p>`;
   }
 
   _renderContent(q) {
@@ -762,9 +805,16 @@ export class NottarioQuestionCard extends LitElement {
       <header class="folded">
         ${this._renderStatePill(q)}
         ${this.showTask && q.task ? html`<a class="task" href=${href}>${q.task.title}</a>` : nothing}
+        ${this._folded ? this._renderUnfold(q) : nothing}
         <time datetime=${q.created_at} title=${formatDateTime(q.created_at)}>
           ${formatRelativeTime(q.created_at)}
         </time>
+        ${
+          this.collapsible && this._expanded
+            ? html`<button class="fold" type="button" aria-expanded="true"
+                       @click=${() => this._setExpanded(false)}>Collapse</button>`
+            : nothing
+        }
       </header>
     `;
   }
@@ -942,6 +992,11 @@ export class NottarioQuestionCard extends LitElement {
     const cmd = mine && !q.recorded_by_agent ? resumeCommand(q.session) : null;
     const channel = this._recordedLabel(q);
     return html`
+      ${
+        q.outcome
+          ? html`<p class="outcome"><span class="label">Decision:</span> ${q.outcome}</p>`
+          : nothing
+      }
       <div class="answer">
         <div class="answer-meta">
           ${

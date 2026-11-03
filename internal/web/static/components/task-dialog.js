@@ -1147,7 +1147,8 @@ class NottarioTaskDialog extends LitElement {
   // ---- Questions in the task dialog --------------------------------
   //
   // Open questions come first as full cards; the rest (answered,
-  // delivered, withdrawn) fold under a disclosure. A question answered
+  // delivered, withdrawn) sit under a closed disclosure, each folded to
+  // its question and the decision it led to. A question answered
   // from this dialog stays among the open ones until the dialog closes,
   // so the confirmation does not jump away from under the cursor.
   _renderQuestions() {
@@ -1167,6 +1168,12 @@ class NottarioTaskDialog extends LitElement {
         data-id=${q.id}
         project-id=${this.projectId}
         .question=${q}></nottario-question-card></li>`;
+    const folded = (q) => html`<li><nottario-question-card
+        compact
+        collapsible
+        data-id=${q.id}
+        project-id=${this.projectId}
+        .question=${q}></nottario-question-card></li>`;
     return html`
       <section @question-answered=${(e) => this._onQuestionAnswered(e)}
                @question-stale=${() => this.selected && this.loadDetail(this.selected.task.id)}>
@@ -1182,9 +1189,9 @@ class NottarioTaskDialog extends LitElement {
         ${
           rest.length
             ? html`
-          <details class="questions-rest" ?open=${!open.length}>
-            <summary>${rest.length} earlier question${rest.length === 1 ? '' : 's'}</summary>
-            <ol class="questions-list">${repeat(rest, (q) => q.id, card)}</ol>
+          <details class="questions-rest">
+            <summary>${rest.length} resolved question${rest.length === 1 ? '' : 's'}</summary>
+            <ol class="questions-list">${repeat(rest, (q) => q.id, folded)}</ol>
           </details>`
             : null
         }
@@ -1192,11 +1199,18 @@ class NottarioTaskDialog extends LitElement {
     `;
   }
 
-  _focusQuestionCard(id) {
+  async _focusQuestionCard(id) {
     const card = this.renderRoot.querySelector(
       `nottario-question-card[data-id="${CSS.escape(id)}"]`,
     );
     if (!card) return;
+    // A resolved question sits folded inside a closed disclosure.
+    const details = card.closest('details');
+    if (details) details.open = true;
+    if (card.collapsible) {
+      card.expand();
+      await card.updateComplete;
+    }
     card.scrollIntoView({
       block: 'nearest',
       behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
