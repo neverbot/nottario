@@ -346,6 +346,10 @@ type Querier interface {
 	SetTaskDone(ctx context.Context, id uuid.UUID) error
 	// Test only: backdates a task's activity to exercise the idle marker.
 	SetTaskLastActivityForTest(ctx context.Context, arg SetTaskLastActivityForTestParams) error
+	// Records or replaces the decision an answered question led to. The
+	// caller holds the row lock and has checked the question is answered
+	// and delivered to the asking session.
+	SetTaskQuestionOutcome(ctx context.Context, arg SetTaskQuestionOutcomeParams) (TaskQuestion, error)
 	SetTaskStepPosition(ctx context.Context, arg SetTaskStepPositionParams) error
 	SetTaskTodo(ctx context.Context, id uuid.UUID) error
 	// The wont_do transition records actual_end so we can answer "when was

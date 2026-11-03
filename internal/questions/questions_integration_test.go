@@ -2,6 +2,7 @@ package questions_test
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -463,7 +464,7 @@ func TestQuestions(t *testing.T) {
 			return q
 		}
 		q := ask(sid, "Postgres or SQLite?", "Postgres", "SQLite")
-		got, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, sid, &tok.ID, "", questions.Reply{Keys: []string{"2"}})
+		got, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, sid, &tok.ID, "", questions.Reply{Keys: []string{"2"}}, "")
 		if err != nil {
 			t.Fatalf("RecordAnswer: %v", err)
 		}
@@ -481,20 +482,20 @@ func TestQuestions(t *testing.T) {
 			t.Errorf("take after record = %d answers, %d open", len(taken), open)
 		}
 		// Recording twice, or over a web answer, is refused.
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "again"}); !errors.Is(err, questions.ErrAlreadyAnswered) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, q.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "again"}, ""); !errors.Is(err, questions.ErrAlreadyAnswered) {
 			t.Errorf("record twice: %v", err)
 		}
 		web := ask(sid, "Which port?")
 		if _, err := questions.Answer(ctx, pool, p.ID, web.ID, u.ID, questions.Reply{Text: "8080"}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, web.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "9090"}); !errors.Is(err, questions.ErrAlreadyAnswered) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, web.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "9090"}, ""); !errors.Is(err, questions.ErrAlreadyAnswered) {
 			t.Errorf("record over a web answer: %v", err)
 		}
 
 		// A choice question also takes the human's own wording; channel other.
 		own := ask(sid, "Which cache?", "Redis", "None")
-		got, err = questions.RecordAnswer(ctx, pool, p.ID, own.ID, u.ID, sid, &tok.ID, "other", questions.Reply{Text: "memcached, we have it"})
+		got, err = questions.RecordAnswer(ctx, pool, p.ID, own.ID, u.ID, sid, &tok.ID, "other", questions.Reply{Text: "memcached, we have it"}, "")
 		if err != nil || got.AnswerChannel != "other" || got.Answer.Text != "memcached, we have it" {
 			t.Errorf("record own wording: %+v err=%v", got, err)
 		}
@@ -506,16 +507,16 @@ func TestQuestions(t *testing.T) {
 			"unknown key": {Keys: []string{"7"}},
 			"two keys":    {Keys: []string{"1", "2"}},
 		} {
-			if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "chat", r); !questions.IsInvalid(err) {
+			if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "chat", r, ""); !questions.IsInvalid(err) {
 				t.Errorf("%s: %v", name, err)
 			}
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "web", questions.Reply{Keys: []string{"1"}}); !questions.IsInvalid(err) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "web", questions.Reply{Keys: []string{"1"}}, ""); !questions.IsInvalid(err) {
 			t.Errorf("channel web: %v", err)
 		}
 
 		// Another conversation, or a question not asked through a token, is refused.
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, session("s-other"), &tok.ID, "chat", questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrNotAskingSession) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, session("s-other"), &tok.ID, "chat", questions.Reply{Keys: []string{"1"}}, ""); !errors.Is(err, questions.ErrNotAskingSession) {
 			t.Errorf("other session: %v", err)
 		}
 		noTok := mkTask(p.ID, "no token")
@@ -523,7 +524,7 @@ func TestQuestions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, plain.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "x"}); !errors.Is(err, questions.ErrNotAgentQuestion) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, plain.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "x"}, ""); !errors.Is(err, questions.ErrNotAgentQuestion) {
 			t.Errorf("question without token: %v", err)
 		}
 
@@ -532,7 +533,7 @@ func TestQuestions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, stranger.ID, sid, nil, "chat", questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrNotAskerRecord) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, stranger.ID, sid, nil, "chat", questions.Reply{Keys: []string{"1"}}, ""); !errors.Is(err, questions.ErrNotAskerRecord) {
 			t.Errorf("non-asker: %v", err)
 		}
 
@@ -540,11 +541,109 @@ func TestQuestions(t *testing.T) {
 		if _, err := questions.Withdraw(ctx, pool, p.ID, bad.ID, u.ID, "moot"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Keys: []string{"1"}}); !errors.Is(err, questions.ErrClosed) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, bad.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Keys: []string{"1"}}, ""); !errors.Is(err, questions.ErrClosed) {
 			t.Errorf("withdrawn: %v", err)
 		}
-		if _, err := questions.RecordAnswer(ctx, pool, p.ID, uuid.New(), u.ID, sid, nil, "chat", questions.Reply{Text: "x"}); !errors.Is(err, questions.ErrNotFound) {
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, uuid.New(), u.ID, sid, nil, "chat", questions.Reply{Text: "x"}, ""); !errors.Is(err, questions.ErrNotFound) {
 			t.Errorf("unknown id: %v", err)
+		}
+	})
+
+	t.Run("outcome", func(t *testing.T) {
+		_, tok, err := identity.IssueToken(ctx, pool, u.ID, p.ID, "outcomer", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sid := session("s-outcome")
+		byTok := tasks.Authorship{UserID: &u.ID, TokenID: &tok.ID}
+		ask := func(body string, opts ...string) *questions.Question {
+			t.Helper()
+			ap := questions.AskParams{ProjectID: p.ID, TaskID: task.ID, SessionID: &sid, AskedBy: byTok, Body: body}
+			for _, o := range opts {
+				ap.Options = append(ap.Options, questions.Option{Label: o})
+			}
+			q, err := questions.Ask(ctx, pool, ap)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return q
+		}
+		const decided = "Decided: keep client-specific commands in a registry with a generic fallback."
+
+		// Open: no answer yet.
+		q := ask("Registry or hard-coded?", "Registry", "Hard-coded")
+		if _, err := questions.SetOutcome(ctx, pool, p.ID, q.ID, u.ID, sid, decided); !questions.IsInvalid(err) {
+			t.Errorf("open question: %v", err)
+		}
+		// Answered in the web, not taken yet.
+		if _, err := questions.Answer(ctx, pool, p.ID, q.ID, u.ID, questions.Reply{Keys: []string{"1"}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.SetOutcome(ctx, pool, p.ID, q.ID, u.ID, sid, decided); !errors.Is(err, questions.ErrNotDelivered) {
+			t.Errorf("not delivered: %v", err)
+		}
+		if _, _, err := questions.Take(ctx, pool, p.ID, sid); err != nil {
+			t.Fatal(err)
+		}
+		// Only the asker, only from the asking session.
+		stranger, _, err := identity.UpsertFromGithub(ctx, pool, 9413, "questions-outcome-stranger", "Stranger", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.SetOutcome(ctx, pool, p.ID, q.ID, stranger.ID, sid, decided); !errors.Is(err, questions.ErrNotAskerOutcome) {
+			t.Errorf("non-asker: %v", err)
+		}
+		if _, err := questions.SetOutcome(ctx, pool, p.ID, q.ID, u.ID, session("s-outcome-other"), decided); !errors.Is(err, questions.ErrNotAskingSession) {
+			t.Errorf("other session: %v", err)
+		}
+		// Empty and overlong are refused.
+		for name, o := range map[string]string{"empty": "   ", "long": strings.Repeat("é", questions.MaxOutcomeLen+1)} {
+			if _, err := questions.SetOutcome(ctx, pool, p.ID, q.ID, u.ID, sid, o); !questions.IsInvalid(err) {
+				t.Errorf("%s: %v", name, err)
+			}
+		}
+		got, err := questions.SetOutcome(ctx, pool, p.ID, q.ID, u.ID, sid, "  "+decided+"  ")
+		if err != nil || got.Outcome != decided || got.OutcomeAt == nil {
+			t.Fatalf("set outcome: %+v err=%v", got, err)
+		}
+		atLimit := strings.Repeat("é", questions.MaxOutcomeLen)
+		if _, err := questions.SetOutcome(ctx, pool, p.ID, q.ID, u.ID, sid, atLimit); err != nil {
+			t.Errorf("outcome at the limit: %v", err)
+		}
+		// Overwriting replaces it and moves outcome_at.
+		again, err := questions.SetOutcome(ctx, pool, p.ID, q.ID, u.ID, sid, "Decided: hard-code it for now.")
+		if err != nil || again.Outcome != "Decided: hard-code it for now." || again.OutcomeAt == nil || again.OutcomeAt.Before(*got.OutcomeAt) {
+			t.Errorf("overwrite: %+v err=%v", again, err)
+		}
+		if _, err := questions.SetOutcome(ctx, pool, p.ID, uuid.New(), u.ID, sid, decided); !errors.Is(err, questions.ErrNotFound) {
+			t.Errorf("unknown id: %v", err)
+		}
+		// Withdrawn is closed.
+		w := ask("Still needed?")
+		if _, err := questions.Withdraw(ctx, pool, p.ID, w.ID, u.ID, "moot"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := questions.SetOutcome(ctx, pool, p.ID, w.ID, u.ID, sid, decided); !errors.Is(err, questions.ErrClosed) {
+			t.Errorf("withdrawn: %v", err)
+		}
+
+		// record_answer carries the outcome in the same write.
+		r := ask("Which cache?", "Redis", "None")
+		if _, err := questions.RecordAnswer(ctx, pool, p.ID, r.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Keys: []string{"1"}}, strings.Repeat("x", questions.MaxOutcomeLen+1)); !questions.IsInvalid(err) {
+			t.Errorf("record with long outcome: %v", err)
+		}
+		rec, err := questions.RecordAnswer(ctx, pool, p.ID, r.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Keys: []string{"1"}}, " Decided: use Redis. ")
+		if err != nil || rec.State != questions.StateAnswered || rec.Outcome != "Decided: use Redis." || rec.OutcomeAt == nil {
+			t.Errorf("record with outcome: %+v err=%v", rec, err)
+		}
+		plain := ask("Which port?")
+		rec, err = questions.RecordAnswer(ctx, pool, p.ID, plain.ID, u.ID, sid, &tok.ID, "chat", questions.Reply{Text: "8080"}, "")
+		if err != nil || rec.Outcome != "" || rec.OutcomeAt != nil {
+			t.Errorf("record without outcome: %+v err=%v", rec, err)
+		}
+		// A recorded answer is delivered, so its outcome can follow later.
+		if _, err := questions.SetOutcome(ctx, pool, p.ID, plain.ID, u.ID, sid, "Decided: serve on port 8080."); err != nil {
+			t.Errorf("outcome after record: %v", err)
 		}
 	})
 

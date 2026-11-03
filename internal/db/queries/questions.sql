@@ -43,6 +43,15 @@ UPDATE task_questions SET state = 'answered',
 WHERE id = sqlc.arg('id')::uuid
 RETURNING *;
 
+-- name: SetTaskQuestionOutcome :one
+-- Records or replaces the decision an answered question led to. The
+-- caller holds the row lock and has checked the question is answered
+-- and delivered to the asking session.
+UPDATE task_questions SET outcome = sqlc.arg('outcome')::text,
+  outcome_at = now(), updated_at = now()
+WHERE id = sqlc.arg('id')::uuid
+RETURNING *;
+
 -- name: TakeTaskAnswers :many
 -- Hands a session its new answers and marks them delivered, once:
 -- SKIP LOCKED keeps two concurrent takes from returning the same row,

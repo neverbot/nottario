@@ -110,8 +110,12 @@ type Question struct {
 	DeliveredAt     *time.Time `json:"delivered_at,omitempty"`
 	WithdrawnAt     *time.Time `json:"withdrawn_at,omitempty"`
 	WithdrawnReason string     `json:"withdrawn_reason,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	// Outcome is the decision the answer led to, one formal line the
+	// asking agent writes once it has the answer (see SetOutcome).
+	Outcome   string     `json:"outcome,omitempty"`
+	OutcomeAt *time.Time `json:"outcome_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 // Limits, in characters. The schema carries the same bounds as CHECKs.
@@ -122,6 +126,7 @@ const (
 	MaxOptionDescLen  = 300
 	MaxReasonLen      = 300
 	MaxAnswerLen      = 8000
+	MaxOutcomeLen     = 300
 )
 
 type invalidErr string
@@ -335,6 +340,8 @@ func fromRow(r dbq.TaskQuestion) (*Question, error) {
 		DeliveredAt:       timestampPtr(r.DeliveredAt),
 		WithdrawnAt:       timestampPtr(r.WithdrawnAt),
 		WithdrawnReason:   r.WithdrawnReason,
+		Outcome:           r.Outcome,
+		OutcomeAt:         timestampPtr(r.OutcomeAt),
 		CreatedAt:         r.CreatedAt.Time,
 		UpdatedAt:         r.UpdatedAt.Time,
 	}

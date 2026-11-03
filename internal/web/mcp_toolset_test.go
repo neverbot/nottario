@@ -88,7 +88,7 @@ func TestMCP_ToolsetRejectsUnknownDomain(t *testing.T) {
 func TestMCPQuestionsToolset(t *testing.T) {
 	f := newMCPFixtureQuery(t, 9812, "questions-only", "?tools=questions")
 	got := listToolNames(t, f)
-	for _, n := range []string{"nottario.questions.ask", "nottario.questions.take", "nottario.questions.list", "nottario.questions.withdraw", "nottario.questions.record_answer", "nottario.whoami"} {
+	for _, n := range []string{"nottario.questions.ask", "nottario.questions.take", "nottario.questions.list", "nottario.questions.withdraw", "nottario.questions.record_answer", "nottario.questions.set_outcome", "nottario.whoami"} {
 		if !got[n] {
 			t.Errorf("questions toolset lacks %s", n)
 		}

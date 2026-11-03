@@ -41,7 +41,23 @@ var (
 	// ErrNotAgentQuestion is returned when recording an answer to a
 	// question that was not asked through an agent token.
 	ErrNotAgentQuestion = errors.New("only a question asked through an agent token can have its answer recorded")
+	// ErrNotAskerOutcome is returned when someone other than the user
+	// who asked tries to record the outcome of a question.
+	ErrNotAskerOutcome = errors.New("only the user who asked this question can record its outcome")
+	// ErrNotDelivered is returned when recording the outcome of a
+	// question whose answer the asking session has not taken yet.
+	ErrNotDelivered = errors.New("the answer has not reached you yet; take it with questions.take first")
 )
+
+// normaliseOutcome trims an outcome and checks its length. Empty is
+// allowed here; callers that require one check it themselves.
+func normaliseOutcome(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if runeLen(s) > MaxOutcomeLen {
+		return "", errInvalid(fmt.Sprintf("outcome is longer than %d characters; state the decision in one sentence", MaxOutcomeLen))
+	}
+	return s, nil
+}
 
 // normaliseAnswer trims an answer and checks it fits the question.
 func normaliseAnswer(q *Question, a Reply) (Reply, error) {
@@ -183,9 +199,15 @@ func ParseRecordChannel(s string) (Channel, error) {
 // is delivered at once: the agent already has it, so Take does not
 // hand it over again. The question must be open, asked through an
 // agent token, and asked by sessionID: only that conversation can
-// record its answer. The row is locked like in Answer.
-func RecordAnswer(ctx context.Context, pool *pgxpool.Pool, projectID, id, callerUserID, sessionID uuid.UUID, tokenID *uuid.UUID, channelName string, a Reply) (*Question, error) {
+// record its answer. outcome, when not blank, is the decision the
+// answer led to, written in the same transaction (see SetOutcome). The
+// row is locked like in Answer.
+func RecordAnswer(ctx context.Context, pool *pgxpool.Pool, projectID, id, callerUserID, sessionID uuid.UUID, tokenID *uuid.UUID, channelName string, a Reply, outcome string) (*Question, error) {
 	channel, err := ParseRecordChannel(channelName)
+	if err != nil {
+		return nil, err
+	}
+	outcome, err = normaliseOutcome(outcome)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +259,68 @@ func RecordAnswer(ctx context.Context, pool *pgxpool.Pool, projectID, id, caller
 	if err != nil {
 		return nil, err
 	}
+	if outcome != "" {
+		row, err = q.SetTaskQuestionOutcome(ctx, dbq.SetTaskQuestionOutcomeParams{Outcome: outcome, ID: id})
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := clearAskedNotifications(ctx, q, cur); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return fromRow(row)
+}
+
+// SetOutcome records the decision an answered question led to: one
+// formal line, written by the asking agent once it has the answer, for
+// whoever reads the task later. Only the user who asked may set it, and
+// only from the asking session (sessionID). The question must be
+// answered and its answer delivered to that session. A second call
+// replaces the outcome. The row is locked like in Answer.
+func SetOutcome(ctx context.Context, pool *pgxpool.Pool, projectID, id, callerUserID, sessionID uuid.UUID, outcome string) (*Question, error) {
+	outcome, err := normaliseOutcome(outcome)
+	if err != nil {
+		return nil, err
+	}
+	if outcome == "" {
+		return nil, errInvalid("outcome is empty; state the decision the answer led to in one sentence")
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbq.New(tx)
+	row, err := q.GetTaskQuestionForUpdate(ctx, dbq.GetTaskQuestionForUpdateParams{ID: id, ProjectID: projectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	cur, err := fromRow(row)
+	if err != nil {
+		return nil, err
+	}
+	if cur.AskedByUserID == nil || *cur.AskedByUserID != callerUserID {
+		return nil, ErrNotAskerOutcome
+	}
+	if cur.SessionID == nil || *cur.SessionID != sessionID {
+		return nil, ErrNotAskingSession
+	}
+	switch {
+	case cur.State == StateWithdrawn:
+		return nil, ErrClosed
+	case cur.State != StateAnswered:
+		return nil, errInvalid("the question is not answered yet; record an outcome once you have the answer")
+	case cur.DeliveredAt == nil:
+		return nil, ErrNotDelivered
+	}
+	row, err = q.SetTaskQuestionOutcome(ctx, dbq.SetTaskQuestionOutcomeParams{Outcome: outcome, ID: id})
+	if err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {

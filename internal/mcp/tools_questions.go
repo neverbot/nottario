@@ -61,6 +61,14 @@ type questionsRecordAnswerInput struct {
 	Text      string `json:"text,omitempty" jsonschema:"the human's answer in their own words: the answer to a free-text question, or their own wording instead of the options"`
 	Note      string `json:"note,omitempty" jsonschema:"anything else the human added"`
 	Channel   string `json:"channel,omitempty" jsonschema:"where the human answered: 'chat' (default) or 'other'"`
+	Outcome   string `json:"outcome,omitempty" jsonschema:"optional: the decision the answer led to, as in questions.set_outcome; up to 300 characters"`
+}
+
+type questionsSetOutcomeInput struct {
+	ProjectID string `json:"project_id" jsonschema:"project uuid"`
+	Session   string `json:"session" jsonschema:"your conversation id, the one you asked with; only the conversation that asked can record the outcome"`
+	ID        string `json:"id" jsonschema:"question uuid, one you filed with questions.ask and whose answer you have"`
+	Outcome   string `json:"outcome" jsonschema:"one formal sentence stating the decision the answer led to, up to 300 characters, in the task's language; e.g. 'Decided: keep client-specific commands in a registry with a generic fallback.'"`
 }
 
 // questions.list page bounds.
@@ -155,6 +163,7 @@ func questionError(tool string, err error) (*sdk.CallToolResult, any, error) {
 		errors.Is(err, questions.ErrAlreadyDelivered), errors.Is(err, questions.ErrNotAsker),
 		errors.Is(err, questions.ErrNotAskerRecord), errors.Is(err, questions.ErrAlreadyAnswered),
 		errors.Is(err, questions.ErrNotAskingSession), errors.Is(err, questions.ErrNotAgentQuestion),
+		errors.Is(err, questions.ErrNotAskerOutcome), errors.Is(err, questions.ErrNotDelivered),
 		questions.IsInvalid(err):
 		return toolError(err.Error())
 	}
@@ -290,7 +299,7 @@ func registerQuestions(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.questions.take",
-		Description: "Returns the answers to your session's questions that you have not seen yet and marks them delivered: {answers: [{id, task_id, step_id, question, choices, text, note, answered_by}], open}. Call it at the start of every turn, after each subagent returns and before ending a turn.",
+		Description: "Returns the answers to your session's questions that you have not seen yet and marks them delivered: {answers: [{id, task_id, step_id, question, choices, text, note, answered_by}], open}. Call it at the start of every turn, after each subagent returns and before ending a turn. After acting on each answer, record the decision it led to with questions.set_outcome.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in questionsTakeInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -410,7 +419,7 @@ func registerQuestions(server *sdk.Server, d Deps) {
 	})
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.questions.record_answer",
-		Description: "ONLY for recording an answer the human already gave you outside Nottario (for example in the chat) to a question you filed with questions.ask in this same conversation (pass your session), so it reads answered in Nottario too. Never use it to answer on the human's behalf, to guess, or to close a question nobody answered. Pass their picks as choices and/or their own words as text. Marks the question answered and delivered, so questions.take will not return it. Returns {id, state}.",
+		Description: "ONLY for recording an answer the human already gave you outside Nottario (for example in the chat) to a question you filed with questions.ask in this same conversation (pass your session), so it reads answered in Nottario too. Never use it to answer on the human's behalf, to guess, or to close a question nobody answered. Pass their picks as choices and/or their own words as text. Marks the question answered and delivered, so questions.take will not return it. Pass outcome to record the decision it led to in the same call (see questions.set_outcome). Returns {id, state, outcome}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in questionsRecordAnswerInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
@@ -441,10 +450,46 @@ func registerQuestions(server *sdk.Server, d Deps) {
 		for _, n := range in.Choices {
 			reply.Keys = append(reply.Keys, strconv.Itoa(n))
 		}
-		q, err := questions.RecordAnswer(ctx, d.Pool, pid, id, c.UserID, session, authorshipFor(c).TokenID, in.Channel, reply)
+		q, err := questions.RecordAnswer(ctx, d.Pool, pid, id, c.UserID, session, authorshipFor(c).TokenID, in.Channel, reply, in.Outcome)
 		if err != nil {
 			return questionError("questions.record_answer", err)
 		}
-		return jsonResult(map[string]any{"id": q.ID, "state": q.State})
+		return jsonResult(map[string]any{"id": q.ID, "state": q.State, "outcome": q.Outcome})
+	})
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "nottario.questions.set_outcome",
+		Description: "Records the decision an answered question led to, on a question you filed with questions.ask in this same conversation (pass your session) once its answer has reached you. Write one formal sentence stating the decision, for someone reading the task later: not a transcript of the chat, not the human's wording; in the task's language; up to 300 characters. Calling it again replaces the outcome. Returns {id, state, outcome}.",
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in questionsSetOutcomeInput) (*sdk.CallToolResult, any, error) {
+		c, err := callerFromContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := questionSession(in.Session, "pass the conversation id you asked with"); err != nil {
+			return toolError(err.Error())
+		}
+		pid, err := questionsProject(ctx, d, in.ProjectID)
+		if err != nil {
+			return toolError(err.Error())
+		}
+		id, err := uuid.Parse(in.ID)
+		if err != nil {
+			return toolError("id must be a uuid")
+		}
+		sid, err := findSession(ctx, d, pid, c, in.Session)
+		if err != nil {
+			return questionError("questions.set_outcome", err)
+		}
+		// An unknown conversation matches no question: the domain
+		// refuses it after the asker check.
+		session := uuid.Nil
+		if sid != nil {
+			session = *sid
+		}
+		q, err := questions.SetOutcome(ctx, d.Pool, pid, id, c.UserID, session, in.Outcome)
+		if err != nil {
+			return questionError("questions.set_outcome", err)
+		}
+		return jsonResult(map[string]any{"id": q.ID, "state": q.State, "outcome": q.Outcome})
 	})
 }

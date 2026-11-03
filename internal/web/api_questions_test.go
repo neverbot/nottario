@@ -25,6 +25,8 @@ type questionsResp struct {
 		// Where the answer was given, and whether the agent recorded it.
 		AnswerChannel   string `json:"answer_channel"`
 		RecordedByAgent bool   `json:"recorded_by_agent"`
+		Outcome         string `json:"outcome"`
+		OutcomeAt       string `json:"outcome_at"`
 		Task            *struct {
 			ID    string `json:"id"`
 			Title string `json:"title"`
@@ -261,7 +263,7 @@ func TestApiQuestions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := questions.RecordAnswer(ctx, pool, p.ID, rq.ID, u.ID, sess.ID, &tok.ID, "chat", questions.Reply{Text: "yes"}); err != nil {
+	if _, err := questions.RecordAnswer(ctx, pool, p.ID, rq.ID, u.ID, sess.ID, &tok.ID, "chat", questions.Reply{Text: "yes"}, "Decided: ship it today."); err != nil {
 		t.Fatal(err)
 	}
 	var answered questionsResp
@@ -271,12 +273,13 @@ func TestApiQuestions(t *testing.T) {
 		switch a.ID {
 		case q.ID.String():
 			seen++
-			if a.AnswerChannel != "web" || a.RecordedByAgent {
+			if a.AnswerChannel != "web" || a.RecordedByAgent || a.Outcome != "" || a.OutcomeAt != "" {
 				t.Errorf("web answer view = %+v", a)
 			}
 		case rq.ID.String():
 			seen++
-			if a.AnswerChannel != "chat" || !a.RecordedByAgent || a.AnsweredBy == nil || a.AnsweredBy.Login != "web-q" {
+			if a.AnswerChannel != "chat" || !a.RecordedByAgent || a.AnsweredBy == nil || a.AnsweredBy.Login != "web-q" ||
+				a.Outcome != "Decided: ship it today." || a.OutcomeAt == "" {
 				t.Errorf("recorded answer view = %+v", a)
 			}
 		}

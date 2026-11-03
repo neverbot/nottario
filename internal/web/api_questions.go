@@ -72,20 +72,25 @@ type questionView struct {
 	AnswerChannel questions.Channel `json:"answer_channel,omitempty"`
 	// RecordedByAgent is true when the asking agent recorded an answer
 	// the human gave it outside Nottario.
-	RecordedByAgent bool                `json:"recorded_by_agent"`
-	DeliveredAt     *time.Time          `json:"delivered_at,omitempty"`
-	WithdrawnAt     *time.Time          `json:"withdrawn_at,omitempty"`
-	WithdrawnReason string              `json:"withdrawn_reason,omitempty"`
-	CreatedAt       time.Time           `json:"created_at"`
-	UpdatedAt       time.Time           `json:"updated_at"`
-	ViaMCP          bool                `json:"via_mcp"`
-	ForMe           bool                `json:"for_me"`
-	Task            *questionTaskRef    `json:"task,omitempty"`
-	Project         *questionProjectRef `json:"project,omitempty"`
-	Step            *questionStepRef    `json:"step,omitempty"`
-	Session         *questionSessionRef `json:"session,omitempty"`
-	AskedBy         *questionUserRef    `json:"asked_by,omitempty"`
-	AnsweredBy      *questionUserRef    `json:"answered_by,omitempty"`
+	RecordedByAgent bool       `json:"recorded_by_agent"`
+	DeliveredAt     *time.Time `json:"delivered_at,omitempty"`
+	WithdrawnAt     *time.Time `json:"withdrawn_at,omitempty"`
+	WithdrawnReason string     `json:"withdrawn_reason,omitempty"`
+	// Outcome is the decision the answer led to, one plain-text line
+	// the asking agent wrote; the pages show it instead of the raw
+	// answer when set.
+	Outcome    string              `json:"outcome,omitempty"`
+	OutcomeAt  *time.Time          `json:"outcome_at,omitempty"`
+	CreatedAt  time.Time           `json:"created_at"`
+	UpdatedAt  time.Time           `json:"updated_at"`
+	ViaMCP     bool                `json:"via_mcp"`
+	ForMe      bool                `json:"for_me"`
+	Task       *questionTaskRef    `json:"task,omitempty"`
+	Project    *questionProjectRef `json:"project,omitempty"`
+	Step       *questionStepRef    `json:"step,omitempty"`
+	Session    *questionSessionRef `json:"session,omitempty"`
+	AskedBy    *questionUserRef    `json:"asked_by,omitempty"`
+	AnsweredBy *questionUserRef    `json:"answered_by,omitempty"`
 	// Recipient is the person the question is addressed to.
 	Recipient *questionUserRef `json:"recipient,omitempty"`
 }
@@ -227,6 +232,7 @@ func buildQuestionViews(ctx context.Context, pool *pgxpool.Pool, viewer uuid.UUI
 			RecommendedKey: q.RecommendedKey, RecommendedReason: q.RecommendedReason,
 			Answer: q.Answer, AnsweredAt: q.AnsweredAt, DeliveredAt: q.DeliveredAt,
 			WithdrawnAt: q.WithdrawnAt, WithdrawnReason: q.WithdrawnReason,
+			Outcome: q.Outcome, OutcomeAt: q.OutcomeAt,
 			CreatedAt: q.CreatedAt, UpdatedAt: q.UpdatedAt,
 			ViaMCP:          q.AskedByTokenID != nil,
 			RecordedByAgent: q.AnsweredByTokenID != nil,

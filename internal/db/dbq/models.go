@@ -334,6 +334,8 @@ type TaskQuestion struct {
 	UpdatedAt         pgtype.Timestamptz
 	AnsweredByTokenID *uuid.UUID
 	AnswerChannel     string
+	Outcome           string
+	OutcomeAt         pgtype.Timestamptz
 }
 
 type TaskStep struct {

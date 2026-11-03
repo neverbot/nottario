@@ -560,3 +560,142 @@ func TestMCPQuestionsRecordAnswer(t *testing.T) {
 		t.Fatalf("record by another member = %+v", res.Content)
 	}
 }
+
+// set_outcome stores the decision an answered question led to, once the
+// asking conversation has the answer; record_answer can carry it too.
+func TestMCPQuestionsSetOutcome(t *testing.T) {
+	f := newMCPFixture(t, 9817, "outcomer")
+	pool := f.pgx(t)
+	pid := uuid.MustParse(f.projectID)
+	uid := uuid.MustParse(f.userID)
+
+	var task struct {
+		ID string `json:"id"`
+	}
+	f.callJSON(t, "nottario.tasks.create", map[string]any{
+		"project_id": f.projectID, "title": "record outcomes", "claim": true, "session": "conv-o",
+	}, &task)
+	ask := func(args map[string]any) string {
+		t.Helper()
+		args["project_id"] = f.projectID
+		args["task_id"] = task.ID
+		args["session"] = "conv-o"
+		var out struct {
+			ID string `json:"id"`
+		}
+		f.callJSON(t, "nottario.questions.ask", args, &out)
+		return out.ID
+	}
+	type outcomeResp struct {
+		ID      string `json:"id"`
+		State   string `json:"state"`
+		Outcome string `json:"outcome"`
+	}
+	set := func(id, outcome string) outcomeResp {
+		t.Helper()
+		var out outcomeResp
+		f.callJSON(t, "nottario.questions.set_outcome", map[string]any{
+			"project_id": f.projectID, "session": "conv-o", "id": id, "outcome": outcome,
+		}, &out)
+		return out
+	}
+	expect := func(args map[string]any, want string) {
+		t.Helper()
+		args["project_id"] = f.projectID
+		if _, ok := args["session"]; !ok {
+			args["session"] = "conv-o"
+		}
+		if msg := f.callExpectErr(t, "nottario.questions.set_outcome", args); !strings.Contains(msg, want) {
+			t.Errorf("set_outcome %v = %q, want %q", args, msg, want)
+		}
+	}
+	const decided = "Decided: keep client-specific commands in a registry with a generic fallback."
+
+	qid := ask(map[string]any{"question": "Registry or hard-coded?", "options": []map[string]any{{"label": "Registry"}, {"label": "Hard-coded"}}})
+	expect(map[string]any{"id": qid, "outcome": decided}, "not answered yet")
+	if _, err := questions.Answer(f.ctx, pool, pid, uuid.MustParse(qid), uid, questions.Reply{Keys: []string{"1"}}); err != nil {
+		t.Fatal(err)
+	}
+	expect(map[string]any{"id": qid, "outcome": decided}, questions.ErrNotDelivered.Error())
+	var got mcpTake
+	f.callJSON(t, "nottario.questions.take", map[string]any{"project_id": f.projectID, "session": "conv-o"}, &got)
+	if len(got.Answers) != 1 {
+		t.Fatalf("take = %+v", got)
+	}
+	expect(map[string]any{"id": qid, "outcome": " "}, "outcome is empty")
+	expect(map[string]any{"id": qid, "outcome": strings.Repeat("x", questions.MaxOutcomeLen+1)}, "longer than 300")
+	expect(map[string]any{"id": qid, "outcome": decided, "session": "conv-elsewhere"}, questions.ErrNotAskingSession.Error())
+	expect(map[string]any{"id": qid, "outcome": decided, "session": " "}, "session is required")
+	expect(map[string]any{"id": "nope", "outcome": decided}, "id must be a uuid")
+
+	if out := set(qid, decided); out.ID != qid || out.State != "answered" || out.Outcome != decided {
+		t.Fatalf("set_outcome = %+v", out)
+	}
+	if out := set(qid, "Decided: hard-code it for now."); out.Outcome != "Decided: hard-code it for now." {
+		t.Fatalf("overwrite = %+v", out)
+	}
+	var stored string
+	var at bool
+	if err := pool.QueryRow(f.ctx, `SELECT outcome, outcome_at IS NOT NULL FROM task_questions WHERE id = $1`, qid).Scan(&stored, &at); err != nil ||
+		stored != "Decided: hard-code it for now." || !at {
+		t.Fatalf("row = %q %v err=%v", stored, at, err)
+	}
+
+	// record_answer carries an outcome in the same call.
+	rid := ask(map[string]any{"question": "Which cache?"})
+	var rec outcomeResp
+	f.callJSON(t, "nottario.questions.record_answer", map[string]any{
+		"project_id": f.projectID, "session": "conv-o", "id": rid, "text": "redis is fine",
+		"outcome": "Decided: use Redis for the cache.",
+	}, &rec)
+	if rec.State != "answered" || rec.Outcome != "Decided: use Redis for the cache." {
+		t.Fatalf("record with outcome = %+v", rec)
+	}
+	if msg := f.callExpectErr(t, "nottario.questions.record_answer", map[string]any{
+		"project_id": f.projectID, "session": "conv-o", "id": ask(map[string]any{"question": "Region?"}),
+		"text": "eu", "outcome": strings.Repeat("x", questions.MaxOutcomeLen+1),
+	}); !strings.Contains(msg, "longer than 300") {
+		t.Errorf("record with long outcome = %q", msg)
+	}
+
+	// Withdrawn questions are closed.
+	wid := ask(map[string]any{"question": "Still needed?"})
+	f.callJSON(t, "nottario.questions.withdraw", map[string]any{"project_id": f.projectID, "id": wid}, nil)
+	expect(map[string]any{"id": wid, "outcome": decided}, questions.ErrClosed.Error())
+
+	// Another member cannot set the outcome of someone else's question.
+	member, _, err := identity.UpsertFromGithub(f.ctx, pool, 9818, "outcome-member", "Member", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles, err := identity.ListRoles(f.ctx, pool, pid)
+	if err != nil || len(roles) == 0 {
+		t.Fatalf("roles: %v", err)
+	}
+	if err := identity.AddMembership(f.ctx, pool, member.ID, pid, roles[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	memberToken, _, err := identity.IssueToken(f.ctx, pool, member.ID, pid, "member", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := sdk.NewClient(&sdk.Implementation{Name: "outcome-member", Version: "v0"}, nil)
+	ms, err := client.Connect(f.ctx, &sdk.StreamableClientTransport{
+		Endpoint:             f.baseURL + "/mcp",
+		HTTPClient:           &http.Client{Transport: bearerTransport{rt: http.DefaultTransport, token: memberToken}},
+		DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ms.Close() })
+	res, err := ms.CallTool(f.ctx, &sdk.CallToolParams{Name: "nottario.questions.set_outcome", Arguments: map[string]any{
+		"project_id": f.projectID, "id": qid, "outcome": decided, "session": "conv-m",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tc, _ := res.Content[0].(*sdk.TextContent); !res.IsError || tc == nil || tc.Text != questions.ErrNotAskerOutcome.Error() {
+		t.Fatalf("set_outcome by another member = %+v", res.Content)
+	}
+}
