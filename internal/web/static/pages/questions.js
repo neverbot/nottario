@@ -344,6 +344,7 @@ class NottarioQuestionsPage extends LitElement {
     }
     this._pendingHash = '';
     this._notFound = false;
+    card.expand();
     const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     card.focus({ preventScroll: true });
     card.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
@@ -369,6 +370,7 @@ class NottarioQuestionsPage extends LitElement {
         li = document.createElement('li');
         const card = document.createElement('nottario-question-card');
         card.showTask = true;
+        card.collapsible = true;
         card.dataset.id = q.id;
         li.appendChild(card);
         this._cards.set(q.id, li);

@@ -29,6 +29,10 @@ import { taskHref } from '/static/utils/task-link.js';
 //             link, age), for Live rows and the task dialog, where the
 //             surrounding row is the frame
 //   showTask  name the task (as a link to it) in the header
+//   collapsible  start folded to the header and a one-line excerpt;
+//             the excerpt expands the card, and saving an answer folds
+//             it again. A draft survives folding. expand() opens it
+//             from script (deep links).
 //
 // Parts: card, the frame, focusable by script (focus() on the element
 // moves there); a list that draws its own separators (the
@@ -91,6 +95,8 @@ export class NottarioQuestionCard extends LitElement {
     projectId: { type: String, attribute: 'project-id' },
     compact: { type: Boolean, reflect: true },
     showTask: { type: Boolean, attribute: 'show-task' },
+    collapsible: { type: Boolean, reflect: true },
+    _expanded: { state: true },
     _editing: { state: true },
     _keys: { state: true },
     _other: { state: true },
@@ -210,6 +216,38 @@ export class NottarioQuestionCard extends LitElement {
       .body { margin-bottom: 12px; }
       :host([compact]) .body nottario-markdown { font-size: 13px; }
       .excerpt { margin: 0; overflow-wrap: anywhere; }
+
+      /* Folded card: the question's first line, a button that opens
+         the rest. */
+      header.closed { margin-bottom: 4px; }
+      .unfold {
+        display: block;
+        width: 100%;
+        max-width: 75ch;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--fg);
+        font: inherit;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .unfold:hover { color: var(--accent); }
+      .unfold:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+      .fold {
+        padding: 0 4px;
+        border: 0;
+        background: none;
+        color: var(--fg-muted);
+        font: inherit;
+        cursor: pointer;
+        border-radius: 2px;
+      }
+      .fold:hover { color: var(--accent); }
+      .fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
       /* Choice options: native inputs with their labels, one row per
          option, the description and the recommendation reason muted
@@ -402,6 +440,24 @@ export class NottarioQuestionCard extends LitElement {
     else super.focus(options);
   }
 
+  // expand opens a collapsible card; others are always open.
+  expand() {
+    this._expanded = true;
+  }
+
+  get _folded() {
+    return this.collapsible && !this._expanded;
+  }
+
+  async _setExpanded(open) {
+    this._expanded = open;
+    await this.updateComplete;
+    const target = open
+      ? this.renderRoot.querySelector('.fold')
+      : this.renderRoot.querySelector('.unfold');
+    target?.focus();
+  }
+
   connectedCallback() {
     super.connectedCallback();
     watch(this);
@@ -460,7 +516,7 @@ export class NottarioQuestionCard extends LitElement {
   // ---- input ----
 
   _onKeydown(e) {
-    if (!this._formOpen || this._saving) return;
+    if (this._folded || !this._formOpen || this._saving) return;
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       // The md-editor already turned this into a submit event.
       if (e.defaultPrevented) return;
@@ -589,6 +645,11 @@ export class NottarioQuestionCard extends LitElement {
     this._saving = false;
     if (res.ok && data.question) {
       this._editing = false;
+      if (this.collapsible) {
+        // Folding removes the focused control; keep focus on the card.
+        this._expanded = false;
+        this.updateComplete.then(() => this.renderRoot.querySelector('.unfold')?.focus());
+      }
       this.question = data.question;
       this._formFor = data.question.id;
       this._resetForm(null);
@@ -630,6 +691,19 @@ export class NottarioQuestionCard extends LitElement {
       <article class="card ${q.state}" part="card" tabindex="-1"
                aria-label=${q.excerpt || 'Question'}>
         ${this._renderHeader(q)}
+        ${
+          this._folded
+            ? html`<button class="unfold" type="button" aria-expanded="false"
+                       title=${q.excerpt || ''}
+                       @click=${() => this._setExpanded(true)}>${q.excerpt}</button>`
+            : this._renderContent(q)
+        }
+      </article>
+    `;
+  }
+
+  _renderContent(q) {
+    return html`
         <div class="content">
           <div class="body">
             ${
@@ -640,7 +714,6 @@ export class NottarioQuestionCard extends LitElement {
           </div>
           ${this._renderState(q)}
         </div>
-      </article>
     `;
   }
 
@@ -664,12 +737,18 @@ export class NottarioQuestionCard extends LitElement {
       i === 0 ? [p] : [html`<span class="sep" aria-hidden="true">·</span>`, p],
     );
     return html`
-      <header>
+      <header class=${this._folded ? 'closed' : ''}>
         ${this._renderStatePill(q)}
         ${joined}
         <time datetime=${q.created_at} title=${formatDateTime(q.created_at)}>
           ${formatRelativeTime(q.created_at)}
         </time>
+        ${
+          this.collapsible && this._expanded
+            ? html`<button class="fold" type="button" aria-expanded="true"
+                       @click=${() => this._setExpanded(false)}>Collapse</button>`
+            : nothing
+        }
       </header>
     `;
   }
