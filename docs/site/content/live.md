@@ -79,6 +79,6 @@ every turn, before picking the next task, before ending a turn):
 answers are pulled, never pushed into a running conversation. Once it
 has acted on an answer, the agent records the decision it led to with
 `nottario.questions.set_outcome`: one formal sentence, such as
-"Decided: keep client-specific commands in a registry with a generic
+"Keep client-specific commands in a registry with a generic
 fallback.", which the task shows instead of the informal answer. See
 [MCP integration](/mcp/) and the [questions skill](/skills/questions/).

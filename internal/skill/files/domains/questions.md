@@ -212,7 +212,7 @@ do with it.
 
 ```text
 answer:  "nah just stick em in a registry, fallback to generic if unknown"
-outcome: "Decided: keep client-specific commands in a registry with a generic fallback."
+outcome: "Keep client-specific commands in a registry with a generic fallback."
 ```
 
 ## Helper agents (subagents)

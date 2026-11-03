@@ -68,7 +68,7 @@ type questionsSetOutcomeInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project uuid"`
 	Session   string `json:"session" jsonschema:"your conversation id, the one you asked with; only the conversation that asked can record the outcome"`
 	ID        string `json:"id" jsonschema:"question uuid, one you filed with questions.ask and whose answer you have"`
-	Outcome   string `json:"outcome" jsonschema:"one formal sentence stating the decision the answer led to, up to 300 characters, in the task's language; e.g. 'Decided: keep client-specific commands in a registry with a generic fallback.'"`
+	Outcome   string `json:"outcome" jsonschema:"one formal sentence stating the decision the answer led to, up to 300 characters, in the task's language, with no 'Decided:' prefix; e.g. 'Keep client-specific commands in a registry with a generic fallback.'"`
 }
 
 // questions.list page bounds.
@@ -459,7 +459,7 @@ func registerQuestions(server *sdk.Server, d Deps) {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "nottario.questions.set_outcome",
-		Description: "Records the decision an answered question led to, on a question you filed with questions.ask in this same conversation (pass your session) once its answer has reached you. Write one formal sentence stating the decision, for someone reading the task later: not a transcript of the chat, not the human's wording; in the task's language; up to 300 characters. Calling it again replaces the outcome. Returns {id, state, outcome}.",
+		Description: "Records the decision an answered question led to, on a question you filed with questions.ask in this same conversation (pass your session) once its answer has reached you. Write one formal sentence stating the decision, for someone reading the task later: not a transcript of the chat, not the human's wording; in the task's language; no 'Decided:' prefix, the reader sees it labelled as the decision; up to 300 characters. Calling it again replaces the outcome. Returns {id, state, outcome}.",
 	}, func(ctx context.Context, req *sdk.CallToolRequest, in questionsSetOutcomeInput) (*sdk.CallToolResult, any, error) {
 		c, err := callerFromContext(ctx)
 		if err != nil {
