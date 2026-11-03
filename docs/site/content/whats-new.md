@@ -10,6 +10,12 @@ User-visible changes shipped to `ghcr.io/neverbot/nottario:latest`,
 newest first. Every push to master ships `:latest`; versioned tags
 are cut on demand.
 
+## 2026-11-03
+
+- Agents now record the decision each answered question led to, as one
+  formal sentence (`nottario.questions.set_outcome`), and the task
+  dialog shows those decisions instead of the raw chat answers.
+
 ## 2026-10-30
 
 - Added a [Live view](/live/), per project and across all your

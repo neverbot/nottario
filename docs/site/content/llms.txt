@@ -23,7 +23,7 @@ canonical description of how to claim work and record progress.
 - [Gantt timeline](https://neverbot.github.io/nottario/gantt.md): dependency-ordered timeline. Nottario has no calendar dates; the axis is derived from ordering.
 - [Shared documents](https://neverbot.github.io/nottario/docs.md): the versioned markdown store, optimistic concurrency, and document history.
 - [Architecture diagram](https://neverbot.github.io/nottario/architecture.md): the navigable box-and-arrow graph agents maintain in textual form.
-- [Live and questions](https://neverbot.github.io/nottario/live.md): what agents and humans are working on right now, and the questions agents ask the human.
+- [Live and questions](https://neverbot.github.io/nottario/live.md): what agents and humans are working on right now, the questions agents ask the human, and the decision each answer led to.
 
 ## Reference
 
@@ -36,7 +36,7 @@ canonical description of how to claim work and record progress.
 - [Agent skills](https://neverbot.github.io/nottario/skills.md): what the skill bundle is and how an agent installs it.
 - [Skill: overview](https://neverbot.github.io/nottario/skills/overview.md): the operating rules an agent follows end to end, from identity to closing a task.
 - [Skill: tasks domain](https://neverbot.github.io/nottario/skills/tasks.md): task schema, states, priorities, dependencies, atomic claim, and closing discipline.
-- [Skill: questions domain](https://neverbot.github.io/nottario/skills/questions.md): asking the human through Nottario, collecting answers, helper-agent hand-off.
+- [Skill: questions domain](https://neverbot.github.io/nottario/skills/questions.md): asking the human through Nottario, collecting answers, recording the outcome of each answer (questions.set_outcome), helper-agent hand-off.
 - [Skill: cycles domain](https://neverbot.github.io/nottario/skills/cycles.md): cycles (sprints), rollover, and the end-of-cycle transition.
 - [Skill: documents domain](https://neverbot.github.io/nottario/skills/docs.md): reading and writing shared context, and handling version conflicts.
 - [Skill: architecture domain](https://neverbot.github.io/nottario/skills/architecture.md): declaring nodes and edges, and keeping the diagram honest.

@@ -1,6 +1,6 @@
 ---
 name: nottario-domain-questions
-description: 'Reference for Nottario questions: asking the human through Nottario, collecting the answers, recording answers given in the chat, helper-agent hand-off, what to say at the end of a turn.'
+description: 'Reference for Nottario questions: asking the human through Nottario, collecting the answers, recording answers given in the chat, recording the outcome of each answer, helper-agent hand-off, what to say at the end of a turn.'
 ---
 
 # Questions domain — reference
@@ -67,13 +67,14 @@ yet, and marks them delivered: each answer comes back exactly once,
 so act on it (or write it down) when you get it. `choices` holds the
 labels picked, `text` a free-text or "other" answer, `note` an extra
 remark. `open` counts your questions still unanswered. Once taken, the
-answer is final; the human can no longer edit it.
+answer is final; the human can no longer edit it. After acting on each
+answer, record its outcome with `questions.set_outcome`.
 
 ### `nottario.questions.record_answer`
 
 ```text
-nottario.questions.record_answer { project_id, session, id, choices?, text?, note?, channel? }
-# → {id, state: "answered"}
+nottario.questions.record_answer { project_id, session, id, choices?, text?, note?, channel?, outcome? }
+# → {id, state: "answered", outcome}
 ```
 
 **Only** for an answer the human already gave you outside Nottario (in
@@ -90,7 +91,23 @@ by default) and recorded by you, and is delivered at once: `take` will
 not return it. A question already answered (in the web UI, say) or
 withdrawn is refused. If it is refused as already answered, call
 `questions.take`; if the two answers disagree, ask the human which one
-stands.
+stands. `outcome`, optional, records the decision in the same call, as
+`set_outcome` does.
+
+### `nottario.questions.set_outcome`
+
+```text
+nottario.questions.set_outcome { project_id, session, id, outcome }
+# → {id, state: "answered", outcome}
+```
+
+Records the decision an answer led to, on a question you asked in this
+conversation (pass the same `session`) once its answer has reached you:
+taken with `questions.take`, or recorded with `record_answer`. Before
+that it is refused (`take` first); a withdrawn question is refused too.
+`outcome` is one formal sentence, up to 300 characters, in the task's
+language, written for someone reading the task later. Calling it again
+replaces the outcome. See "Recording the outcome" below.
 
 ### `nottario.questions.list`
 
@@ -171,7 +188,32 @@ Call `questions.take` with your session:
 - before picking the next task;
 - before ending a turn.
 
-An answer may change the plan: act on it before continuing.
+An answer may change the plan: act on it before continuing, then
+record its outcome (next section).
+
+## Recording the outcome
+
+The human's answer is often chat: terse, informal, half a thought. The
+task's record shows the **outcome** instead: the decision the answer
+led to, which you write once you have the answer and know what you will
+do with it.
+
+- After `take`, call `questions.set_outcome` for each answer you act
+  on. For an answer given in the chat, pass `outcome` to
+  `record_answer` instead.
+- One formal sentence stating the decision, in the task's language,
+  for someone reading the task months later. Not a transcript, not the
+  human's wording, no "the user said".
+- If the plan changes later, call `set_outcome` again; it replaces the
+  previous one.
+- If the answer changes the task's scope or plan, also update the task
+  description or its steps: the outcome records the decision, the task
+  carries the work.
+
+```text
+answer:  "nah just stick em in a registry, fallback to generic if unknown"
+outcome: "Decided: keep client-specific commands in a registry with a generic fallback."
+```
 
 ## Helper agents (subagents)
 
@@ -213,5 +255,6 @@ open under it.
 
 Withdraw a question as soon as it no longer matters: you found the
 answer elsewhere or the plan changed. If the human answered it in the
-chat, record that answer (`questions.record_answer`) instead.
+chat, record that answer (`questions.record_answer`, with its
+`outcome`) instead.
 A stale question wastes the human's time.

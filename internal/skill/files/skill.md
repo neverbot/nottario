@@ -137,6 +137,13 @@ Detail in `domains/questions.md`.
 - **`questions.take`** collects the answers given in Nottario: at the
   start of every turn, after each helper agent returns, before picking
   the next task and before ending a turn.
+- **Record the outcome** of every answer you act on: after `take`, call
+  `questions.set_outcome` (or pass `outcome` to `record_answer`) with
+  one formal sentence stating the decision, e.g. "Decided: keep
+  client-specific commands in a registry with a generic fallback."
+  It is what the task shows later, so not the chat wording. If the
+  answer changes the task's scope or plan, also update its description
+  or steps.
 - **Ending a turn with open questions:** list them, one line each, and
   say they can be answered in Nottario (Questions view).
 - **Withdraw** a question that no longer matters

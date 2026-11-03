@@ -379,7 +379,10 @@ Questions for the human hang off a task (`domains/questions.md`).
 ones not yet taken. Open questions block nothing. **Closing a task**
 (`tasks.close`, `set_state done` or `wont_do`) **withdraws its open
 questions**: the response adds `withdrawn_questions` (a count) and a
-`notice`. Tell the human, and take any answers first.
+`notice`. Tell the human, and take any answers first. Each answer you
+act on gets an outcome (`questions.set_outcome`): one formal sentence of
+the decision; if it changes the task's scope or plan, update the
+description or steps too.
 
 ## When to file a task before doing the work
 

@@ -76,5 +76,9 @@ the chat; if you answer in the chat, the agent records your answer with
 in chat, recorded by the agent. It collects answers given in Nottario
 with `nottario.questions.take` at fixed points of its loop (start of
 every turn, before picking the next task, before ending a turn):
-answers are pulled, never pushed into a running conversation. See
+answers are pulled, never pushed into a running conversation. Once it
+has acted on an answer, the agent records the decision it led to with
+`nottario.questions.set_outcome`: one formal sentence, such as
+"Decided: keep client-specific commands in a registry with a generic
+fallback.", which the task shows instead of the informal answer. See
 [MCP integration](/mcp/) and the [questions skill](/skills/questions/).
