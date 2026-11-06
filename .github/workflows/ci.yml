@@ -140,8 +140,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # master push → :latest. git tags vX.Y.Z → :X.Y.Z and :X.Y.
-          # Untagged digests of previous master pushes remain in GHCR
-          # so a regression can be rolled back to any past digest.
+          # Each master push leaves the previous :latest untagged; the
+          # prune step below keeps only that one for a rollback.
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
             type=semver,pattern={{version}}
@@ -152,6 +152,23 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
+
+      # The image :latest points at before this build: the prune step
+      # keeps it as the rollback target once the new build takes the
+      # tag. Empty when there is no :latest yet or the lookup failed,
+      # which skips the prune.
+      - name: Remember the previous latest
+        id: previous
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: ${{ github.event.repository.name }}
+        run: |
+          digest="$(gh api "/users/${OWNER}/packages/container/${PACKAGE}/versions?per_page=100" \
+            --jq '[.[] | select(.metadata.container.tags | index("latest"))][0].name // ""' || true)"
+          echo "Previous latest: ${digest:-none}"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -168,6 +185,38 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+
+      # Deletes untagged image versions: every master push leaves the
+      # previous :latest behind. Tagged versions (latest, X.Y.Z, X.Y)
+      # and the previous latest stay. Safe while images are single
+      # platform with provenance off: an untagged version is then never
+      # a child manifest of a tagged one.
+      - name: Prune untagged images
+        if: github.ref == 'refs/heads/master' && steps.previous.outputs.digest != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: ${{ github.event.repository.name }}
+          KEEP: ${{ steps.previous.outputs.digest }}
+        run: |
+          base="/users/${OWNER}/packages/container/${PACKAGE}/versions"
+          gh api --paginate "${base}?per_page=100" \
+            --jq '.[] | select((.metadata.container.tags | length) == 0) | "\(.id) \(.name)"' | {
+            failed=0
+            while read -r id digest; do
+              if [ "$digest" = "$KEEP" ]; then
+                echo "keep ${digest} (previous latest)"
+                continue
+              fi
+              if gh api -X DELETE "${base}/${id}" > /dev/null; then
+                echo "deleted ${digest}"
+              else
+                echo "::error::could not delete ${digest}"
+                failed=1
+              fi
+            done
+            exit "$failed"
+          }
 
   publish-docs:
     name: Build and deploy docs site
